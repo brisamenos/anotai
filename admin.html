@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Admin — Painel SaaS</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -26,7 +27,8 @@
   --sb-w:230px;
 }
 html{scroll-behavior:smooth}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;line-height:1.5;-webkit-font-smoothing:antialiased}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+h1,h2,h3,.lg-title,.card-title,.sec-head-title,.stat-card-val{font-family:'Space Grotesk',sans-serif;letter-spacing:-.3px}
 
 /* ══ SCROLLBAR ══ */
 ::-webkit-scrollbar{width:5px;height:5px}
@@ -38,13 +40,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .lg-card{background:rgba(13,21,38,.96);border:1px solid var(--border);border-radius:22px;padding:44px 40px;width:400px;max-width:95vw;backdrop-filter:blur(24px);box-shadow:0 32px 80px rgba(0,0,0,.7);animation:fadeUp .4s ease}
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 .lg-icon{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,var(--accent),#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 18px;box-shadow:0 6px 20px rgba(59,130,246,.45)}
-.lg-title{font-family:'Syne',sans-serif;font-size:23px;font-weight:800;text-align:center;letter-spacing:-.5px;margin-bottom:4px}
+.lg-title{font-family:'Space Grotesk',sans-serif;font-size:23px;font-weight:800;text-align:center;letter-spacing:-.5px;margin-bottom:4px}
 .lg-sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:30px}
 .f-label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
-.f-input{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:all .18s;margin-bottom:16px}
+.f-input{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:all .18s;margin-bottom:16px}
 .f-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.14);background:rgba(59,130,246,.04)}
 .f-input::placeholder{color:var(--muted)}
-.btn-lg{width:100%;padding:13px;border-radius:10px;border:none;cursor:pointer;background:linear-gradient(135deg,var(--accent),#2563eb);color:#fff;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;transition:all .2s;box-shadow:0 4px 16px rgba(59,130,246,.35)}
+.btn-lg{width:100%;padding:13px;border-radius:10px;border:none;cursor:pointer;background:linear-gradient(135deg,var(--accent),#2563eb);color:#fff;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;transition:all .2s;box-shadow:0 4px 16px rgba(59,130,246,.35)}
 .btn-lg:hover{transform:translateY(-1px);box-shadow:0 8px 26px rgba(59,130,246,.5)}
 .btn-lg:active{transform:none}
 .err{display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:10px 14px;font-size:13px;color:#fca5a5;margin-bottom:14px}
@@ -74,7 +76,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   font-size:16px;box-shadow:0 3px 12px rgba(59,130,246,.35);
   flex-shrink:0;
 }
-.sb-logo-name{font-family:'Syne',sans-serif;font-size:15px;font-weight:800;line-height:1.2}
+.sb-logo-name{font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:800;line-height:1.2}
 .sb-logo-tag{
   font-size:9px;background:var(--orange);color:#fff;
   padding:2px 7px;border-radius:99px;font-weight:700;
@@ -92,7 +94,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   font-size:13px;font-weight:500;color:var(--muted);
   cursor:pointer;transition:all .15s;margin-bottom:2px;
   border:none;background:none;width:100%;text-align:left;
-  font-family:'DM Sans',sans-serif;
+  font-family:'Inter',sans-serif;
 }
 .sb-item:hover{background:rgba(255,255,255,.05);color:var(--text)}
 .sb-item.on{background:rgba(59,130,246,.14);color:var(--accent);font-weight:600}
@@ -137,7 +139,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   flex-shrink:0;
 }
 .topbar-left{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
-.topbar-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;letter-spacing:-.3px;white-space:nowrap}
+.topbar-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:800;letter-spacing:-.3px;white-space:nowrap}
 .topbar-crumb{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
 .content{padding:24px;flex:1;animation:fadeUp .25s ease}
 
@@ -154,14 +156,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   background:var(--ca,var(--accent));border-radius:14px 14px 0 0;
 }
 .stat-card-label{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px}
-.stat-card-val{font-family:'Syne',sans-serif;font-size:30px;font-weight:800;letter-spacing:-1.5px;line-height:1}
+.stat-card-val{font-family:'Space Grotesk',sans-serif;font-size:30px;font-weight:800;letter-spacing:-1.5px;line-height:1}
 .stat-card-icon{position:absolute;bottom:12px;right:14px;font-size:28px;opacity:.15}
 .stat-card-sub{font-size:11px;color:var(--muted);margin-top:6px}
 
 /* ══ CARDS ══ */
 .card{background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:18px}
 .card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
-.card-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;letter-spacing:-.2px}
+.card-title{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;letter-spacing:-.2px}
 .card-sub{font-size:12px;color:var(--muted);margin-top:2px}
 
 /* ══ GRID 2 COL ══ */
@@ -175,7 +177,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .minput{
   width:100%;background:var(--s2);border:1px solid var(--border);
   border-radius:9px;padding:9px 12px;color:var(--text);
-  font-family:'DM Sans',sans-serif;font-size:13px;outline:none;
+  font-family:'Inter',sans-serif;font-size:13px;outline:none;
   transition:all .18s;
 }
 .minput:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.1);background:rgba(59,130,246,.03)}
@@ -185,7 +187,7 @@ textarea.minput{resize:vertical;min-height:90px;line-height:1.5}
 
 /* ══ SECTION HEADER ══ */
 .sec-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;gap:14px;flex-wrap:wrap}
-.sec-head-title{font-family:'Syne',sans-serif;font-size:21px;font-weight:800;letter-spacing:-.4px}
+.sec-head-title{font-family:'Space Grotesk',sans-serif;font-size:21px;font-weight:800;letter-spacing:-.4px}
 .sec-head-sub{font-size:12.5px;color:var(--muted);margin-top:3px}
 
 /* ══ TABELA ══ */
@@ -216,7 +218,7 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
   padding:7px 14px;border-radius:9px;
-  font-family:'DM Sans',sans-serif;font-size:12.5px;font-weight:600;
+  font-family:'Inter',sans-serif;font-size:12.5px;font-weight:600;
   cursor:pointer;border:none;transition:all .15s;white-space:nowrap;
 }
 .bp{background:linear-gradient(135deg,var(--accent),#2563eb);color:#fff;box-shadow:0 2px 10px rgba(59,130,246,.25)}
@@ -236,7 +238,7 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
   border-radius:9px;padding:7px 12px;
 }
 .sbox:focus-within{border-color:var(--accent)}
-.sbox input{background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);min-width:160px}
+.sbox input{background:none;border:none;outline:none;font-family:'Inter',sans-serif;font-size:13px;color:var(--text);min-width:160px}
 .sbox input::placeholder{color:var(--muted)}
 
 /* ══ MODAL ══ */
@@ -270,7 +272,7 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
   padding:28px;position:relative;box-shadow:0 28px 72px rgba(0,0,0,.7);
   animation:fadeUp .22s ease;
 }
-.modal h2{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:20px;letter-spacing:-.2px}
+.modal h2{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:800;margin-bottom:20px;letter-spacing:-.2px}
 .modal-x{
   position:absolute;top:16px;right:16px;width:28px;height:28px;
   border-radius:8px;background:var(--s2);border:1px solid var(--border);
@@ -412,12 +414,12 @@ th,td{overflow-wrap:normal}
   padding:0 12px;border:1px solid rgba(148,163,184,.16);border-radius:8px;
   background:rgba(15,23,38,.74);color:var(--muted);
 }
-.admin-global-search:focus-within{border-color:rgba(79,140,255,.55);box-shadow:0 0 0 3px rgba(79,140,255,.12)}
+.admin-global-search:focus-within{border-color:rgba(91,139,255,.55);box-shadow:0 0 0 3px rgba(91,139,255,.12)}
 .admin-global-search input{
   width:100%;min-width:0;background:transparent;border:0;outline:0;color:var(--text);
   font:600 12.5px 'DM Sans',sans-serif;
 }
-.admin-global-search input::placeholder{color:#6f7f99}
+.admin-global-search input::placeholder{color:#8492ac}
 .admin-status-pill{
   height:30px;display:inline-flex;align-items:center;gap:7px;padding:0 10px;border-radius:8px;
   background:rgba(36,197,122,.09);border:1px solid rgba(36,197,122,.16);
@@ -435,22 +437,23 @@ th,td{overflow-wrap:normal}
   --surface-2:#111b2d;
   --border:rgba(148,163,184,.14);
   --border-hover:rgba(148,163,184,.28);
-  --accent:#4f8cff;
-  --accent-dim:rgba(79,140,255,.13);
-  --success:#24c57a;
+  --accent:#5b8bff;
+  --accent-2:#8b7cf6;
+  --accent-dim:rgba(91,139,255,.13);
+  --success:#2dd4a7;
   --orange:#f5a524;
-  --danger:#f05252;
+  --danger:#f0596b;
   --purple:#a78bfa;
   --text:#f8fafc;
-  --text-2:#b6c2d6;
-  --muted:#75839a;
+  --text-2:#c2cce0;
+  --muted:#8b98b3;
   --sb-w:286px;
 }
 html,body{background:var(--bg)}
 body{
   background:
-    linear-gradient(180deg,rgba(79,140,255,.055),transparent 260px),
-    radial-gradient(circle at 100% 0,rgba(36,197,122,.07),transparent 360px),
+    radial-gradient(1100px 560px at 14% -8%, rgba(91,139,255,.08), transparent 55%),
+    radial-gradient(900px 480px at 100% 0%, rgba(139,124,246,.06), transparent 50%),
     var(--bg);
 }
 #painel{background:transparent}
@@ -462,7 +465,7 @@ body{
 .sb-logo{padding:26px 20px 24px;border-bottom-color:rgba(148,163,184,.1)}
 .sb-logo-icon,.sb-av{
   border-radius:10px;background:linear-gradient(135deg,#38bdf8,#4f46e5);
-  box-shadow:0 14px 34px rgba(79,140,255,.28);
+  box-shadow:0 14px 34px rgba(91,139,255,.28);
 }
 .sb-logo-name{font-size:19px;letter-spacing:-.35px}
 .sb-logo-tag{
@@ -470,9 +473,9 @@ body{
   color:#fff;border-radius:6px;padding:3px 8px;font-size:9px;
 }
 .sb-nav{padding:18px 10px}
-.sb-sec{padding:14px 12px 7px;color:#7890b5;font-size:10px}
+.sb-sec{padding:14px 12px 7px;color:#96a4c2;font-size:10px}
 .sb-item{
-  border-radius:8px;margin-bottom:4px;padding:10px 12px;color:#91a3c2;
+  border-radius:8px;margin-bottom:4px;padding:10px 12px;color:#c2cce0;
   font-size:14px;font-weight:600;
 }
 .sb-item .sb-icon{
@@ -481,14 +484,14 @@ body{
 }
 .sb-item:hover{background:rgba(148,163,184,.08);color:#e8eefc}
 .sb-item.on{
-  color:#7ab0ff;background:linear-gradient(135deg,rgba(79,140,255,.2),rgba(79,140,255,.08));
-  box-shadow:inset 3px 0 0 #4f8cff;
+  color:#7ab0ff;background:linear-gradient(135deg,rgba(91,139,255,.2),rgba(91,139,255,.08));
+  box-shadow:inset 3px 0 0 #5b8bff;
 }
-.sb-item.on .sb-icon{background:rgba(79,140,255,.2);border-color:rgba(79,140,255,.16)}
+.sb-item.on .sb-icon{background:rgba(91,139,255,.2);border-color:rgba(91,139,255,.16)}
 .sb-foot{padding:14px 12px;border-top-color:rgba(148,163,184,.1)}
 .sb-user{border-radius:8px;padding:10px 12px}
 .sb-user-name{font-size:13.5px;color:var(--text)}
-.sb-user-role{font-size:11.5px;color:#7f8ea8}
+.sb-user-role{font-size:11.5px;color:#aab5cc}
 .main{background:transparent}
 .topbar{
   min-height:70px;height:auto;padding:14px 30px;
@@ -499,48 +502,54 @@ body{
 .content{padding:26px 30px 36px}
 .sec-head{margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid rgba(148,163,184,.1)}
 .sec-head-title{font-size:24px;letter-spacing:-.55px}
-.sec-head-sub{font-size:13px;color:#8290a8}
+.sec-head-sub{font-size:13px;color:#aab5cc}
 .stats-grid{gap:12px;margin-bottom:18px}
 .stat-card,.card,.tw,.modal{
-  border-radius:8px;border-color:rgba(148,163,184,.14);
+  border-radius:12px;border-color:rgba(148,163,184,.14);
   background:linear-gradient(180deg,rgba(15,23,38,.96),rgba(10,16,29,.96));
   box-shadow:0 18px 36px rgba(0,0,0,.22);
+  transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease;
 }
-.stat-card{padding:16px 18px}
-.stat-card:hover,.card:hover{border-color:rgba(148,163,184,.22);transform:none}
-.stat-card::before{height:3px;border-radius:8px 8px 0 0}
-.stat-card-label{font-size:10.5px;color:#8190aa}
+.stat-card{padding:18px 20px;position:relative;overflow:hidden}
+.stat-card:hover,.card:hover{border-color:rgba(148,163,184,.26);transform:translateY(-2px);box-shadow:0 26px 50px rgba(0,0,0,.32)}
+.stat-card::before{height:3px;border-radius:12px 12px 0 0;background:linear-gradient(90deg,var(--ca,var(--accent)),transparent)}
+.stat-card::after{
+  content:'';position:absolute;top:-40%;right:-20%;width:140px;height:140px;border-radius:50%;
+  background:radial-gradient(circle,var(--ca,var(--accent)),transparent 70%);opacity:.08;pointer-events:none;
+}
+.stat-card-label{font-size:10.5px;color:#a9b4cc}
 .stat-card-val{font-size:27px;letter-spacing:-.8px}
-.stat-card-sub{font-size:11.5px;color:#7d8ba4}
+.stat-card-sub{font-size:11.5px;color:#a9b4cc}
 .stat-card-icon{font-size:0;display:flex;color:var(--ca,var(--accent));opacity:.22}
 .stat-card-icon .ui-ico{width:32px;height:32px;stroke-width:1.55}
 .card{padding:18px;margin-bottom:16px}
 .card-head{margin-bottom:14px}
 .card-title{font-size:14px;letter-spacing:-.1px}
-.card-sub{font-size:12.5px;color:#7f8ea8}
+.card-sub{font-size:12.5px;color:#aab5cc}
 .tw{margin-bottom:16px}
 .tmeta{padding:14px 18px;background:rgba(15,23,38,.62);border-bottom-color:rgba(148,163,184,.12)}
-thead th{padding:12px 16px;background:#111a2a;color:#7f94bc;font-size:10px;letter-spacing:1px}
+thead th{padding:12px 16px;background:#111a2a;color:#a3b1cc;font-size:10px;letter-spacing:1px}
 tbody tr{background:rgba(10,16,29,.78)}
-tbody tr:hover{background:rgba(79,140,255,.045)}
+tbody tr:hover{background:rgba(91,139,255,.045)}
 td{padding:12px 16px;color:#dce6f7}
-.badge{border-radius:8px;padding:4px 9px;font-size:11px;border:1px solid transparent}
+.badge{border-radius:7px;padding:4px 9px;font-size:11px;border:1px solid transparent;font-weight:600}
 .bg-green{background:rgba(36,197,122,.12);border-color:rgba(36,197,122,.16);color:#86efac}
 .bg-red{background:rgba(240,82,82,.12);border-color:rgba(240,82,82,.16);color:#fca5a5}
-.bg-blue{background:rgba(79,140,255,.13);border-color:rgba(79,140,255,.16);color:#8bb8ff}
+.bg-blue{background:rgba(91,139,255,.13);border-color:rgba(91,139,255,.16);color:#8bb8ff}
 .bg-orange{background:rgba(245,165,36,.13);border-color:rgba(245,165,36,.16);color:#fcd58d}
 .bg-purple{background:rgba(167,139,250,.13);border-color:rgba(167,139,250,.16);color:#c4b5fd}
 .bg-gray{background:rgba(148,163,184,.1);border-color:rgba(148,163,184,.13);color:#a8b5cb}
-.btn{border-radius:8px;font-weight:700;min-height:34px;border:1px solid transparent;box-shadow:none}
-.bp{background:linear-gradient(135deg,#4f8cff,#2563eb);box-shadow:0 10px 24px rgba(37,99,235,.22)}
-.bp:hover{transform:none;box-shadow:0 12px 30px rgba(37,99,235,.32)}
-.bg2{background:rgba(15,23,38,.82);border-color:rgba(148,163,184,.16);color:#bfcaDD}
+.btn{border-radius:9px;font-weight:700;min-height:34px;border:1px solid transparent;box-shadow:none;transition:transform .15s ease,box-shadow .15s ease,background .15s ease}
+.btn:active{transform:scale(.97)}
+.bp{background:linear-gradient(135deg,#5b8bff,#2563eb);box-shadow:0 10px 24px rgba(37,99,235,.22)}
+.bp:hover{transform:translateY(-1px);box-shadow:0 14px 32px rgba(37,99,235,.36)}
+.bg2{background:rgba(15,23,38,.82);border-color:rgba(148,163,184,.16);color:#c2cce0}
 .bg2:hover{background:rgba(22,34,56,.95);border-color:rgba(148,163,184,.28)}
 .bd{background:rgba(240,82,82,.1);border-color:rgba(240,82,82,.16);color:#fca5a5}
-.btn-icon{border-radius:8px}
-.minput,.f-input{background:rgba(15,23,38,.9);border-color:rgba(148,163,184,.16);border-radius:8px}
-.minput:focus,.f-input:focus{border-color:rgba(79,140,255,.58);box-shadow:0 0 0 3px rgba(79,140,255,.12)}
-.sbox{background:rgba(15,23,38,.9);border-color:rgba(148,163,184,.16);border-radius:8px}
+.btn-icon{border-radius:9px}
+.minput,.f-input{background:rgba(15,23,38,.9);border-color:rgba(148,163,184,.16);border-radius:9px}
+.minput:focus,.f-input:focus{border-color:rgba(91,139,255,.58);box-shadow:0 0 0 3px rgba(91,139,255,.12)}
+.sbox{background:rgba(15,23,38,.9);border-color:rgba(148,163,184,.16);border-radius:9px}
 .modal-bg{background:rgba(2,6,14,.74)}
 .modal-bg.on{padding:18px}
 .modal{box-shadow:0 30px 90px rgba(0,0,0,.54)}
@@ -553,7 +562,7 @@ td{padding:12px 16px;color:#dce6f7}
   padding:26px;animation:drawerIn .22s ease;overflow-y:auto;
 }
 @keyframes drawerIn{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
-.empty-state{padding:34px 20px;color:#7f8ea8}
+.empty-state{padding:34px 20px;color:#aab5cc}
 .empty-state .es-icon{
   width:46px;height:46px;margin:0 auto 12px;border-radius:12px;
   display:flex;align-items:center;justify-content:center;
@@ -563,13 +572,13 @@ td{padding:12px 16px;color:#dce6f7}
 .infobox{border-radius:8px}
 .plan-card{border-radius:8px}
 .ind-tab{border-radius:8px 8px 0 0}
-.ind-tab.on{background:rgba(79,140,255,.08)}
+.ind-tab.on{background:rgba(91,139,255,.08)}
 .tutorial-grid{display:grid;grid-template-columns:minmax(280px,420px) minmax(0,1fr);gap:16px;align-items:start}
 .tutorial-form-card{position:sticky;top:88px}
 .tutorial-form-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .tutorial-video-link{color:#8bb8ff;text-decoration:none;font-weight:700;max-width:260px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tutorial-order{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--muted)}
-.indicator-access-box{border:1px solid rgba(79,140,255,.16);background:rgba(79,140,255,.07);border-radius:8px;padding:12px}
+.indicator-access-box{border:1px solid rgba(91,139,255,.16);background:rgba(91,139,255,.07);border-radius:8px;padding:12px}
 .indicator-check{display:flex;align-items:flex-start;gap:9px;font-size:12.5px;color:var(--text-2);font-weight:700;line-height:1.35}
 .indicator-check input{margin-top:2px;accent-color:var(--accent)}
 
@@ -661,7 +670,7 @@ td{padding:12px 16px;color:#dce6f7}
   }
   .sb-nav{padding:16px 10px}
   .sb-sec{height:1px;margin:12px 12px 8px;padding:0;border-top:1px solid rgba(148,163,184,.12);color:transparent;font-size:0}
-  .sidebar:hover .sb-sec,.sidebar:focus-within .sb-sec{height:auto;margin:6px 0 0;padding:14px 12px 7px;border-top:0;color:#7890b5;font-size:10px}
+  .sidebar:hover .sb-sec,.sidebar:focus-within .sb-sec{height:auto;margin:6px 0 0;padding:14px 12px 7px;border-top:0;color:#96a4c2;font-size:10px}
   .sb-item{justify-content:center;gap:0;padding:10px;font-size:0}
   .sidebar:hover .sb-item,.sidebar:focus-within .sb-item{justify-content:flex-start;gap:9px;padding:10px 12px;font-size:14px}
   .sb-foot{padding:14px 10px}
@@ -706,49 +715,49 @@ td{padding:12px 16px;color:#dce6f7}
     <nav class="sb-nav">
       <div class="sb-sec">Painel</div>
       <button class="sb-item on" id="nav-dash" onclick="navTo('dash')">
-        <span class="sb-icon">📊</span> Dashboard
+        <span class="sb-icon"></span> Dashboard
       </button>
 
       <div class="sb-sec" style="margin-top:6px">Gestão</div>
       <button class="sb-item" id="nav-clientes" onclick="navTo('clientes')">
-        <span class="sb-icon">🏢</span> Clientes
+        <span class="sb-icon"></span> Clientes
       </button>
       <button class="sb-item" id="nav-planos" onclick="navTo('planos')">
-        <span class="sb-icon">💳</span> Planos &amp; Leads
+        <span class="sb-icon"></span> Planos &amp; Leads
       </button>
       <button class="sb-item" id="nav-comunicados" onclick="navTo('comunicados')">
         <span class="sb-icon">!</span> Comunicados
       </button>
       <button class="sb-item" id="nav-saques" onclick="navTo('saques')">
-        <span class="sb-icon">💰</span> Saques PIX
+        <span class="sb-icon"></span> Saques PIX
       </button>
       <button class="sb-item" id="nav-faturamento" onclick="navTo('faturamento')">
-        <span class="sb-icon">🧾</span> Faturamento
+        <span class="sb-icon"></span> Faturamento
       </button>
       <button class="sb-item" id="nav-fiscal-uso" onclick="navTo('fiscal-uso')">
         <span class="sb-icon">NFe</span> Uso NFC-e
       </button>
       <button class="sb-item" id="nav-indicacoes" onclick="navTo('indicacoes')">
-        <span class="sb-icon">🎯</span> Indicações
+        <span class="sb-icon"></span> Indicações
       </button>
 
       <div class="sb-sec" style="margin-top:6px">Sistema</div>
       <button class="sb-item" id="nav-ia" onclick="navTo('ia')">
-        <span class="sb-icon">🧠</span> Agente IA
+        <span class="sb-icon"></span> Agente IA
       </button>
       <button class="sb-item" id="nav-backup" onclick="navTo('backup')">
-        <span class="sb-icon">💾</span> Backup
+        <span class="sb-icon"></span> Backup
       </button>
       <button class="sb-item" id="nav-auditoria" onclick="navTo('auditoria')">
-        <span class="sb-icon">📋</span> Auditoria
+        <span class="sb-icon"></span> Auditoria
       </button>
       <button class="sb-item" id="nav-icones" onclick="navTo('icones')">
-        <span class="sb-icon">🖼️</span> Ícones do Açougue
+        <span class="sb-icon"></span> Ícones do Açougue
       </button>
     </nav>
     <div class="sb-foot">
       <button type="button" onclick="abrirModalTrocarSenha()" style="width:100%;display:flex;align-items:center;gap:6px;justify-content:center;background:none;border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--muted);font-size:11.5px;cursor:pointer;margin-bottom:8px">
-        🔑 Trocar minha senha
+        Trocar minha senha
       </button>
       <div class="sb-user" onclick="doLogout()">
         <div class="sb-av" id="adm-av">A</div>
@@ -766,7 +775,7 @@ td{padding:12px 16px;color:#dce6f7}
   <div class="modal-bg" id="m-trocar-senha">
     <div class="modal" style="width:400px">
       <div class="modal-head">
-        <div class="modal-title">🔑 Trocar minha senha</div>
+        <div class="modal-title">Trocar minha senha</div>
         <button class="modal-close" onclick="fecharModal('m-trocar-senha')">×</button>
       </div>
       <div class="modal-body" style="display:flex;flex-direction:column;gap:11px">
@@ -817,59 +826,84 @@ td{padding:12px 16px;color:#dce6f7}
 
       <!-- ════ DASHBOARD ════ -->
       <div id="sec-dash" class="sec-page">
-        <!-- 💰 FINANCEIRO -->
+        <!-- Financeiro -->
         <div class="stats-grid">
-          <div class="stat-card" style="--ca:var(--success);background:linear-gradient(135deg,rgba(34,197,94,.08),transparent)">
+          <div class="stat-card" style="--ca:var(--success);background:linear-gradient(135deg,rgba(45,212,167,.08),transparent)">
             <div class="stat-card-label">MRR — Receita Mensal</div>
             <div class="stat-card-val" id="st-mrr" style="color:var(--success)">R$ —</div>
             <div class="stat-card-sub" id="st-mrr-sub">— ativos pagantes</div>
-            <div class="stat-card-icon">💰</div>
+            <div class="stat-card-icon" id="ic-mrr"></div>
           </div>
-          <div class="stat-card" style="--ca:var(--purple);background:linear-gradient(135deg,rgba(139,92,246,.08),transparent)">
+          <div class="stat-card" style="--ca:var(--purple);background:linear-gradient(135deg,rgba(167,139,250,.08),transparent)">
             <div class="stat-card-label">ARR — Receita Anual</div>
             <div class="stat-card-val" id="st-arr" style="color:var(--purple)">R$ —</div>
             <div class="stat-card-sub">projeção em 12 meses</div>
-            <div class="stat-card-icon">📈</div>
+            <div class="stat-card-icon" id="ic-arr"></div>
           </div>
           <div class="stat-card" style="--ca:var(--orange)">
             <div class="stat-card-label">Ticket Médio</div>
             <div class="stat-card-val" id="st-ticket" style="color:var(--orange)">R$ —</div>
             <div class="stat-card-sub">por cliente ativo</div>
-            <div class="stat-card-icon">🎫</div>
+            <div class="stat-card-icon" id="ic-ticket"></div>
           </div>
           <div class="stat-card" style="--ca:var(--danger)">
             <div class="stat-card-label">Churn (30d)</div>
             <div class="stat-card-val" id="st-churn" style="color:var(--danger)">—%</div>
             <div class="stat-card-sub" id="st-churn-sub">— cancelaram</div>
-            <div class="stat-card-icon">📉</div>
+            <div class="stat-card-icon" id="ic-churn"></div>
           </div>
         </div>
 
-        <!-- 📊 OPERACIONAL -->
+        <!-- Operacional -->
         <div class="stats-grid">
           <div class="stat-card" style="--ca:var(--accent)">
             <div class="stat-card-label">Total Clientes</div>
             <div class="stat-card-val" id="st-total">—</div>
             <div class="stat-card-sub">restaurantes cadastrados</div>
-            <div class="stat-card-icon">🏢</div>
+            <div class="stat-card-icon" id="ic-total"></div>
           </div>
           <div class="stat-card" style="--ca:var(--success)">
             <div class="stat-card-label">Ativos</div>
             <div class="stat-card-val" id="st-ativos" style="color:var(--success)">—</div>
             <div class="stat-card-sub">com acesso liberado</div>
-            <div class="stat-card-icon">✅</div>
+            <div class="stat-card-icon" id="ic-ativos"></div>
           </div>
           <div class="stat-card" style="--ca:var(--danger)">
             <div class="stat-card-label">Inativos</div>
             <div class="stat-card-val" id="st-inativos" style="color:var(--danger)">—</div>
             <div class="stat-card-sub">suspensos ou expirados</div>
-            <div class="stat-card-icon">⏸</div>
+            <div class="stat-card-icon" id="ic-inativos"></div>
           </div>
           <div class="stat-card" style="--ca:var(--purple)">
             <div class="stat-card-label">Usuários</div>
             <div class="stat-card-val" id="st-users" style="color:var(--purple)">—</div>
             <div class="stat-card-sub">gestores cadastrados</div>
-            <div class="stat-card-icon">👤</div>
+            <div class="stat-card-icon" id="ic-users"></div>
+          </div>
+        </div>
+
+        <!-- Gráficos -->
+        <div class="grid-2" style="align-items:stretch">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Receita — últimos 6 meses</div>
+                <div class="card-sub">Total recebido por mês (faturas pagas)</div>
+              </div>
+            </div>
+            <div style="height:220px;position:relative"><canvas id="chart-receita"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Distribuição de planos</div>
+                <div class="card-sub">Clientes ativos por plano</div>
+              </div>
+            </div>
+            <div style="height:220px;position:relative;display:flex;align-items:center;gap:18px">
+              <div style="flex:1;height:100%;position:relative"><canvas id="chart-planos"></canvas></div>
+              <div id="chart-planos-legend" style="flex-shrink:0;min-width:110px;display:flex;flex-direction:column;gap:10px"></div>
+            </div>
           </div>
         </div>
 
@@ -877,7 +911,7 @@ td{padding:12px 16px;color:#dce6f7}
           <div class="card">
             <div class="card-head">
               <div>
-                <div class="card-title">🕐 Clientes Recentes</div>
+                <div class="card-title">Clientes recentes</div>
                 <div class="card-sub">Últimos cadastros no sistema</div>
               </div>
               <button class="btn bg2 bsm" onclick="navTo('clientes')">Ver todos →</button>
@@ -888,8 +922,8 @@ td{padding:12px 16px;color:#dce6f7}
           <div class="card">
             <div class="card-head">
               <div>
-                <div class="card-title">📈 Visão Rápida</div>
-                <div class="card-sub">Status geral da plataforma</div>
+                <div class="card-title">Vencimentos próximos</div>
+                <div class="card-sub">Expirando nos próximos 7 dias</div>
               </div>
             </div>
             <div id="dash-overview"></div>
@@ -901,7 +935,7 @@ td{padding:12px 16px;color:#dce6f7}
       <div id="sec-clientes" style="display:none" class="sec-page">
         <div class="sec-head">
           <div>
-            <div class="sec-head-title">🏢 Clientes &amp; Restaurantes</div>
+            <div class="sec-head-title">Clientes &amp; Restaurantes</div>
             <div class="sec-head-sub">Gerencie todos os restaurantes cadastrados na plataforma</div>
           </div>
           <button class="btn bp" onclick="abrirModalCliente()">
@@ -922,7 +956,7 @@ td{padding:12px 16px;color:#dce6f7}
             </div>
           </div>
 
-          <!-- 🔍 FILTROS + ORDENAÇÃO -->
+          <!-- Filtros + ordenação -->
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 16px 12px;border-bottom:1px solid var(--border)">
             <select id="cli-f-plano" class="minput" onchange="renderClientes()" style="width:auto;padding:6px 10px;font-size:12px">
               <option value="">Todos os planos</option>
@@ -933,15 +967,15 @@ td{padding:12px 16px;color:#dce6f7}
             </select>
             <select id="cli-f-status" class="minput" onchange="renderClientes()" style="width:auto;padding:6px 10px;font-size:12px">
               <option value="">Todos os status</option>
-              <option value="ativo">✅ Ativos</option>
-              <option value="inativo">⏸ Inativos</option>
-              <option value="expirando">⚠️ Expirando em 7d</option>
-              <option value="expirado">❌ Expirados</option>
+              <option value="ativo">Ativos</option>
+              <option value="inativo">Inativos</option>
+              <option value="expirando">Expirando em 7d</option>
+              <option value="expirado">Expirados</option>
             </select>
             <select id="cli-f-segmento" class="minput" onchange="renderClientes()" style="width:auto;padding:6px 10px;font-size:12px">
               <option value="">Todos os segmentos</option>
-              <option value="restaurante">🍔 Restaurante</option>
-              <option value="acougue">🥩 Açougue</option>
+              <option value="restaurante">Restaurante</option>
+              <option value="acougue">Açougue</option>
             </select>
             <select id="cli-f-sort" class="minput" onchange="renderClientes()" style="width:auto;padding:6px 10px;font-size:12px">
               <option value="recentes">Mais recentes</option>
@@ -949,7 +983,7 @@ td{padding:12px 16px;color:#dce6f7}
               <option value="nome">Nome (A-Z)</option>
               <option value="expira">Expira em breve</option>
             </select>
-            <button class="btn bg2 bsm" onclick="limparFiltrosCli()" style="margin-left:auto">✕ Limpar</button>
+            <button class="btn bg2 bsm" onclick="limparFiltrosCli()" style="margin-left:auto">Limpar</button>
           </div>
 
           <table>
@@ -967,7 +1001,7 @@ td{padding:12px 16px;color:#dce6f7}
             <tbody id="cli-tbody"></tbody>
           </table>
 
-          <!-- 📄 PAGINAÇÃO -->
+          <!-- Paginação -->
           <div id="cli-pagination" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border);font-size:12.5px;color:var(--muted);flex-wrap:wrap;gap:10px">
             <div id="cli-pag-info">—</div>
             <div style="display:flex;align-items:center;gap:6px">
@@ -1089,10 +1123,10 @@ td{padding:12px 16px;color:#dce6f7}
       <div id="sec-planos" style="display:none" class="sec-page">
         <div class="sec-head">
           <div>
-            <div class="sec-head-title">💳 Planos &amp; Comercial</div>
+            <div class="sec-head-title">Planos &amp; Comercial</div>
             <div class="sec-head-sub">Configure preços, WhatsApp de leads e acompanhe solicitações de teste</div>
           </div>
-          <button class="btn bp" onclick="salvarPrecosPlanos()">💾 Salvar preços</button>
+          <button class="btn bp" onclick="salvarPrecosPlanos()">Salvar preços</button>
         </div>
 
         <!-- Plano único -->
@@ -1101,12 +1135,12 @@ td{padding:12px 16px;color:#dce6f7}
             <div class="plan-card-icon" style="background:linear-gradient(135deg,rgba(139,92,246,.18),rgba(236,72,153,.1))">
               <svg width="22" height="22" viewBox="0 0 16 16" fill="none" style="color:var(--purple)"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
             </div>
-            <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:4px;color:var(--purple)">Plano Anotai</div>
+            <div style="font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:800;margin-bottom:4px;color:var(--purple)">Plano Anotai</div>
             <div style="font-size:12px;color:var(--muted);margin-bottom:18px">Todas as ferramentas, plano único</div>
             <div class="plan-price-wrap">
               <span class="plan-price-sym">R$</span>
               <input class="minput" id="adm-preco-premium" type="number" step="0.01" min="0" value="99.90"
-                style="font-size:28px;font-weight:800;font-family:'Syne',sans-serif;width:130px;text-align:center;padding:6px 10px;letter-spacing:-1px;color:var(--purple);border-color:rgba(139,92,246,.25)">
+                style="font-size:28px;font-weight:800;font-family:'Space Grotesk',sans-serif;width:130px;text-align:center;padding:6px 10px;letter-spacing:-1px;color:var(--purple);border-color:rgba(139,92,246,.25)">
               <span style="font-size:12px;color:var(--muted)">/mês</span>
             </div>
             <div class="sep"></div>
@@ -1132,7 +1166,7 @@ td{padding:12px 16px;color:#dce6f7}
         </div>
 
         <div class="infobox infobox-orange" style="margin-bottom:20px;display:flex;align-items:flex-start;gap:12px">
-          <div style="font-size:20px;flex-shrink:0">💡</div>
+          
           <div>
             <div style="font-weight:700;margin-bottom:3px;color:var(--orange)">Dica: Promoções</div>
             <div style="font-size:12.5px;color:var(--text-2)">Você pode alterar o preço a qualquer momento para criar promoções gerais. Para dar um desconto individual a um cliente específico, edite o cliente em "Clientes" e preencha o campo "Valor personalizado".</div>
@@ -1143,10 +1177,10 @@ td{padding:12px 16px;color:#dce6f7}
         <div class="card" style="margin-bottom:20px">
           <div class="card-head">
             <div>
-              <div class="card-title">📲 WhatsApp para receber leads</div>
+              <div class="card-title">WhatsApp para receber leads</div>
               <div class="card-sub">Número que recebe notificação quando alguém solicita o teste grátis na landing page</div>
             </div>
-            <button class="btn bp bsm" onclick="salvarAdminPhone()">💾 Salvar</button>
+            <button class="btn bp bsm" onclick="salvarAdminPhone()">Salvar</button>
           </div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <div style="position:relative;flex:1;max-width:320px">
@@ -1162,7 +1196,7 @@ td{padding:12px 16px;color:#dce6f7}
         <div class="tw">
           <div class="tmeta">
             <div>
-              <div class="card-title">🧪 Leads — Teste Grátis</div>
+              <div class="card-title">Leads — Teste Grátis</div>
               <div class="card-sub">Pessoas que solicitaram o teste pela landing page</div>
             </div>
             <button class="btn bg2 bsm" onclick="carregarLeads()">↻ Atualizar</button>
@@ -1182,15 +1216,14 @@ td{padding:12px 16px;color:#dce6f7}
       <div id="sec-ia" style="display:none" class="sec-page">
         <div class="sec-head">
           <div>
-            <div class="sec-head-title">🧠 Agente IA</div>
+            <div class="sec-head-title">Agente IA</div>
             <div class="sec-head-sub">Configurações globais do agente IA para todos os restaurantes</div>
           </div>
-          <button class="btn bp" onclick="iaSalvarConfigAdmin()">💾 Salvar configurações</button>
+          <button class="btn bp" onclick="iaSalvarConfigAdmin()">Salvar configurações</button>
         </div>
 
         <!-- Status atual -->
         <div class="infobox infobox-blue" style="margin-bottom:20px;display:flex;align-items:center;gap:10px">
-          <span style="font-size:18px">📊</span>
           <div id="adm-ia-status-msg" style="font-size:13px">Carregando...</div>
         </div>
 
@@ -1198,7 +1231,7 @@ td{padding:12px 16px;color:#dce6f7}
           <!-- API e Modelo -->
           <div class="card">
             <div class="card-head">
-              <div class="card-title">🔑 API OpenAI</div>
+              <div class="card-title">API OpenAI</div>
             </div>
             <div class="form-group">
               <label class="form-label">API Key</label>
@@ -1208,9 +1241,9 @@ td{padding:12px 16px;color:#dce6f7}
             <div class="form-group">
               <label class="form-label">Modelo</label>
               <select class="minput" id="adm-ia-modelo">
-                <option value="gpt-4o-mini">⚡ GPT-4o Mini (rápido e econômico)</option>
-                <option value="gpt-4o">🧠 GPT-4o (mais inteligente)</option>
-                <option value="gpt-3.5-turbo">💨 GPT-3.5 Turbo</option>
+                <option value="gpt-4o-mini">GPT-4o Mini (rápido e econômico)</option>
+                <option value="gpt-4o">GPT-4o (mais inteligente)</option>
+                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
               </select>
             </div>
             <div class="form-group" style="margin-bottom:0">
@@ -1222,7 +1255,7 @@ td{padding:12px 16px;color:#dce6f7}
           <!-- Comportamento -->
           <div class="card">
             <div class="card-head">
-              <div class="card-title">⚙️ Comportamento das mensagens</div>
+              <div class="card-title">Comportamento das mensagens</div>
             </div>
 
             <div class="form-group">
@@ -1256,7 +1289,7 @@ td{padding:12px 16px;color:#dce6f7}
       <div id="sec-backup" style="display:none" class="sec-page">
         <div class="sec-head">
           <div>
-            <div class="sec-head-title">💾 Backup &amp; Restore</div>
+            <div class="sec-head-title">Backup &amp; Restore</div>
             <div class="sec-head-sub">Gerencie backups de todos os gestores ou individualmente</div>
           </div>
         </div>
@@ -1265,7 +1298,7 @@ td{padding:12px 16px;color:#dce6f7}
         <div class="card" style="margin-bottom:20px">
           <div class="card-head">
             <div>
-              <div class="card-title">🗄️ Backup Global Completo</div>
+              <div class="card-title">Backup Global Completo</div>
               <div class="card-sub">Todos os restaurantes + todas as imagens em um único arquivo</div>
             </div>
             <button class="btn bp" onclick="baixarBackupCompleto()" id="btn-backup-full">
@@ -1282,7 +1315,7 @@ td{padding:12px 16px;color:#dce6f7}
         <div class="card" style="margin-bottom:20px">
           <div class="card-head">
             <div>
-              <div class="card-title">📤 Backup Automático via Telegram</div>
+              <div class="card-title">Backup Automático via Telegram</div>
               <div class="card-sub">Envia o backup.json pra fora do servidor periodicamente — protege contra perda total do volume</div>
             </div>
           </div>
@@ -1318,7 +1351,7 @@ td{padding:12px 16px;color:#dce6f7}
           <!-- Backup por Gestor -->
           <div class="tw" style="margin-bottom:0">
             <div class="tmeta">
-              <div class="card-title">🏢 Backup por Gestor</div>
+              <div class="card-title">Backup por Gestor</div>
               <div class="sbox">
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
                 <input id="bkp-q" placeholder="Buscar gestor..." oninput="renderBackupList()">
@@ -1334,7 +1367,7 @@ td{padding:12px 16px;color:#dce6f7}
           <div class="card" style="margin-bottom:0">
             <div class="card-head">
               <div>
-                <div class="card-title">📤 Importar / Restaurar</div>
+                <div class="card-title">Importar / Restaurar</div>
                 <div class="card-sub">Selecione um arquivo .json ou .json.gz de backup</div>
               </div>
             </div>
@@ -1343,7 +1376,7 @@ td{padding:12px 16px;color:#dce6f7}
             </div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
               <label style="cursor:pointer">
-                <div class="btn bg2">📂 Selecionar arquivo</div>
+                <div class="btn bg2">Selecionar arquivo</div>
                 <input type="file" id="import-file" accept=".json,.gz" style="display:none" onchange="previewImport(this)">
               </label>
               <div id="import-file-name" style="font-size:12px;color:var(--muted)">Nenhum arquivo selecionado</div>
@@ -1358,7 +1391,7 @@ td{padding:12px 16px;color:#dce6f7}
       <div id="sec-saques" style="display:none" class="sec-page">
         <div class="sec-head">
           <div>
-            <div class="sec-head-title">💰 Saques PIX</div>
+            <div class="sec-head-title">Saques PIX</div>
             <div class="sec-head-sub">Gerencie as solicitações de saque e configure o Mercado Pago</div>
           </div>
         </div>
@@ -1367,10 +1400,10 @@ td{padding:12px 16px;color:#dce6f7}
         <div class="card" style="margin-bottom:20px">
           <div class="card-head">
             <div>
-              <div class="card-title">⚙️ Configuração Mercado Pago</div>
+              <div class="card-title">Configuração Mercado Pago</div>
               <div class="card-sub" id="mp-status-txt">Carregando...</div>
             </div>
-            <button class="btn bp bsm" onclick="salvarMpConfig()">💾 Salvar</button>
+            <button class="btn bp bsm" onclick="salvarMpConfig()">Salvar</button>
           </div>
 
           <div class="grid-2" style="margin-bottom:16px">
@@ -1399,7 +1432,7 @@ td{padding:12px 16px;color:#dce6f7}
         <div class="card" style="margin-bottom:20px">
           <div class="card-head">
             <div>
-              <div class="card-title">📲 WhatsApp para cobranças (admin)</div>
+              <div class="card-title">WhatsApp para cobranças (admin)</div>
               <div class="card-sub" id="cob-wa-status-txt">Número que envia cobranças/lembretes para os gestores dos restaurantes (seus clientes SaaS)</div>
             </div>
           </div>
@@ -1419,9 +1452,9 @@ td{padding:12px 16px;color:#dce6f7}
           </div>
 
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-            <button class="btn bp bsm" onclick="cobWaCriarInstancia()">🔌 Criar / Conectar instância</button>
-            <button class="btn bg2 bsm" onclick="cobWaVerificarStatus()">🔄 Verificar status</button>
-            <button class="btn bg2 bsm" onclick="salvarCobrancaWA()">💾 Salvar</button>
+            <button class="btn bp bsm" onclick="cobWaCriarInstancia()">Criar / Conectar instância</button>
+            <button class="btn bg2 bsm" onclick="cobWaVerificarStatus()">Verificar status</button>
+            <button class="btn bg2 bsm" onclick="salvarCobrancaWA()">Salvar</button>
           </div>
 
           <div id="cob-wa-status-badge" style="margin-bottom:14px"></div>
@@ -1457,7 +1490,7 @@ td{padding:12px 16px;color:#dce6f7}
             <div>
               <div class="card-title">⏳ Saques Pendentes</div>
             </div>
-            <button class="btn bg2 bsm" onclick="carregarSaquesAdmin()">🔄 Atualizar</button>
+            <button class="btn bg2 bsm" onclick="carregarSaquesAdmin()">Atualizar</button>
           </div>
           <table>
             <thead>
@@ -1470,8 +1503,8 @@ td{padding:12px 16px;color:#dce6f7}
         <!-- Histórico pagos -->
         <div class="tw">
           <div class="tmeta">
-            <div class="card-title">✅ Histórico de Saques Pagos</div>
-            <button class="btn bg2 bsm" onclick="carregarSaquesAdmin('pago')">🔄 Ver pagos</button>
+            <div class="card-title">Histórico de Saques Pagos</div>
+            <button class="btn bg2 bsm" onclick="carregarSaquesAdmin('pago')">Ver pagos</button>
           </div>
           <table>
             <thead>
@@ -1486,10 +1519,10 @@ td{padding:12px 16px;color:#dce6f7}
       <div id="sec-faturamento" style="display:none" class="sec-page">
         <div class="sec-head">
           <div>
-            <div class="sec-head-title">🧾 Faturamento</div>
+            <div class="sec-head-title">Faturamento</div>
             <div class="sec-head-sub">Cobranças geradas, pagas e pendentes dos clientes</div>
           </div>
-          <button class="btn bg2 bsm" onclick="carregarFaturamento()">🔄 Atualizar</button>
+          <button class="btn bg2 bsm" onclick="carregarFaturamento()">Atualizar</button>
         </div>
 
         <div class="grid-3" style="margin-bottom:20px">
@@ -1516,10 +1549,10 @@ td{padding:12px 16px;color:#dce6f7}
         <div class="card" style="margin-bottom:20px">
           <div class="card-head">
             <div>
-              <div class="card-title">⚡ Cobrança em massa</div>
+              <div class="card-title">Cobrança em massa</div>
               <div class="card-sub">Gera cobrança automática para todos os clientes que vencem nos próximos 7 dias</div>
             </div>
-            <button class="btn bp bsm" onclick="cobrancaEmMassa()">📲 Disparar cobrança em massa</button>
+            <button class="btn bp bsm" onclick="cobrancaEmMassa()">Disparar cobrança em massa</button>
           </div>
           <div id="ft-massa-info" class="infobox infobox-blue" style="font-size:12.5px">
             Cada cliente recebe um link Mercado Pago (PIX/Cartão) por WhatsApp. O vencimento é renovado automaticamente após o pagamento.
@@ -1535,9 +1568,9 @@ td{padding:12px 16px;color:#dce6f7}
             <div style="display:flex;gap:8px">
               <select id="ft-filtro" class="minput" onchange="renderFaturamento()" style="width:auto;padding:6px 10px;font-size:12px">
                 <option value="">Todas</option>
-                <option value="pago">✅ Pagas</option>
+                <option value="pago">Pagas</option>
                 <option value="pendente">⏳ Pendentes</option>
-                <option value="vencido">🚨 Vencidas</option>
+                <option value="vencido">Vencidas</option>
                 <option value="cancelado">⏹ Canceladas</option>
               </select>
             </div>
@@ -1621,7 +1654,7 @@ td{padding:12px 16px;color:#dce6f7}
       <div id="sec-indicacoes" style="display:none" class="sec-page">
         <div class="sec-head">
           <div>
-            <div class="sec-head-title">🎯 Indicações</div>
+            <div class="sec-head-title">Indicações</div>
             <div class="sec-head-sub">Indicadores parceiros, leads recebidos e comissões a pagar</div>
           </div>
           <button class="btn bg2 bsm" onclick="abrirModalIndicador()">+ Novo indicador</button>
@@ -1653,9 +1686,9 @@ td{padding:12px 16px;color:#dce6f7}
 
         <!-- Sub-tabs: Indicadores | Leads | Comissões | Aulas -->
         <div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0">
-          <button class="ind-tab on" data-tab="indicadores" onclick="indSwitchTab('indicadores')">👥 Indicadores</button>
-          <button class="ind-tab"    data-tab="leads"        onclick="indSwitchTab('leads')">🎯 Leads</button>
-          <button class="ind-tab"    data-tab="comissoes"    onclick="indSwitchTab('comissoes')">💰 Comissões</button>
+          <button class="ind-tab on" data-tab="indicadores" onclick="indSwitchTab('indicadores')">Indicadores</button>
+          <button class="ind-tab"    data-tab="leads"        onclick="indSwitchTab('leads')">Leads</button>
+          <button class="ind-tab"    data-tab="comissoes"    onclick="indSwitchTab('comissoes')">Comissões</button>
           <button class="ind-tab"    data-tab="aulas"        onclick="indSwitchTab('aulas')">Aulas</button>
         </div>
 
@@ -1686,10 +1719,10 @@ td{padding:12px 16px;color:#dce6f7}
               <select id="lead-f-status" class="minput" onchange="carregarLeadsIndicacao()" style="width:auto;padding:6px 10px;font-size:12px">
                 <option value="">Todos</option>
                 <option value="novo">🆕 Novos</option>
-                <option value="em_contato">📞 Em contato</option>
-                <option value="negociando">💬 Negociando</option>
-                <option value="convertido">✅ Convertidos</option>
-                <option value="perdido">❌ Perdidos</option>
+                <option value="em_contato">Em contato</option>
+                <option value="negociando">Negociando</option>
+                <option value="convertido">Convertidos</option>
+                <option value="perdido">Perdidos</option>
               </select>
             </div>
             <table>
@@ -1705,7 +1738,7 @@ td{padding:12px 16px;color:#dce6f7}
         <div id="ind-tab-comissoes" class="ind-tab-content" style="display:none">
           <div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
             <input type="month" id="com-mes-input" class="minput" style="width:auto;padding:7px 10px;font-size:13px">
-            <button class="btn bg2 bsm" onclick="gerarComissoesDoMes()">⚙️ Gerar comissões deste mês</button>
+            <button class="btn bg2 bsm" onclick="gerarComissoesDoMes()">Gerar comissões deste mês</button>
             <span style="font-size:11.5px;color:var(--muted);margin-left:8px">Roda quando os tenants pagarem a mensalidade do mês</span>
           </div>
           <div class="tw">
@@ -1796,10 +1829,10 @@ td{padding:12px 16px;color:#dce6f7}
       <div id="sec-auditoria" style="display:none" class="sec-page">
         <div class="sec-head">
           <div>
-            <div class="sec-head-title">📋 Auditoria</div>
+            <div class="sec-head-title">Auditoria</div>
             <div class="sec-head-sub">Histórico de todas as ações administrativas realizadas no sistema</div>
           </div>
-          <button class="btn bg2 bsm" onclick="carregarAuditoria()">🔄 Atualizar</button>
+          <button class="btn bg2 bsm" onclick="carregarAuditoria()">Atualizar</button>
         </div>
 
         <div class="tw">
@@ -1832,7 +1865,7 @@ td{padding:12px 16px;color:#dce6f7}
       <div id="sec-icones" style="display:none" class="sec-page">
         <div class="sec-head">
           <div>
-            <div class="sec-head-title">🖼️ Ícones do Açougue</div>
+            <div class="sec-head-title">Ícones do Açougue</div>
             <div class="sec-head-sub">Ícones padrão de cortes e formas de preparo, usados por TODOS os açougues do sistema (não é por loja). Cada um tem 2 versões: uma pra tema claro, outra pra tema escuro.</div>
           </div>
         </div>
@@ -1924,7 +1957,7 @@ td{padding:12px 16px;color:#dce6f7}
 <div class="modal-bg" id="m-converter-lead">
   <div class="modal" style="width:440px">
     <div class="modal-head">
-      <div class="modal-title">✅ Converter lead em cliente</div>
+      <div class="modal-title">Converter lead em cliente</div>
       <button class="modal-close" onclick="fecharModal('m-converter-lead')">×</button>
     </div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:11px">
@@ -1955,7 +1988,7 @@ td{padding:12px 16px;color:#dce6f7}
 <div class="modal-bg" id="m-confirm-dupla">
   <div class="modal" style="width:440px">
     <button class="modal-x" onclick="fecharModal('m-confirm-dupla')">✕</button>
-    <h2 id="cd-titulo" style="color:var(--danger)">⚠️ Confirmar ação destrutiva</h2>
+    <h2 id="cd-titulo" style="color:var(--danger)">Confirmar ação destrutiva</h2>
     <div id="cd-mensagem" style="font-size:13.5px;color:var(--text-2);margin-bottom:16px;line-height:1.55"></div>
     <div class="infobox infobox-orange" style="font-size:12.5px;margin-bottom:14px">
       Esta ação <strong>não pode ser desfeita</strong>. Para confirmar, digite exatamente:
@@ -1973,7 +2006,7 @@ td{padding:12px 16px;color:#dce6f7}
 <div class="modal-bg" id="m-saude">
   <div class="modal" style="width:720px;max-height:90vh;overflow-y:auto">
     <button class="modal-x" onclick="fecharModal('m-saude')">✕</button>
-    <h2 id="sd-titulo">📊 Saúde do Cliente</h2>
+    <h2 id="sd-titulo">Saúde do Cliente</h2>
     <div id="sd-content">
       <div style="text-align:center;padding:40px;color:var(--muted)">Carregando...</div>
     </div>
@@ -1984,7 +2017,7 @@ td{padding:12px 16px;color:#dce6f7}
 <div class="modal-bg" id="m-cobranca">
   <div class="modal" style="width:480px">
     <button class="modal-x" onclick="fecharModal('m-cobranca')">✕</button>
-    <h2 id="cb-titulo">💳 Gerar cobrança</h2>
+    <h2 id="cb-titulo">Gerar cobrança</h2>
     <div id="cb-info" style="font-size:13px;color:var(--text-2);margin-bottom:14px"></div>
 
     <div class="mrow2">
@@ -2025,7 +2058,7 @@ td{padding:12px 16px;color:#dce6f7}
 
     <div style="display:flex;gap:10px;margin-top:16px">
       <button class="btn bg2" style="flex:1" onclick="fecharModal('m-cobranca')">Cancelar</button>
-      <button class="btn bp" style="flex:1" id="cb-confirmar" onclick="cbGerar()">📲 Gerar e enviar</button>
+      <button class="btn bp" style="flex:1" id="cb-confirmar" onclick="cbGerar()">Gerar e enviar</button>
     </div>
   </div>
 </div>
@@ -2034,10 +2067,10 @@ td{padding:12px 16px;color:#dce6f7}
 <div class="modal-bg" id="m-cliente">
   <div class="modal">
     <button class="modal-x" onclick="fecharModal('m-cliente')">✕</button>
-    <h2 id="m-cli-titulo">➕ Novo Cliente</h2>
+    <h2 id="m-cli-titulo">Novo Cliente</h2>
     <input type="hidden" id="cli-id">
 
-    <div class="modal-sec-title">🏢 Dados do Estabelecimento</div>
+    <div class="modal-sec-title">Dados do Estabelecimento</div>
     <div class="mrow">
       <label class="mlabel">Nome do estabelecimento *</label>
       <input class="minput" id="cli-nome" placeholder="Ex: Estima Food" oninput="autoSlug()">
@@ -2058,8 +2091,8 @@ td{padding:12px 16px;color:#dce6f7}
       <div class="mrow" style="margin:0">
         <label class="mlabel">Segmento</label>
         <select class="minput" id="cli-segmento">
-          <option value="restaurante">🍔 Restaurante / Pizzaria / Lanchonete</option>
-          <option value="acougue">🥩 Açougue / Frigorífico</option>
+          <option value="restaurante">Restaurante / Pizzaria / Lanchonete</option>
+          <option value="acougue">Açougue / Frigorífico</option>
         </select>
       </div>
       <div class="mrow" style="margin:0">
@@ -2097,7 +2130,7 @@ td{padding:12px 16px;color:#dce6f7}
 
     <!-- IA (só edição) -->
     <div id="cli-ia-section" style="display:none">
-      <div class="modal-sec-title">🤖 Agente IA</div>
+      <div class="modal-sec-title">Agente IA</div>
       <div class="mrow" style="margin-bottom:6px">
         <label class="mlabel">API Key OpenAI (exclusiva deste gestor)</label>
         <input class="minput" id="cli-ia-key" type="password" placeholder="sk-... (deixe em branco para usar a chave global)" autocomplete="off">
@@ -2108,7 +2141,7 @@ td{padding:12px 16px;color:#dce6f7}
 
     <!-- Gestor (só criação) -->
     <div id="cli-gestor-section">
-      <div class="modal-sec-title">👤 Acesso do Gestor</div>
+      <div class="modal-sec-title">Acesso do Gestor</div>
       <div class="mrow">
         <label class="mlabel">Nome do responsável *</label>
         <input class="minput" id="cli-gestor-nome" placeholder="Nome de quem vai operar o sistema">
@@ -2127,7 +2160,7 @@ td{padding:12px 16px;color:#dce6f7}
 
     <div style="display:flex;gap:8px;margin-top:20px">
       <button class="btn bg2" style="flex:1" onclick="fecharModal('m-cliente')">Cancelar</button>
-      <button class="btn bp" style="flex:1" onclick="salvarCliente()">💾 Salvar</button>
+      <button class="btn bp" style="flex:1" onclick="salvarCliente()">Salvar</button>
     </div>
   </div>
 </div>
@@ -2136,7 +2169,7 @@ td{padding:12px 16px;color:#dce6f7}
 <div class="modal-bg" id="m-renovar">
   <div class="modal" style="width:430px">
     <button class="modal-x" onclick="fecharModal('m-renovar')">✕</button>
-    <h2 id="m-ren-titulo">🔄 Renovar Acesso</h2>
+    <h2 id="m-ren-titulo">Renovar Acesso</h2>
     <input type="hidden" id="ren-id">
     <div class="infobox infobox-blue" style="margin-bottom:18px;font-size:13px" id="ren-info">Vencimento atual: —</div>
 
@@ -2172,7 +2205,7 @@ td{padding:12px 16px;color:#dce6f7}
 <div class="modal-bg" id="m-usuarios-cli">
   <div class="modal" style="width:580px">
     <button class="modal-x" onclick="fecharModal('m-usuarios-cli')">✕</button>
-    <h2 id="m-ucli-titulo">👥 Usuários</h2>
+    <h2 id="m-ucli-titulo">Usuários</h2>
     <div id="ucli-lista" style="margin-bottom:16px"></div>
     <button class="btn bp bsm" onclick="abrirFormUsuario()">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -2194,7 +2227,7 @@ td{padding:12px 16px;color:#dce6f7}
       <div class="mrow"><label class="mlabel">Senha <span style="font-weight:400;text-transform:none;letter-spacing:0">(deixe em branco para não alterar)</span></label><input class="minput" id="usr-senha" type="password" placeholder="Mínimo 6 caracteres"></div>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button class="btn bg2" style="flex:1" onclick="fecharFormUsuario()">Cancelar</button>
-        <button class="btn bp" style="flex:1" onclick="salvarUsuario()">💾 Salvar</button>
+        <button class="btn bp" style="flex:1" onclick="salvarUsuario()">Salvar</button>
       </div>
     </div>
   </div>
@@ -2318,7 +2351,10 @@ const ADMIN_ICONS = {
   trend:'<path d="M2.5 11.5l3.2-3.2 2.4 2.4 4.9-5"/><path d="M10 5.7h3v3"/>',
   ticket:'<path d="M3 5a1.7 1.7 0 0 1 1.7-1.7h6.6A1.7 1.7 0 0 1 13 5v1.1a1.9 1.9 0 0 0 0 3.8V11a1.7 1.7 0 0 1-1.7 1.7H4.7A1.7 1.7 0 0 1 3 11V9.9a1.9 1.9 0 0 0 0-3.8z"/><path d="M8 4.2v1.2M8 7.4v1.2M8 10.6v1.2"/>',
   check:'<path d="M3.5 8.3l2.8 2.8 6.2-6.2"/>',
-  calendar:'<rect x="2.5" y="3.5" width="11" height="10" rx="1.7"/><path d="M5.5 2.5v2M10.5 2.5v2M2.5 6.5h11"/>'
+  calendar:'<rect x="2.5" y="3.5" width="11" height="10" rx="1.7"/><path d="M5.5 2.5v2M10.5 2.5v2M2.5 6.5h11"/>',
+  close:'<path d="M4 4l8 8M12 4l-8 8"/>',
+  link:'<path d="M6.8 9.2a2.6 2.6 0 0 0 3.7.2l1.8-1.8a2.6 2.6 0 0 0-3.7-3.7L7.5 5"/><path d="M9.2 6.8a2.6 2.6 0 0 0-3.7-.2L3.7 8.4a2.6 2.6 0 0 0 3.7 3.7L8.5 11"/>',
+  copy:'<rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.6"/><path d="M10.5 5.5V3.7A1.7 1.7 0 0 0 8.8 2H3.7A1.7 1.7 0 0 0 2 3.7v5.1a1.7 1.7 0 0 0 1.7 1.7h1.8"/>'
 };
 
 function adminIcon(name, cls = 'ui-ico') {
@@ -2372,7 +2408,8 @@ function polishAdminUI(root = document) {
     'nav-indicacoes':'target',
     'nav-ia':'brain',
     'nav-backup':'backup',
-    'nav-auditoria':'audit'
+    'nav-auditoria':'audit',
+    'nav-icones':'card'
   };
   Object.entries(navIcons).forEach(([id, icon]) => {
     const slot = document.querySelector(`#${id} .sb-icon`);
@@ -2405,7 +2442,13 @@ function polishAdminUI(root = document) {
     'st-total':'clients',
     'st-ativos':'check',
     'st-inativos':'pause',
-    'st-users':'users'
+    'st-users':'users',
+    'saq-cnt-pendentes':'wallet',
+    'saq-cnt-pagos':'check',
+    'saq-vol-pendente':'trend',
+    'ft-recebido':'check',
+    'ft-pendente':'invoice',
+    'ft-vencidas':'target'
   };
   Object.entries(statIcons).forEach(([id, icon]) => {
     const card = document.getElementById(id)?.closest('.stat-card');
@@ -2758,7 +2801,7 @@ async function salvarPrecosPlanos() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
     await auditLog('planos.alterar_precos', null, { premium });
-    toast('ok', '✅ Preço salvo com sucesso!');
+    toast('ok', 'Preço salvo com sucesso!');
     calcularFinanceiro(); // recalcula MRR/ARR com o novo preço
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
@@ -2772,7 +2815,7 @@ async function carregarAdminPhone() {
     if (el && d.admin_phone) el.value = d.admin_phone;
     const st = document.getElementById('adm-phone-status');
     if (st) st.innerHTML = d.admin_phone
-      ? `<span style="color:var(--success)">✅ WhatsApp configurado: +${d.admin_phone}</span>`
+      ? `<span style="color:var(--success)">WhatsApp configurado: +${d.admin_phone}</span>`
       : `<span style="color:var(--muted)">Nenhum número configurado ainda</span>`;
   } catch(e) {}
 }
@@ -2786,7 +2829,7 @@ async function salvarAdminPhone() {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    toast('ok', '✅ WhatsApp salvo!');
+    toast('ok', 'WhatsApp salvo!');
     carregarAdminPhone();
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
@@ -2799,7 +2842,7 @@ async function carregarLeads() {
     const r = await fetch('/api/admin/leads-trial', { headers: adminAuthHeader() });
     const leads = r.ok ? await r.json() : [];
     if (!leads.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">🧪</div><div class="es-msg">Nenhum lead ainda</div></div></td></tr>';
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">${adminIcon('target')}</div><div class="es-msg">Nenhum lead ainda</div></div></td></tr>`;
       return;
     }
     tbody.innerHTML = leads.map(l => `
@@ -2812,7 +2855,7 @@ async function carregarLeads() {
         <td style="font-size:12px;color:var(--muted)">${l.created_at ? new Date(l.created_at).toLocaleDateString('pt-BR') : '—'}</td>
         <td>
           <a href="https://wa.me/${(l.telefone||'').replace(/\D/g,'')}?text=${encodeURIComponent('Oi ' + l.nome + ', vi que você solicitou o teste grátis do Estima Food! Posso te ajudar a configurar tudo agora?')}"
-            target="_blank" class="btn bp bsm">📲 Chamar</a>
+            target="_blank" class="btn bp bsm">Chamar</a>
         </td>
       </tr>`).join('');
   } catch(e) { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--danger)">Erro: ${e.message}</td></tr>`; }
@@ -2825,7 +2868,7 @@ let _adminSseSource    = null;
 function conectarAdminSSE() {
   if (_adminSseSource) return;
   _adminSseSource = new EventSource('/sse/saques-admin');
-  _adminSseSource.addEventListener('saques:INSERT', () => { toast('ok','🔔 Nova solicitação de saque!'); carregarSaquesAdmin('pendente'); });
+  _adminSseSource.addEventListener('saques:INSERT', () => { toast('ok','Nova solicitação de saque!'); carregarSaquesAdmin('pendente'); });
   _adminSseSource.addEventListener('saques:UPDATE', () => { carregarSaquesAdmin('pendente'); carregarSaquesAdmin('pago'); });
   _adminSseSource.onerror = () => { _adminSseSource.close(); _adminSseSource = null; setTimeout(conectarAdminSSE, 5000); };
 }
@@ -2838,7 +2881,7 @@ async function togglePix(tenantId, ativo) {
     if (!r.ok) throw new Error(d.error);
     _pixAtivoPorTenant[tenantId] = d.pix_ativo;
     renderClientes();
-    toast('ok', d.pix_ativo ? '⚡ PIX ativado!' : '⚡ PIX desativado!');
+    toast('ok', d.pix_ativo ? 'PIX ativado!' : 'PIX desativado!');
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
 
@@ -2866,6 +2909,10 @@ async function loadAll() {
   document.getElementById('st-users').textContent    = _usuarios.length;
 
   calcularFinanceiro();
+  // Precisa das faturas carregadas ANTES de desenhar o dashboard, pra saber
+  // quais clientes expirando já têm cobrança pendente enviada (e mostrar
+  // "✅ Enviada" em vez do botão "Cobrar" de novo).
+  await carregarFaturamento();
   renderDash(); renderClientes();
   if (document.getElementById('sec-comunicados')?.style.display !== 'none') renderComunicadoTargetsAdmin();
   carregarPixStatus();
@@ -2917,7 +2964,7 @@ function renderDash() {
   const el = document.getElementById('dash-list');
   if (el) {
     const list = _clientes.slice(0,6);
-    if (!list.length) { el.innerHTML='<div class="empty-state"><div class="es-icon">🏢</div><div class="es-msg">Nenhum cliente ainda. Crie o primeiro!</div></div>'; }
+    if (!list.length) { el.innerHTML='<div class="empty-state"><div class="es-icon">'+adminIcon('clients')+'</div><div class="es-msg">Nenhum cliente ainda. Crie o primeiro!</div></div>'; }
     else el.innerHTML = list.map(c=>`
       <div class="av-row" style="padding:10px 0;border-bottom:1px solid var(--border)">
         <div class="av">${c.nome.charAt(0).toUpperCase()}</div>
@@ -2930,51 +2977,127 @@ function renderDash() {
       </div>`).join('');
   }
 
-  // Visão rápida
+  // Vencimentos próximos (só a lista de quem está expirando — a contagem
+  // de ativos/inativos/planos já está nos cards e no gráfico de rosca)
   const ov = document.getElementById('dash-overview');
   if (ov) {
-    const ativos   = _clientes.filter(c=>c.ativo).length;
-    const inativos = _clientes.filter(c=>!c.ativo).length;
-    const premium  = _clientes.filter(c=>c.plano==='premium').length;
-    const pro      = _clientes.filter(c=>c.plano==='pro').length;
-    const fiscal   = _clientes.filter(c=>c.plano==='fiscal').length;
     const expiring = _clientes.filter(c=>{
       if(!c.expires_at) return false;
       const d = adminParseDateOnly(c.expires_at), now = new Date();
       return (d - now) < 7*24*3600*1000 && d > now;
     });
-    ov.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:13px;color:var(--text-2)">✅ Ativos</span>
-          <span style="font-weight:700;color:var(--success)">${ativos}</span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:13px;color:var(--text-2)">⏸ Inativos</span>
-          <span style="font-weight:700;color:var(--danger)">${inativos}</span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:13px;color:var(--text-2)">⭐ Plano Premium</span>
-          <span style="font-weight:700;color:var(--purple)">${premium}</span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:13px;color:var(--text-2)">💙 Plano Pro</span>
-          <span style="font-weight:700;color:var(--accent)">${pro}</span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:13px;color:var(--text-2)">NFC-e Plano Fiscal</span>
-          <span style="font-weight:700;color:var(--success)">${fiscal}</span>
-        </div>
-        ${expiring.length ? `
-        <div style="margin-top:4px">
-          <div class="infobox infobox-orange" style="font-size:12px">
-            <div style="font-weight:700;color:var(--orange);margin-bottom:4px">⚠️ Expirando em 7 dias (${expiring.length})</div>
-            ${expiring.map(c=>`<div style="color:var(--text-2)">• ${c.nome} — ${adminFormatDate(c.expires_at)}</div>`).join('')}
-          </div>
-        </div>` : `<div style="padding:10px 0;font-size:12.5px;color:var(--muted)">✅ Nenhum plano expirando nos próximos 7 dias</div>`}
-      </div>`;
+    ov.innerHTML = expiring.length ? `
+        <div style="display:flex;flex-direction:column">
+          ${expiring.map((c,i)=>{
+            const faturaPendente = _faturas.find(f => String(f.tenant_id)===String(c.id) && f.status==='pendente');
+            return `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 0;${i>0?'border-top:1px solid var(--border)':''}">
+              <div style="min-width:0">
+                <div style="color:var(--text);font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(c.nome)}</div>
+                <div style="color:var(--muted);font-size:11.5px;margin-top:2px">${adminFormatDate(c.expires_at)}</div>
+              </div>
+              ${faturaPendente
+                ? `<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+                     <span class="badge bg-green">Enviada</span>
+                     <button class="btn bg2 bsm" style="font-size:11px;padding:5px 8px" onclick="reenviarCobranca('${faturaPendente.id}')">Reenviar</button>
+                   </div>`
+                : `<button class="btn bp bsm" style="font-size:11px;padding:5px 10px;flex-shrink:0" onclick="cobrarClienteRapido('${c.id}','${escapeHtml(c.nome).replace(/'/g,"\\'")}',this)">Cobrar</button>`
+              }
+            </div>`;
+          }).join('')}
+        </div>`
+      : `<div class="empty-state"><div class="es-icon">${adminIcon('check')}</div><div class="es-msg">Nenhum plano expirando nos próximos 7 dias</div></div>`;
+  }
+
+  renderDashCharts();
+}
+
+// ── Gráficos do Dashboard (Chart.js) ────────────────────
+let _chartReceita = null, _chartPlanos = null;
+function renderDashCharts() {
+  if (typeof Chart === 'undefined') return;
+
+  // ── Receita mensal (últimos 6 meses, faturas pagas) ──
+  const canvasR = document.getElementById('chart-receita');
+  if (canvasR) {
+    const meses = [];
+    const hoje = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      meses.push({ label: d.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''), ano: d.getFullYear(), mes: d.getMonth() });
+    }
+    const valores = meses.map(m => {
+      return _faturas
+        .filter(f => f.status==='pago' && f.pago_em)
+        .filter(f => { const p = new Date(f.pago_em); return p.getFullYear()===m.ano && p.getMonth()===m.mes; })
+        .reduce((s,f) => s + (parseFloat(f.valor)||0), 0);
+    });
+    if (_chartReceita) _chartReceita.destroy();
+    _chartReceita = new Chart(canvasR, {
+      type: 'line',
+      data: {
+        labels: meses.map(m=>m.label),
+        datasets: [{
+          data: valores,
+          borderColor: '#5b8bff',
+          backgroundColor: (ctx) => {
+            const g = ctx.chart.ctx.createLinearGradient(0,0,0,220);
+            g.addColorStop(0,'rgba(91,139,255,.35)'); g.addColorStop(1,'rgba(91,139,255,0)');
+            return g;
+          },
+          fill: true, tension: .4, borderWidth: 2.5,
+          pointRadius: 3, pointBackgroundColor: '#5b8bff', pointBorderColor: '#0a101d', pointBorderWidth: 2,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: {
+          backgroundColor: '#0f1726', borderColor: 'rgba(148,163,184,.16)', borderWidth: 1,
+          titleColor: '#f8fafc', bodyColor: '#c2cce0', padding: 10, displayColors: false,
+          callbacks: { label: (c) => 'R$ ' + c.parsed.y.toLocaleString('pt-BR',{minimumFractionDigits:2}) }
+        }},
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#8b98b3', font: { family:'Inter', size: 11 } } },
+          y: { grid: { color: 'rgba(148,163,184,.08)' }, ticks: {
+            color: '#8b98b3', font: { family:'Inter', size: 11 },
+            callback: (v) => 'R$ ' + v.toLocaleString('pt-BR')
+          }}
+        }
+      }
+    });
+  }
+
+  // ── Distribuição de planos (rosca) ──
+  const canvasP = document.getElementById('chart-planos');
+  const legendP = document.getElementById('chart-planos-legend');
+  if (canvasP) {
+    const dados = [
+      { label: 'Premium', valor: _clientes.filter(c=>c.plano==='premium').length, cor: '#a78bfa' },
+      { label: 'Pro',     valor: _clientes.filter(c=>c.plano==='pro').length,     cor: '#5b8bff' },
+      { label: 'Fiscal',  valor: _clientes.filter(c=>c.plano==='fiscal').length,  cor: '#2dd4a7' },
+    ].filter(d => d.valor > 0);
+    if (_chartPlanos) _chartPlanos.destroy();
+    if (dados.length) {
+      _chartPlanos = new Chart(canvasP, {
+        type: 'doughnut',
+        data: { labels: dados.map(d=>d.label), datasets: [{ data: dados.map(d=>d.valor), backgroundColor: dados.map(d=>d.cor), borderColor: '#0a101d', borderWidth: 3, hoverOffset: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '72%', plugins: { legend: { display: false }, tooltip: {
+          backgroundColor: '#0f1726', borderColor: 'rgba(148,163,184,.16)', borderWidth: 1,
+          titleColor: '#f8fafc', bodyColor: '#c2cce0', padding: 10, displayColors: true
+        }}}
+      });
+    }
+    if (legendP) {
+      legendP.innerHTML = dados.length ? dados.map(d => `
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:10px;height:10px;border-radius:3px;background:${d.cor};flex-shrink:0"></span>
+          <span style="font-size:12.5px;color:var(--text-2);flex:1">${d.label}</span>
+          <span style="font-size:13px;font-weight:700;color:var(--text)">${d.valor}</span>
+        </div>`).join('') : `<div style="font-size:12.5px;color:var(--muted)">Sem clientes ativos</div>`;
+    }
   }
 }
+
 
 // ── CLIENTES ───────────────────────────────────────────
 let _cliPag = 1;
@@ -3047,7 +3170,7 @@ function renderClientes() {
   if (pagNext) pagNext.disabled    = _cliPag >= totalPag;
 
   if (!fil.length) {
-    el.innerHTML='<tr><td colspan="7"><div class="empty-state"><div class="es-icon">🔍</div><div class="es-msg">Nenhum cliente encontrado</div></div></td></tr>';
+    el.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="es-icon">${adminIcon('search')}</div><div class="es-msg">Nenhum cliente encontrado</div></div></td></tr>`;
     return;
   }
   el.innerHTML = pag.map(c => {
@@ -3071,8 +3194,8 @@ function renderClientes() {
         <div class="manager-name">${gestor?.nome||'—'}</div>
         <div class="manager-email">${gestor?.email||c.email||'—'}</div>
       </td>
-      <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span>${(c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<div style="font-size:11px;color:var(--success);font-weight:700;margin-top:3px">💰 R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês${c.valor_mensalidade_expira_em ? ` <span style="color:var(--warning,#b45309);font-weight:600">(até ${adminFormatDate(c.valor_mensalidade_expira_em)})</span>` : ''}</div>` : ''}</td>
-      <td><span class="badge ${(c.segmento||'restaurante')==='acougue'?'bg-orange':'bg-blue'}">${(c.segmento||'restaurante')==='acougue'?'🥩 Açougue':'🍔 Restaurante'}</span></td>
+      <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span>${(c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<div style="font-size:11px;color:var(--success);font-weight:700;margin-top:3px">R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês${c.valor_mensalidade_expira_em ? ` <span style="color:var(--warning,#b45309);font-weight:600">(até ${adminFormatDate(c.valor_mensalidade_expira_em)})</span>` : ''}</div>` : ''}</td>
+      <td><span class="badge ${(c.segmento||'restaurante')==='acougue'?'bg-orange':'bg-blue'}">${(c.segmento||'restaurante')==='acougue'?'Açougue':'Restaurante'}</span></td>
       <td style="font-size:12.5px;color:${expOk?(expSoon?'var(--orange)':'var(--text-2)'):'var(--danger)'}">${c.expires_at ? adminFormatDate(c.expires_at) : '—'}${expSoon?' ⚠️':''}</td>
       <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">● ${c.ativo?'Ativo':'Inativo'}</span></td>
       <td>
@@ -3102,7 +3225,7 @@ function autoSlug() {
 
 function abrirModalCliente(id) { _abrirModalClienteAsync(id); }
 async function _abrirModalClienteAsync(id) {
-  document.getElementById('m-cli-titulo').textContent = id ? '✏️ Editar Cliente' : '➕ Novo Cliente';
+  document.getElementById('m-cli-titulo').textContent = id ? 'Editar Cliente' : 'Novo Cliente';
   ['cli-id','cli-nome','cli-slug','cli-email','cli-senha','cli-gestor-nome','cli-expira','cli-valor-personalizado','cli-valor-expira','cli-telefone-cobranca'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
   document.getElementById('cli-plano').value    = 'premium';
   document.getElementById('cli-segmento').value = 'restaurante';
@@ -3138,7 +3261,7 @@ async function _abrirModalClienteAsync(id) {
         if (ia.openai_key) {
           keyEl.value = '••••••••' + ia.openai_key.slice(-4);
           keyEl.addEventListener('focus', () => { if (keyEl.value.startsWith('•')) keyEl.value = ''; }, {once:true});
-          statEl.innerHTML = '<span style="color:var(--success)">✅ Chave própria configurada</span>';
+          statEl.innerHTML = '<span style="color:var(--success)">Chave própria configurada</span>';
         } else {
           statEl.innerHTML = '<span style="color:var(--muted)">Sem chave própria — usará a chave global</span>';
         }
@@ -3230,7 +3353,7 @@ async function deletarCliente(id, nome, slug) {
   const users = _usuarios.filter(u=>u.tenant_id===id);
 
   confirmarDupla({
-    titulo: '🗑 Excluir cliente permanentemente',
+    titulo: 'Excluir cliente permanentemente',
     mensagem: `Você está prestes a <strong>excluir todos os dados</strong> de <strong>${nome}</strong>:<br><br>
       • ${users.length} usuário(s) cadastrado(s)<br>
       • Todos os pedidos, cardápio, configurações<br>
@@ -3264,7 +3387,7 @@ function abrirRenovar(id) {
   const c = _clientes.find(x=>x.id===id);
   if (!c) return;
   document.getElementById('ren-id').value = id;
-  document.getElementById('m-ren-titulo').textContent = `🔄 Renovar — ${c.nome}`;
+  document.getElementById('m-ren-titulo').textContent = `Renovar — ${c.nome}`;
   const expAtual = c.expires_at ? adminFormatDate(c.expires_at) : 'Sem data definida';
   document.getElementById('ren-info').textContent = `Vencimento atual: ${expAtual}`;
   const hoje = new Date();
@@ -3328,7 +3451,7 @@ let _tenantAtivo = null;
 function abrirUsuariosCliente(tenantId) {
   _tenantAtivo = tenantId;
   const c = _clientes.find(x=>x.id===tenantId);
-  document.getElementById('m-ucli-titulo').textContent = `👥 Usuários — ${c?.nome||''}`;
+  document.getElementById('m-ucli-titulo').textContent = `Usuários — ${c?.nome||''}`;
   fecharFormUsuario();
   renderUsuariosCliente();
   abrirModal('m-usuarios-cli');
@@ -3349,9 +3472,9 @@ function renderUsuariosCliente() {
       <span class="badge ${rb[u.role]||'bg-gray'}">${u.role}</span>
       <span class="badge ${u.ativo?'bg-green':'bg-red'}">${u.ativo?'Ativo':'Inativo'}</span>
       <div style="display:flex;gap:4px">
-        <button class="btn bg2 bsm btn-icon" onclick="editarUsuarioCliente('${u.id}')">✏️</button>
-        <button class="btn bg2 bsm btn-icon" onclick="toggleUsuario('${u.id}',${u.ativo})">${u.ativo?'⏸':'▶'}</button>
-        <button class="btn bd bsm btn-icon" onclick="deletarUsuario('${u.id}','${u.nome.replace(/'/g,"\\'")}')">🗑</button>
+        <button class="btn bg2 bsm btn-icon" title="Editar" onclick="editarUsuarioCliente('${u.id}')">${adminIcon('edit')}</button>
+        <button class="btn bg2 bsm btn-icon" title="${u.ativo?'Pausar':'Ativar'}" onclick="toggleUsuario('${u.id}',${u.ativo})">${adminIcon(u.ativo?'pause':'play')}</button>
+        <button class="btn bd bsm btn-icon" title="Excluir" onclick="deletarUsuario('${u.id}','${u.nome.replace(/'/g,"\\'")}')">${adminIcon('trash')}</button>
       </div>
     </div>`).join('');
 }
@@ -3412,7 +3535,7 @@ async function toggleUsuario(id, ativo) {
 async function deletarUsuario(id, nome) {
   const u = _usuarios.find(x=>x.id===id);
   confirmarDupla({
-    titulo: '🗑 Remover usuário',
+    titulo: 'Remover usuário',
     mensagem: `Você está prestes a remover o usuário <strong>${nome}</strong>.<br>Ele perderá acesso imediatamente.`,
     token: 'remover',
     callback: async () => {
@@ -3484,7 +3607,7 @@ function toast(type, msg) {
   const c = document.getElementById('toast');
   const d = document.createElement('div');
   d.className = 'ti ti-'+(type==='ok'?'ok':'err');
-  d.innerHTML = (type==='ok'?'✅':'❌') + ' ' + msg;
+  d.innerHTML = (type==='ok'?'':'') + ' ' + msg;
   c.appendChild(d);
   setTimeout(()=>d.remove(), 3500);
 }
@@ -3506,7 +3629,7 @@ async function auditLog(acao, alvo, detalhes) {
 // ── 🛡️ CONFIRMAÇÃO DUPLA ───────────────────────────────
 let _cdCallback = null;
 function confirmarDupla({ titulo, mensagem, token, callback }) {
-  document.getElementById('cd-titulo').textContent = titulo || '⚠️ Confirmar ação destrutiva';
+  document.getElementById('cd-titulo').textContent = titulo || 'Confirmar ação destrutiva';
   document.getElementById('cd-mensagem').innerHTML = mensagem || '';
   document.getElementById('cd-token').textContent  = token;
   const inp = document.getElementById('cd-input');
@@ -3535,8 +3658,8 @@ function gerarCobrancaCliente(tenantId) {
   const c = _clientes.find(x=>x.id===tenantId);
   if (!c) return;
   _cbTenantAtual = c;
-  document.getElementById('cb-titulo').textContent = `💳 Cobrar — ${c.nome}`;
-  document.getElementById('cb-info').innerHTML = `Vencimento atual: <strong>${c.expires_at?adminFormatDate(c.expires_at):'Sem data'}</strong>` + ((c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<br><span style="color:var(--success)">💰 Preço personalizado deste cliente: R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês${c.valor_mensalidade_expira_em ? ` <span style="color:var(--warning,#b45309)">(promoção válida até ${adminFormatDate(c.valor_mensalidade_expira_em)}, depois volta ao valor geral)</span>` : ''}</span>` : '');
+  document.getElementById('cb-titulo').textContent = `Cobrar — ${c.nome}`;
+  document.getElementById('cb-info').innerHTML = `Vencimento atual: <strong>${c.expires_at?adminFormatDate(c.expires_at):'Sem data'}</strong>` + ((c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<br><span style="color:var(--success)">Preço personalizado deste cliente: R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês${c.valor_mensalidade_expira_em ? ` <span style="color:var(--warning,#b45309)">(promoção válida até ${adminFormatDate(c.valor_mensalidade_expira_em)}, depois volta ao valor geral)</span>` : ''}</span>` : '');
   document.getElementById('cb-plano').value = 'premium';
   document.getElementById('cb-meses').value = '1';
   document.getElementById('cb-metodo').value = 'pix';
@@ -3572,12 +3695,12 @@ async function cbGerar() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Falha ao gerar cobrança');
     await auditLog('cobranca.gerar', { tipo:'tenant', id: payload.tenant_id, nome: _cbTenantAtual.nome }, payload);
-    toast('ok', `✅ Cobrança gerada e enviada via WhatsApp!`);
+    toast('ok', `Cobrança gerada e enviada via WhatsApp!`);
     fecharModal('m-cobranca');
   } catch(e) {
     toast('err', 'Erro: ' + e.message);
   } finally {
-    btn.disabled = false; btn.textContent = '📲 Gerar e enviar';
+    btn.disabled = false; btn.textContent = 'Gerar e enviar';
   }
 }
 
@@ -3716,7 +3839,7 @@ function renderSaude(c, d) {
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
         <div>
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700">Health Score</div>
-          <div style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:${scoreClr};line-height:1">${score}/100</div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-size:36px;font-weight:800;color:${scoreClr};line-height:1">${score}/100</div>
         </div>
         <div style="text-align:right">
           <div style="font-size:12px;color:var(--muted)">Cliente há</div>
@@ -3749,15 +3872,15 @@ function renderSaude(c, d) {
       <div class="grid-3">
         <div>
           <div style="font-size:11px;color:var(--muted)">Pedidos</div>
-          <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--accent)">${fmt(d?.pedidos_30d)}</div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:800;color:var(--accent)">${fmt(d?.pedidos_30d)}</div>
         </div>
         <div>
           <div style="font-size:11px;color:var(--muted)">Faturamento</div>
-          <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--success)">${fmtMoney(d?.faturamento_30d)}</div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:800;color:var(--success)">${fmtMoney(d?.faturamento_30d)}</div>
         </div>
         <div>
           <div style="font-size:11px;color:var(--muted)">Mensagens IA</div>
-          <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--purple)">${fmt(d?.mensagens_ia_30d)}</div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:800;color:var(--purple)">${fmt(d?.mensagens_ia_30d)}</div>
         </div>
       </div>
     </div>
@@ -3782,7 +3905,7 @@ function renderSaude(c, d) {
         </div>
         <div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0">
           <span style="color:var(--text-2)">IA configurada</span>
-          <span style="font-weight:600">${d?.ia_ativa ? '✅ Sim' : '⚪ Não'}</span>
+          <span style="font-weight:600">${d?.ia_ativa ? 'Sim' : 'Não'}</span>
         </div>
       </div>
     </div>
@@ -3853,13 +3976,13 @@ function renderFaturamento() {
   document.getElementById('ft-count').textContent = lista.length;
 
   if (!lista.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">🧾</div><div class="es-msg">Nenhuma cobrança encontrada</div></div></td></tr>';
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">${adminIcon('invoice')}</div><div class="es-msg">Nenhuma cobrança encontrada</div></div></td></tr>`;
     return;
   }
 
   const stBadge = { pago:'bg-green', pendente:'bg-orange', vencido:'bg-red', cancelado:'bg-gray' };
-  const stLabel = { pago:'✅ Pago', pendente:'⏳ Pendente', vencido:'🚨 Vencido', cancelado:'⏹ Cancelado' };
-  const metIcon = { pix:'⚡ PIX', cartao:'💳 Cartão', boleto:'🧾 Boleto' };
+  const stLabel = { pago:'Pago', pendente:'Pendente', vencido:'Vencido', cancelado:'Cancelado' };
+  const metIcon = { pix:'PIX', cartao:'Cartão', boleto:'Boleto' };
 
   tbody.innerHTML = lista.map(f => {
     const cli = _clientes.find(c=>c.id===f.tenant_id);
@@ -3875,13 +3998,32 @@ function renderFaturamento() {
       <td><span class="badge ${stBadge[f._st]||'bg-gray'}">${stLabel[f._st]||f._st}</span></td>
       <td>
         <div style="display:flex;gap:4px">
-          ${f.link_pagamento ? `<a class="btn bg2 bsm btn-icon" title="Abrir link" href="${f.link_pagamento}" target="_blank">🔗</a>` : ''}
+          ${f.link_pagamento ? `<a class="btn bg2 bsm btn-icon" title="Abrir link" href="${f.link_pagamento}" target="_blank">${adminIcon('link')}</a>` : ''}
           ${f._st === 'vencido' || f._st === 'pendente' ? `<button class="btn bp bsm btn-icon" title="Reenviar via WhatsApp" onclick="reenviarCobranca('${f.id}')">📲</button>` : ''}
           ${f._st === 'pendente' ? `<button class="btn bd bsm btn-icon" title="Cancelar" onclick="cancelarCobranca('${f.id}')">✕</button>` : ''}
         </div>
       </td>
     </tr>`;
   }).join('');
+}
+async function cobrarClienteRapido(id, nome, btn) {
+  if (!confirm(`Disparar cobrança via WhatsApp para ${nome}?`)) return;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Enviando...'; }
+  try {
+    const r = await fetch('/api/admin/cobranca/em-massa', {
+      method:'POST', headers: adminAuthHeader(), body: JSON.stringify({ tenant_ids: [id] })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha');
+    if (d.falhas > 0 && d.enviadas === 0) throw new Error(d.erros?.[0]?.erro || 'Falha ao enviar cobrança');
+    await auditLog('cobranca.em_massa', { tipo:'tenant', id, nome }, { total: 1 });
+    toast('ok', `Cobrança enviada para ${nome}!`);
+    await carregarFaturamento();
+    renderDash();
+  } catch(e) {
+    toast('err', 'Erro: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Cobrar'; }
+  }
 }
 async function cobrancaEmMassa() {
   const expirando = _clientes.filter(c => {
@@ -3903,7 +4045,7 @@ async function cobrancaEmMassa() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Falha');
     await auditLog('cobranca.em_massa', null, { total: expirando.length, ids: expirando.map(c=>c.id) });
-    toast('ok', `✅ ${d.enviadas || expirando.length} cobranças enviadas!`);
+    toast('ok', `${d.enviadas || expirando.length} cobranças enviadas!`);
     carregarFaturamento();
   } catch(e) {
     toast('err', 'Erro: ' + e.message);
@@ -3917,7 +4059,7 @@ async function reenviarCobranca(id) {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Falha');
     if (d.wa && d.wa.enviado === false) throw new Error(d.wa.motivo || 'WhatsApp não confirmou o envio');
-    toast('ok','📲 Reenviada por WhatsApp');
+    toast('ok','Reenviada por WhatsApp');
   } catch(e) { toast('err','Erro: '+e.message); }
 }
 async function cancelarCobranca(id) {
@@ -3979,7 +4121,7 @@ function renderFiscalUso() {
   if (filtro === 'ja-cobrado') lista = lista.filter(r => !!r.fatura_id);
   document.getElementById('nfce-uso-count').textContent = lista.length;
   if (!lista.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">NFe</div><div class="es-msg">Nenhum uso fiscal encontrado no mês</div></div></td></tr>';
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">${adminIcon('invoice')}</div><div class="es-msg">Nenhum uso fiscal encontrado no mês</div></div></td></tr>`;
     return;
   }
   const stBadge = { pago:'bg-green', pendente:'bg-orange', vencido:'bg-red', cancelado:'bg-gray' };
@@ -4120,7 +4262,7 @@ async function renderIconesPadrao() {
             <button class="btn bg2 bsm" style="flex:1;font-size:10.5px" onclick="document.getElementById('ic-inp-tags-${base}').click()">Trocar claro</button>
             <button class="btn bg2 bsm" style="flex:1;font-size:10.5px" onclick="document.getElementById('ic-inp-tags-${base}-claro').click()">Trocar escuro</button>
           </div>
-          <button class="btn bp bsm" style="font-size:10.5px" onclick="document.getElementById('ic-vid-${base}').click()">🎬 Enviar vídeo (máx 10MB)</button>
+          <button class="btn bp bsm" style="font-size:10.5px" onclick="document.getElementById('ic-vid-${base}').click()">Enviar vídeo MP4 (máx 10MB)</button>
         </div>`;
     return `
     <div style="background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center">
@@ -4129,7 +4271,7 @@ async function renderIconesPadrao() {
       ${botoes}
       <input type="file" id="ic-inp-tags-${base}" accept="image/png" style="display:none" onchange="uploadIconePadrao(this,'tags/${base}.png')">
       <input type="file" id="ic-inp-tags-${base}-claro" accept="image/png" style="display:none" onchange="uploadIconePadrao(this,'tags/${base}-claro.png')">
-      <input type="file" id="ic-vid-${base}" accept="video/mp4,video/webm" style="display:none" onchange="uploadVideoIconePadrao(this,'${base}')">
+      <input type="file" id="ic-vid-${base}" accept="video/mp4" style="display:none" onchange="uploadVideoIconePadrao(this,'${base}')">
     </div>`;
   };
 
@@ -4170,7 +4312,9 @@ async function uploadVideoIconePadrao(input, base) {
   const file = input.files[0];
   if (!file) return;
   if (file.size > 10*1024*1024) { toast('err','Vídeo muito grande (máx 10MB)'); input.value=''; return; }
-  if (!/^video\/(mp4|webm)$/.test(file.type)) { toast('err','Envie um vídeo .mp4 ou .webm'); input.value=''; return; }
+  // Só MP4/H.264 — iPhone (Safari/iOS) não reproduz WebM de jeito nenhum,
+  // o vídeo simplesmente não aparece, sem nenhum erro visível pro cliente.
+  if (!/^video\/mp4$/.test(file.type)) { toast('err','Envie um vídeo em .mp4 — .webm não funciona no iPhone'); input.value=''; return; }
   try {
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -4241,7 +4385,7 @@ function renderAuditoria() {
   document.getElementById('audit-count').textContent = lista.length;
 
   if (!lista.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">📋</div><div class="es-msg">Nenhum log encontrado</div></div></td></tr>';
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">${adminIcon('audit')}</div><div class="es-msg">Nenhum log encontrado</div></div></td></tr>`;
     return;
   }
 
@@ -4296,8 +4440,8 @@ async function iaAdminCarregar() {
     if (ia.max_tokens      !== undefined) document.getElementById('adm-ia-tokens').value  = ia.max_tokens;
 
     if (statusEl) statusEl.innerHTML = ia.openai_key
-      ? `✅ API Key configurada · Modelo: <strong>${ia.modelo||'gpt-4o-mini'}</strong> · Buffer: <strong>${ia.buffer_seg||3}s</strong> · Pausa humano: <strong>${ia.pausa_min||30}min</strong>`
-      : `⚠️ <strong>API Key não configurada</strong> — o Agente IA não funcionará até que seja configurada.`;
+      ? `API Key configurada · Modelo: <strong>${ia.modelo||'gpt-4o-mini'}</strong> · Buffer: <strong>${ia.buffer_seg||3}s</strong> · Pausa humano: <strong>${ia.pausa_min||30}min</strong>`
+      : `<strong>API Key não configurada</strong> — o Agente IA não funcionará até que seja configurada.`;
   } catch(e) {
     if (statusEl) statusEl.textContent = 'Erro ao carregar: ' + e.message;
   }
@@ -4323,7 +4467,7 @@ async function iaSalvarConfigAdmin() {
   try {
     const { error } = await sb.from('store_config').upsert({ tenant_id: '_global', ia_config: JSON.stringify(ia) });
     if (error) throw error;
-    toast('ok','✅ Configurações da IA salvas!');
+    toast('ok','Configurações da IA salvas!');
     const keyEl = document.getElementById('adm-ia-key');
     if (keyEl && ia.openai_key) keyEl.value = '••••••••' + ia.openai_key.slice(-4);
     iaAdminCarregar();
@@ -4362,18 +4506,18 @@ async function salvarTelegramBackupConfig() {
     });
     const data = await r.json().catch(() => null);
     if (!r.ok || !data?.ok) throw new Error(data?.error || `Erro ${r.status}`);
-    toast('ok', '✅ Configuração do backup via Telegram salva!');
+    toast('ok', 'Configuração do backup via Telegram salva!');
     telegramBackupCarregar();
   } catch(e) { toast('err', 'Erro: ' + (e.message || JSON.stringify(e))); }
 }
 
 async function testarTelegramBackup() {
-  toast('ok', '📤 Enviando backup de teste...');
+  toast('ok', 'Enviando backup de teste...');
   try {
     const r = await fetch('/api/admin-backup/telegram-test', { method: 'POST', headers: adminAuthHeader() });
     const data = await r.json();
-    if (data.ok) { toast('ok', '✅ Backup enviado ao Telegram com sucesso!'); telegramBackupCarregar(); }
-    else toast('err', '❌ Falha ao enviar: ' + (data.motivo || 'verifique bot_token/chat_id'));
+    if (data.ok) { toast('ok', 'Backup enviado ao Telegram com sucesso!'); telegramBackupCarregar(); }
+    else toast('err', 'Falha ao enviar: ' + (data.motivo || 'verifique bot_token/chat_id'));
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
 
@@ -4396,10 +4540,10 @@ async function baixarBackupCompleto() {
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
     const kb = Math.round(blob.size / 1024);
-    if (info) info.innerHTML = `<span class="infobox infobox-green" style="display:block">✅ Backup gerado: <strong>${filename}</strong> (${kb} KB)</span>`;
-    toast('ok', `💾 Backup global baixado! (${kb} KB)`);
+    if (info) info.innerHTML = `<span class="infobox infobox-green" style="display:block">Backup gerado: <strong>${filename}</strong> (${kb} KB)</span>`;
+    toast('ok', `Backup global baixado! (${kb} KB)`);
   } catch(e) {
-    if (info) info.textContent = '❌ Erro: ' + e.message;
+    if (info) info.textContent = 'Erro: ' + e.message;
     toast('err', 'Erro ao gerar backup: ' + e.message);
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Baixar backup global'; }
@@ -4411,7 +4555,7 @@ function renderBackupList() {
   const el = document.getElementById('bkp-tbody');
   if (!el) return;
   const fil = _clientes.filter(c => !q || c.nome.toLowerCase().includes(q) || (c.slug||'').includes(q));
-  if (!fil.length) { el.innerHTML = '<tr><td colspan="5"><div class="empty-state"><div class="es-icon">🔍</div><div class="es-msg">Nenhum gestor encontrado</div></div></td></tr>'; return; }
+  if (!fil.length) { el.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="es-icon">${adminIcon('search')}</div><div class="es-msg">Nenhum gestor encontrado</div></div></td></tr>`; return; }
   el.innerHTML = fil.map(c => `
     <tr>
       <td><div style="font-weight:600;font-size:13px">${c.nome}</div></td>
@@ -4433,7 +4577,7 @@ async function baixarBackupGestor(tenantId, slug) {
     a.href = url; a.download = fname;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
-    toast('ok', `💾 Backup de "${slug}" baixado!`);
+    toast('ok', `Backup de "${slug}" baixado!`);
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
 
@@ -4468,21 +4612,21 @@ async function previewImport(input) {
     const ts      = _importData.ts ? new Date(_importData.ts).toLocaleString('pt-BR') : '—';
     if (status) status.innerHTML = `
       <div class="infobox infobox-green" style="margin-top:8px">
-        <div style="font-weight:700;color:var(--success);margin-bottom:10px">✅ Arquivo válido — ${file.name}</div>
+        <div style="font-weight:700;color:var(--success);margin-bottom:10px">Arquivo válido — ${file.name}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12.5px">
-          <div>🏢 <strong>${tenants}</strong> restaurante(s)</div>
-          <div>👤 <strong>${users}</strong> usuário(s)</div>
-          <div>🍽️ <strong>${items}</strong> item(ns)</div>
-          <div>🛎️ <strong>${orders}</strong> pedido(s)</div>
-          <div>🖼️ <strong>${imgs}</strong> imagem(ns)</div>
-          <div>📅 Gerado em: ${ts}</div>
+          <div><strong>${tenants}</strong> restaurante(s)</div>
+          <div><strong>${users}</strong> usuário(s)</div>
+          <div><strong>${items}</strong> item(ns)</div>
+          <div><strong>${orders}</strong> pedido(s)</div>
+          <div><strong>${imgs}</strong> imagem(ns)</div>
+          <div>Gerado em: ${ts}</div>
         </div>
         <div style="margin-top:10px;font-size:11.5px;color:var(--text-2)">Registros já existentes <strong>não serão sobrescritos</strong>.</div>
       </div>`;
     if (btnEl) btnEl.style.display = '';
   } catch(e) {
     _importData = null;
-    if (status) status.innerHTML = `<div class="infobox infobox-red" style="margin-top:8px">❌ Erro ao ler arquivo: ${e.message}</div>`;
+    if (status) status.innerHTML = `<div class="infobox infobox-red" style="margin-top:8px">Erro ao ler arquivo: ${e.message}</div>`;
     if (btnEl)  btnEl.style.display = 'none';
   }
 }
@@ -4500,21 +4644,21 @@ async function importarBackup() {
     if (!res.ok) throw new Error(data.error || `Erro ${res.status}`);
     if (status) status.innerHTML = `
       <div class="infobox infobox-green" style="margin-top:8px">
-        <div style="font-weight:700;color:var(--success);margin-bottom:8px">✅ Restauração concluída!</div>
+        <div style="font-weight:700;color:var(--success);margin-bottom:8px">Restauração concluída!</div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px">
-          <div>📋 Registros inseridos: <strong>${data.registros}</strong></div>
-          <div>⏭️ Já existiam: <strong>${data.registros_ignorados}</strong></div>
-          <div>🖼️ Imagens restauradas: <strong>${data.imagens}</strong></div>
-          ${data.imagens_falha ? `<div style="color:var(--danger)">⚠️ Imagens com erro: ${data.imagens_falha}</div>` : ''}
+          <div>Registros inseridos: <strong>${data.registros}</strong></div>
+          <div>⏭Já existiam: <strong>${data.registros_ignorados}</strong></div>
+          <div>Imagens restauradas: <strong>${data.imagens}</strong></div>
+          ${data.imagens_falha ? `<div style="color:var(--danger)">Imagens com erro: ${data.imagens_falha}</div>` : ''}
         </div>
       </div>`;
-    toast('ok', `✅ Backup restaurado! ${data.registros} registros, ${data.imagens} imagens`);
+    toast('ok', `Backup restaurado! ${data.registros} registros, ${data.imagens} imagens`);
     await loadAll();
   } catch(e) {
-    if (status) status.innerHTML = `<div class="infobox infobox-red" style="margin-top:8px">❌ Erro: ${e.message}</div>`;
+    if (status) status.innerHTML = `<div class="infobox infobox-red" style="margin-top:8px">Erro: ${e.message}</div>`;
     toast('err', 'Erro na restauração: ' + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '⬆️ Restaurar backup'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Restaurar backup'; }
   }
 }
 
@@ -4526,8 +4670,8 @@ async function carregarMpConfig() {
     const d = r.ok ? await r.json() : {};
     const txtEl = document.getElementById('mp-status-txt');
     if (txtEl) txtEl.innerHTML = d.mp_configurado
-      ? `<span style="color:var(--success)">✅ Access Token configurado · Taxa PIX: R$ ${parseFloat(d.taxa_pix||1).toFixed(2)}</span>`
-      : `<span style="color:var(--danger)">⚠️ Access Token MP não configurado</span>`;
+      ? `<span style="color:var(--success)">Access Token configurado · Taxa PIX: R$ ${parseFloat(d.taxa_pix||1).toFixed(2)}</span>`
+      : `<span style="color:var(--danger)">Access Token MP não configurado</span>`;
     const taxaEl = document.getElementById('mp-taxa-input');
     if (taxaEl && d.taxa_pix !== undefined) taxaEl.value = parseFloat(d.taxa_pix).toFixed(2);
     const tokenEl = document.getElementById('mp-token-input');
@@ -4542,8 +4686,8 @@ async function carregarMpConfig() {
       pkEl.addEventListener('focus', () => { if (pkEl.value.startsWith('•')) pkEl.value = ''; }, { once: true });
     }
     if (pkStatus) pkStatus.innerHTML = d.mp_public_key_configurado
-      ? `<span style="color:var(--success)">✅ Chave Pública configurada — cartão de crédito ativo</span>`
-      : `<span style="color:var(--orange)">⚠️ Chave Pública não configurada — cartão de crédito inativo</span>`;
+      ? `<span style="color:var(--success)">Chave Pública configurada — cartão de crédito ativo</span>`
+      : `<span style="color:var(--orange)">Chave Pública não configurada — cartão de crédito inativo</span>`;
   } catch(e) { console.error(e); }
 }
 
@@ -4562,7 +4706,7 @@ async function salvarMpConfig() {
     if (r.status === 401) { toast('err','Sessão expirada.'); setTimeout(doLogout,1500); return; }
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    toast('ok', '✅ Configuração MP salva!');
+    toast('ok', 'Configuração MP salva!');
     carregarMpConfig();
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
@@ -4579,7 +4723,7 @@ async function carregarCobrancaWA() {
     if (inp) inp.value = d.instance || '';
     if (at)  at.value  = d.atendente_whatsapp || '';
     if (st)  st.innerHTML = d.instance
-      ? `<span style="color:var(--success)">✅ Instância configurada: <code style="background:rgba(0,0,0,.3);padding:1px 6px;border-radius:4px">${d.instance}</code></span>`
+      ? `<span style="color:var(--success)">Instância configurada: <code style="background:rgba(0,0,0,.3);padding:1px 6px;border-radius:4px">${d.instance}</code></span>`
       : `<span style="color:var(--muted)">Número que envia cobranças/lembretes para os gestores dos restaurantes (seus clientes SaaS)</span>`;
     if (d.instance) cobWaVerificarStatus();
   } catch(e) {}
@@ -4601,7 +4745,7 @@ async function salvarCobrancaWA() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
     await auditLog('config.cobranca_wa', null, { instance, atendente_whatsapp: atendente });
-    toast('ok', instance ? '✅ Configuração de cobrança salva!' : '✅ Voltou para instância padrão');
+    toast('ok', instance ? 'Configuração de cobrança salva!' : 'Voltou para instância padrão');
     carregarCobrancaWA();
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
@@ -4727,7 +4871,7 @@ function _cobWaIniciarPolling() {
     const state = s.data?.instance?.state || s.data?.state || 'close';
     if (state === 'open') {
       clearInterval(_cobWaQrInterval);
-      _cobWaSetBadge('connected', '✅ Conectado');
+      _cobWaSetBadge('connected', 'Conectado');
       const area = document.getElementById('cob-wa-qr-area');
       if (area) area.innerHTML = '';
       toast('ok', 'WhatsApp de cobrança conectado!');
@@ -4744,11 +4888,11 @@ async function cobWaVerificarStatus() {
   if (!r.ok) { _cobWaSetBadge('disconnected','Desconectado ou instância não encontrada'); return; }
   const state = r.data?.instance?.state || r.data?.state || 'close';
   if (state === 'open') {
-    _cobWaSetBadge('connected', '✅ Conectado');
+    _cobWaSetBadge('connected', 'Conectado');
     const area = document.getElementById('cob-wa-qr-area');
     if (area) area.innerHTML = '';
   } else {
-    _cobWaSetBadge('disconnected', '⚠️ Desconectado — clique em "Criar / Conectar instância"');
+    _cobWaSetBadge('disconnected', 'Desconectado — clique em "Criar / Conectar instância"');
   }
 }
 
@@ -4775,7 +4919,7 @@ function _renderSaquesPendentes(saques) {
   const el = document.getElementById('saq-tbody-pendentes');
   if (!el) return;
   if (!saques.length) {
-    el.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="es-icon">🎉</div><div class="es-msg">Nenhum saque pendente</div></div></td></tr>';
+    el.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="es-icon">${adminIcon('check')}</div><div class="es-msg">Nenhum saque pendente</div></div></td></tr>`;
     return;
   }
   el.innerHTML = saques.map(s => `
@@ -4796,8 +4940,8 @@ function _renderSaquesPendentes(saques) {
       <td style="font-size:12px;color:var(--muted)">${new Date(s.created_at).toLocaleString('pt-BR')}</td>
       <td>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <button class="btn bg2 bsm btn-icon" onclick="navigator.clipboard.writeText('${s.pix_key}').then(()=>toast('ok','Chave PIX copiada!'))" title="Copiar chave PIX">📋</button>
-          <button class="btn bp bsm" onclick="abrirModalPagarSaque(${s.id},'${(s.tenant_nome||'').replace(/'/g,"\\'")}','${s.valor_liquido}','${s.pix_key}','${s.pix_key_tipo}')">✅ Pagar</button>
+          <button class="btn bg2 bsm btn-icon" onclick="navigator.clipboard.writeText('${s.pix_key}').then(()=>toast('ok','Chave PIX copiada!'))" title="Copiar chave PIX"></button>
+          <button class="btn bp bsm" onclick="abrirModalPagarSaque(${s.id},'${(s.tenant_nome||'').replace(/'/g,"\\'")}','${s.valor_liquido}','${s.pix_key}','${s.pix_key_tipo}')">Pagar</button>
           <button class="btn bd bsm btn-icon" onclick="atualizarSaque(${s.id},'cancelado','Cancelado pelo administrador')" title="Cancelar">✕</button>
         </div>
       </td>
@@ -4807,7 +4951,7 @@ function _renderSaquesPendentes(saques) {
 function _renderSaquesPagos(saques) {
   const el = document.getElementById('saq-tbody-pagos');
   if (!el) return;
-  if (!saques.length) { el.innerHTML = '<tr><td colspan="5"><div class="empty-state"><div class="es-icon">📋</div><div class="es-msg">Nenhum saque pago ainda</div></div></td></tr>'; return; }
+  if (!saques.length) { el.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="es-icon">${adminIcon('wallet')}</div><div class="es-msg">Nenhum saque pago ainda</div></div></td></tr>`; return; }
   el.innerHTML = saques.map(s => `
     <tr>
       <td><div style="font-weight:600">${s.tenant_nome||'—'}</div></td>
@@ -4828,7 +4972,7 @@ function abrirModalPagarSaque(id, nome, valor, pixKey, pixTipo) {
   m.innerHTML = `
     <div class="modal" style="max-width:440px">
       <button class="modal-x" onclick="this.closest('.modal-bg').remove()">✕</button>
-      <h2>✅ Confirmar pagamento</h2>
+      <h2>Confirmar pagamento</h2>
       <div class="infobox infobox-green" style="margin-bottom:18px">
         <div style="font-size:12px;color:var(--text-2);margin-bottom:2px">Restaurante</div>
         <div style="font-weight:700;font-size:15px;margin-bottom:12px">${nome}</div>
@@ -4837,7 +4981,7 @@ function abrirModalPagarSaque(id, nome, valor, pixKey, pixTipo) {
         <div style="font-size:12px;color:var(--text-2);margin-bottom:4px">Chave PIX (${(pixTipo||'').toUpperCase()})</div>
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-weight:700;font-size:14px" id="mpag-key">${pixKey}</span>
-          <button onclick="navigator.clipboard.writeText('${pixKey}').then(()=>toast('ok','Copiado!'))" style="background:var(--s3);border:1px solid var(--border);border-radius:6px;padding:2px 9px;color:var(--text-2);cursor:pointer;font-size:11px;font-family:inherit">📋</button>
+          <button onclick="navigator.clipboard.writeText('${pixKey}').then(()=>toast('ok','Copiado!'))" style="background:var(--s3);border:1px solid var(--border);border-radius:6px;padding:2px 9px;color:var(--text-2);cursor:pointer;font-size:11px;font-family:inherit"></button>
         </div>
       </div>
       <div class="mrow">
@@ -4846,7 +4990,7 @@ function abrirModalPagarSaque(id, nome, valor, pixKey, pixTipo) {
       </div>
       <div style="display:flex;gap:8px;margin-top:16px">
         <button class="btn bg2" style="flex:1" onclick="this.closest('.modal-bg').remove()">Cancelar</button>
-        <button class="btn bp" style="flex:1" onclick="confirmarPagamento(${id})">✅ Confirmar</button>
+        <button class="btn bp" style="flex:1" onclick="confirmarPagamento(${id})">Confirmar</button>
       </div>
     </div>`;
   document.body.appendChild(m);
@@ -4863,7 +5007,7 @@ async function atualizarSaque(id, status, obs) {
     const r = await fetch('/api/admin/saques/atualizar', { method:'PATCH', headers:{...adminAuthHeader(),'Content-Type':'application/json'}, body: JSON.stringify({ id, status, obs_admin: obs }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    toast('ok', status === 'pago' ? '✅ Saque marcado como pago!' : '✅ Status atualizado!');
+    toast('ok', status === 'pago' ? 'Saque marcado como pago!' : 'Status atualizado!');
     carregarSaquesAdmin('pendente');
     carregarSaquesAdmin('pago');
   } catch(e) { toast('err', 'Erro: ' + e.message); }
@@ -4916,7 +5060,7 @@ async function carregarIndicadores() {
         <td><b>${escapeHtml(r.nome)}</b>${r.email ? `<div style="font-size:11px;color:var(--muted)">${escapeHtml(r.email)}</div>` : ''}</td>
         <td><code style="background:var(--s2);padding:3px 7px;border-radius:5px;font-size:12px">${r.codigo}</code></td>
         <td>
-          <button class="btn bg2 bsm" style="font-size:11px" onclick="copiarLinkIndicacao('${r.codigo}')">📋 Copiar link</button>
+          <button class="btn bg2 bsm" style="font-size:11px" onclick="copiarLinkIndicacao('${r.codigo}')">Copiar link</button>
         </td>
         <td>${r.comissao_pct}% × ${r.comissao_meses}m</td>
         <td>${r.total_leads}</td>
@@ -4924,9 +5068,9 @@ async function carregarIndicadores() {
         <td><b style="color:#ef4444">R$ ${(r.total_a_pagar || 0).toFixed(2).replace('.', ',')}</b></td>
         <td><span class="ind-status-badge ind-status-${r.ativo ? 'pago' : 'cancelado'}">${r.ativo ? 'Ativo' : 'Inativo'}</span></td>
         <td style="text-align:right;white-space:nowrap">
-          <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" onclick='editarIndicador(${JSON.stringify(r).replace(/'/g,"&#39;")})'>✏️</button>
-          <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" onclick="toggleAtivoIndicador(${r.id}, ${r.ativo ? 0 : 1})">${r.ativo ? '🔇' : '✅'}</button>
-          ${r.total_leads === 0 ? `<button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px;color:#ef4444" onclick="deletarIndicador(${r.id}, '${escapeHtml(r.nome)}')">🗑️</button>` : ''}
+          <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" onclick='editarIndicador(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Editar</button>
+          <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" onclick="toggleAtivoIndicador(${r.id}, ${r.ativo ? 0 : 1})">${r.ativo ? 'Desativar' : 'Ativar'}</button>
+          ${r.total_leads === 0 ? `<button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px;color:#ef4444" onclick="deletarIndicador(${r.id}, '${escapeHtml(r.nome)}')">Excluir</button>` : ''}
         </td>
       </tr>`;
     }).join('');
@@ -4935,7 +5079,7 @@ async function carregarIndicadores() {
 
 function copiarLinkIndicacao(codigo) {
   const link = INDICACAO_BASE_URL + codigo;
-  navigator.clipboard.writeText(link).then(() => toast('ok', '🔗 Link copiado: ' + link));
+  navigator.clipboard.writeText(link).then(() => toast('ok', 'Link copiado: ' + link));
 }
 
 function abrirModalIndicador() {
@@ -4970,7 +5114,7 @@ function editarIndicador(r) {
   document.getElementById('m-ind-codigo-show').textContent = INDICACAO_BASE_URL + r.codigo;
   document.getElementById('m-ind-painel-show').textContent = location.origin + '/indicador';
   document.getElementById('m-ind-codigo-row').style.display = 'block';
-  document.getElementById('m-ind-title').textContent = '✏️ Editar indicador';
+  document.getElementById('m-ind-title').textContent = 'Editar indicador';
   document.getElementById('m-indicador').classList.add('on');
 }
 
@@ -4998,7 +5142,7 @@ async function salvarIndicador() {
     const r = await fetch(url, { method, headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    toast('ok', id ? '✅ Indicador atualizado' : '✅ Indicador criado: ' + d.codigo);
+    toast('ok', id ? 'Indicador atualizado' : 'Indicador criado: ' + d.codigo);
     fecharModal('m-indicador');
     carregarIndicadores();
     carregarResumoIndicacoes();
@@ -5009,7 +5153,7 @@ async function toggleAtivoIndicador(id, ativo) {
   try {
     const r = await fetch(`/api/admin/indicadores/${id}`, { method: 'PUT', headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo }) });
     if (!r.ok) throw new Error('Falha');
-    toast('ok', ativo ? '✅ Indicador reativado' : '🔇 Indicador desativado');
+    toast('ok', ativo ? 'Indicador reativado' : 'Indicador desativado');
     carregarIndicadores();
     carregarResumoIndicacoes();
   } catch(e) { toast('err', 'Erro: ' + e.message); }
@@ -5021,7 +5165,7 @@ async function deletarIndicador(id, nome) {
     const r = await fetch(`/api/admin/indicadores/${id}`, { method: 'DELETE', headers: adminAuthHeader() });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    toast('ok', '🗑️ Indicador removido');
+    toast('ok', 'Indicador removido');
     carregarIndicadores();
     carregarResumoIndicacoes();
   } catch(e) { toast('err', 'Erro: ' + e.message); }
@@ -5050,21 +5194,21 @@ async function carregarLeadsIndicacao() {
       return `<tr>
         <td><b>${escapeHtml(l.nome_estabelecimento)}</b>${l.segmento ? `<div style="font-size:11px;color:var(--muted)">${escapeHtml(l.segmento)}</div>` : ''}</td>
         <td>${escapeHtml(l.nome_cliente)}</td>
-        <td><a href="https://wa.me/55${l.phone_cliente}" target="_blank" style="color:#22c55e;text-decoration:none">📱 ${phoneFmt}</a></td>
+        <td><a href="https://wa.me/55${l.phone_cliente}" target="_blank" style="color:#22c55e;text-decoration:none">${phoneFmt}</a></td>
         <td>${escapeHtml(l.indicador_nome || '—')}</td>
         <td>${escapeHtml(l.cidade || '—')}</td>
         <td>
           <select class="minput" style="padding:4px 7px;font-size:11.5px;width:auto" onchange="mudarStatusLead(${l.id}, this.value, '${l.status}', event)">
             <option value="novo"        ${l.status==='novo'?'selected':''}>🆕 Novo</option>
-            <option value="em_contato"  ${l.status==='em_contato'?'selected':''}>📞 Em contato</option>
-            <option value="negociando"  ${l.status==='negociando'?'selected':''}>💬 Negociando</option>
-            <option value="convertido"  ${l.status==='convertido'?'selected':''}>✅ Convertido</option>
-            <option value="perdido"     ${l.status==='perdido'?'selected':''}>❌ Perdido</option>
+            <option value="em_contato"  ${l.status==='em_contato'?'selected':''}>Em contato</option>
+            <option value="negociando"  ${l.status==='negociando'?'selected':''}>Negociando</option>
+            <option value="convertido"  ${l.status==='convertido'?'selected':''}>Convertido</option>
+            <option value="perdido"     ${l.status==='perdido'?'selected':''}>Perdido</option>
           </select>
         </td>
         <td style="font-size:11.5px;color:var(--muted)">${dataFmt}</td>
         <td style="text-align:right">
-          ${l.observacoes ? `<button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" title="Ver observações" onclick="alert('${escapeHtml(l.observacoes).replace(/'/g,'&#39;')}')">📝</button>` : ''}
+          ${l.observacoes ? `<button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" title="Ver observações" onclick="alert('${escapeHtml(l.observacoes).replace(/'/g,'&#39;')}')">Ver obs.</button>` : ''}
         </td>
       </tr>`;
     }).join('');
@@ -5116,7 +5260,7 @@ async function atualizarStatusLead(id, payload) {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    toast('ok', '✅ Lead atualizado');
+    toast('ok', 'Lead atualizado');
     carregarLeadsIndicacao();
     carregarResumoIndicacoes();
   } catch(e) { toast('err', 'Erro: ' + e.message); }
@@ -5149,11 +5293,11 @@ async function carregarComissoes() {
         <td>${escapeHtml(c.nome_estabelecimento || '—')}</td>
         <td>R$ ${parseFloat(c.valor_pagamento).toFixed(2).replace('.', ',')}</td>
         <td><b style="color:${c.status==='pago'?'#16a34a':'#ef4444'}">R$ ${parseFloat(c.comissao_valor).toFixed(2).replace('.', ',')}</b></td>
-        <td>${c.chave_pix ? `<code style="font-size:11px">${escapeHtml(c.chave_pix)}</code> <button class="btn bg2 bsm" style="font-size:10px;padding:2px 6px" onclick="navigator.clipboard.writeText('${escapeHtml(c.chave_pix)}').then(()=>toast('ok','Copiado!'))">📋</button>` : '—'}</td>
+        <td>${c.chave_pix ? `<code style="font-size:11px">${escapeHtml(c.chave_pix)}</code> <button class="btn bg2 bsm" style="font-size:10px;padding:2px 6px" onclick="navigator.clipboard.writeText('${escapeHtml(c.chave_pix)}').then(()=>toast('ok','Copiado!'))"></button>` : '—'}</td>
         <td><span class="ind-status-badge ind-status-${c.status}">${c.status==='a_pagar'?'A pagar':c.status==='pago'?'Pago':'Cancelado'}</span></td>
         <td style="text-align:right;white-space:nowrap">
           ${c.status === 'a_pagar'
-            ? `<button class="btn bg bsm" style="font-size:11px;padding:4px 9px" onclick="marcarComissaoPaga(${c.id})">✅ Marcar paga</button>`
+            ? `<button class="btn bg bsm" style="font-size:11px;padding:4px 9px" onclick="marcarComissaoPaga(${c.id})">Marcar paga</button>`
             : c.status === 'pago'
             ? `<span style="font-size:11px;color:var(--muted)">${c.data_pagamento_indicador ? new Date(c.data_pagamento_indicador).toLocaleDateString('pt-BR') : ''}</span>`
             : ''}
@@ -5175,7 +5319,7 @@ async function gerarComissoesDoMes() {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    toast('ok', `✅ ${d.geradas} comissões geradas (${d.ignoradas} fora da janela)`);
+    toast('ok', `${d.geradas} comissões geradas (${d.ignoradas} fora da janela)`);
     carregarComissoes();
     carregarResumoIndicacoes();
   } catch(e) { toast('err', 'Erro: ' + e.message); }
@@ -5190,7 +5334,7 @@ async function marcarComissaoPaga(id) {
       body: JSON.stringify({ status: 'pago' })
     });
     if (!r.ok) throw new Error('Falha');
-    toast('ok', '✅ Comissão marcada como paga');
+    toast('ok', 'Comissão marcada como paga');
     carregarComissoes();
     carregarResumoIndicacoes();
   } catch(e) { toast('err', 'Erro: ' + e.message); }
