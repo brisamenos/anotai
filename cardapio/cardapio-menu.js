@@ -327,13 +327,14 @@ function renderMenu() {
         <div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}>
           <div class="dest-img${i.image_url ? ' has-photo' : ''}">
             ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`}
-            <span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>
+            ${i.hide_price ? '' : `<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>`}
           </div>
           <div class="dest-body">
             <div class="dest-name">${i.name}</div>
             <div class="dest-prices">
+              ${i.hide_price ? `<span class="dest-price" style="color:var(--muted)">Ver opções</span>` : `
               ${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}
-              <span class="dest-price">R$ ${fmt(i.price)}</span>
+              <span class="dest-price">R$ ${fmt(i.price)}</span>`}
             </div>
           </div>
         </div>`;
@@ -395,7 +396,7 @@ function renderMenu() {
         const destMedia = i.video_url
           ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
           : (i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : '');
-        html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img${(i.image_url||i.video_url)?' has-photo':''}">${destMedia}<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span></div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span></div></div></div>`;
+        html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img${(i.image_url||i.video_url)?' has-photo':''}">${destMedia}${i.hide_price?'':`<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>`}</div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.hide_price?`<span class="dest-price" style="color:var(--muted)">Ver opções</span>`:`${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span>`}</div></div></div>`;
       });
       html += `</div></div>`;
     }
@@ -684,14 +685,20 @@ function itemCard(i) {
   const cgs = i.custom_groups || [];
   const porcaoGrp = cgs.find(g => g.tipo === 'porcao_ref');
   const porcaoRef = porcaoGrp?.gramas || 0;
-  const porcaoBadge = (porcaoRef > 0 && i.price > 0)
+  // hide_price: preço "de vitrine" é 0/irrelevante — quem cobra de verdade são os
+  // adicionais (ex: categoria "Refrigerante" com as marcas precificadas dentro).
+  // Mostrar R$ 0,00 aqui confundiria o cliente achando que é grátis.
+  const hidePrice = !!i.hide_price;
+  const porcaoBadge = (!hidePrice && porcaoRef > 0 && i.price > 0)
     ? `<div class="item-porcao-ref">${porcaoRef}g · R$ ${fmt(i.price * porcaoRef / 1000)}</div>`
     : '';
   const hasPizzaSizes = typeof _pizzaHasSizePricing === 'function' && _pizzaHasSizePricing(i);
   const isKg = i.item_type === 'kg';
-  const priceText = hasPizzaSizes
-    ? `A partir de R$ ${fmt(_pizzaMinPrice(i))}`
-    : `R$ ${fmt(i.price)}${isKg ? '<span style="font-size:10px;font-weight:400;color:var(--muted)">/kg</span>' : ''}`;
+  const priceText = hidePrice
+    ? 'Ver opções'
+    : (hasPizzaSizes
+      ? `A partir de R$ ${fmt(_pizzaMinPrice(i))}`
+      : `R$ ${fmt(i.price)}${isKg ? '<span style="font-size:10px;font-weight:400;color:var(--muted)">/kg</span>' : ''}`);
 
   return `
   <div class="item-card${isKg && _segmento==='acougue' ? ' item-card-kg' : ''}" ${click} style="${esg?'opacity:.55;cursor:not-allowed':''}">
@@ -699,8 +706,8 @@ function itemCard(i) {
       <div class="item-name">${i.name}</div>
       ${i.description ? `<div class="item-desc">${i.description}</div>` : ''}
       <div class="item-foot">
-        ${i.price_old ? `<span class="item-price-old">R$ ${fmt(i.price_old)}</span>` : ''}
-        <span class="item-price${i.promo||i.price_old?' item-price-promo':''}">${priceText}</span>
+        ${!hidePrice && i.price_old ? `<span class="item-price-old">R$ ${fmt(i.price_old)}</span>` : ''}
+        <span class="item-price${!hidePrice&&(i.promo||i.price_old)?' item-price-promo':''}"${hidePrice?' style="color:var(--muted);font-weight:600"':''}>${priceText}</span>
         <button class="item-add-btn" ${esg?'disabled':''} onclick="event.stopPropagation();openItemModal(${i.id})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
       </div>
       ${porcaoBadge}

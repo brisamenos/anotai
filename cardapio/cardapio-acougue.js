@@ -468,6 +468,7 @@ function _kitMontavelToggle(itemId) {
     if (pesoEl) pesoEl.textContent = '500g';
   }
   _kitMontavelAtualizarResumo();
+  if (typeof updateImAddBtn === 'function') updateImAddBtn();
 }
 
 function _kitMontavelAjustarPeso(itemId, delta) {
@@ -477,6 +478,7 @@ function _kitMontavelAjustarPeso(itemId, delta) {
   const pesoEl = document.getElementById(`kitmv-peso-${itemId}`);
   if (pesoEl) pesoEl.textContent = novo >= 1000 ? (novo/1000).toFixed(1).replace('.',',')+'kg' : novo+'g';
   _kitMontavelAtualizarResumo();
+  if (typeof updateImAddBtn === 'function') updateImAddBtn();
 }
 
 function _kitMontavelAtualizarResumo() {

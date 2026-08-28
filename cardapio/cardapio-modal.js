@@ -44,9 +44,15 @@ function openItemModal(id) {
   document.getElementById('im-desc').textContent = i.description || '';
   const hasPizzaSizesAtOpen = _pizzaHasSizePricing(i);
   const openPrice = hasPizzaSizesAtOpen ? _pizzaMinPrice(i) : (parseFloat(i.price) || 0);
-  document.getElementById('im-price').textContent = (hasPizzaSizesAtOpen ? 'A partir de R$ ' : 'R$ ') + fmt(openPrice) + (i.item_type === 'kg' ? '/kg' : '');
+  // hide_price: preço-base é só de vitrine (0 ou irrelevante) — quem cobra de
+  // verdade são os adicionais. Mostrar aqui confundiria o cliente.
+  if (i.hide_price) {
+    document.getElementById('im-price').textContent = 'Escolha as opções abaixo';
+  } else {
+    document.getElementById('im-price').textContent = (hasPizzaSizesAtOpen ? 'A partir de R$ ' : 'R$ ') + fmt(openPrice) + (i.item_type === 'kg' ? '/kg' : '');
+  }
   const old = document.getElementById('im-price-old');
-  if (i.price_old) { old.textContent = 'R$ ' + fmt(i.price_old); old.style.display = ''; }
+  if (!i.hide_price && i.price_old) { old.textContent = 'R$ ' + fmt(i.price_old); old.style.display = ''; }
   else old.style.display = 'none';
 
   // Porção de referência no modal
@@ -60,7 +66,7 @@ function openItemModal(id) {
   const porcaoGrpM = (i.custom_groups || []).find(g => g.tipo === 'porcao_ref');
   const porcaoRefM = porcaoGrpM?.gramas || 0;
   const pesosGrpM  = (i.custom_groups || []).find(g => g.tipo === 'pesos');
-  if (porcaoRefM > 0 && i.price > 0) {
+  if (!i.hide_price && porcaoRefM > 0 && i.price > 0) {
     porcaoEl.textContent = `${porcaoRefM}g · R$ ${fmt(i.price * porcaoRefM / 1000)}`;
     porcaoEl.style.display = 'inline-flex';
     // Se tem pesos disponíveis, torna clicável para selecionar gramas
@@ -538,11 +544,32 @@ function updateImAddBtn() {
   const needsSize = isPizza && _pizzaHasSizePricing(i) && !_pizzaSizeKey;
   const extra = (typeof _calcGruposExtra === 'function') ? _calcGruposExtra(i) : 0;
   price = (isPizza ? _pizzaCurrentBasePrice(i, _halfItem) : (parseFloat(i.price) || 0)) + extra;
-  const disabled = !_lojaAberta || needsSize || (isPizza && !_halfItem);
+
+  // Kit montável (açougue) — preço não é o do item "kit" (que é só um
+  // agrupador, geralmente 0), e sim a soma de cada corte escolhido pelo
+  // peso selecionado. Sem isso, o botão sempre mostrava R$ 0,00 mesmo com
+  // cortes e pesos já escolhidos no resumo acima.
+  let kitMontavelAtivo = false;
+  if (_isKitItem(i)) {
+    const kitCatsGrp = (i.custom_groups || []).find(g => g.tipo === 'kit_categorias');
+    if (kitCatsGrp?.categorias?.length) {
+      kitMontavelAtivo = true;
+      const fonte = (typeof allItems !== 'undefined' && Array.isArray(allItems)) ? allItems : [];
+      price = Object.entries(_kitMontavelSel || {}).reduce((s, [idStr, peso]) => {
+        const it = fonte.find(x => x.id === parseInt(idStr));
+        return s + (it ? (peso / 1000) * (parseFloat(it.price) || 0) : 0);
+      }, 0);
+    }
+  }
+  const kitMontavelVazio = kitMontavelAtivo && !Object.values(_kitMontavelSel || {}).some(p => p > 0);
+
+  const disabled = !_lojaAberta || needsSize || (isPizza && !_halfItem) || kitMontavelVazio;
   document.getElementById('im-add-btn').disabled = disabled;
   const label = needsSize ? 'Escolha o tamanho da pizza' : (isPizza && !_halfItem
     ? 'Escolha como quer sua pizza acima'
-    : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(price * _imQty)}`);
+    : (kitMontavelVazio
+      ? 'Escolha ao menos um corte acima'
+      : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(price * _imQty)}`));
   document.getElementById('im-add-btn').innerHTML = label;
 }
 
