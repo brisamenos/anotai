@@ -404,9 +404,14 @@ function _renderGenericGruposHtml(genericGrupos) {
 }
 
 // ── Kit montável: cliente escolhe cortes das categorias liberadas ──
-// Cada corte escolhido tem seu próprio peso; preço final = soma de cada
-// corte pelo peso escolhido (preço real por kg daquele corte).
-let _kitMontavelSel = {}; // { itemId: pesoEmGramas }
+// Cada corte escolhido soma ao total do seu jeito: por peso (kg) se o item
+// for vendido por peso, ou por quantidade de unidades se for vendido por
+// unidade (ex: linguiça, frango inteiro, ovos — qualquer item_type != 'kg').
+let _kitMontavelSel = {}; // { itemId: gramas (kg) OU quantidade de unidades }
+
+function _kitMontavelEhUnidade(it) {
+  return (it?.item_type || it?.itemType) !== 'kg';
+}
 
 function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
   _kitMontavelSel = {};
@@ -422,8 +427,8 @@ function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
     return `<div class="ac-section"><div style="font-size:12.5px;color:var(--muted);text-align:center;padding:12px">Nenhum corte disponível nas categorias configuradas.</div></div>`;
   }
   const cards = elegiveis.map(i => {
-    const isKgIt = i.item_type === 'kg' || i.itemType === 'kg';
-    const precoLabel = 'R$ ' + parseFloat(i.price || 0).toFixed(2).replace('.', ',') + (isKgIt ? '/kg' : '');
+    const isUnidade = _kitMontavelEhUnidade(i);
+    const precoLabel = 'R$ ' + parseFloat(i.price || 0).toFixed(2).replace('.', ',') + (isUnidade ? '/un' : '/kg');
     const ilustracao = i.image_url
       ? `<img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
       : `<span style="font-size:28px">${i.emoji || '🥩'}</span>`;
@@ -432,9 +437,9 @@ function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
       <div class="corte-card-name">${i.name}</div>
       <div class="corte-card-hint" id="kitmv-hint-${i.id}">${precoLabel}</div>
       <div id="kitmv-stepper-${i.id}" style="display:none;align-items:center;justify-content:center;gap:6px;margin-top:6px" onclick="event.stopPropagation()">
-        <button type="button" onclick="_kitMontavelAjustarPeso(${i.id},-100)" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:14px;cursor:pointer">−</button>
-        <span id="kitmv-peso-${i.id}" style="font-size:11.5px;font-weight:700;min-width:44px;text-align:center">500g</span>
-        <button type="button" onclick="_kitMontavelAjustarPeso(${i.id},100)" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:14px;cursor:pointer">+</button>
+        <button type="button" onclick="_kitMontavelAjustarPeso(${i.id},${isUnidade?-1:-100})" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:14px;cursor:pointer">−</button>
+        <span id="kitmv-peso-${i.id}" style="font-size:11.5px;font-weight:700;min-width:44px;text-align:center">${isUnidade?'1 un':'500g'}</span>
+        <button type="button" onclick="_kitMontavelAjustarPeso(${i.id},${isUnidade?1:100})" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:14px;cursor:pointer">+</button>
       </div>
     </div>`;
   }).join('');
@@ -453,6 +458,9 @@ function _kitMontavelToggle(itemId) {
   const stepper = document.getElementById(`kitmv-stepper-${itemId}`);
   const hint = document.getElementById(`kitmv-hint-${itemId}`);
   if (!card) return;
+  const fonte = (typeof allItems !== 'undefined' && Array.isArray(allItems)) ? allItems : [];
+  const it = fonte.find(x => x.id === itemId);
+  const isUnidade = _kitMontavelEhUnidade(it);
   if (_kitMontavelSel[itemId]) {
     // já selecionado — desmarca
     delete _kitMontavelSel[itemId];
@@ -460,23 +468,31 @@ function _kitMontavelToggle(itemId) {
     if (stepper) stepper.style.display = 'none';
     if (hint) hint.style.display = '';
   } else {
-    _kitMontavelSel[itemId] = 500; // peso inicial padrão
+    _kitMontavelSel[itemId] = isUnidade ? 1 : 500; // valor inicial padrão
     card.classList.add('on');
     if (stepper) stepper.style.display = 'flex';
     if (hint) hint.style.display = 'none';
     const pesoEl = document.getElementById(`kitmv-peso-${itemId}`);
-    if (pesoEl) pesoEl.textContent = '500g';
+    if (pesoEl) pesoEl.textContent = isUnidade ? '1 un' : '500g';
   }
   _kitMontavelAtualizarResumo();
   if (typeof updateImAddBtn === 'function') updateImAddBtn();
 }
 
 function _kitMontavelAjustarPeso(itemId, delta) {
-  const atual = _kitMontavelSel[itemId] || 500;
-  const novo = Math.max(100, atual + delta);
+  const fonte = (typeof allItems !== 'undefined' && Array.isArray(allItems)) ? allItems : [];
+  const it = fonte.find(x => x.id === itemId);
+  const isUnidade = _kitMontavelEhUnidade(it);
+  const min = isUnidade ? 1 : 100;
+  const atual = _kitMontavelSel[itemId] || min;
+  const novo = Math.max(min, atual + delta);
   _kitMontavelSel[itemId] = novo;
   const pesoEl = document.getElementById(`kitmv-peso-${itemId}`);
-  if (pesoEl) pesoEl.textContent = novo >= 1000 ? (novo/1000).toFixed(1).replace('.',',')+'kg' : novo+'g';
+  if (pesoEl) {
+    pesoEl.textContent = isUnidade
+      ? `${novo} un`
+      : (novo >= 1000 ? (novo/1000).toFixed(1).replace('.',',')+'kg' : novo+'g');
+  }
   _kitMontavelAtualizarResumo();
   if (typeof updateImAddBtn === 'function') updateImAddBtn();
 }
@@ -488,12 +504,13 @@ function _kitMontavelAtualizarResumo() {
   const entradas = Object.entries(_kitMontavelSel);
   if (!entradas.length) { el.style.color = 'var(--muted)'; el.textContent = 'Nenhum corte selecionado ainda'; return; }
   let total = 0;
-  const linhas = entradas.map(([idStr, peso]) => {
+  const linhas = entradas.map(([idStr, valor]) => {
     const it = fonte.find(x => x.id === parseInt(idStr));
     if (!it) return null;
-    total += (peso/1000) * parseFloat(it.price || 0);
-    const pesoLabel = peso >= 1000 ? (peso/1000).toFixed(1).replace('.',',')+'kg' : peso+'g';
-    return `${pesoLabel} ${it.name}`;
+    const isUnidade = _kitMontavelEhUnidade(it);
+    total += isUnidade ? (valor * parseFloat(it.price || 0)) : ((valor/1000) * parseFloat(it.price || 0));
+    const label = isUnidade ? `${valor} un` : (valor >= 1000 ? (valor/1000).toFixed(1).replace('.',',')+'kg' : valor+'g');
+    return `${label} ${it.name}`;
   }).filter(Boolean);
   el.style.color = 'var(--text)';
   el.innerHTML = linhas.join(', ') + `<div style="margin-top:4px;font-weight:800;color:var(--accent);font-size:14px">Total: R$ ${total.toFixed(2).replace('.', ',')}</div>`;

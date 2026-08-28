@@ -555,9 +555,11 @@ function updateImAddBtn() {
     if (kitCatsGrp?.categorias?.length) {
       kitMontavelAtivo = true;
       const fonte = (typeof allItems !== 'undefined' && Array.isArray(allItems)) ? allItems : [];
-      price = Object.entries(_kitMontavelSel || {}).reduce((s, [idStr, peso]) => {
+      price = Object.entries(_kitMontavelSel || {}).reduce((s, [idStr, valor]) => {
         const it = fonte.find(x => x.id === parseInt(idStr));
-        return s + (it ? (peso / 1000) * (parseFloat(it.price) || 0) : 0);
+        if (!it) return s;
+        const isUnidade = (typeof _kitMontavelEhUnidade === 'function') ? _kitMontavelEhUnidade(it) : (it.item_type !== 'kg');
+        return s + (isUnidade ? (valor * (parseFloat(it.price) || 0)) : ((valor / 1000) * (parseFloat(it.price) || 0)));
       }, 0);
     }
   }
@@ -1341,20 +1343,21 @@ function imConfirm() {
     const groups = i.custom_groups || [];
     const _kitCatsGrp = groups.find(g => g.tipo === 'kit_categorias');
     if (_kitCatsGrp?.categorias?.length) {
-      // Kit montável: cliente escolheu os cortes na tela — preço real,
-      // somado pelo peso escolhido de cada corte (não é preço fixo).
-      const escolhidos = Object.entries(_kitMontavelSel || {}).filter(([, peso]) => peso > 0);
+      // Kit montável: cliente escolheu os cortes na tela — preço real, somado
+      // por peso (kg) ou por unidade, dependendo do tipo de cada item.
+      const escolhidos = Object.entries(_kitMontavelSel || {}).filter(([, valor]) => valor > 0);
       if (!escolhidos.length) {
         toast('warn', 'Escolha ao menos um corte para montar o kit!');
         return;
       }
       let precoTotal = 0;
-      const partesDesc = escolhidos.map(([idStr, peso]) => {
+      const partesDesc = escolhidos.map(([idStr, valor]) => {
         const itCorte = (typeof allItems !== 'undefined' ? allItems : []).find(x => x.id === parseInt(idStr));
         if (!itCorte) return null;
-        precoTotal += (peso / 1000) * parseFloat(itCorte.price || 0);
-        const pesoLabel = peso >= 1000 ? (peso / 1000).toFixed(1).replace('.', ',') + 'kg' : peso + 'g';
-        return `${pesoLabel} ${itCorte.name}`;
+        const isUnidade = (typeof _kitMontavelEhUnidade === 'function') ? _kitMontavelEhUnidade(itCorte) : (itCorte.item_type !== 'kg');
+        precoTotal += isUnidade ? (valor * parseFloat(itCorte.price || 0)) : ((valor / 1000) * parseFloat(itCorte.price || 0));
+        const label = isUnidade ? `${valor} un` : (valor >= 1000 ? (valor / 1000).toFixed(1).replace('.', ',') + 'kg' : valor + 'g');
+        return `${label} ${itCorte.name}`;
       }).filter(Boolean);
       cartObs = ['Kit: ' + partesDesc.join(' · '), cartObs].filter(Boolean).join(' | ');
       cartPrice = precoTotal;
