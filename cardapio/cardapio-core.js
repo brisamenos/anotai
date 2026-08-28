@@ -447,7 +447,7 @@ function applyBranding(b, nome) {
 }
 
 // ── Banner(s) promocional(is) configurável(is) (tipo "Kit Churrasco") ──
-// Só aparece no visual do açougue (CSS controla), configurado pelo gestor.
+// Já funciona em qualquer segmento (era só açougue antes; CSS liberou).
 // Suporta até 5 banners em rotação automática a cada 4s (mesmo espírito do
 // carrossel de fotos do topo — dots + troca automática).
 let _promoBannerTimer = null;
