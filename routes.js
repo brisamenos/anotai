@@ -336,7 +336,10 @@ async function _gerarCobrancaBotPix(ctx, tenant, opts) {
   if (!mpToken) throw new Error('Token Mercado Pago não configurado em /admin → Saques PIX')
 
   const extRef = `assinatura-bot-${tenant.id.slice(0, 8)}-${plano}-${Date.now()}`
-  const venceEm = new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString() // expira em 3d
+  const pixExpiraEm = new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString() // validade técnica do Pix (3d)
+  // vence_em salvo na fatura = vencimento real do plano, não a validade do
+  // Pix acima (mesmo ajuste feito em _gerarCobrancaMP).
+  const venceEm = tenant.expires_at || pixExpiraEm.slice(0, 10)
   const descricao = `Plano ${_planoSaasLabel(plano)} — ${meses} ${meses === 1 ? 'mês' : 'meses'} — ${tenant.nome}`
 
   const mpResp = await fetch('https://api.mercadopago.com/v1/payments', {
@@ -347,7 +350,7 @@ async function _gerarCobrancaBotPix(ctx, tenant, opts) {
       description: descricao,
       payment_method_id: 'pix',
       external_reference: extRef,
-      date_of_expiration: venceEm.replace('Z', '-03:00'),
+      date_of_expiration: pixExpiraEm.replace('Z', '-03:00'),
       payer: { email: 'cobranca@estimafood.com', first_name: tenant.nome.split(' ')[0] || 'Cliente' }
     })
   })
@@ -541,7 +544,9 @@ async function _handleCobrancaBot(ctx, body) {
       }
 
       const valorTxt = parseFloat(fatura.valor).toFixed(2).replace('.', ',')
-      const venceTxt = fatura.vence_em ? new Date(fatura.vence_em).toLocaleDateString('pt-BR') : '-'
+      // T00:00:00 evita que a data volte um dia por causa do fuso horário
+      // do servidor (fatura.vence_em é só "YYYY-MM-DD", sem hora).
+      const venceTxt = fatura.vence_em ? new Date(fatura.vence_em + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
       const msg = [
         `🧾 *Fatura em aberto — ${tenant.nome}*`,
         ``,
@@ -1222,7 +1227,7 @@ function _iniciarAutoCobrancaJob(ctx) {
           const mpData = await mpResp.json()
           if (!mpResp.ok) { log('⚠️', `Auto-cobrança falhou tenant=${t.nome}: ${mpData.message || 'erro MP'}`); continue }
 
-          const venceEm = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
+          const venceEm = t.expires_at // vencimento real do plano — não a validade técnica do Pix acima
           const link = mpData.point_of_interaction?.transaction_data?.ticket_url || null
           const qr   = mpData.point_of_interaction?.transaction_data?.qr_code || null
           const qrB64= mpData.point_of_interaction?.transaction_data?.qr_code_base64 || null
@@ -1256,11 +1261,10 @@ function _iniciarAutoCobrancaJob(ctx) {
             if (telefone) {
               const valorTxt = parseFloat(valor).toFixed(2).replace('.', ',')
               const planoNome = _planoSaasLabel(plano)
-              // Data real de vencimento do plano (t.expires_at) — não a
-              // validade de 7 dias do código Pix (essa é só uma folga
-              // técnica pro pagamento ficar escaneável, não é o prazo real
-              // que o cliente tem antes do acesso ser suspenso).
-              const venceEmTxt = new Date(t.expires_at + 'T00:00:00').toLocaleDateString('pt-BR')
+              // venceEm (linha acima) já é o vencimento real do plano — usa
+              // direto, com o mesmo truque de T00:00:00 pra não deslocar
+              // o dia por causa do fuso horário do servidor.
+              const venceEmTxt = new Date(venceEm + 'T00:00:00').toLocaleDateString('pt-BR')
               const msg = [
                 `🧾 *Lembrete: sua mensalidade vence em breve*`,
                 ``,
@@ -8467,7 +8471,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!mpToken) throw new Error('Token Mercado Pago não configurado em /admin → Saques PIX')
 
     const extRef = `fatura-${tenant.id.slice(0, 8)}-${plano}-${Date.now()}`
-    const venceEm = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString() // expira em 7d
+    // vence_em salvo na fatura = vencimento REAL do plano do cliente, não a
+    // validade técnica do Pix (usada só no date_of_expiration abaixo, pro
+    // Mercado Pago — são coisas diferentes). Sem isso, tanto essa mensagem
+    // quanto a consulta "fatura em aberto" pelo bot mostravam uma data
+    // errada, sempre 7 dias à frente da data real de corte do acesso.
+    const venceEm = tenant.expires_at || new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().slice(0, 10)
     const descricao = `Plano ${_planoSaasLabel(plano)} — ${meses} ${meses === 1 ? 'mês' : 'meses'} — ${tenant.nome}`
 
     let mpData = null, qrCode = null, qrCodeBase64 = null, linkPagamento = null
@@ -8552,8 +8561,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
       const valorTxt = parseFloat(fatura.valor).toFixed(2).replace('.', ',')
       const planoNome = _planoSaasLabel(fatura.plano)
+      // fatura.vence_em já é o vencimento real do plano (corrigido na
+      // geração, em _gerarCobrancaMP) — só formata com o truque de
+      // T00:00:00 pra não deslocar o dia por fuso horário.
       const venceEmTxt = fatura.vence_em
-        ? new Date(fatura.vence_em).toLocaleDateString('pt-BR')
+        ? new Date(fatura.vence_em + 'T00:00:00').toLocaleDateString('pt-BR')
         : '7 dias'
 
       const linhas = [
