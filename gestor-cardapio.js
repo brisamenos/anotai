@@ -1891,6 +1891,7 @@ async function addItem() {
   const maxFlavors   = itemType === 'pizza' ? (parseInt(document.getElementById('new-max-flavors')?.value) || 1) : 1;
   const status       = document.getElementById('new-status').value || 'active';
   const destaque     = document.getElementById('new-destaque')?.classList.contains('on') || false;
+  const hidePrice    = document.getElementById('new-hide-price')?.classList.contains('on') || false;
   const _AC_TIPOS_F  = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens','pizza_sizes'];
   let customGroups = readGrupos('new').filter(g => !_AC_TIPOS_F.includes(g.tipo));
 
@@ -1945,6 +1946,7 @@ async function addItem() {
     max_flavors:  maxFlavors,
     promo:        destaque,
     destaque,
+    hide_price:   hidePrice,
     custom_groups: customGroups,
     status,
     days: [1,1,1,1,1,1,1]
@@ -2089,6 +2091,8 @@ function openEditItem(id) {
 
   const _desel = document.getElementById('edit-destaque');
   if (_desel) _desel.classList.toggle('on', !!it.destaque);
+  const _hpsel = document.getElementById('edit-hide-price');
+  if (_hpsel) _hpsel.classList.toggle('on', !!it.hidePrice);
 
   // Tipos exclusivos do açougue — não devem aparecer como grupos genéricos
   const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens','pizza_sizes'];
@@ -2153,6 +2157,7 @@ async function saveEditItem() {
   it.allowHalf   = it.itemType === 'pizza' && meioEl && meioEl.classList.contains('on');
   it.maxFlavors  = it.itemType === 'pizza' ? (parseInt(document.getElementById('edit-max-flavors')?.value) || 1) : 1;
   it.destaque    = document.getElementById('edit-destaque')?.classList.contains('on') || false;
+  it.hidePrice   = document.getElementById('edit-hide-price')?.classList.contains('on') || false;
   // readGrupos retorna só grupos genéricos (radio/checkbox) — filtra resíduos de tipos açougue
   const _AC_TIPOS_FILTER = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens','pizza_sizes'];
   it.customGroups = readGrupos('edit').filter(g => !_AC_TIPOS_FILTER.includes(g.tipo));
@@ -2210,6 +2215,7 @@ async function saveEditItem() {
     max_flavors:  it.maxFlavors,
     destaque:     it.destaque,
     promo:        it.destaque,
+    hide_price:   it.hidePrice,
     custom_groups: it.customGroups
   };
   console.log('[EDIT-ITEM] payload:', updatePayload);

@@ -574,7 +574,8 @@ function mapItem(i) {
     allowHalf: !!i.allow_half,
     maxFlavors: i.max_flavors || 1,
     customGroups: _safeParseArray(i.custom_groups),
-    destaque: !!i.destaque
+    destaque: !!i.destaque,
+    hidePrice: !!i.hide_price
   };
 }
 

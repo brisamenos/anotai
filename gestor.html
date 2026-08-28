@@ -4022,6 +4022,13 @@ Use no seu próximo pedido.</textarea>
       <div class="form-row"><label class="form-label">Preço (R$) *</label><input class="form-input" id="new-price" placeholder="0,00" type="number" step="0.01" min="0" oninput="updatePorcaoPreview('new')"></div>
       <div class="form-row"><label class="form-label">Preço antigo (R$)</label><input class="form-input" id="new-price-old" placeholder="Opcional" type="number" step="0.01" min="0"></div>
     </div>
+    <div class="form-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+      <div>
+        <div style="font-size:12.5px;font-weight:600">Não mostrar este preço no cardápio</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Use quando o preço de verdade está nos adicionais (ex: categoria "Refrigerante" com as marcas precificadas dentro) — evita o cliente achar que é R$ 0,00</div>
+      </div>
+      <div class="toggle" id="new-hide-price" onclick="this.classList.toggle('on')"></div>
+    </div>
 
     <div class="form-row-2">
       <div class="form-row"><label class="form-label">Categoria *</label>
@@ -4245,6 +4252,13 @@ Use no seu próximo pedido.</textarea>
     <div class="form-row-2">
       <div class="form-row"><label class="form-label">Preço (R$) *</label><input class="form-input" id="edit-price" type="number" step="0.01" min="0" oninput="updatePorcaoPreview('edit')"></div>
       <div class="form-row"><label class="form-label">Preço antigo (R$)</label><input class="form-input" id="edit-price-old" type="number" step="0.01" min="0" placeholder="Opcional"></div>
+    </div>
+    <div class="form-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+      <div>
+        <div style="font-size:12.5px;font-weight:600">Não mostrar este preço no cardápio</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Use quando o preço de verdade está nos adicionais (ex: categoria "Refrigerante" com as marcas precificadas dentro) — evita o cliente achar que é R$ 0,00</div>
+      </div>
+      <div class="toggle" id="edit-hide-price" onclick="this.classList.toggle('on')"></div>
     </div>
 
     <div class="form-row-2">
