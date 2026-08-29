@@ -337,7 +337,10 @@ async function submitOrder() {
   if (!name)  { toast('⚠️','Informe seu nome');      return; }
   if (!phone) { toast('⚠️','Informe seu WhatsApp');  return; }
   if (!cart.length) { toast('⚠️','Carrinho vazio');  return; }
-  if (!_lojaAberta) { toast('🔴','Loja fechada');     return; }
+  // Loja fechada bloqueia normalmente — mas libera se o cliente confirmou
+  // um pedido agendado no modal de loja fechada (_pedidoAgendadoPara setado).
+  { const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
+    if (!_lojaAberta && !_pedidoAgendadoSeguro) { toast('🔴','Loja fechada');     return; } }
   // Sem isso, cancelar a modal de troco (dinheiro) ou a modal "pagar agora/
   // na entrega" (crédito/débito) zera selectedPay, e o pedido seguia sem
   // forma de pagamento nenhuma — imprimia "Forma de Pagamento: -" na comanda.
@@ -1031,7 +1034,10 @@ async function _iniciarSubmit() {
   if (!name)  { toast('⚠️','Informe seu nome');      return; }
   if (!phone) { toast('⚠️','Informe seu WhatsApp');  return; }
   if (!cart.length) { toast('⚠️','Carrinho vazio');  return; }
-  if (!_lojaAberta) { toast('🔴','Loja fechada');     return; }
+  // Loja fechada bloqueia normalmente — mas libera se o cliente confirmou
+  // um pedido agendado no modal de loja fechada (_pedidoAgendadoPara setado).
+  { const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
+    if (!_lojaAberta && !_pedidoAgendadoSeguro) { toast('🔴','Loja fechada');     return; } }
   if (!selectedPay) { toast('⚠️','Escolha uma forma de pagamento'); return; }
 
   if (deliveryType === 'delivery' && _pedidoMinimo > 0) {

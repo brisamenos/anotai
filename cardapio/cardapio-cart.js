@@ -356,7 +356,14 @@ function updateCartFloat() {
   document.getElementById('cart-badge').textContent = qty;
   document.getElementById('cart-total-float').textContent = fmt(displayTotal());
   const btn = document.getElementById('confirm-btn');
-  if (btn) btn.disabled = cart.length === 0 || !_lojaAberta;
+  if (btn) {
+    // Mesma checagem de agendamento do applyStatus() — sem isso, essa função
+    // (que roda toda vez que o carrinho muda) sobrescrevia o botão de volta
+    // pro estado "desabilitado", desfazendo a liberação do pedido agendado.
+    const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
+    const podeAgendado = !_lojaAberta && _pedidoAgendadoSeguro;
+    btn.disabled = cart.length === 0 || (!_lojaAberta && !podeAgendado);
+  }
 }
 
 function openCart() {

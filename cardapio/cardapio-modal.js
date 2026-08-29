@@ -84,7 +84,10 @@ function openItemModal(id) {
   }
   document.getElementById('im-qty').textContent = _imQty;
   document.getElementById('im-obs').value = '';
-  document.getElementById('im-add-btn').disabled = !_lojaAberta;
+  {
+    const _pedidoAgendadoSeguroInit = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
+    document.getElementById('im-add-btn').disabled = !_lojaAberta && !_pedidoAgendadoSeguroInit;
+  }
 
   // Açougue: oculta botões - 1 + (peso é selecionado pelo seletor de gramas)
   const qtyRow = document.getElementById('im-qty-row');
@@ -565,9 +568,16 @@ function updateImAddBtn() {
   }
   const kitMontavelVazio = kitMontavelAtivo && !Object.values(_kitMontavelSel || {}).some(p => p > 0);
 
-  const disabled = !_lojaAberta || needsSize || (isPizza && !_halfItem) || kitMontavelVazio;
+  // Mesmo raciocínio do botão de finalizar pedido: se a loja está fechada
+  // mas o cliente já confirmou que quer agendar, o "Adicionar" (de dentro
+  // do produto) também precisa liberar — senão o cliente confirma o
+  // agendamento mas trava logo no primeiro item que tenta montar.
+  const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
+  const podeAgendadoModal = !_lojaAberta && _pedidoAgendadoSeguro;
+
+  const disabled = (!_lojaAberta && !podeAgendadoModal) || needsSize || (isPizza && !_halfItem) || kitMontavelVazio;
   document.getElementById('im-add-btn').disabled = disabled;
-  const label = needsSize ? 'Escolha o tamanho da pizza' : (isPizza && !_halfItem
+  const label = (!_lojaAberta && !podeAgendadoModal) ? 'Loja fechada' : needsSize ? 'Escolha o tamanho da pizza' : (isPizza && !_halfItem
     ? 'Escolha como quer sua pizza acima'
     : (kitMontavelVazio
       ? 'Escolha ao menos um corte acima'

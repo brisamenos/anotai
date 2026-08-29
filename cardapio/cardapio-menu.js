@@ -553,7 +553,8 @@ function _updateChecklistBadge(clId) {
 }
 
 function addChecklistToCart(clId) {
-  if (!_lojaAberta) { toast('err','Loja fechada'); return; }
+  const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
+  if (!_lojaAberta && !_pedidoAgendadoSeguro) { toast('err','Loja fechada'); return; }
   const state = _clState[clId] || {};
   if (!Object.keys(state).length) return;
 
