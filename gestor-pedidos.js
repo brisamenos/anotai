@@ -1246,6 +1246,25 @@ function editarItemGenerico(orderId, itemIndex, isMesaOrder) {
 
   _odEditCtx = { orderId, itemIndex, isMesaOrder, item, catalogItem, grupos };
 
+  // Kit montável (açougue) — se o pedido guardou a seleção estruturada
+  // (itens escolhidos, pesos, corte/preparo), monta a tela de seleção
+  // igual o cliente vê no cardápio, em vez de só mostrar texto.
+  window._odEditKitSel = {};
+  window._odEditKitExtras = {};
+  let kitEligiveis = [];
+  const kitSelecao = item._kitSelecao;
+  if (kitSelecao?.itens?.length && kitSelecao?.categorias?.length) {
+    const catsSet = new Set(kitSelecao.categorias);
+    kitEligiveis = items.filter(i =>
+      i.status !== 'pausado' && i.status !== 'esgotado' &&
+      (catsSet.has(i.cat_key) || catsSet.has(i.cat))
+    );
+    kitSelecao.itens.forEach(e => {
+      window._odEditKitSel[e.itemId] = e.valor;
+      window._odEditKitExtras[e.itemId] = e.extras || {};
+    });
+  }
+
   document.getElementById('modal-od-edit-item-bg')?.remove();
 
   const _TIPO_LABEL = { radio: 'Escolha', checkbox: 'Adicional', opcional: 'Adicional', adicionais: 'Adicional', obrigatorio: 'Escolha obrigatória', sabor: 'Sabor' };
@@ -1272,6 +1291,14 @@ function editarItemGenerico(orderId, itemIndex, isMesaOrder) {
     </div>`;
   }).join('');
 
+  const kitHtml = kitEligiveis.length ? `<div style="margin-bottom:16px">
+    <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Cortes deste kit — toque pra marcar/desmarcar</div>
+    <div id="od-edit-kit-lista" style="display:flex;flex-direction:column;gap:8px">
+      ${kitEligiveis.map(it => _odEditKitCardHtml(it)).join('')}
+    </div>
+    <div id="od-edit-kit-total" style="margin-top:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;font-size:13px;font-weight:700;color:var(--success);text-align:right"></div>
+  </div>` : '';
+
   const bg = document.createElement('div');
   bg.id = 'modal-od-edit-item-bg';
   bg.className = 'modal-bg on';
@@ -1280,7 +1307,7 @@ function editarItemGenerico(orderId, itemIndex, isMesaOrder) {
     <div class="modal" style="max-width:480px;width:92vw;padding:0;max-height:88vh;overflow-y:auto">
       <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px">
         <div>
-          <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">✏️ Editar item</div>
+          <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">Editar item</div>
           <div style="font-size:16px;font-weight:700;margin-top:2px">${item.name}</div>
         </div>
         <button onclick="document.getElementById('modal-od-edit-item-bg')?.remove()" style="width:30px;height:30px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:14px">✕</button>
@@ -1296,15 +1323,16 @@ function editarItemGenerico(orderId, itemIndex, isMesaOrder) {
             </div>
           </div>
           <div style="flex:1">
-            <label style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Preço unitário</label>
-            <input type="number" id="od-edit-price" value="${parseFloat(item.price || 0).toFixed(2)}" step="0.01" min="0" oninput="_odEditAtualizarPreview()"
+            <label style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Preço unitário${kitEligiveis.length ? ' (auto)' : ''}</label>
+            <input type="number" id="od-edit-price" value="${parseFloat(item.price || 0).toFixed(2)}" step="0.01" min="0" oninput="_odEditAtualizarPreview()" ${kitEligiveis.length ? 'readonly' : ''}
               style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:14px;font-weight:700;box-sizing:border-box;font-family:inherit">
           </div>
         </div>
+        ${kitHtml}
         <div style="margin-bottom:14px">
           <label style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Observação</label>
           <textarea id="od-edit-obs" rows="2" placeholder="Ex: sem cebola, borda recheada..."
-            style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;resize:none;box-sizing:border-box">${item.obs || ''}</textarea>
+            style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;resize:none;box-sizing:border-box">${kitEligiveis.length ? '' : (item.obs || '')}</textarea>
         </div>
         ${grupos.length ? `<div style="margin-bottom:6px">
           <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:10px">➕ Marque para acrescentar mais adicionais a este item</div>
@@ -1320,6 +1348,106 @@ function editarItemGenerico(orderId, itemIndex, isMesaOrder) {
   document.body.appendChild(bg);
   bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
   window._odEditQty = item.qty || 1;
+  if (kitEligiveis.length) _odEditKitAtualizarTotal();
+}
+
+// ── Kit montável — edição no gestor (mesma lógica do cardápio) ──
+function _odEditKitEhUnidade(it) {
+  return (it?.item_type || it?.itemType) !== 'kg';
+}
+
+function _odEditKitExtraGrupos(it) {
+  return (it?.custom_groups || []).filter(g => (g.tipo === 'cortes' || g.tipo === 'preparos') && g.opcoes?.length);
+}
+
+function _odEditKitCardHtml(it) {
+  const marcado = !!window._odEditKitSel[it.id];
+  const isUnidade = _odEditKitEhUnidade(it);
+  const valor = window._odEditKitSel[it.id] || (isUnidade ? 1 : 500);
+  const valorLabel = isUnidade ? `${valor} un` : (valor >= 1000 ? (valor / 1000).toFixed(1).replace('.', ',') + 'kg' : valor + 'g');
+  const precoLabel = 'R$ ' + parseFloat(it.price || 0).toFixed(2).replace('.', ',') + (isUnidade ? '/un' : '/kg');
+  const extraGrupos = _odEditKitExtraGrupos(it);
+  const extrasAtuais = window._odEditKitExtras[it.id] || {};
+  const extrasHtml = (marcado && extraGrupos.length) ? extraGrupos.map(g => {
+    const chips = g.opcoes.map(o => {
+      const nome = o.nome || o.id || '';
+      const isOn = (extrasAtuais[g.tipo] || g.opcoes[0]?.nome || g.opcoes[0]?.id) === nome;
+      return `<button type="button" class="od-kit-chip${isOn ? ' on' : ''}" onclick="_odEditKitEscolherExtra(${it.id},'${g.tipo}','${nome.replace(/'/g, "\\'")}',this)">${nome}</button>`;
+    }).join('');
+    return `<div style="margin-top:8px">
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:5px">${g.nome || (g.tipo === 'cortes' ? 'Tipo de corte' : 'Forma de preparo')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">${chips}</div>
+    </div>`;
+  }).join('') : '';
+
+  return `<div class="od-kit-card${marcado ? ' on' : ''}" id="od-kit-card-${it.id}" style="border:1.5px solid ${marcado ? 'var(--accent)' : 'var(--border)'};border-radius:10px;padding:10px 12px;background:${marcado ? 'var(--accent-dim)' : 'var(--surface2)'}">
+    <div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="_odEditKitToggle(${it.id})">
+      <input type="checkbox" ${marcado ? 'checked' : ''} readonly style="width:18px;height:18px;accent-color:var(--accent);pointer-events:none;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13.5px;font-weight:700">${it.name}</div>
+        <div style="font-size:11.5px;color:var(--muted)">${precoLabel}</div>
+      </div>
+      ${marcado ? `<div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <button type="button" onclick="_odEditKitAjustarPeso(${it.id},${isUnidade ? -1 : -100})" style="width:26px;height:26px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:14px">−</button>
+        <span id="od-kit-peso-${it.id}" style="font-size:12.5px;font-weight:700;min-width:48px;text-align:center">${valorLabel}</span>
+        <button type="button" onclick="_odEditKitAjustarPeso(${it.id},${isUnidade ? 1 : 100})" style="width:26px;height:26px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:14px">+</button>
+      </div>` : ''}
+    </div>
+    <div id="od-kit-extras-${it.id}">${extrasHtml}</div>
+  </div>`;
+}
+
+function _odEditKitToggle(itemId) {
+  const it = items.find(x => x.id === itemId);
+  if (!it) return;
+  if (window._odEditKitSel[itemId]) {
+    delete window._odEditKitSel[itemId];
+    delete window._odEditKitExtras[itemId];
+  } else {
+    const isUnidade = _odEditKitEhUnidade(it);
+    window._odEditKitSel[itemId] = isUnidade ? 1 : 500;
+    const extraGrupos = _odEditKitExtraGrupos(it);
+    const escolhas = {};
+    extraGrupos.forEach(g => { escolhas[g.tipo] = g.opcoes[0]?.nome || g.opcoes[0]?.id || ''; });
+    window._odEditKitExtras[itemId] = escolhas;
+  }
+  const card = document.getElementById(`od-kit-card-${itemId}`);
+  if (card) card.outerHTML = _odEditKitCardHtml(it);
+  _odEditKitAtualizarTotal();
+}
+
+function _odEditKitAjustarPeso(itemId, delta) {
+  const it = items.find(x => x.id === itemId);
+  if (!it) return;
+  const isUnidade = _odEditKitEhUnidade(it);
+  const min = isUnidade ? 1 : 100;
+  const novo = Math.max(min, (window._odEditKitSel[itemId] || min) + delta);
+  window._odEditKitSel[itemId] = novo;
+  const pesoEl = document.getElementById(`od-kit-peso-${itemId}`);
+  if (pesoEl) pesoEl.textContent = isUnidade ? `${novo} un` : (novo >= 1000 ? (novo / 1000).toFixed(1).replace('.', ',') + 'kg' : novo + 'g');
+  _odEditKitAtualizarTotal();
+}
+
+function _odEditKitEscolherExtra(itemId, tipo, nome, btn) {
+  if (!window._odEditKitExtras[itemId]) window._odEditKitExtras[itemId] = {};
+  window._odEditKitExtras[itemId][tipo] = nome;
+  btn.parentElement.querySelectorAll('.od-kit-chip').forEach(c => c.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+function _odEditKitAtualizarTotal() {
+  let total = 0;
+  Object.entries(window._odEditKitSel || {}).forEach(([idStr, valor]) => {
+    const it = items.find(x => x.id === parseInt(idStr));
+    if (!it) return;
+    const isUnidade = _odEditKitEhUnidade(it);
+    total += isUnidade ? (valor * parseFloat(it.price || 0)) : ((valor / 1000) * parseFloat(it.price || 0));
+  });
+  const priceInp = document.getElementById('od-edit-price');
+  if (priceInp) priceInp.value = total.toFixed(2);
+  const totalEl = document.getElementById('od-edit-kit-total');
+  if (totalEl) totalEl.textContent = 'Total dos cortes: R$ ' + total.toFixed(2).replace('.', ',');
+  _odEditAtualizarPreview();
 }
 
 function _odEditChangeQty(delta) {
@@ -1334,7 +1462,10 @@ function _odEditAtualizarPreview() {
   const totalEl = document.getElementById('od-edit-total-preview');
   if (!priceInp || !totalEl) return;
   let unit = parseFloat(priceInp.value) || 0;
-  document.querySelectorAll('#modal-od-edit-item-bg input:checked').forEach(inp => {
+  // [data-nome] filtra só os checkboxes de "adicionais" de verdade — os
+  // checkboxes visuais dos cards de kit (readonly, sem esse atributo) não
+  // devem entrar nessa soma, senão o preço vira NaN.
+  document.querySelectorAll('#modal-od-edit-item-bg input[data-nome]:checked').forEach(inp => {
     unit += parseFloat(inp.dataset.preco || 0);
   });
   const qty = window._odEditQty || 1;
@@ -1356,10 +1487,44 @@ async function _odEditSalvar() {
   const qty = window._odEditQty || 1;
   let unitPrice = parseFloat(document.getElementById('od-edit-price')?.value) || 0;
   let obs = (document.getElementById('od-edit-obs')?.value || '').trim();
+  let novoKitSelecao = null;
+
+  // Kit montável — se essa tela de seleção estava ativa, reconstrói a
+  // descrição a partir do que ficou marcado (em vez de manter o texto
+  // antigo), e guarda a seleção estruturada de novo pra próxima edição.
+  const kitSelAtual = window._odEditKitSel || {};
+  if (item._kitSelecao && Object.keys(kitSelAtual).length >= 0 && document.getElementById('od-edit-kit-lista')) {
+    const escolhidos = Object.entries(kitSelAtual).filter(([, v]) => v > 0);
+    if (!escolhidos.length) {
+      alert('Escolha ao menos um corte pra esse kit — pra remover o item inteiro, use "Cancelar item" em vez de editar.');
+      return;
+    }
+    const partesDesc = escolhidos.map(([idStr, valor]) => {
+      const itCorte = items.find(x => x.id === parseInt(idStr));
+      if (!itCorte) return null;
+      const isUnidade = _odEditKitEhUnidade(itCorte);
+      const label = isUnidade ? `${valor} un` : (valor >= 1000 ? (valor / 1000).toFixed(1).replace('.', ',') + 'kg' : valor + 'g');
+      const extras = (window._odEditKitExtras || {})[idStr] || (window._odEditKitExtras || {})[parseInt(idStr)];
+      const extrasTxt = extras && Object.values(extras).filter(Boolean).length ? ` (${Object.values(extras).join(', ')})` : '';
+      return `${label} ${itCorte.name}${extrasTxt}`;
+    }).filter(Boolean);
+    // Preserva qualquer observação livre que o gestor tenha digitado além
+    // do texto do kit (o campo de obs fica sem o texto antigo do kit
+    // enquanto essa tela está ativa — ver "kitEligiveis.length ? '' :" acima).
+    obs = ['Kit: ' + partesDesc.join(' · '), obs].filter(Boolean).join(' | ');
+    novoKitSelecao = {
+      categorias: item._kitSelecao.categorias,
+      itens: escolhidos.map(([idStr, valor]) => ({
+        itemId: parseInt(idStr),
+        valor,
+        extras: (window._odEditKitExtras || {})[idStr] || (window._odEditKitExtras || {})[parseInt(idStr)] || {}
+      }))
+    };
+  }
 
   // Adicionais extras marcados — soma no preço e anexa descrição na observação
   const novosAdicionais = [];
-  document.querySelectorAll('#modal-od-edit-item-bg input:checked').forEach(inp => {
+  document.querySelectorAll('#modal-od-edit-item-bg input[data-nome]:checked').forEach(inp => {
     const nome = inp.dataset.nome || '';
     const preco = parseFloat(inp.dataset.preco || 0);
     unitPrice += preco;
@@ -1369,7 +1534,9 @@ async function _odEditSalvar() {
     obs = [obs, novosAdicionais.join(', ')].filter(Boolean).join(' · ');
   }
 
-  const updatedItems = allItems.map((i, idx) => idx === itemIndex ? { ...i, qty, price: unitPrice, obs } : i);
+  const updatedItems = allItems.map((i, idx) => idx === itemIndex
+    ? { ...i, qty, price: unitPrice, obs, ...(novoKitSelecao ? { _kitSelecao: novoKitSelecao } : {}) }
+    : i);
 
   const newTotal = updatedItems
     .filter(i => (i.item_status || 'active') !== 'cancelado')
@@ -2115,9 +2282,14 @@ function noAbrirModalAdicionais(item, grupos, isKg, editCtx) {
       </div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${opcoes.map((op, oi) => {
-      const nome = op.nome || op.name || (typeof op === 'string' ? op : '');
-      const preco = parseFloat(op.preco || op.price || 0);
-      const icon = op.icon ? `<img src="${op.icon}" style="width:22px;height:22px;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'">` : '';
+      // Valores de peso/porção costumam vir como número puro (ex: 500 =
+      // 500g) em vez de {nome:...} — sem tratar isso, a etiqueta ficava
+      // em branco (era exatamente o bug visto na tela "Novo Pedido").
+      const nome = typeof op === 'number'
+        ? (op >= 1000 ? (op / 1000).toFixed(1).replace('.', ',') + 'kg' : op + 'g')
+        : (op?.nome || op?.name || (typeof op === 'string' ? op : ''));
+      const preco = parseFloat(op?.preco || op?.price || 0);
+      const icon = op?.icon ? `<img src="${op.icon}" style="width:22px;height:22px;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'">` : '';
       const precoLabel = preco > 0 ? ` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.', ',')}</span>` : '';
       return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer" onclick="noToggleOpc(this)">
             <input type="${inputType}" name="no-grp-${gi}" value="${oi}" data-grp="${gi}" data-idx="${oi}" data-nome="${nome.replace(/"/g, '&quot;')}" data-preco="${preco}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">

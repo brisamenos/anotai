@@ -240,8 +240,13 @@ function _pdvAbrirModalItem(it, grupos, isKg) {
       </div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${opcoes.map((op, oi) => {
-      const nome = op.nome || op.name || (typeof op === 'string' ? op : '');
-      const preco = parseFloat(op.preco || op.price || 0);
+      // Valores de peso/porção costumam vir como número puro (ex: 500 =
+      // 500g) em vez de {nome:...} — sem tratar isso, a etiqueta ficava
+      // em branco (o rádio aparecia sem nenhum texto do lado).
+      const nome = typeof op === 'number'
+        ? (op >= 1000 ? (op / 1000).toFixed(1).replace('.', ',') + 'kg' : op + 'g')
+        : (op?.nome || op?.name || (typeof op === 'string' ? op : ''));
+      const preco = parseFloat(op?.preco || op?.price || 0);
       const icon = op.icon ? `<span style="font-size:16px">${op.icon}</span>` : '';
       const pLabel = preco > 0 ? ` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.', ',')}</span>` : '';
       return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;cursor:pointer" onclick="pdvToggleOpc(this)">
