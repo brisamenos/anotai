@@ -3384,6 +3384,7 @@ function _buildTicketHtml(order, cfg) {
 
       // ── 2) PEDIDO NN gigante ──
       CENTER('PEDIDO ' + orderNum, 'font-size:1.7em;font-weight:bold;letter-spacing:1px;margin:6px 0 4px'),
+      order.scheduled_for ? CENTER('*** AGENDADO PARA ' + _fmtBR(new Date(order.scheduled_for), {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',', '') + ' ***', 'font-size:1.05em;font-weight:bold;margin:2px 0 4px') : '',
       HR(),
 
       // ── 3) Itens ──
@@ -3799,8 +3800,12 @@ function _buildEscPos(order, cfg, cols = 32) {
   bytes(0x1D, 0x21, 0x11);                   // fonte dupla altura+largura
   bytes(0x1B, 0x45, 0x01);                   // negrito
   push('PEDIDO ' + (order.num || order.id) + '\n');
-  bytes(0x1B, 0x45, 0x00);
   bytes(0x1D, 0x21, 0x00);                   // fonte normal
+  if (order.scheduled_for) {
+    const _agTxt = new Date(order.scheduled_for).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    push('*** AGENDADO PARA ' + _agTxt + ' ***\n');
+  }
+  bytes(0x1B, 0x45, 0x00);
   bytes(0x1B, 0x61, 0x00);                   // alinhar esquerda
   push(sep);
 
