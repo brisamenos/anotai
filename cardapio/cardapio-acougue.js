@@ -439,7 +439,7 @@ function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
     const isUnidade = _kitMontavelEhUnidade(i);
     const precoLabel = 'R$ ' + parseFloat(i.price || 0).toFixed(2).replace('.', ',') + (isUnidade ? '/un' : '/kg');
     const ilustracao = i.image_url
-      ? `<img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
+      ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
       : `<span style="font-size:28px">${i.emoji || '🥩'}</span>`;
     // Card fica compacto na grade — peso, tipo de corte e preparo são
     // escolhidos num modal próprio (_kitMontavelAbrirConfig), não expandindo
