@@ -344,15 +344,24 @@ function renderKanban() {
           ? '<div class="oc-wa-notif" onclick="event.stopPropagation();abrirRespostaWA(' + o.id + ')" title="Cliente respondeu no WhatsApp">💬 Cliente respondeu!</div>'
           : '';
 
+        // Selo de pedido agendado — mostrado quando a loja estava fechada e
+        // o cliente confirmou o pedido pra ser feito na próxima abertura.
+        const _agendadoBadge = o.scheduled_for
+          ? '<div class="oc-agendado-badge">🕐 Agendado para ' + new Date(o.scheduled_for).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) + '</div>'
+          : '';
+
         const _tipoClass = isMesa ? ' card-mesa' : isRetirada ? ' card-retirada' : ' card-delivery';
 
         const _cardStyle = o._pixPendente
           ? ' style="border-left:3px solid rgba(249,115,22,.7);background:rgba(249,115,22,.04)"'
           : o._waResposta
             ? ' style="border-left:3px solid rgba(34,197,94,.7);background:rgba(34,197,94,.03)"'
-            : '';
+            : o.scheduled_for
+              ? ' style="border-left:3px solid rgba(139,92,246,.7);background:rgba(139,92,246,.04)"'
+              : '';
 
         return '<div class="order-card' + _tipoClass + '"' + _cardStyle + ' onclick="openOrderDetail(' + o.id + ')">' +
+          _agendadoBadge +
           '<div class="oc-top"><span class="oc-id">#' + o.num + '</span>' + _tipoBadge + '<span class="oc-time">⏱ ' + o.time + '</span>' + _acougueBtn + '</div>' +
           _waNotif +
           '<div class="oc-client">' + o.client + (o.phone ? ' · ' + o.phone : '') + '</div>' +
@@ -763,6 +772,17 @@ function openOrderDetail(id) {
   const badgeEl = document.getElementById('od-status-badge');
   badgeEl.className = 'od-status-badge ' + cls;
   badgeEl.textContent = lbl;
+
+  // Selo de pedido agendado (mesma marcação do card do Kanban)
+  const agBadgeEl = document.getElementById('od-agendado-badge');
+  if (agBadgeEl) {
+    if (o.scheduled_for) {
+      agBadgeEl.style.display = 'flex';
+      agBadgeEl.textContent = '🕐 Agendado para ' + new Date(o.scheduled_for).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    } else {
+      agBadgeEl.style.display = 'none';
+    }
+  }
 
   // Horário
   document.getElementById('od-timer').textContent = o.time || '';

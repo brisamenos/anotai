@@ -3899,6 +3899,7 @@ Use no seu próximo pedido.</textarea>
     <div class="od-header">
       <div class="od-id" id="od-id">Pedido #—</div>
       <span class="od-status-badge badge-analise" id="od-status-badge">Em análise</span>
+      <span id="od-agendado-badge" class="oc-agendado-badge" style="display:none;margin:0"></span>
       <div class="od-timer" id="od-timer"></div>
       <div class="od-actions">
         <div class="od-action-btn" title="Imprimir comanda" onclick="printOrderDetail()" style="background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.3);color:var(--accent)">
@@ -5779,6 +5780,22 @@ Use no seu próximo pedido.</textarea>
         <input type="checkbox" id="cp-indicacao-preparo" onchange="cpToggleIndicacaoPreparo(this.checked)" style="opacity:0;width:0;height:0">
         <span style="position:absolute;cursor:pointer;inset:0;background:var(--surface2);border:1px solid var(--border);border-radius:99px;transition:.2s" id="cp-indicacao-preparo-track">
           <span style="position:absolute;width:18px;height:18px;left:2px;bottom:2px;background:var(--muted);border-radius:50%;transition:.2s" id="cp-indicacao-preparo-thumb"></span>
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Agendamento de pedido quando a loja está fechada -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:13px;font-weight:700">Permitir agendar pedido com a loja fechada</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">Quando fechado, mostra um aviso no cardápio com o próximo horário de abertura e deixa o cliente confirmar o pedido pra ser preparado assim que a loja abrir</div>
+      </div>
+      <label style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0">
+        <input type="checkbox" id="cp-permitir-agendamento" onchange="cpToggleAgendamento(this.checked)" style="opacity:0;width:0;height:0">
+        <span style="position:absolute;cursor:pointer;inset:0;background:var(--surface2);border:1px solid var(--border);border-radius:99px;transition:.2s" id="cp-permitir-agendamento-track">
+          <span style="position:absolute;width:18px;height:18px;left:2px;bottom:2px;background:var(--muted);border-radius:50%;transition:.2s" id="cp-permitir-agendamento-thumb"></span>
         </span>
       </label>
     </div>
