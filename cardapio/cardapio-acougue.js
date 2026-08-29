@@ -441,30 +441,14 @@ function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
     const ilustracao = i.image_url
       ? `<img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
       : `<span style="font-size:28px">${i.emoji || '🥩'}</span>`;
-    // Grupos de corte/preparo do PRÓPRIO item (ex: Acém tem "Tipo de corte":
-    // bife fino/grosso/moído) — mesmos dados que já existem no cardápio,
-    // só que agora também ficam disponíveis dentro do "monte seu kit".
-    const extraGrupos = _kitMontavelExtraGrupos(i);
-    const extrasHtml = extraGrupos.map(g => {
-      const chips = g.opcoes.map((o, idx) => {
-        const nome = o.nome || o.id || '';
-        return `<button type="button" class="kitmv-chip${idx===0?' on':''}" data-grupo="${g.tipo}" onclick="event.stopPropagation();_kitMontavelEscolherExtra(${i.id},'${g.tipo}','${nome.replace(/'/g,"\\'")}',this)">${nome}</button>`;
-      }).join('');
-      return `<div style="margin-top:8px;text-align:left">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">${g.nome || (g.tipo==='cortes'?'Tipo de corte':'Forma de preparo')}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:5px">${chips}</div>
-      </div>`;
-    }).join('');
-    return `<div class="corte-card" id="kitmv-card-${i.id}" onclick="_kitMontavelToggle(${i.id})">
+    // Card fica compacto na grade — peso, tipo de corte e preparo são
+    // escolhidos num modal próprio (_kitMontavelAbrirConfig), não expandindo
+    // aqui dentro (isso quebrava o alinhamento da grade).
+    return `<div class="corte-card" id="kitmv-card-${i.id}" onclick="_kitMontavelAbrirConfig(${i.id})">
       <div class="corte-card-illus">${ilustracao}</div>
       <div class="corte-card-name">${i.name}</div>
       <div class="corte-card-hint" id="kitmv-hint-${i.id}">${precoLabel}</div>
-      <div id="kitmv-stepper-${i.id}" style="display:none;align-items:center;justify-content:center;gap:6px;margin-top:6px" onclick="event.stopPropagation()">
-        <button type="button" onclick="_kitMontavelAjustarPeso(${i.id},${isUnidade?-1:-100})" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:14px;cursor:pointer">−</button>
-        <span id="kitmv-peso-${i.id}" style="font-size:11.5px;font-weight:700;min-width:44px;text-align:center">${isUnidade?'1 un':'500g'}</span>
-        <button type="button" onclick="_kitMontavelAjustarPeso(${i.id},${isUnidade?1:100})" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:14px;cursor:pointer">+</button>
-      </div>
-      ${extraGrupos.length ? `<div id="kitmv-extras-${i.id}" style="display:none" onclick="event.stopPropagation()">${extrasHtml}</div>` : ''}
+      <div id="kitmv-resumo-card-${i.id}" style="display:none;margin-top:5px;font-size:10.5px;font-weight:700;color:var(--accent);line-height:1.3"></div>
     </div>`;
   }).join('');
 
@@ -474,75 +458,144 @@ function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
     <div id="kitmv-resumo" style="margin-top:12px;padding:11px 13px;background:var(--s2);border:1px solid var(--border);border-radius:12px;font-size:12.5px;color:var(--muted)">
       Nenhum corte selecionado ainda
     </div>
+  </div>
+  <div id="kitmv-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9200;align-items:flex-end;justify-content:center" onclick="if(event.target===this)_kitMontavelFecharConfig()">
+    <div style="background:var(--s1);width:100%;max-width:480px;border-radius:20px 20px 0 0;max-height:85vh;overflow-y:auto;padding:18px 20px calc(18px + env(safe-area-inset-bottom,0px))">
+      <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 14px"></div>
+      <div id="kitmv-modal-body"></div>
+    </div>
   </div>`;
 }
 
-function _kitMontavelEscolherExtra(itemId, tipo, nome, btn) {
-  if (!_kitMontavelExtras[itemId]) _kitMontavelExtras[itemId] = {};
-  _kitMontavelExtras[itemId][tipo] = nome;
-  // Visual: marca só o chip clicado dentro do MESMO grupo, dessa MESMA carne
-  const wrap = btn.closest('#kitmv-extras-' + itemId + ', [id^="kitmv-extras-"]') || btn.parentElement.parentElement;
-  const grupoWrap = btn.parentElement;
-  grupoWrap.querySelectorAll('.kitmv-chip').forEach(c => c.classList.remove('on'));
-  btn.classList.add('on');
-  _kitMontavelAtualizarResumo();
-  if (typeof updateImAddBtn === 'function') updateImAddBtn();
-}
-
-function _kitMontavelToggle(itemId) {
-  const card = document.getElementById(`kitmv-card-${itemId}`);
-  const stepper = document.getElementById(`kitmv-stepper-${itemId}`);
-  const hint = document.getElementById(`kitmv-hint-${itemId}`);
-  const extras = document.getElementById(`kitmv-extras-${itemId}`);
-  if (!card) return;
+// Abre o modal de configuração de UM corte específico do kit — peso/quantidade
+// e, se existirem, os grupos de corte/preparo daquele item.
+function _kitMontavelAbrirConfig(itemId) {
   const fonte = (typeof allItems !== 'undefined' && Array.isArray(allItems)) ? allItems : [];
   const it = fonte.find(x => x.id === itemId);
+  if (!it) return;
+  const overlay = document.getElementById('kitmv-modal-overlay');
+  const body = document.getElementById('kitmv-modal-body');
+  if (!overlay || !body) return;
+
   const isUnidade = _kitMontavelEhUnidade(it);
-  if (_kitMontavelSel[itemId]) {
-    // já selecionado — desmarca
-    delete _kitMontavelSel[itemId];
-    delete _kitMontavelExtras[itemId];
-    card.classList.remove('on');
-    if (stepper) stepper.style.display = 'none';
-    if (hint) hint.style.display = '';
-    if (extras) extras.style.display = 'none';
-  } else {
-    _kitMontavelSel[itemId] = isUnidade ? 1 : 500; // valor inicial padrão
-    card.classList.add('on');
-    if (stepper) stepper.style.display = 'flex';
-    if (hint) hint.style.display = 'none';
-    if (extras) {
-      extras.style.display = 'block';
-      // Pré-seleciona a primeira opção de cada grupo (corte/preparo), igual
-      // ao chip que já nasce marcado — evita ir pro carrinho sem escolha.
-      const extraGrupos = _kitMontavelExtraGrupos(it);
-      const escolhas = {};
-      extraGrupos.forEach(g => { escolhas[g.tipo] = g.opcoes[0]?.nome || g.opcoes[0]?.id || ''; });
-      _kitMontavelExtras[itemId] = escolhas;
-    }
-    const pesoEl = document.getElementById(`kitmv-peso-${itemId}`);
-    if (pesoEl) pesoEl.textContent = isUnidade ? '1 un' : '500g';
-  }
-  _kitMontavelAtualizarResumo();
-  if (typeof updateImAddBtn === 'function') updateImAddBtn();
+  const jaSelecionado = !!_kitMontavelSel[itemId];
+  const valorAtual = _kitMontavelSel[itemId] || (isUnidade ? 1 : 500);
+  const extraGrupos = _kitMontavelExtraGrupos(it);
+  const escolhasAtuais = _kitMontavelExtras[itemId] || {};
+
+  const extrasHtml = extraGrupos.map(g => {
+    const chips = g.opcoes.map((o) => {
+      const nome = o.nome || o.id || '';
+      const marcado = (escolhasAtuais[g.tipo] || g.opcoes[0]?.nome || g.opcoes[0]?.id) === nome;
+      return `<button type="button" class="kitmv-chip${marcado ? ' on' : ''}" data-grupo="${g.tipo}" onclick="_kitMontavelEscolherExtra('${g.tipo}','${nome.replace(/'/g, "\\'")}',this)">${nome}</button>`;
+    }).join('');
+    return `<div style="margin-top:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">${g.nome || (g.tipo === 'cortes' ? 'Tipo de corte' : 'Forma de preparo')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${chips}</div>
+    </div>`;
+  }).join('');
+
+  body.dataset.itemId = itemId;
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+      <div style="width:52px;height:52px;border-radius:12px;overflow:hidden;flex-shrink:0;background:var(--s2);display:flex;align-items:center;justify-content:center">
+        ${it.image_url ? `<img src="${it.image_url}" style="width:100%;height:100%;object-fit:cover">` : `<span style="font-size:26px">${it.emoji || '🥩'}</span>`}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:15.5px">${it.name}</div>
+        <div style="font-size:12.5px;color:var(--muted)">R$ ${parseFloat(it.price || 0).toFixed(2).replace('.', ',')}${isUnidade ? '/un' : '/kg'}</div>
+      </div>
+    </div>
+    <div style="margin-top:16px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">${isUnidade ? 'Quantidade' : 'Peso'}</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;background:var(--s2);border-radius:14px;padding:12px">
+      <button type="button" onclick="_kitMontavelAjustarPesoModal(${isUnidade ? -1 : -100})" style="width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:18px;cursor:pointer">−</button>
+      <span id="kitmv-modal-peso" style="font-size:17px;font-weight:800;min-width:80px;text-align:center">${isUnidade ? valorAtual + ' un' : (valorAtual >= 1000 ? (valorAtual / 1000).toFixed(1).replace('.', ',') + 'kg' : valorAtual + 'g')}</span>
+      <button type="button" onclick="_kitMontavelAjustarPesoModal(${isUnidade ? 1 : 100})" style="width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:18px;cursor:pointer">+</button>
+    </div>
+    ${extrasHtml}
+    <div style="display:flex;gap:8px;margin-top:20px">
+      ${jaSelecionado ? `<button type="button" onclick="_kitMontavelRemoverDoKit(${itemId})" style="flex:1;padding:13px;border-radius:12px;border:1px solid var(--border);background:var(--s2);color:var(--danger,#e5484d);font-weight:700;font-size:13.5px;cursor:pointer">Remover do kit</button>` : ''}
+      <button type="button" onclick="_kitMontavelConfirmarConfig()" style="flex:2;padding:13px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-weight:800;font-size:13.5px;cursor:pointer">${jaSelecionado ? 'Salvar' : 'Adicionar ao kit'}</button>
+    </div>
+  `;
+  body._valorTemp = valorAtual;
+  body._extrasTemp = { ...escolhasAtuais };
+  extraGrupos.forEach(g => { if (!body._extrasTemp[g.tipo]) body._extrasTemp[g.tipo] = g.opcoes[0]?.nome || g.opcoes[0]?.id || ''; });
+
+  overlay.style.display = 'flex';
 }
 
-function _kitMontavelAjustarPeso(itemId, delta) {
+function _kitMontavelFecharConfig() {
+  const overlay = document.getElementById('kitmv-modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function _kitMontavelAjustarPesoModal(delta) {
+  const body = document.getElementById('kitmv-modal-body');
+  const itemId = parseInt(body.dataset.itemId);
   const fonte = (typeof allItems !== 'undefined' && Array.isArray(allItems)) ? allItems : [];
   const it = fonte.find(x => x.id === itemId);
   const isUnidade = _kitMontavelEhUnidade(it);
   const min = isUnidade ? 1 : 100;
-  const atual = _kitMontavelSel[itemId] || min;
-  const novo = Math.max(min, atual + delta);
-  _kitMontavelSel[itemId] = novo;
-  const pesoEl = document.getElementById(`kitmv-peso-${itemId}`);
-  if (pesoEl) {
-    pesoEl.textContent = isUnidade
-      ? `${novo} un`
-      : (novo >= 1000 ? (novo/1000).toFixed(1).replace('.',',')+'kg' : novo+'g');
-  }
+  const novo = Math.max(min, (body._valorTemp || min) + delta);
+  body._valorTemp = novo;
+  const pesoEl = document.getElementById('kitmv-modal-peso');
+  if (pesoEl) pesoEl.textContent = isUnidade ? `${novo} un` : (novo >= 1000 ? (novo / 1000).toFixed(1).replace('.', ',') + 'kg' : novo + 'g');
+}
+
+function _kitMontavelEscolherExtra(tipo, nome, btn) {
+  const body = document.getElementById('kitmv-modal-body');
+  if (!body._extrasTemp) body._extrasTemp = {};
+  body._extrasTemp[tipo] = nome;
+  btn.parentElement.querySelectorAll('.kitmv-chip').forEach(c => c.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+function _kitMontavelConfirmarConfig() {
+  const body = document.getElementById('kitmv-modal-body');
+  const itemId = parseInt(body.dataset.itemId);
+  _kitMontavelSel[itemId] = body._valorTemp;
+  _kitMontavelExtras[itemId] = { ...(body._extrasTemp || {}) };
+  _kitMontavelAtualizarCard(itemId);
   _kitMontavelAtualizarResumo();
   if (typeof updateImAddBtn === 'function') updateImAddBtn();
+  _kitMontavelFecharConfig();
+}
+
+function _kitMontavelRemoverDoKit(itemId) {
+  delete _kitMontavelSel[itemId];
+  delete _kitMontavelExtras[itemId];
+  _kitMontavelAtualizarCard(itemId);
+  _kitMontavelAtualizarResumo();
+  if (typeof updateImAddBtn === 'function') updateImAddBtn();
+  _kitMontavelFecharConfig();
+}
+
+// Atualiza só a aparência do card na grade (compacto — sem expandir)
+function _kitMontavelAtualizarCard(itemId) {
+  const card = document.getElementById(`kitmv-card-${itemId}`);
+  const hint = document.getElementById(`kitmv-hint-${itemId}`);
+  const resumoCard = document.getElementById(`kitmv-resumo-card-${itemId}`);
+  if (!card) return;
+  const valor = _kitMontavelSel[itemId];
+  if (!valor) {
+    card.classList.remove('on');
+    if (hint) hint.style.display = '';
+    if (resumoCard) { resumoCard.style.display = 'none'; resumoCard.textContent = ''; }
+    return;
+  }
+  const fonte = (typeof allItems !== 'undefined' && Array.isArray(allItems)) ? allItems : [];
+  const it = fonte.find(x => x.id === itemId);
+  const isUnidade = _kitMontavelEhUnidade(it);
+  const label = isUnidade ? `${valor} un` : (valor >= 1000 ? (valor / 1000).toFixed(1).replace('.', ',') + 'kg' : valor + 'g');
+  const extras = _kitMontavelExtras[itemId] || {};
+  const extrasTxt = Object.values(extras).filter(Boolean).join(', ');
+  card.classList.add('on');
+  if (hint) hint.style.display = 'none';
+  if (resumoCard) {
+    resumoCard.style.display = 'block';
+    resumoCard.textContent = extrasTxt ? `${label} · ${extrasTxt}` : label;
+  }
 }
 
 function _kitMontavelAtualizarResumo() {
