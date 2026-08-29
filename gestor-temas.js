@@ -135,6 +135,55 @@ const GESTOR_TEMAS = [
       '--kanban-saiu':'rgba(245,158,11,.07)',
       '--kanban-entregue':'rgba(99,102,241,.06)'
     }
+  },
+  {
+    key: 'dourado',
+    nome: 'Dourado ButherBox',
+    desc: 'Preto premium com acentos dourados',
+    emoji: '⚜️',
+    tipo: 'dark',
+    preview: {
+      bg:'#0a0806', sidebar:'#050403', accent:'#d4af37',
+      card:'#161310', cardBorder:'rgba(212,175,55,.16)',
+      text:'#f5f1e8', muted:'#8a7d61',
+      kol1:'rgba(251,191,36,.08)', kol2:'rgba(14,165,233,.08)', kol3:'rgba(52,211,153,.08)',
+      kolT1:'#fbbf24', kolT2:'#7dd3fc', kolT3:'#6ee7b7'
+    },
+    vars: {
+      '--bg':'#0a0806',
+      '--surface':'#161310',
+      '--surface2':'#1e1a14',
+      '--surface3':'#2a2318',
+      '--s1':'#161310',
+      '--s2':'#1e1a14',
+      '--s3':'#2a2318',
+      '--border':'rgba(212,175,55,.16)',
+      '--border2':'rgba(212,175,55,.28)',
+      '--accent':'#d4af37',
+      '--accent2':'#f4d271',
+      '--accent3':'#fbbf24',
+      '--accent-dim':'rgba(212,175,55,.12)',
+      '--accent-glow':'rgba(212,175,55,.24)',
+      '--success':'#34d399',
+      '--danger':'#fb7185',
+      '--purple':'#a78bfa',
+      '--pink':'#f0abfc',
+      '--orange':'#f0a060',
+      '--text':'#f5f1e8',
+      '--muted':'#8a7d61',
+      '--muted2':'#a89b7d',
+      '--sidebar-bg':'#050403',
+      '--topnav-bg':'#030202',
+      '--sfoot-bg':'rgba(3,2,2,.9)',
+      /* Kanban continua com as MESMAS cores do tema escuro padrão —
+         funcional e intuitivo (não devem virar douradas, senão perde o
+         contraste entre as colunas de status). */
+      '--kanban-analise':'rgba(14,165,233,.08)',
+      '--kanban-producao':'rgba(255,255,255,.06)',
+      '--kanban-pronto':'rgba(52,211,153,.06)',
+      '--kanban-saiu':'rgba(245,158,11,.08)',
+      '--kanban-entregue':'rgba(99,102,241,.06)'
+    }
   }
 ];
 
@@ -146,7 +195,8 @@ function temaNormalizarKey(key) {
     'escuro':'escuro', 'dark':'escuro', 'oceano':'escuro', 'cobre':'escuro',
     'cafe':'escuro', 'lavanda':'escuro', 'cereja':'escuro', 'crepusculo':'escuro', 'esmeralda':'escuro',
     'claro':'claro', 'light':'claro', 'artico':'claro', 'classico':'claro', 'minimalista':'claro',
-    'noturno':'noturno'
+    'noturno':'noturno',
+    'dourado':'dourado', 'gold':'dourado', 'butherbox':'dourado'
   };
   return mapa[key] || 'claro';
 }
@@ -207,7 +257,7 @@ function temaRenderStatusPanel() {
         ${GESTOR_TEMAS.map(t => `
           <button type="button" class="tema-mode-btn ${t.key === ativo.key ? 'on' : ''}" onclick="temaAplicarModo('${t.key}')" aria-pressed="${t.key === ativo.key}">
             <span>${t.emoji}</span>
-            <span>${t.tipo === 'light' ? 'Claro' : (t.key === 'noturno' ? 'Noturno' : 'Escuro')}</span>
+            <span>${t.tipo === 'light' ? 'Claro' : (t.key === 'noturno' ? 'Noturno' : (t.key === 'dourado' ? 'Dourado' : 'Escuro'))}</span>
           </button>
         `).join('')}
       </div>
