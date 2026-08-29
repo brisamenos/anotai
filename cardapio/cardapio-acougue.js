@@ -408,13 +408,22 @@ function _renderGenericGruposHtml(genericGrupos) {
 // for vendido por peso, ou por quantidade de unidades se for vendido por
 // unidade (ex: linguiça, frango inteiro, ovos — qualquer item_type != 'kg').
 let _kitMontavelSel = {}; // { itemId: gramas (kg) OU quantidade de unidades }
+// Corte/preparo escolhidos por item dentro do kit — só existe quando o
+// próprio item selecionado (ex: "Acém Bovino") tem esses grupos cadastrados,
+// igual já acontece quando ele é vendido avulso no cardápio normal.
+let _kitMontavelExtras = {}; // { itemId: { cortes: 'nome', preparos: 'nome' } }
 
 function _kitMontavelEhUnidade(it) {
   return (it?.item_type || it?.itemType) !== 'kg';
 }
 
+function _kitMontavelExtraGrupos(it) {
+  return (it?.custom_groups || []).filter(g => (g.tipo === 'cortes' || g.tipo === 'preparos') && g.opcoes?.length);
+}
+
 function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
   _kitMontavelSel = {};
+  _kitMontavelExtras = {};
   const catsSet = new Set(categoriasPermitidas);
   const fonte = (typeof allItems !== 'undefined' && Array.isArray(allItems)) ? allItems : [];
   const elegiveis = fonte.filter(i =>
@@ -432,6 +441,20 @@ function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
     const ilustracao = i.image_url
       ? `<img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
       : `<span style="font-size:28px">${i.emoji || '🥩'}</span>`;
+    // Grupos de corte/preparo do PRÓPRIO item (ex: Acém tem "Tipo de corte":
+    // bife fino/grosso/moído) — mesmos dados que já existem no cardápio,
+    // só que agora também ficam disponíveis dentro do "monte seu kit".
+    const extraGrupos = _kitMontavelExtraGrupos(i);
+    const extrasHtml = extraGrupos.map(g => {
+      const chips = g.opcoes.map((o, idx) => {
+        const nome = o.nome || o.id || '';
+        return `<button type="button" class="kitmv-chip${idx===0?' on':''}" data-grupo="${g.tipo}" onclick="event.stopPropagation();_kitMontavelEscolherExtra(${i.id},'${g.tipo}','${nome.replace(/'/g,"\\'")}',this)">${nome}</button>`;
+      }).join('');
+      return `<div style="margin-top:8px;text-align:left">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">${g.nome || (g.tipo==='cortes'?'Tipo de corte':'Forma de preparo')}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">${chips}</div>
+      </div>`;
+    }).join('');
     return `<div class="corte-card" id="kitmv-card-${i.id}" onclick="_kitMontavelToggle(${i.id})">
       <div class="corte-card-illus">${ilustracao}</div>
       <div class="corte-card-name">${i.name}</div>
@@ -441,6 +464,7 @@ function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
         <span id="kitmv-peso-${i.id}" style="font-size:11.5px;font-weight:700;min-width:44px;text-align:center">${isUnidade?'1 un':'500g'}</span>
         <button type="button" onclick="_kitMontavelAjustarPeso(${i.id},${isUnidade?1:100})" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:14px;cursor:pointer">+</button>
       </div>
+      ${extraGrupos.length ? `<div id="kitmv-extras-${i.id}" style="display:none" onclick="event.stopPropagation()">${extrasHtml}</div>` : ''}
     </div>`;
   }).join('');
 
@@ -453,10 +477,23 @@ function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
   </div>`;
 }
 
+function _kitMontavelEscolherExtra(itemId, tipo, nome, btn) {
+  if (!_kitMontavelExtras[itemId]) _kitMontavelExtras[itemId] = {};
+  _kitMontavelExtras[itemId][tipo] = nome;
+  // Visual: marca só o chip clicado dentro do MESMO grupo, dessa MESMA carne
+  const wrap = btn.closest('#kitmv-extras-' + itemId + ', [id^="kitmv-extras-"]') || btn.parentElement.parentElement;
+  const grupoWrap = btn.parentElement;
+  grupoWrap.querySelectorAll('.kitmv-chip').forEach(c => c.classList.remove('on'));
+  btn.classList.add('on');
+  _kitMontavelAtualizarResumo();
+  if (typeof updateImAddBtn === 'function') updateImAddBtn();
+}
+
 function _kitMontavelToggle(itemId) {
   const card = document.getElementById(`kitmv-card-${itemId}`);
   const stepper = document.getElementById(`kitmv-stepper-${itemId}`);
   const hint = document.getElementById(`kitmv-hint-${itemId}`);
+  const extras = document.getElementById(`kitmv-extras-${itemId}`);
   if (!card) return;
   const fonte = (typeof allItems !== 'undefined' && Array.isArray(allItems)) ? allItems : [];
   const it = fonte.find(x => x.id === itemId);
@@ -464,14 +501,25 @@ function _kitMontavelToggle(itemId) {
   if (_kitMontavelSel[itemId]) {
     // já selecionado — desmarca
     delete _kitMontavelSel[itemId];
+    delete _kitMontavelExtras[itemId];
     card.classList.remove('on');
     if (stepper) stepper.style.display = 'none';
     if (hint) hint.style.display = '';
+    if (extras) extras.style.display = 'none';
   } else {
     _kitMontavelSel[itemId] = isUnidade ? 1 : 500; // valor inicial padrão
     card.classList.add('on');
     if (stepper) stepper.style.display = 'flex';
     if (hint) hint.style.display = 'none';
+    if (extras) {
+      extras.style.display = 'block';
+      // Pré-seleciona a primeira opção de cada grupo (corte/preparo), igual
+      // ao chip que já nasce marcado — evita ir pro carrinho sem escolha.
+      const extraGrupos = _kitMontavelExtraGrupos(it);
+      const escolhas = {};
+      extraGrupos.forEach(g => { escolhas[g.tipo] = g.opcoes[0]?.nome || g.opcoes[0]?.id || ''; });
+      _kitMontavelExtras[itemId] = escolhas;
+    }
     const pesoEl = document.getElementById(`kitmv-peso-${itemId}`);
     if (pesoEl) pesoEl.textContent = isUnidade ? '1 un' : '500g';
   }
@@ -510,7 +558,9 @@ function _kitMontavelAtualizarResumo() {
     const isUnidade = _kitMontavelEhUnidade(it);
     total += isUnidade ? (valor * parseFloat(it.price || 0)) : ((valor/1000) * parseFloat(it.price || 0));
     const label = isUnidade ? `${valor} un` : (valor >= 1000 ? (valor/1000).toFixed(1).replace('.',',')+'kg' : valor+'g');
-    return `${label} ${it.name}`;
+    const extras = _kitMontavelExtras[idStr] || _kitMontavelExtras[parseInt(idStr)];
+    const extrasTxt = extras && Object.values(extras).length ? ` (${Object.values(extras).join(', ')})` : '';
+    return `${label} ${it.name}${extrasTxt}`;
   }).filter(Boolean);
   el.style.color = 'var(--text)';
   el.innerHTML = linhas.join(', ') + `<div style="margin-top:4px;font-weight:800;color:var(--accent);font-size:14px">Total: R$ ${total.toFixed(2).replace('.', ',')}</div>`;

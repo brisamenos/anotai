@@ -1357,7 +1357,11 @@ function imConfirm() {
         const isUnidade = (typeof _kitMontavelEhUnidade === 'function') ? _kitMontavelEhUnidade(itCorte) : (itCorte.item_type !== 'kg');
         precoTotal += isUnidade ? (valor * parseFloat(itCorte.price || 0)) : ((valor / 1000) * parseFloat(itCorte.price || 0));
         const label = isUnidade ? `${valor} un` : (valor >= 1000 ? (valor / 1000).toFixed(1).replace('.', ',') + 'kg' : valor + 'g');
-        return `${label} ${itCorte.name}`;
+        // Corte/preparo escolhidos pra ESSA carne específica (ex: "Bife fino",
+        // "Grelhar") — só existe quando o item tem esses grupos cadastrados.
+        const extras = (typeof _kitMontavelExtras !== 'undefined' && (_kitMontavelExtras[idStr] || _kitMontavelExtras[parseInt(idStr)])) || null;
+        const extrasTxt = extras && Object.values(extras).length ? ` (${Object.values(extras).join(', ')})` : '';
+        return `${label} ${itCorte.name}${extrasTxt}`;
       }).filter(Boolean);
       cartObs = ['Kit: ' + partesDesc.join(' · '), cartObs].filter(Boolean).join(' | ');
       cartPrice = precoTotal;
