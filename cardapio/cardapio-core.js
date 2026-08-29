@@ -628,6 +628,73 @@ function isLojaAberta(horarios, store_open) {
 let _cachedHorarios = null;
 let _cachedStoreOpen = undefined;
 
+// ── Próximo horário de abertura (usado no modal de loja fechada) ──
+// Varre hoje + próximos 7 dias procurando a primeira janela que ainda vai
+// abrir. Retorna { data: Date, label: 'hoje às 18:00' | 'amanhã às 08:00' |
+// 'segunda às 08:00' } ou null se não achar nada configurado (nesse caso o
+// modal só fala "fechada no momento", sem prometer um horário).
+function _calcularProximaAbertura() {
+  const h = _cachedHorarios;
+  if (!h || !Object.keys(h).length) return null;
+  const dias = ['dom','seg','ter','qua','qui','sex','sab'];
+  const nomesDia = { dom:'domingo', seg:'segunda', ter:'terça', qua:'quarta', qui:'quinta', sex:'sexta', sab:'sábado' };
+  const agora = new Date();
+  const minutoAtual = agora.getHours() * 60 + agora.getMinutes();
+
+  for (let offset = 0; offset <= 7; offset++) {
+    const idxDia = (agora.getDay() + offset) % 7;
+    const cfgDia = h[dias[idxDia]];
+    if (!_horarioAtivo(cfgDia)) continue;
+    const janelas = _cpJanelasDia(cfgDia).slice().sort((a, b) => (_horaParaMinutos(a.abertura) ?? 0) - (_horaParaMinutos(b.abertura) ?? 0));
+    for (const j of janelas) {
+      const aberturaMin = _horaParaMinutos(j.abertura);
+      if (aberturaMin === null) continue;
+      // No dia de hoje (offset 0), só conta se a abertura ainda não passou
+      if (offset === 0 && aberturaMin <= minutoAtual) continue;
+      const data = new Date(agora);
+      data.setDate(data.getDate() + offset);
+      data.setHours(Math.floor(aberturaMin / 60), aberturaMin % 60, 0, 0);
+      const horaTxt = String(Math.floor(aberturaMin / 60)).padStart(2, '0') + ':' + String(aberturaMin % 60).padStart(2, '0');
+      let label;
+      if (offset === 0) label = `hoje às ${horaTxt}`;
+      else if (offset === 1) label = `amanhã às ${horaTxt}`;
+      else label = `${nomesDia[dias[idxDia]]} às ${horaTxt}`;
+      return { data, label };
+    }
+  }
+  return null;
+}
+
+// ── Modal "loja fechada / agendar pedido" ──────────────────────────────
+function abrirModalAgendamento() {
+  const ov = document.getElementById('agendamento-overlay');
+  if (!ov) return;
+  const proxima = _calcularProximaAbertura();
+  const txtEl = document.getElementById('agnd-proxima-abertura');
+  if (txtEl) {
+    txtEl.textContent = proxima
+      ? `Abrimos ${proxima.label}.`
+      : 'Ainda não temos um horário certo pra reabrir — mas você já pode deixar seu pedido garantido.';
+  }
+  ov.style.display = 'flex';
+}
+
+function fecharModalAgendamento() {
+  const ov = document.getElementById('agendamento-overlay');
+  if (ov) ov.style.display = 'none';
+}
+
+function confirmarAgendamento() {
+  const proxima = _calcularProximaAbertura();
+  _pedidoAgendadoPara = proxima ? proxima.data : new Date();
+  fecharModalAgendamento();
+  applyStatus(); // recalcula o botão de confirmar com _pedidoAgendadoPara já setado
+  try {
+    const proxTxt = proxima ? proxima.label : 'assim que abrirmos';
+    if (typeof toast === 'function') toast('ok', `Combinado! Monte seu pedido — vamos prepará-lo para ${proxTxt}.`);
+  } catch(e) {}
+}
+
 // ── Modal info da loja ────────────────────────────────
 function openStoreInfoModal() {
   const ov = document.getElementById('store-info-overlay');
@@ -748,9 +815,28 @@ function applyStatus(store_open, horarios) {
     }
   }
   if (btn) {
-    btn.disabled = !_lojaAberta || cart.length === 0;
-    if (!_lojaAberta) btn.innerHTML = '<span style="color:var(--red);font-size:10px">●</span> Loja fechada';
-    else if (cart.length > 0) btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido';
+    // typeof-guard: se por acaso o cardapio-state.js estiver desatualizado
+    // (arquivo antigo, sem essa variável ainda), acessar direto quebraria
+    // TODO o carregamento do cardápio bem aqui — só quando a loja está
+    // fechada (loja aberta nem chega a avaliar isso, por causa do &&).
+    const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
+    const podeAgendado = !_lojaAberta && _pedidoAgendadoSeguro;
+    btn.disabled = (!_lojaAberta && !podeAgendado) || cart.length === 0;
+    if (!_lojaAberta && !podeAgendado) btn.innerHTML = '<span style="color:var(--red);font-size:10px">●</span> Loja fechada';
+    else if (cart.length === 0) btn.innerHTML = podeAgendado ? 'Adicione itens para agendar' : 'Adicione itens ao carrinho';
+    else if (podeAgendado) btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 4v4l2.5 2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg> Confirmar Pedido Agendado';
+    else btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido';
+  }
+  // Modal "loja fechada, quer agendar?" — mostra 1x por sessão quando a
+  // loja está fechada e o gestor não desligou o recurso de agendamento.
+  // Mesma blindagem: se _permitirAgendamento/_agendamentoModalMostrado não
+  // existirem (arquivo desatualizado), trata como recurso desligado em vez
+  // de travar o carregamento inteiro do cardápio.
+  const _permitirAgendamentoSeguro = (typeof _permitirAgendamento !== 'undefined') ? _permitirAgendamento : false;
+  const _modalJaMostradoSeguro = (typeof _agendamentoModalMostrado !== 'undefined') ? _agendamentoModalMostrado : true;
+  if (!_lojaAberta && _permitirAgendamentoSeguro && !_modalJaMostradoSeguro) {
+    try { _agendamentoModalMostrado = true; } catch(e) {}
+    setTimeout(() => { if (typeof abrirModalAgendamento === 'function') abrirModalAgendamento(); }, 600);
   }
 }
 
@@ -793,7 +879,7 @@ async function init() {
       sb.from('menu_items').select('*').not('status','eq','pausado').order('sort_order', { nullsFirst: false }).order('id'),
       sb.from('categories').select('*').eq('ativo', true).order('sort_order'),
       sb.from('cupons').select('*').eq('ativo', true),
-      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,pickup_addresses,store_tempo_entrega,store_tempo_retirada,mostrar_indicacao_preparo').single(),
+      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,pickup_addresses,store_tempo_entrega,store_tempo_retirada,mostrar_indicacao_preparo,permitir_agendamento').single(),
       fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } }).then(r => r.ok ? r.json() : {}).catch(() => ({}))
     ]);
 
@@ -826,7 +912,6 @@ async function init() {
 
     if (cfgR.data) {
       const c = cfgR.data;
-      applyStatus(c.store_open, c.horarios_config);
       feeConfig     = c.delivery_fee_config || {};
       _pedidoMinimo = parseFloat(c.pedido_minimo) || 0;
       _storeAddress = c.store_address || '';
@@ -836,6 +921,10 @@ async function init() {
       // Sem essa coluna configurada ainda (null/undefined), mantém ligada
       // por padrão pra não sumir de quem nunca mexeu nessa opção.
       _mostrarIndicacaoPreparo = c.mostrar_indicacao_preparo !== 0 && c.mostrar_indicacao_preparo !== false;
+      _permitirAgendamento = c.permitir_agendamento !== 0 && c.permitir_agendamento !== false;
+      // Só agora, com _permitirAgendamento já certo, aplica o status —
+      // é ele quem decide se mostra o modal de loja fechada + agendamento.
+      applyStatus(c.store_open, c.horarios_config);
       _tiposEntrega = Array.isArray(c.tipos_entrega) ? c.tipos_entrega : ['delivery','retirada','mesa'];
       // Múltiplos endereços de retirada
       try {
@@ -1015,6 +1104,7 @@ function subscribeRealtime() {
     .on('postgres_changes',{event:'UPDATE',table:'store_config'}, p => {
       const cfg = p.new;
       // Status aberto/fechado
+      if (cfg.permitir_agendamento !== undefined) _permitirAgendamento = cfg.permitir_agendamento !== 0 && cfg.permitir_agendamento !== false;
       applyStatus(cfg.store_open, cfg.horarios_config || _cachedHorarios);
       // Offset de numeração — atualiza imediatamente quando gestor zera a contagem
       if (cfg.order_num_offset !== undefined) {
