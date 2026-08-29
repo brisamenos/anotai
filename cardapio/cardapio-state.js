@@ -39,6 +39,10 @@ let _selectedPickupIdx  = 0;   // índice do endereço de retirada selecionado p
 // Seção "Não sabe qual carne escolher?" (robozinho + modal de preparo) —
 // liga/desliga pelo gestor em Configurações. true até a config carregar.
 let _mostrarIndicacaoPreparo = true;
+// Agendamento de pedido quando a loja está fechada — idem, true por padrão.
+let _permitirAgendamento = true;
+let _agendamentoModalMostrado = false; // mostra o modal 1x por carregamento de página
+let _pedidoAgendadoPara = null; // Date escolhida, preenchido ao confirmar no modal
 
 // ── Segmento ──
 let _segmento      = 'restaurante'; // 'restaurante' | 'acougue'
