@@ -577,10 +577,6 @@ async function _doSubmitOrder(addr, troco) {
       // o pedido se a loja estiver fechada (validação server-side; não é
       // coluna real, é descartada antes do INSERT). Ver server.js.
       origem_pedido: 'cardapio_publico',
-      // Pedido agendado (loja fechada, cliente confirmou no modal de
-      // agendamento) — servidor só aceita pedido com loja fechada quando
-      // esse campo vem preenchido. Ver isLojaAbertaServer() em server.js.
-      ...(_pedidoAgendadoPara ? { scheduled_for: _pedidoAgendadoPara.toISOString() } : {}),
       client: name, phone, addr,
       items, total: grandTotal(), taxa: getTaxa(),
       status: selectedPay === 'pix' ? 'aguardando_pix'
@@ -646,9 +642,7 @@ async function _doSubmitOrder(addr, troco) {
     cart = [];
     appliedCupom = null;
     _pendingOrderAddr = '';
-    _pedidoAgendadoPara = null; // reseta pra não marcar um próximo pedido como agendado por engano
     updateCartFloat();
-    if (typeof applyStatus === 'function') applyStatus(); // atualiza texto/estado do botão de confirmar
     document.getElementById('cupom-input').value = '';
     document.getElementById('cupom-msg').innerHTML = '';
 
@@ -691,8 +685,7 @@ async function _doSubmitOrder(addr, troco) {
       total: order.total,
       taxa: order.taxa,
       pag: order.pag,
-      troco: order.troco,
-      scheduled_for: order.scheduled_for || null
+      troco: order.troco
     });
     // ── PIX: gera QR Code MP ou exibe chave manual ──
     if (pixFlowPromise) await pixFlowPromise;
