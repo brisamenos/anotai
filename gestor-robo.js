@@ -898,7 +898,7 @@ let _cpBanners   = []; // [{type:'image'|'video', url}] — até 5, formam slide
 
 async function loadCardapioPublico() {
   const { data } = await sb.from('store_config').select(
-    'store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config,pickup_addresses,mostrar_indicacao_preparo,permitir_agendamento'
+    'store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config,pickup_addresses,mostrar_indicacao_preparo'
   ).single();
   if (!data) return;
 
@@ -965,11 +965,6 @@ async function loadCardapioPublico() {
   const indicacaoPreparoOn = data.mostrar_indicacao_preparo !== 0 && data.mostrar_indicacao_preparo !== false;
   const indicacaoEl = document.getElementById('cp-indicacao-preparo');
   if (indicacaoEl) { indicacaoEl.checked = indicacaoPreparoOn; cpToggleIndicacaoPreparo(indicacaoPreparoOn); }
-  // Agendamento de pedido com loja fechada — vale pra qualquer segmento.
-  // Mesmo raciocínio de default: sem config ainda, considera ligado.
-  const agendamentoOn = data.permitir_agendamento !== 0 && data.permitir_agendamento !== false;
-  const agendamentoEl = document.getElementById('cp-permitir-agendamento');
-  if (agendamentoEl) { agendamentoEl.checked = agendamentoOn; cpToggleAgendamento(agendamentoOn); }
   // Oculta opção de carrossel se for açougue (já usa por padrão)
   // Busca segmento direto para não depender de window._segmento que pode não ter carregado
   const catsWrap = document.getElementById('cp-cats-modo-wrap');
@@ -1306,13 +1301,6 @@ function cpToggleIndicacaoPreparo(on) {
   if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
 }
 
-function cpToggleAgendamento(on) {
-  const track = document.getElementById('cp-permitir-agendamento-track');
-  const thumb = document.getElementById('cp-permitir-agendamento-thumb');
-  if (track) track.style.background = on ? 'var(--accent)' : 'var(--surface2)';
-  if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
-}
-
 function cpSelecionarTema(tema) {
   if (!document.querySelector('#cp-temas-grid .cp-theme-card')) cpRenderTemasGrid();
   // Atualiza borda visual de cada card
@@ -1502,7 +1490,6 @@ async function salvarCardapioPublico() {
       store_tema:          document.getElementById('cp-tema-value')?.value          || 'classico',
       cats_carrossel:      document.getElementById('cp-cats-carrossel')?.checked ? 1 : 0,
       mostrar_indicacao_preparo: document.getElementById('cp-indicacao-preparo')?.checked ? 1 : 0,
-      permitir_agendamento: document.getElementById('cp-permitir-agendamento')?.checked ? 1 : 0,
       horarios_config:     JSON.stringify(cpGetHorarios()),
       pedido_minimo:       parseFloat(document.getElementById('cp-pedido-minimo')?.value) || 0,
       store_address:       document.getElementById('cp-store-address')?.value.trim() || null,

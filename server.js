@@ -1205,10 +1205,6 @@ const MIGRATIONS = [
   { version:79, description:'esconde o preço do item no cardápio (usado quando o preço real está só nos adicionais)', up:
     `ALTER TABLE menu_items ADD COLUMN hide_price INTEGER DEFAULT 0`
   },
-  { version:80, description:'agendamento de pedido quando a loja está fechada', up:
-    `ALTER TABLE orders ADD COLUMN scheduled_for TEXT;
-     ALTER TABLE store_config ADD COLUMN permitir_agendamento INTEGER DEFAULT 1`
-  },
 ]
 
 function runMigrations() {
@@ -2184,17 +2180,6 @@ function brasiliaDateString(date = new Date()) {
   return `${p.year}-${p.month}-${p.day}`
 }
 
-// Loja permite agendamento quando fechada? Padrão sim (config não existe
-// ainda pra quem nunca mexeu nisso — não pode quebrar quem já confiava
-// que dava pra deixar pedido agendado antes desse toggle existir).
-function _permiteAgendamentoServer(tenantId) {
-  try {
-    const cfg = db.prepare('SELECT permitir_agendamento FROM store_config WHERE tenant_id=?').get(tenantId)
-    if (!cfg || cfg.permitir_agendamento === null || cfg.permitir_agendamento === undefined) return true
-    return !!cfg.permitir_agendamento
-  } catch(e) { return true }
-}
-
 // ── Loja aberta? (validação SERVER-SIDE) ──────────────────────────────────
 // Porte fiel da lógica de cardapio-core.js (isLojaAberta / _horarioAbertoNoMinuto
 // / _horaParaMinutos etc). Antes, "loja fechada" só era checado no JS do
@@ -2340,13 +2325,13 @@ agendarResetDiarioPedidos()
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','image_url','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','video_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','hide_price','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','taxa_servico','clientes_json','pagamentos_json','nome','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','session_ref','garcom_id','garcom_nome','customer_id','client_request_id','order_num','wa_track','scheduled_for','created_at'],
+  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','session_ref','garcom_id','garcom_nome','customer_id','client_request_id','order_num','wa_track','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','fornecedor_id','updated_at'],
   estoque_receitas: ['id','tenant_id','item_id','estoque_id','qty','unit','ativo','created_at','updated_at'],
@@ -2765,13 +2750,7 @@ async function handleREST(req, res, table, params, body) {
         if (payload.origem_pedido === 'cardapio_publico') {
           const _chk = isLojaAbertaServer(tenantId)
           if (!_chk.aberto) {
-            // Loja fechada — mas se o cliente confirmou um pedido AGENDADO no
-            // modal de loja fechada (scheduled_for preenchido) e o gestor não
-            // desativou esse recurso, deixa passar mesmo assim.
-            const ehAgendado = !!payload.scheduled_for && _permiteAgendamentoServer(tenantId)
-            if (!ehAgendado) {
-              return send(res, 503, { error: _chk.motivo || 'Loja fechada no momento.' })
-            }
+            return send(res, 503, { error: _chk.motivo || 'Loja fechada no momento.' })
           }
         }
 

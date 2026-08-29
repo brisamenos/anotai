@@ -2044,41 +2044,6 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
   margin-top:10px;font-size:12.5px;font-weight:700;color:var(--text);text-align:center;
 }
 /* ── Fim robozinho ── */
-
-/* ── Modal "loja fechada / agendar pedido" ── */
-@keyframes agndSheetUp{ from{ transform:translateY(100%) } to{ transform:translateY(0) } }
-.agnd-sheet{
-  position:relative;background:var(--s1);border-radius:24px 24px 0 0;
-  width:100%;max-width:480px;
-  box-shadow:0 -20px 60px rgba(0,0,0,.35);
-  animation:agndSheetUp .38s cubic-bezier(.22,.9,.32,1.15);
-  border-top:1px solid var(--border);
-}
-.agnd-robot-wrap{
-  position:absolute;top:-46px;left:50%;transform:translateX(-50%);
-  z-index:2;pointer-events:none;
-  animation:preparoRobotFloat 3s ease-in-out infinite;
-}
-.agnd-arm-l{ transform:rotate(52deg) translate(-3px,4px) !important; }
-.agnd-arm-r{ transform:rotate(-68deg) translate(3px,4px) !important; }
-.agnd-close{
-  position:absolute;top:14px;right:14px;z-index:3;
-  width:30px;height:30px;border-radius:50%;border:none;
-  background:var(--s2);color:var(--muted);
-  display:flex;align-items:center;justify-content:center;cursor:pointer;
-}
-.agnd-btn-primary{
-  padding:14px;border-radius:14px;border:none;
-  background:var(--accent-g,var(--accent));color:#fff;
-  font-size:14.5px;font-weight:800;cursor:pointer;
-  box-shadow:0 10px 24px rgba(var(--accent-rgb,249,115,22),.32);
-}
-.agnd-btn-primary:active{ transform:scale(.98) }
-.agnd-btn-secondary{
-  padding:12px;border-radius:14px;border:none;background:transparent;
-  color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;
-}
-
 .preparo-filter-scroll{
   display:flex;
   gap:10px;
@@ -3886,41 +3851,6 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
     <button onclick="closeStoreInfoModal()" style="width:100%;margin-top:22px;padding:14px;border-radius:12px;border:none;background:#f1f3f7;color:#374151;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">Fechar</button>
   </div>
 </div>
-
-<!-- MODAL LOJA FECHADA / AGENDAR PEDIDO -->
-<div id="agendamento-overlay" onclick="if(event.target===this)fecharModalAgendamento()" style="display:none;position:fixed;inset:0;z-index:9300;background:rgba(0,0,0,.6);align-items:flex-end;justify-content:center">
-  <div class="agnd-sheet">
-    <div class="agnd-robot-wrap">
-      <div class="preparo-robot" style="width:74px">
-        <div class="preparo-robot-antenna"></div>
-        <div class="preparo-robot-head">
-          <div class="preparo-robot-eye"></div>
-          <div class="preparo-robot-eye"></div>
-        </div>
-        <div class="preparo-robot-body">
-          <div class="preparo-robot-arm preparo-robot-arm-l agnd-arm-l"></div>
-          <div class="preparo-robot-arm preparo-robot-arm-r agnd-arm-r"></div>
-        </div>
-      </div>
-    </div>
-    <button class="agnd-close" onclick="fecharModalAgendamento()">
-      <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-    </button>
-    <div style="text-align:center;padding:20px 22px 4px">
-      <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:900;color:var(--text)">Estamos fechados no momento</div>
-      <div id="agnd-proxima-abertura" style="font-size:13.5px;color:var(--muted);margin-top:6px;line-height:1.5"></div>
-    </div>
-    <div id="agnd-oferta-wrap" style="margin:16px 20px 0;padding:14px 16px;background:var(--s2);border:1.5px dashed var(--accent);border-radius:14px">
-      <div style="font-size:13.5px;font-weight:700;color:var(--text);line-height:1.4">Mas você já pode fazer seu pedido!</div>
-      <div style="font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.5">A gente separa tudo certinho e começa a preparar assim que abrirmos.</div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8px;padding:18px 20px calc(18px + env(safe-area-inset-bottom,0px))">
-      <button class="agnd-btn-primary" onclick="confirmarAgendamento()">Quero fazer meu pedido agendado</button>
-      <button class="agnd-btn-secondary" onclick="fecharModalAgendamento()">Só dar uma olhada no cardápio</button>
-    </div>
-  </div>
-</div>
-
 
 
 <script>

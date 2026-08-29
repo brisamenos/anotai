@@ -632,8 +632,7 @@ function mapOrder(o) {
     pag_momento: o.pag_momento || null,
     mesa_num: o.mesa_num || null,
     garcom_id: o.garcom_id || null,
-    garcom_nome: o.garcom_nome || '',
-    scheduled_for: o.scheduled_for || null
+    garcom_nome: o.garcom_nome || ''
   };
 }
 
