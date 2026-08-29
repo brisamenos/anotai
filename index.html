@@ -1909,6 +1909,17 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
   width:64px;height:64px;object-fit:contain;display:block;
   transition:opacity .15s;
 }
+/* Chips de corte/preparo dentro de cada carne do "monte seu kit" */
+.kitmv-chip{
+  padding:5px 10px;border-radius:20px;font-size:11px;font-weight:600;
+  border:1.3px solid var(--border);background:var(--s2);color:var(--text-2);
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.kitmv-chip:active{ transform:scale(.95) }
+.kitmv-chip.on{
+  border-color:var(--accent);background:rgba(var(--accent-rgb,249,115,22),.12);
+  color:var(--accent);
+}
 /* Chip de preparo com imagem real */
 .preparo-chip-icon img{
   width:20px;height:20px;object-fit:contain;display:block;

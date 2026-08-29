@@ -2620,7 +2620,10 @@ async function uploadItemVideo(file, itemId) {
 
 // ── Upload image to Supabase Storage ─────────
 async function uploadItemImage(file, itemId) {
-  if (file.size > 2 * 1024 * 1024) throw new Error('Imagem muito grande. Use uma imagem de até 2MB.');
+  // Era 2MB — bem abaixo do que o servidor já aceita (10MB) e menor que uma
+  // foto comum tirada direto da câmera do celular em JPEG/PNG, o que
+  // rejeitava fotos normais achando que era "formato não suportado".
+  if (file.size > 8 * 1024 * 1024) throw new Error('Imagem muito grande. Use uma imagem de até 8MB.');
   const extFromType = {
     'image/jpeg': 'jpg',
     'image/jpg': 'jpg',
@@ -2644,7 +2647,7 @@ async function uploadItemImage(file, itemId) {
 // ícone redondo na barra de categorias do cardápio do cliente (alternativa
 // ao emoji), ver .cat-btn-icon em cardapio-menu.js / index.html.
 async function uploadCategoryImage(file, catId) {
-  if (file.size > 2 * 1024 * 1024) throw new Error('Imagem muito grande. Use uma imagem de até 2MB.');
+  if (file.size > 8 * 1024 * 1024) throw new Error('Imagem muito grande. Use uma imagem de até 8MB.');
   const extFromType = {
     'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png',
     'image/webp': 'webp', 'image/gif': 'gif'

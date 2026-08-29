@@ -3133,7 +3133,7 @@ function handleTenantInfo(params) {
 // UPLOAD DE IMAGENS
 // ════════════════════════════════════════════════════════
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // 10 MB
-const ALLOWED_EXT = new Set(['.jpg','.jpeg','.png','.webp','.gif','.mp4','.webm'])
+const ALLOWED_EXT = new Set(['.jpg','.jpeg','.png','.webp','.gif','.bmp','.mp4','.webm'])
 
 function handleUpload(req, res) {
   return new Promise(resolve => {

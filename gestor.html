@@ -156,6 +156,9 @@ function temaToggleRapido() {
       <svg viewBox="0 0 16 16" fill="none" width="19" height="19"><path d="M13.5 7.75a5.75 5.75 0 1 1-9.6-4.28L2.5 1.5l1.97 1.17A5.72 5.72 0 0 1 13.5 7.75Z" stroke="#25D366" stroke-width="1.3" fill="none"/><path d="M6 6.5c.3.8.9 1.5 1.5 2s1.5.9 2 .6l.5-.3c.2-.1.4-.1.5.1l.8 1.1c.1.2.1.4-.1.5-.8.5-2.1.5-3.2-.4C6.9 9.2 6 8 5.8 6.8c-.1-.6.1-1.1.4-1.3.2-.1.4-.1.5.1l.8 1.1c.1.1.1.3 0 .4l-.5.4Z" fill="#25D366"/></svg>
       <span class="nbadge" id="wa-unread-badge" style="display:none;background:#25D366">0</span>
     </div>
+    <div class="ibtn" onclick="window.open('https://web.whatsapp.com','_blank')" title="Abrir WhatsApp Web (site oficial, em outra aba)" style="width:38px;height:38px">
+      <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M13.5 4h6.5v6.5" stroke="#25D366" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 4l-8.5 8.5" stroke="#25D366" stroke-width="1.6" stroke-linecap="round"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
     <div class="ibtn" id="tema-topbtn" onclick="temaToggleRapido()" title="Alternar tema" aria-label="Alternar tema" style="width:38px;height:38px">
       <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M13.2 10.3A5.5 5.5 0 0 1 5.7 2.8a5.8 5.8 0 1 0 7.5 7.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
     </div>
@@ -4204,7 +4207,7 @@ Use no seu próximo pedido.</textarea>
         </div>
         <div id="new-img-change" style="display:none;position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600">Trocar</div>
       </div>
-      <input type="file" id="new-img-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="previewNewItemImage(this)">
+      <input type="file" id="new-img-input" accept="image/*" style="display:none" onchange="previewNewItemImage(this)">
       <!-- Galeria inline -->
       <div style="margin-top:8px">
         <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">
@@ -4438,7 +4441,7 @@ Use no seu próximo pedido.</textarea>
         </div>
         <div id="edit-img-change" style="display:none;position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600">Trocar foto</div>
       </div>
-      <input type="file" id="edit-img-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="previewEditItemImage(this)">
+      <input type="file" id="edit-img-input" accept="image/*" style="display:none" onchange="previewEditItemImage(this)">
       <!-- Galeria inline -->
       <div style="margin-top:8px">
         <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">
@@ -4815,7 +4818,7 @@ Use no seu próximo pedido.</textarea>
           <button type="button" class="btn bg" style="font-size:12px;padding:6px 12px" onclick="document.getElementById('cat-img-input').click()">Escolher imagem</button>
           <button type="button" id="cat-img-remove" class="btn bg" style="font-size:11px;padding:4px 10px;display:none;color:var(--danger)" onclick="removeAddCatImage()">Remover</button>
         </div>
-        <input type="file" id="cat-img-input" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none" onchange="handleAddCatImageSelect(this)">
+        <input type="file" id="cat-img-input" accept="image/*" style="display:none" onchange="handleAddCatImageSelect(this)">
       </div>
       <div style="font-size:10px;color:var(--muted);margin-top:6px">Aparece como ícone redondo na barra de categorias do cardápio do cliente. Sem imagem, usa o emoji/ícone padrão.</div>
     </div>
@@ -4854,7 +4857,7 @@ Use no seu próximo pedido.</textarea>
           <button type="button" class="btn bg" style="font-size:12px;padding:6px 12px" onclick="document.getElementById('edit-cat-img-input').click()">Trocar imagem</button>
           <button type="button" id="edit-cat-img-remove" class="btn bg" style="font-size:11px;padding:4px 10px;display:none;color:var(--danger)" onclick="removeEditCatImage()">Remover</button>
         </div>
-        <input type="file" id="edit-cat-img-input" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none" onchange="handleEditCatImageSelect(this)">
+        <input type="file" id="edit-cat-img-input" accept="image/*" style="display:none" onchange="handleEditCatImageSelect(this)">
       </div>
       <div style="font-size:10px;color:var(--muted);margin-top:6px">Aparece como ícone redondo na barra de categorias do cardápio do cliente. Sem imagem, usa o emoji/ícone padrão.</div>
     </div>
@@ -6206,12 +6209,12 @@ Use no seu próximo pedido.</textarea>
     <div class="wa-list-col" id="wa-list-col">
       <div class="wa-list-head">
         <div style="display:flex;align-items:center;gap:10px">
-          <div style="width:40px;height:40px;border-radius:50%;background:#dfe5e7;display:flex;align-items:center;justify-content:center">
+          <div class="wa-list-head-icon" style="width:40px;height:40px;border-radius:50%;background:#dfe5e7;display:flex;align-items:center;justify-content:center">
             <svg viewBox="0 0 20 20" fill="none" width="20" height="20"><path d="M17 10a7 7 0 1 1-11.7-5.2L3.5 2.5 6 4A6.96 6.96 0 0 1 17 10Z" stroke="#54656f" stroke-width="1.4"/><path d="M7.5 8c.3.9 1 1.8 1.8 2.3.8.5 1.8 1 2.4.7l.6-.3c.2-.1.5-.1.6.1l1 1.3c.1.2.1.5-.1.6-1 .6-2.6.6-4-.5-1.2-.9-2.3-2.3-2.6-3.9-.1-.7.2-1.4.5-1.6.2-.1.5-.1.6.1l1 1.3c.1.2.1.4 0 .5l-.5.5Z" fill="#54656f"/></svg>
           </div>
           <div>
-            <div style="font-size:16px;font-weight:500;color:#111b21">WhatsApp</div>
-            <div style="font-size:12.5px;color:#667781" id="wa-conn-status">Verificando conexão...</div>
+            <div class="wa-list-head-title" style="font-size:16px;font-weight:500;color:#111b21">WhatsApp</div>
+            <div class="wa-list-head-status" style="font-size:12.5px;color:#667781" id="wa-conn-status">Verificando conexão...</div>
           </div>
         </div>
         <button class="wa-close-btn" onclick="waClosePanel()">
@@ -6548,22 +6551,38 @@ Use no seu próximo pedido.</textarea>
   .wa-list-head{
     position:relative;
     padding-top:14px!important;
+    /* Verde-escuro do app oficial de celular (no Web é cinza-claro — no
+       celular é essa cor que todo mundo reconhece de cara como WhatsApp) */
+    background:#008069!important;
   }
   .wa-list-head::before{
     content:'';position:absolute;top:6px;left:50%;transform:translateX(-50%);
-    width:36px;height:3.5px;background:#d1d7db;border-radius:99px;
+    width:36px;height:3.5px;background:rgba(255,255,255,.35);border-radius:99px;
   }
+  .wa-list-head-icon{background:rgba(255,255,255,.18)!important}
+  .wa-list-head-icon svg path{stroke:#fff!important;fill:#fff!important}
+  .wa-list-head-title{color:#fff!important}
+  .wa-list-head-status{color:rgba(255,255,255,.75)!important}
   /* Botão X maior e mais fácil de tocar */
   .wa-close-btn{
     width:36px!important;height:36px!important;
-    background:rgba(11,20,26,.06)!important;
+    background:rgba(255,255,255,.14)!important;
     border-radius:50%!important;
-    color:#54656f!important;
+    color:#fff!important;
     flex-shrink:0;
   }
+  .wa-close-btn:hover{background:rgba(255,255,255,.22)!important;color:#fff!important}
 
   /* Quando a conversa abre, barra do topo da conversa também tem botão fechar */
-  .wa-conv-header{position:relative}
+  .wa-conv-header{
+    position:relative;
+    background:#008069!important;
+  }
+  .wa-conv-name{color:#fff!important}
+  .wa-conv-phone{color:rgba(255,255,255,.75)!important}
+  .wa-contact-avatar{background:rgba(255,255,255,.18)!important;color:#fff!important}
+  .wa-conv-header .wa-ibtn{color:#fff!important}
+  .wa-conv-header .wa-ibtn:hover{background:rgba(255,255,255,.14)!important;color:#fff!important}
 
   /* Colunas ocupam toda a altura do sheet */
   .wa-list-col{
@@ -6576,10 +6595,12 @@ Use no seu próximo pedido.</textarea>
   .wa-back-btn{
     display:flex!important;
     width:36px!important;height:36px!important;
-    background:rgba(255,255,255,.08)!important;
+    background:rgba(255,255,255,.14)!important;
+    color:#fff!important;
     border-radius:50%!important;
     flex-shrink:0;
   }
+  .wa-back-btn:hover{background:rgba(255,255,255,.22)!important;color:#fff!important}
 
   /* Botão fechar visível na conversa no mobile */
   .wa-conv-close-btn{ display:flex!important; }
