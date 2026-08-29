@@ -1349,6 +1349,10 @@ function imConfirm() {
   }
 
   // ── Kit: monta descrição com todos os itens do kit ──
+  // Guarda a seleção estruturada (não só o texto) — é isso que permite o
+  // gestor reabrir a tela de seleção depois pra editar/cancelar um corte
+  // específico, em vez de só ver um texto solto no pedido.
+  let _kitSelecaoParaPedido = null;
   if (_isKitItem(i)) {
     const groups = i.custom_groups || [];
     const _kitCatsGrp = groups.find(g => g.tipo === 'kit_categorias');
@@ -1375,6 +1379,14 @@ function imConfirm() {
       }).filter(Boolean);
       cartObs = ['Kit: ' + partesDesc.join(' · '), cartObs].filter(Boolean).join(' | ');
       cartPrice = precoTotal;
+      _kitSelecaoParaPedido = {
+        categorias: _kitCatsGrp.categorias,
+        itens: escolhidos.map(([idStr, valor]) => ({
+          itemId: parseInt(idStr),
+          valor,
+          extras: (_kitMontavelExtras[idStr] || _kitMontavelExtras[parseInt(idStr)]) || {}
+        }))
+      };
     } else {
       const _kitGrp = groups.find(g => g.tipo === 'kit_itens');
       if (_kitGrp?.itens?.length) {
@@ -1415,6 +1427,7 @@ function imConfirm() {
     emoji:     cartEmoji,
     image_url: cartImg,
     _grupos:   JSON.parse(JSON.stringify(_imGruposState)),
+    ...(_kitSelecaoParaPedido ? { _kitSelecao: _kitSelecaoParaPedido } : {}),
   };
 
   const existing = cart.find(c => c.name === cartName && (c.obs||'') === (cartObs||''));
