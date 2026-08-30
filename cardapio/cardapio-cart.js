@@ -754,90 +754,52 @@ function _resetStampUI() {
 let _cbLookupTimer = null;
 async function onPhoneCashback(raw) {
   const phone = raw.replace(/\D/g,'');
-  if (phone.length < 8) { _resetCashbackUI(); _resetStampUI(); _resetFidelidadeUI(); return; }
+  if (phone.length < 8) { _resetCashbackUI(); _resetStampUI(); return; }
   clearTimeout(_cbLookupTimer);
   _cbLookupTimer = setTimeout(async () => {
-    const tid = _tenantId || '';
-
-    // ── Cashback ──
     try {
+      const tid = _tenantId || '';
       const r = await fetch(`/api/cashback/saldo?phone=${phone}&tenant_id=${encodeURIComponent(tid)}`);
-      if (!r.ok) { _resetCashbackUI(); }
-      else {
-        const d = await r.json();
-        _cbSaldo = parseFloat(d.saldo || 0);
-        const block = document.getElementById('cashback-block');
-        const disp  = document.getElementById('cb-saldo-display');
-        if (_cbSaldo > 0 && block) {
-          block.style.display = '';
-          if (disp) disp.textContent = 'R$ ' + _cbSaldo.toFixed(2).replace('.', ',');
-        } else {
-          _resetCashbackUI();
-        }
+      if (!r.ok) { _resetCashbackUI(); return; }
+      const d = await r.json();
+      _cbSaldo = parseFloat(d.saldo || 0);
+      const block = document.getElementById('cashback-block');
+      const disp  = document.getElementById('cb-saldo-display');
+      if (_cbSaldo > 0 && block) {
+        block.style.display = '';
+        if (disp) disp.textContent = 'R$ ' + _cbSaldo.toFixed(2).replace('.', ',');
+      } else {
+        _resetCashbackUI();
       }
     } catch(e) { _resetCashbackUI(); }
-
-    // ── Cartão Fidelidade (carimbinho) ──
-    try {
-      const rs = await fetch(`/api/stamp/check?phone=${phone}`, { headers: { 'x-tenant-id': tid } });
-      if (!rs.ok) { _resetStampUI(); }
-      else {
-        const ds = await rs.json();
-        if (!ds.ativo) { _resetStampUI(); }
-        else {
-          _stampMeta          = ds.meta || 10;
-          _stampCompras       = ds.compras || 0;
-          _stampElegivel      = !!ds.elegivel;
-          _stampRecompensaTipo  = ds.recompensa_tipo || 'pedido_gratis';
-          _stampRecompensaValor = parseFloat(ds.recompensa_valor || 0);
-          const bl = document.getElementById('stamp-block');
-          const prog = document.getElementById('stamp-progress-txt');
-          const pbar = document.getElementById('stamp-progress-bar');
-          const act  = document.getElementById('stamp-action');
-          if (bl) {
-            bl.style.display = '';
-            const pct = Math.min(100, Math.round((_stampCompras / _stampMeta) * 100));
-            if (pbar) pbar.style.width = pct + '%';
-            if (prog) prog.textContent = _stampElegivel
-              ? '🎁 Recompensa disponível! Aplicar no pedido?'
-              : `🃏 ${_stampCompras}/${_stampMeta} pedidos — faltam ${_stampMeta - _stampCompras}`;
-            if (act) act.style.display = _stampElegivel ? '' : 'none';
-          }
-          renderTotals();
-        }
-      }
-    } catch(e) { _resetStampUI(); }
-
-    // ── Pontos de fidelidade ──
-    try {
-      const rf = await fetch(`/api/fidelidade/saldo?phone=${phone}`, { headers: { 'x-tenant-id': tid } });
-      if (!rf.ok) { _resetFidelidadeUI(); }
-      else {
-        const df = await rf.json();
-        if (!df.ativo) { _resetFidelidadeUI(); }
-        else {
-          const bl   = document.getElementById('fid-block');
-          const prog = document.getElementById('fid-progress-txt');
-          const pbar = document.getElementById('fid-progress-bar');
-          if (bl && (df.pts > 0 || df.meta > 0)) {
-            bl.style.display = '';
-            const pct = Math.min(100, Math.round((df.pts / df.meta) * 100));
-            if (pbar) pbar.style.width = pct + '%';
-            if (prog) prog.textContent = df.elegivel
-              ? `🎁 Você tem ${df.pts} pontos — resgate ${df.recompensa_reais > 0 ? 'R$ ' + df.recompensa_reais.toFixed(2).replace('.', ',') + ' de desconto' : 'sua recompensa'}!`
-              : `⭐ ${df.pts}/${df.meta} pontos — faltam ${df.faltam} para a recompensa`;
-          } else {
-            _resetFidelidadeUI();
-          }
-        }
-      }
-    } catch(e) { _resetFidelidadeUI(); }
+  // ── Stamp check ──
+  try {
+    const tid = _tenantId || '';
+    const rs = await fetch(`/api/stamp/check?phone=${phone}`, { headers: { 'x-tenant-id': tid } });
+    if (!rs.ok) { _resetStampUI(); return; }
+    const ds = await rs.json();
+    if (!ds.ativo) { _resetStampUI(); return; }
+    _stampMeta          = ds.meta || 10;
+    _stampCompras       = ds.compras || 0;
+    _stampElegivel      = !!ds.elegivel;
+    _stampRecompensaTipo  = ds.recompensa_tipo || 'pedido_gratis';
+    _stampRecompensaValor = parseFloat(ds.recompensa_valor || 0);
+    const bl = document.getElementById('stamp-block');
+    const prog = document.getElementById('stamp-progress-txt');
+    const pbar = document.getElementById('stamp-progress-bar');
+    const act  = document.getElementById('stamp-action');
+    if (bl) {
+      bl.style.display = '';
+      const pct = Math.min(100, Math.round((_stampCompras / _stampMeta) * 100));
+      if (pbar) pbar.style.width = pct + '%';
+      if (prog) prog.textContent = _stampElegivel
+        ? '🎁 Recompensa disponível! Aplicar no pedido?'
+        : `🃏 ${_stampCompras}/${_stampMeta} pedidos — faltam ${_stampMeta - _stampCompras}`;
+      if (act) act.style.display = _stampElegivel ? '' : 'none';
+    }
+    renderTotals();
+  } catch(e) { _resetStampUI(); }
   }, 600);
-}
-
-function _resetFidelidadeUI() {
-  const bl = document.getElementById('fid-block');
-  if (bl) bl.style.display = 'none';
 }
 
 function toggleStampUso() {

@@ -507,13 +507,7 @@ async function carregarEnderecosSalvos() {
   if (!wrap || !list) return;
   if (!_customer || !_customer.id) { wrap.style.display = 'none'; return; }
   try {
-    // fetch manual (não sb.from) — precisa mandar o token do cliente no
-    // Authorization, senão o servidor não consegue confirmar que quem
-    // está pedindo os endereços é o dono deles, e passa a bloquear.
-    const headers = {'x-tenant-id': _tenantId};
-    if (_customer?.token) headers.Authorization = 'Bearer ' + _customer.token;
-    const res = await fetch(`/api/customer_enderecos?customer_id=eq.${_customer.id}&order=is_default.desc,id.desc`, { headers });
-    const data = res.ok ? await res.json() : [];
+    const { data } = await sb.from('customer_enderecos').select('*').eq('customer_id', _customer.id).order('is_default', { ascending: false }).order('id', { ascending: false });
     const eds = data || [];
     if (!eds.length) {
       wrap.style.display = '';
@@ -543,11 +537,7 @@ async function carregarEnderecosSalvos() {
 
 async function usarEnderecoSalvo(id) {
   try {
-    const headers = {'x-tenant-id': _tenantId};
-    if (_customer?.token) headers.Authorization = 'Bearer ' + _customer.token;
-    const res = await fetch(`/api/customer_enderecos?id=eq.${id}`, { headers });
-    const rows = res.ok ? await res.json() : [];
-    const data = Array.isArray(rows) ? rows[0] : rows;
+    const { data } = await sb.from('customer_enderecos').select('*').eq('id', id).single();
     if (!data) return;
     const set = (inputId, v) => { const el = document.getElementById(inputId); if (el) el.value = v || ''; };
     set('f-cep',        data.cep);
