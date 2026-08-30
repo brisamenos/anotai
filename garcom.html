@@ -2480,8 +2480,13 @@ async function garcomPrint(order, newItems) {
         return;
       } catch(e) { console.warn('[PRINT] Agent falhou:', e.message); }
     } else {
-      // UMA impressora só — tudo junto numa folha
-      const htmlTudo = [htmlCozinha, htmlBar].filter(Boolean).join('<div style="page-break-before:always"></div>');
+      // UMA impressora só — modo "comanda única": tudo junto, numa lista só,
+      // sem separar em "VIA DA COZINHA"/"VIA DO BAR" nem quebra de página.
+      // Antes, mesmo configurado como impressão única, o garçom sempre
+      // dividia o pedido em duas seções tituladas — não era de fato "uma
+      // comanda só", só ficava fisicamente no mesmo papel.
+      const todosItensImpressao = [...itensCozinha, ...itensBebida];
+      const htmlTudo = montarVia('COMANDA', todosItensImpressao);
       if (window.ElectronPrint?.printHtml) {
         const pw = fmt === '58mm' ? 58 : 80;
         const r = await window.ElectronPrint.printHtml(htmlTudo, { printer: printerCaixa, paperWidth: pw }).catch(()=>({}));
