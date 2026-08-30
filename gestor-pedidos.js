@@ -1,3 +1,13 @@
+// Escapa texto que vem do cliente (nome, endereço, observação) antes de
+// colocar dentro de innerHTML — sem isso, alguém podia digitar um "nome"
+// que na real é um pedaço de código e ele rodaria dentro da tela do
+// gestor quando o pedido fosse exibido no Kanban.
+function _escHtml(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
 // NAV
 // ─────────────────────────────────────────
 function nav(id) {
@@ -231,7 +241,7 @@ function renderKanban() {
     } else {
       col.innerHTML = filtered.map(o => {
         const itemStr = o.items.map(i => i.qty + 'x ' + i.name).join(', ');
-        const obsStr = o.items.filter(i => i.obs).map(i => '📝 ' + i.obs).join(' · ');
+        const obsStr = o.items.filter(i => i.obs).map(i => '📝 ' + _escHtml(i.obs)).join(' · ');
 
         // ── Mesa em produção: lista de itens com botão de "pronto" individual ──
         const itemsHtml = (o._isMesa && st === 'producao')
@@ -364,11 +374,11 @@ function renderKanban() {
           _agendadoBadge +
           '<div class="oc-top"><span class="oc-id">#' + o.num + '</span>' + _tipoBadge + '<span class="oc-time">⏱ ' + o.time + '</span>' + _acougueBtn + '</div>' +
           _waNotif +
-          '<div class="oc-client">' + o.client + (o.phone ? ' · ' + o.phone : '') + '</div>' +
+          '<div class="oc-client">' + _escHtml(o.client) + (o.phone ? ' · ' + _escHtml(o.phone) : '') + '</div>' +
           itemsHtml +
           (obsStr ? '<div style="font-size:11px;color:#c4956a;font-weight:600;margin-top:3px;padding:3px 7px;background:rgba(196,149,106,.08);border-radius:5px;border:1px solid rgba(196,149,106,.12)">' + obsStr + '</div>' : '') +
           '<div class="oc-bot"><span class="oc-total">' + total + '</span>' +
-          (o.addr && !isMesa ? '<span class="oc-addr">' + o.addr + '</span>' : '') +
+          (o.addr && !isMesa ? '<span class="oc-addr">' + _escHtml(o.addr) + '</span>' : '') +
           '</div>' +
           _pagBadge +
           '<div class="oc-actions">' +
@@ -462,7 +472,7 @@ async function _kanbanHistSearch(numQ, clientQ) {
       return `<div onclick="kanbanHistOpenDetail(${o.id})" style="display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;padding:10px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;cursor:pointer;transition:all .15s" onmouseenter="this.style.borderColor='rgba(14,165,233,.3)';this.style.background='rgba(14,165,233,.04)'" onmouseleave="this.style.borderColor='rgba(255,255,255,.06)';this.style.background='rgba(255,255,255,.03)'">
         <div style="font-weight:800;color:var(--accent);font-size:13px;min-width:74px">${num}</div>
         <div style="min-width:0">
-          <div style="font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o.client || '—'}${o.mesa_num ? ' <span style="color:var(--purple);font-size:11px">Mesa ' + o.mesa_num + '</span>' : ''}</div>
+          <div style="font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_escHtml(o.client) || '—'}${o.mesa_num ? ' <span style="color:var(--purple);font-size:11px">Mesa ' + _escHtml(o.mesa_num) + '</span>' : ''}</div>
           <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">${itensStr || '—'}</div>
         </div>
         <div style="text-align:right;flex-shrink:0">
@@ -806,7 +816,7 @@ function openOrderDetail(id) {
           <div class="od-item-name">${item.name}</div>
           ${itemStatus !== 'active' && itemStatus !== 'cancelado' ? `<span style="font-size:10px;color:var(--muted);font-weight:600">${itemStatus.charAt(0).toUpperCase() + itemStatus.slice(1)}</span>` : ''}
         </div>
-        ${item.obs ? `<div class="od-item-obs">📝 ${item.obs}</div>` : ''}
+        ${item.obs ? `<div class="od-item-obs">📝 ${_escHtml(item.obs)}</div>` : ''}
         ${Array.isArray(item.extras) && item.extras.length ? `<div class="od-item-obs">➕ ${item.extras.join(', ')}</div>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:6px">

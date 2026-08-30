@@ -2563,6 +2563,24 @@ function parseRow(table, row, opts={}) {
   const jf  = JSON_FIELDS[table]
   if (jf) for (const f of jf) { if (f in out) out[f] = jsonParse(out[f]) }
   for (const f of BOOL_FIELDS) { if (f in out) out[f] = out[f] === 1 || out[f] === true }
+  // ia_config guarda a chave da OpenAI e o token do Mercado Pago do tenant,
+  // mas fica de fora do JSON_FIELDS de propósito (não é parseado acima) —
+  // assim ele nunca sai como objeto pronto pra usar sem passar por aqui.
+  // O painel do gestor só precisa dos campos de configuração do robô
+  // (ativo, textos, toggles); a chave de verdade só deve sair pelo admin,
+  // que já usa uma rota própria e autenticada (/api/admin-backup/ia-config)
+  // — essa rota chama parseRow com {raw:true} pra não perder o valor.
+  if (table === 'store_config' && !opts.raw && typeof out.ia_config === 'string' && out.ia_config) {
+    try {
+      const ia = JSON.parse(out.ia_config)
+      if (ia && typeof ia === 'object') {
+        delete ia.openai_key
+        delete ia.mp_token
+        delete ia.mp_public_key
+        out.ia_config = JSON.stringify(ia)
+      }
+    } catch(e) {}
+  }
   // Remove colunas sensíveis do output (a menos que seja chamada interna com {raw:true})
   if (!opts.raw) {
     const strip = STRIP_FROM_OUTPUT[table]
@@ -2626,6 +2644,26 @@ function buildOrder(str, cols) {
 
 function getTenantId(req, params) { return req.headers['x-tenant-id'] || params.get('_tenant') || null }
 
+// Confirma que quem está pedindo os dados de um customer_id específico é
+// de fato aquele cliente — reaproveita o mesmo esquema de token usado em
+// /api/favoritos e /api/customer-orders (token = base64 de
+// "customerId:tenantId:prefixoDoHashDaSenha"). Sem isso, o filtro
+// "customer_id=eq.X" sozinho não provava nada — qualquer um podia trocar
+// o X e ler o endereço salvo de outro cliente.
+function _validarTokenClienteServer(tid, cid, req) {
+  const auth = req.headers['authorization'] || ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+  if (!token) return false
+  try {
+    const decoded = Buffer.from(token, 'base64').toString()
+    const [tkCid, tkTid, tkHashPrefix] = decoded.split(':')
+    if (String(tkCid) !== String(cid) || String(tkTid) !== String(tid)) return false
+    const custRow = db.prepare('SELECT senha_hash FROM customers WHERE id=? AND tenant_id=?').get(cid, tid)
+    if (!custRow || !custRow.senha_hash || custRow.senha_hash.slice(0, 16) !== tkHashPrefix) return false
+    return true
+  } catch (e) { return false }
+}
+
 async function handleREST(req, res, table, params, body) {
   const cols = TABLE_COLS[table]
   if (!cols) return send(res, 404, { error: 'Tabela não encontrada' })
@@ -2663,6 +2701,48 @@ async function handleREST(req, res, table, params, body) {
       ['POST','PATCH','DELETE'].includes(req.method) &&
       !validarSessaoGestor(req, tenantId, table)) {
     return send(res, 401, { error: 'Sessão de gestor inválida ou expirada. Faça login novamente.' })
+  }
+  // Leitura de "orders" sem sessão de gestor: só libera quando é uma busca
+  // exata por um id específico (é assim que o próprio cliente acompanha o
+  // pedido dele, sem precisar logar — ver cardapio-tracking.js e
+  // cardapio-auth.js). Sem esse id exato, seria uma listagem/busca ampla —
+  // aí sim precisa de sessão, senão dava pra ler todos os pedidos (e os
+  // dados de cliente dentro deles) de qualquer loja só sabendo o tenant_id,
+  // que não é secreto (aparece pra qualquer visitante do cardápio público).
+  if (table === 'orders' && req.method === 'GET' && !validarSessaoGestor(req, tenantId, table)) {
+    const idFiltro = params.get('id') || ''
+    const idExato = /^eq\.\d+$/.test(idFiltro)
+    if (!idExato) {
+      return send(res, 401, { error: 'Sessão de gestor inválida ou expirada. Faça login novamente.' })
+    }
+  }
+  // "customers": sem sessão de gestor, só libera busca por telefone exato
+  // (é o que o checkout usa pra ver se aquele telefone já é cliente antes
+  // de pedir login — não expõe endereço nem senha, só contagem de pedidos).
+  // Nunca libera listagem sem filtro (dump da base toda de clientes).
+  if (table === 'customers' && req.method === 'GET' && !validarSessaoGestor(req, tenantId, table)) {
+    const phoneExato = /^eq\./.test(params.get('phone') || '')
+    if (!phoneExato) {
+      return send(res, 401, { error: 'Sessão de gestor inválida ou expirada. Faça login novamente.' })
+    }
+  }
+  // "customer_enderecos" guarda endereço de casa — mais sensível, então
+  // aqui exige prova de verdade de que quem está pedindo é o próprio
+  // cliente dono do endereço (reaproveita o token que já existe pra
+  // favoritos), não só "sabia o número certo pra por no filtro".
+  if (table === 'customer_enderecos' && req.method === 'GET' && !validarSessaoGestor(req, tenantId, table)) {
+    const customerIdFiltro = (params.get('customer_id') || '').match(/^eq\.(\d+)$/)
+    const idFiltro = (params.get('id') || '').match(/^eq\.(\d+)$/)
+    let cidParaValidar = customerIdFiltro?.[1] || null
+    if (!cidParaValidar && idFiltro) {
+      // Busca por id do próprio endereço (não do cliente) — descobre de
+      // quem é esse endereço antes de decidir se libera.
+      const end = db.prepare('SELECT customer_id FROM customer_enderecos WHERE id=? AND tenant_id=?').get(idFiltro[1], tenantId)
+      cidParaValidar = end?.customer_id || null
+    }
+    if (!cidParaValidar || !_validarTokenClienteServer(tenantId, cidParaValidar, req)) {
+      return send(res, 401, { error: 'Não autorizado.' })
+    }
   }
   if (FINANCE_REST_RULES[table]?.has(req.method) && !validarFinanceAccess(req, tenantId)) {
     return sendFinanceLocked(res)
@@ -2773,6 +2853,41 @@ async function handleREST(req, res, table, params, body) {
               return send(res, 503, { error: _chk.motivo || 'Loja fechada no momento.' })
             }
           }
+
+          // ── Validação de preço (só pedido do cardápio público) ──────────
+          // Não dá pra recalcular o preço exato aqui: tem item por peso/kg,
+          // kit montado, meio a meio de pizza, adicionais e preço escondido
+          // — cada um calcula diferente, e refazer tudo isso no servidor sem
+          // testar direito arriscaria travar pedido legítimo por engano.
+          // Em vez disso, dois cuidados que são seguros pra qualquer caso:
+          //   1) todo item precisa existir de verdade no cardápio da loja
+          //      (barra item inventado do zero);
+          //   2) um item SEM nenhuma opção de customização (sem adicional,
+          //      sem peso, sem kit — o caso mais simples) não pode chegar
+          //      com menos da metade do preço cadastrado; nesse caso
+          //      específico não existe motivo legítimo pro valor ser tão
+          //      menor, então é o sinal mais seguro de manipulação.
+          try {
+            const orderItems = Array.isArray(payload.items) ? payload.items
+              : (typeof payload.items === 'string' ? JSON.parse(payload.items) : [])
+            for (const it of orderItems) {
+              if (it?.id == null) continue // item avulso sem id de catálogo (ex: taxa extra) — não valida
+              const catalogItem = db.prepare('SELECT price, item_type, custom_groups FROM menu_items WHERE id=? AND tenant_id=?').get(it.id, tenantId)
+              if (!catalogItem) {
+                return send(res, 422, { error: `Item "${it.name || it.id}" não existe mais no cardápio.` })
+              }
+              const isKg = catalogItem.item_type === 'kg'
+              let temGrupos = false
+              try { temGrupos = !!(JSON.parse(catalogItem.custom_groups || '[]')?.length) } catch(e) {}
+              if (!isKg && !temGrupos) {
+                const precoCatalogo = parseFloat(catalogItem.price) || 0
+                const precoPedido   = parseFloat(it.price) || 0
+                if (precoCatalogo > 0 && precoPedido < precoCatalogo * 0.5) {
+                  return send(res, 422, { error: `Preço de "${it.name || 'item'}" não confere com o cardápio.` })
+                }
+              }
+            }
+          } catch(e) { log('⚠️', 'validação de preço falhou:', e.message) }
         }
 
         const addrRaw = String(payload.addr || '').trim()
@@ -2878,6 +2993,31 @@ async function handleREST(req, res, table, params, body) {
             !Object.prototype.hasOwnProperty.call(payload, 'order_auto_reset_last_date')) {
           const ativoReset = payload.order_auto_reset_daily === true || payload.order_auto_reset_daily === 1 || payload.order_auto_reset_daily === '1'
           if (ativoReset) payload.order_auto_reset_last_date = brasiliaDateString()
+        }
+        // Proteção contra apagar openai_key/mp_token sem querer: como esses
+        // campos agora nunca saem pra fora em GET (ver parseRow acima), o
+        // painel do gestor faz "lê ia_config, muda só os toggles/textos,
+        // regrava tudo" — sem essa camada aqui, essa regravação salvaria
+        // ia_config SEM a chave (porque o gestor nunca a recebeu), apagando
+        // a configuração da IA daquela loja sem ninguém pedir isso.
+        // Só entra em ação quando a requisição vem com x-tenant-id (é assim
+        // que o painel do GESTOR sempre chama) — o admin, que legitimamente
+        // precisa poder apagar uma chave, usa uma rota própria autenticada
+        // (/api/admin-backup/ia-config) que nunca passa por aqui.
+        if (tenantId && Object.prototype.hasOwnProperty.call(payload, 'ia_config')) {
+          try {
+            const incoming = typeof payload.ia_config === 'string' ? JSON.parse(payload.ia_config) : payload.ia_config
+            const existente = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tenantId)
+            const atual = existente?.ia_config ? JSON.parse(existente.ia_config) : {}
+            if (incoming && typeof incoming === 'object') {
+              for (const campoSegredo of ['openai_key', 'mp_token', 'mp_public_key']) {
+                if (!(campoSegredo in incoming) && atual[campoSegredo] !== undefined) {
+                  incoming[campoSegredo] = atual[campoSegredo]
+                }
+              }
+              payload.ia_config = JSON.stringify(incoming)
+            }
+          } catch(e) { log('⚠️', 'merge ia_config falhou:', e.message) }
         }
         const scTid = tenantId || payload.tenant_id
         if (!scTid) return send(res, 400, { error: 'tenant_id obrigatório' })
@@ -3045,6 +3185,20 @@ async function handleREST(req, res, table, params, body) {
       // WHERE já filtra por tenant_id via buildWhere(), então remover do payload é suficiente.
       if (!NO_TENANT_FILTER.has(table) && 'tenant_id' in payload && payload.tenant_id !== tenantId) {
         delete payload.tenant_id
+      }
+      // "orders" é escrita liberada pro cardápio público (cliente cria o
+      // próprio pedido sem logar), mas o id do pedido é só um número
+      // sequencial — bem fácil de adivinhar. Sem sessão de gestor, o PATCH
+      // só pode mexer nos 2 campos que o cardápio realmente usa (total, ao
+      // aplicar cashback; pag, quando cai no modo Pix manual) — nunca em
+      // status, itens, cliente, endereço, etc. Antes dava pra reescrever um
+      // pedido de OUTRO cliente inteiro só sabendo o número dele.
+      if (table === 'orders' && !validarSessaoGestor(req, tenantId, table)) {
+        const camposPermitidos = new Set(['total', 'pag', 'id', 'tenant_id'])
+        const camposExtras = Object.keys(payload).filter(k => !camposPermitidos.has(k))
+        if (camposExtras.length) {
+          return send(res, 403, { error: 'Alteração não permitida sem sessão de gestor.' })
+        }
       }
       // Segurança: bloqueia tentativa de cancelar pedido via PATCH genérico.
       // Cancelamento deve passar pelos endpoints dedicados:
@@ -5413,6 +5567,28 @@ const server = http.createServer(async (req,res) => {
     marcarDirty(); send(res, 200, { ok: true }); return
   }
 
+  // ── Fidelidade (pontos): consulta de saldo pro cardápio público ──
+  // Os pontos já eram somados a cada pedido finalizado (ver finishOrderById
+  // / rota de confirmação), mas não existia nenhum jeito do CLIENTE ver
+  // esse saldo no cardápio — só aparecia numa mensagem de WhatsApp depois
+  // do pedido. Essa rota espelha exatamente o /api/stamp/check.
+  if (req.method === 'GET' && upath === '/api/fidelidade/saldo') {
+    const tid   = req.headers['x-tenant-id'] || ''
+    const phone = (params.phone || '').replace(/\D/g,'')
+    if (!tid || !phone) { send(res, 400, { error: 'tenant_id e phone obrigatórios' }); return }
+    const row = db.prepare('SELECT fid_config FROM store_config WHERE tenant_id=?').get(tid)
+    const cfg = (() => { try { return JSON.parse(row?.fid_config||'{}') } catch { return {} } })()
+    const ptsPorReal = parseFloat(cfg.pts_por_real || 0)
+    if (!cfg.ativo || !(ptsPorReal > 0)) { send(res, 200, { ativo: false }); return }
+    const phone8 = phone.slice(-8)
+    const fid = db.prepare("SELECT pts, max_pts FROM fidelidade WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ?").get(tid, phone8)
+    const pts  = fid?.pts || 0
+    const meta = fid?.max_pts || parseInt(cfg.meta_pts || 500)
+    const faltam   = Math.max(0, meta - pts)
+    const elegivel = pts >= meta
+    send(res, 200, { ativo: true, pts, meta, faltam, elegivel, recompensa_reais: parseFloat(cfg.recompensa_reais || 0) }); return
+  }
+
   // ── Fidelidade: sync automático ao cadastrar/logar ───
   if (req.method === 'POST' && upath === '/api/fidelidade/sync') {
     const tid = req.headers['x-tenant-id'] || ''
@@ -5516,7 +5692,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao','/api/favoritos','/api/favoritos/toggle'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/fidelidade/saldo','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao','/api/favoritos','/api/favoritos/toggle'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/'))||upath.startsWith('/rest/v1/')){
     try {
       const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
