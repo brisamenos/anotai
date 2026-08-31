@@ -62,24 +62,12 @@ const _preparoImgMap = {
 };
 
 // Cada ícone tem 2 arquivos: "nome.png" (tinta escura, pra tema claro)
-// e "nome-claro.png" (tinta clara, pra tema escuro). Decidimos qual usar
-// lendo a cor de var(--text) do tema ativo — funciona em qualquer tema
-// do cardápio (não só "dark"/"classico"), inclusive temas novos que
-// forem criados depois, sem precisar mexer aqui.
-function _acIconeClaro() {
-  try {
-    const raw = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
-    const m = raw.match(/^#?([0-9a-f]{6})$/i);
-    if (!m) return false;
-    const hex = m[1];
-    const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
-    // --text claro (alta luminância) ⇒ o fundo do tema é escuro
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55;
-  } catch { return false; }
-}
-
+// Antes existiam duas versões de cada ícone (uma pro tema claro, outra pro
+// escuro) — dava confusão de qual botão do admin trocava qual, e às vezes
+// a foto certa acabava indo pro lugar errado. Agora é uma imagem só, igual
+// pros dois temas — mais simples e sem esse risco.
 function _acIconUrl(baseUrl) {
-  return _acIconeClaro() ? baseUrl.replace(/\.png$/i, '-claro.png') : baseUrl;
+  return baseUrl;
 }
 
 // alt = texto alternativo (acessibilidade); size = px
