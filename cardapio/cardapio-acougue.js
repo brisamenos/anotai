@@ -105,6 +105,24 @@ let _preparoPhotoTags = new Set();
       document.querySelectorAll('img.ac-ico').forEach(img => {
         if (!img.src.includes('?v=')) img.src += '?v=' + _iconesVer;
       });
+      // Mesma correção pros ícones de "forma de preparo" do robozinho e do
+      // banner de filtro ativo (_preparoCardIconHtml, em cardapio-menu.js) —
+      // eles usam outro caminho de renderização, sem a classe "ac-ico", e
+      // por isso não eram pegos pela correção acima. Sem isso, se a tela já
+      // tivesse desenhado o ícone antes dessa versão chegar, uma foto real
+      // subida pelo admin continuava aparecendo com o filtro preto-e-branco
+      // (pensado só pro ícone de linha padrão) até a página ser recarregada.
+      document.querySelectorAll('[data-preparo-id]').forEach(el => {
+        const id = el.dataset.preparoId;
+        if (!id) return;
+        if (el.tagName === 'IMG') {
+          if (_preparoPhotoTags.has(id)) el.classList.add('preparo-foto');
+          else el.classList.remove('preparo-foto');
+          if (!el.src.includes('?v=')) el.src += '?v=' + _iconesVer;
+        } else if (el.tagName === 'VIDEO' && !el.src.includes('?v=')) {
+          el.src += '?v=' + _iconesVer;
+        }
+      });
     }
   }).catch(() => {});
 })();
@@ -1181,7 +1199,7 @@ function openPreparoDetail(preparoId) {
         ${temVideoPreparo
           ? `<video src="${_IMG_TAGS}/${preparoId}.mp4${_vv}" style="width:36px;height:36px;object-fit:cover;border-radius:8px" autoplay muted loop playsinline disablepictureinpicture></video>`
           : (iconPreparo
-              ? `<img src="${iconPreparo}" style="width:36px;height:36px;object-fit:contain" onerror="this.parentElement.innerHTML='<svg width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\'><path d=\'M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5\' stroke=\'currentColor\' stroke-width=\'1.5\' stroke-linecap=\'round\'/><circle cx=\'12\' cy=\'12\' r=\'3\' stroke=\'currentColor\' stroke-width=\'1.4\'/></svg>'">`
+              ? `<img src="${iconPreparo}${_vv}" style="width:36px;height:36px;object-fit:contain" onerror="this.parentElement.innerHTML='<svg width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\'><path d=\'M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5\' stroke=\'currentColor\' stroke-width=\'1.5\' stroke-linecap=\'round\'/><circle cx=\'12\' cy=\'12\' r=\'3\' stroke=\'currentColor\' stroke-width=\'1.4\'/></svg>'">`
               : '<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/></svg>')}
       </div>
       <div style="flex:1">

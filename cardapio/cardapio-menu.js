@@ -160,11 +160,11 @@ function _collectAllPreparos() {
 function _preparoCardIconHtml(id, nome) {
   const _prepV = (typeof _iconesVer !== 'undefined' && _iconesVer) ? ('?v=' + _iconesVer) : '';
   if (typeof _preparoVideoTags !== 'undefined' && _preparoVideoTags.has(id)) {
-    return `<video src="${_IMG_TAGS}/${id}.mp4${_prepV}" autoplay muted loop playsinline disablepictureinpicture aria-label="${nome}"></video>`;
+    return `<video src="${_IMG_TAGS}/${id}.mp4${_prepV}" autoplay muted loop playsinline disablepictureinpicture aria-label="${nome}" data-preparo-id="${id}"></video>`;
   }
   const _isFoto = typeof _preparoPhotoTags !== 'undefined' && _preparoPhotoTags.has(id);
   return _preparoImgMap[id]
-    ? `<img class="${_isFoto ? 'preparo-foto' : ''}" src="${_preparoImgMap[id]}${_prepV}" alt="${nome}" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='${_preparoImgMap[id]}'">`
+    ? `<img class="${_isFoto ? 'preparo-foto' : ''}" data-preparo-id="${id}" src="${_preparoImgMap[id]}${_prepV}" alt="${nome}" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='${_preparoImgMap[id]}'">`
     : `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M10 22c-2-2-3-5-1.5-8s5-4.5 8-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M22 10c2 1 3 4 1.5 7S19 21 16 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="16" cy="16" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`;
 }
 
