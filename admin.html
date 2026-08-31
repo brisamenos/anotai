@@ -4216,22 +4216,11 @@ async function renderIconesPadrao() {
   const _card = (pasta, base, label) => `
     <div style="background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center">
       <div style="font-size:12px;font-weight:700;margin-bottom:8px">${label}</div>
-      <div style="display:flex;gap:8px;justify-content:center;margin-bottom:8px">
-        <div style="text-align:center">
-          <img src="/cardapio/img/${pasta}/${base}.png?v=${v}" style="width:48px;height:48px;object-fit:contain;background:#fff;border-radius:8px;border:1px solid var(--border);padding:4px" onerror="this.style.opacity=.2">
-          <div style="font-size:9px;color:var(--muted);margin-top:2px">Tema claro</div>
-        </div>
-        <div style="text-align:center">
-          <img src="/cardapio/img/${pasta}/${base}-claro.png?v=${v}" style="width:48px;height:48px;object-fit:contain;background:#222;border-radius:8px;border:1px solid var(--border);padding:4px" onerror="this.style.opacity=.2">
-          <div style="font-size:9px;color:var(--muted);margin-top:2px">Tema escuro</div>
-        </div>
+      <div style="margin-bottom:8px">
+        <img src="/cardapio/img/${pasta}/${base}.png?v=${v}" style="width:48px;height:48px;object-fit:contain;background:#fff;border-radius:8px;border:1px solid var(--border);padding:4px" onerror="this.style.opacity=.2">
       </div>
-      <div style="display:flex;gap:4px">
-        <button class="btn bg2 bsm" style="flex:1;font-size:10.5px" onclick="document.getElementById('ic-inp-${pasta}-${base}').click()">Trocar claro</button>
-        <button class="btn bg2 bsm" style="flex:1;font-size:10.5px" onclick="document.getElementById('ic-inp-${pasta}-${base}-claro').click()">Trocar escuro</button>
-      </div>
+      <button class="btn bg2 bsm" style="width:100%;font-size:10.5px" onclick="document.getElementById('ic-inp-${pasta}-${base}').click()">Trocar imagem</button>
       <input type="file" id="ic-inp-${pasta}-${base}" accept="image/png" style="display:none" onchange="uploadIconePadrao(this,'${pasta}/${base}.png')">
-      <input type="file" id="ic-inp-${pasta}-${base}-claro" accept="image/png" style="display:none" onchange="uploadIconePadrao(this,'${pasta}/${base}-claro.png')">
     </div>`;
 
   // Card das "Formas de preparo" — aqui, além de trocar as imagens, dá pra
@@ -4242,26 +4231,14 @@ async function renderIconesPadrao() {
     const temVideo = _iconesVideoTags.includes(base);
     const preview = temVideo
       ? `<video src="/cardapio/img/tags/${base}.mp4?v=${v}" style="width:100px;height:70px;object-fit:cover;border-radius:8px;border:1px solid var(--border);background:#000" muted loop autoplay playsinline></video>`
-      : `<div style="display:flex;gap:8px;justify-content:center">
-          <div style="text-align:center">
-            <img src="/cardapio/img/tags/${base}.png?v=${v}" style="width:48px;height:48px;object-fit:contain;background:#fff;border-radius:8px;border:1px solid var(--border);padding:4px" onerror="this.style.opacity=.2">
-            <div style="font-size:9px;color:var(--muted);margin-top:2px">Tema claro</div>
-          </div>
-          <div style="text-align:center">
-            <img src="/cardapio/img/tags/${base}-claro.png?v=${v}" style="width:48px;height:48px;object-fit:contain;background:#222;border-radius:8px;border:1px solid var(--border);padding:4px" onerror="this.style.opacity=.2">
-            <div style="font-size:9px;color:var(--muted);margin-top:2px">Tema escuro</div>
-          </div>
-        </div>`;
+      : `<img src="/cardapio/img/tags/${base}.png?v=${v}" style="width:48px;height:48px;object-fit:contain;background:#fff;border-radius:8px;border:1px solid var(--border);padding:4px" onerror="this.style.opacity=.2">`;
     const botoes = temVideo
       ? `<div style="display:flex;gap:4px">
           <button class="btn bg2 bsm" style="flex:1;font-size:10.5px" onclick="document.getElementById('ic-vid-${base}').click()">Trocar vídeo</button>
           <button class="btn bsm" style="flex:1;font-size:10.5px;color:var(--danger);border-color:var(--danger)" onclick="removerVideoIconePadrao('${base}')">Remover</button>
         </div>`
       : `<div style="display:flex;gap:4px;flex-direction:column">
-          <div style="display:flex;gap:4px">
-            <button class="btn bg2 bsm" style="flex:1;font-size:10.5px" onclick="document.getElementById('ic-inp-tags-${base}').click()">Trocar claro</button>
-            <button class="btn bg2 bsm" style="flex:1;font-size:10.5px" onclick="document.getElementById('ic-inp-tags-${base}-claro').click()">Trocar escuro</button>
-          </div>
+          <button class="btn bg2 bsm" style="font-size:10.5px" onclick="document.getElementById('ic-inp-tags-${base}').click()">Trocar imagem</button>
           <button class="btn bp bsm" style="font-size:10.5px" onclick="document.getElementById('ic-vid-${base}').click()">Enviar vídeo MP4 (máx 10MB)</button>
         </div>`;
     return `
@@ -4270,7 +4247,6 @@ async function renderIconesPadrao() {
       <div style="margin-bottom:8px">${preview}</div>
       ${botoes}
       <input type="file" id="ic-inp-tags-${base}" accept="image/png" style="display:none" onchange="uploadIconePadrao(this,'tags/${base}.png')">
-      <input type="file" id="ic-inp-tags-${base}-claro" accept="image/png" style="display:none" onchange="uploadIconePadrao(this,'tags/${base}-claro.png')">
       <input type="file" id="ic-vid-${base}" accept="video/mp4" style="display:none" onchange="uploadVideoIconePadrao(this,'${base}')">
     </div>`;
   };
@@ -4306,8 +4282,8 @@ async function uploadIconePadrao(input, arquivo) {
 }
 // Vídeo das "Formas de preparo" — mesmo endpoint do ícone padrão, só que
 // com arquivo tags/<base>.mp4 e limite de 10MB (validado aqui e de novo
-// no servidor). Ao subir, o vídeo passa a substituir as imagens claro/
-// escuro em todo o cardápio, só nessa forma de preparo.
+// no servidor). Ao subir, o vídeo passa a substituir a imagem estática
+// em todo o cardápio, só nessa forma de preparo.
 async function uploadVideoIconePadrao(input, base) {
   const file = input.files[0];
   if (!file) return;
