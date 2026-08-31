@@ -580,6 +580,11 @@ async function _doSubmitOrder(addr, troco) {
       // o pedido se a loja estiver fechada (validação server-side; não é
       // coluna real, é descartada antes do INSERT). Ver server.js.
       origem_pedido: 'cardapio_publico',
+      // Canal do pedido — diferente de origem_pedido (que só serve pra
+      // validação no servidor e nunca é salvo). Esse aqui é salvo de
+      // verdade, pra o gestor ver de onde veio o pedido no Kanban (ex:
+      // veio do tablet fixo na mesa, não do cardápio normal do celular).
+      ...(typeof window._canalPedido !== 'undefined' && window._canalPedido ? { canal: window._canalPedido } : {}),
       // Pedido agendado (loja fechada, cliente confirmou no modal de
       // agendamento) — servidor só aceita pedido com loja fechada quando
       // esse campo vem preenchido. Ver isLojaAbertaServer() em server.js.

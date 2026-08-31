@@ -410,6 +410,46 @@ function applyBranding(b, nome) {
   // Favicon dinâmico — usa o logo da loja
   if (b?.store_logo_url) setFavicon(b.store_logo_url);
 
+  // Portal de boas-vindas do cardápio de mesa/tablet (mesa-tablet.html) —
+  // só existe nesse arquivo; em index.html esse elemento não existe, então
+  // isso não faz nada (seguro reaproveitar a mesma função pros dois).
+  const gateLogoWrap = document.getElementById('mesa-gate-logo-wrap');
+  if (gateLogoWrap) {
+    const gateImg = document.getElementById('mesa-gate-logo-img');
+    const gateEmoji = document.getElementById('mesa-gate-emoji');
+    if (b?.store_logo_url && gateImg) {
+      gateImg.src = b.store_logo_url;
+      gateImg.style.display = 'block';
+      if (gateEmoji) gateEmoji.style.display = 'none';
+    }
+    const gateName = document.getElementById('mesa-gate-storename');
+    if (gateName) gateName.textContent = n;
+    const gateBg = document.getElementById('mesa-gate-bg');
+    if (gateBg && b?.tablet_splash_bg_url) {
+      gateBg.style.backgroundImage = `linear-gradient(180deg, rgba(0,0,0,.05), rgba(0,0,0,.25)), url('${b.tablet_splash_bg_url}')`;
+    } else if (gateBg && b?.store_banner_url) {
+      // Sem fundo específico configurado pro tablet — usa o banner da loja
+      // (já existe, fica bonito, e assim não obriga a configurar de novo).
+      gateBg.style.backgroundImage = `linear-gradient(180deg, rgba(0,0,0,.05), rgba(0,0,0,.25)), url('${b.store_banner_url}')`;
+    }
+  }
+
+  // Cabeçalho da marca na faixa direita (layout de totem) — mesma logo e
+  // nome do portal de boas-vindas, só que fica sempre visível ali depois
+  // que o cliente já entrou no cardápio.
+  const sideLogoWrap = document.getElementById('totem-sidebar-logo');
+  if (sideLogoWrap) {
+    const sideImg = document.getElementById('totem-sidebar-logo-img');
+    const sideEmoji = document.getElementById('totem-sidebar-emoji');
+    if (b?.store_logo_url && sideImg) {
+      sideImg.src = b.store_logo_url;
+      sideImg.style.display = 'block';
+      if (sideEmoji) sideEmoji.style.display = 'none';
+    }
+    const sideName = document.getElementById('totem-sidebar-name');
+    if (sideName) sideName.textContent = n;
+  }
+
   // Banner — aparece apenas no topo (atrás do cartão). Suporta até 5 banners em slide (imagem ou vídeo).
   applyHeroBanners(getBannerList(b));
 

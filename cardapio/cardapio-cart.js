@@ -476,6 +476,7 @@ function setDelivery(type) {
   });
   document.getElementById('addr-block').style.display       = type==='delivery' ? '' : 'none';
   document.getElementById('mesa-block').style.display       = type==='mesa'     ? '' : 'none';
+  if (type === 'mesa') _montarGradeMesas();
   // O card "Entrega" (título + moldura) só existe pra dar contexto ao
   // endereço/mesa — sem isso, escolher "Retirada" deixava um card vazio
   // sobrando na tela, sem nenhum campo dentro.
@@ -535,6 +536,48 @@ function setDelivery(type) {
   if (type === 'delivery' && typeof carregarEnderecosSalvos === 'function') {
     carregarEnderecosSalvos();
   }
+}
+
+// Grade de números de mesa — visual tocável em vez de digitar (pensado pro
+// tablet fixo na mesa, mas funciona igual no cardápio normal também). Só
+// monta uma vez por sessão de checkout; reaproveita se já montada.
+let _mesaGradeMontada = false;
+function _montarGradeMesas(qtdPadrao) {
+  const grid = document.getElementById('mesa-grid');
+  if (!grid || _mesaGradeMontada) return;
+  _mesaGradeMontada = true;
+  const total = qtdPadrao || 24; // cobre a maioria dos salões; "Outro número" resolve o resto
+  let html = '';
+  for (let n = 1; n <= total; n++) {
+    html += `<button type="button" class="mesa-num-btn" data-mesa="${n}" onclick="_selecionarMesaGrade(${n},this)">${n}</button>`;
+  }
+  html += `<button type="button" class="mesa-num-btn mesa-num-outro" onclick="_abrirMesaOutro(this)">Outro</button>`;
+  grid.innerHTML = html;
+}
+
+function _selecionarMesaGrade(numero, btn) {
+  document.getElementById('f-mesa').value = numero;
+  document.getElementById('mesa-outro-wrap').style.display = 'none';
+  document.querySelectorAll('.mesa-num-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+function _abrirMesaOutro(btn) {
+  document.querySelectorAll('.mesa-num-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const wrap = document.getElementById('mesa-outro-wrap');
+  wrap.style.display = '';
+  const inp = document.getElementById('f-mesa');
+  inp.value = '';
+  inp.focus();
+}
+
+// Chamado pelo próprio campo de texto (quando o cliente digita em "Outro"),
+// só pra garantir que nenhum botão da grade fique marcado por engano.
+function _marcarMesaSelecionada(valor) {
+  document.querySelectorAll('.mesa-num-btn:not(.mesa-num-outro)').forEach(b => {
+    b.classList.toggle('on', b.dataset.mesa === String(valor));
+  });
 }
 
 function _renderPickupSelector(allPickup) {
