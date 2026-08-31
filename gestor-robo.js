@@ -1013,6 +1013,7 @@ async function loadCardapioPublico() {
   cpRenderBanners();
 
   cpMontarLink();
+  cpCarregarTabletSplash();
 }
 
 async function cpMontarLink() {
@@ -1337,6 +1338,73 @@ function cpSelecionarTema(tema) {
 }
 
 // Preview agora é o iframe real — cpPreviewCor e cpAtualizarPreview não são mais necessários
+
+// ══════════════════════════════════════════
+//  CARDÁPIO DE MESA/TABLET — fundo do portal de boas-vindas
+// ══════════════════════════════════════════
+async function uploadTabletSplashBg(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 3 * 1024 * 1024) { sbToast('err', 'Imagem muito grande. Use uma imagem de até 3MB.'); return; }
+
+  sbLoading(true);
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+      reader.readAsDataURL(file);
+    });
+
+    const prev = document.getElementById('cp-tablet-splash-preview');
+    if (prev) prev.style.backgroundImage = `url(${dataUrl})`;
+
+    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, tablet_splash_bg_url: dataUrl });
+    if (error) throw new Error(error.message || JSON.stringify(error));
+    sbToast('ok', 'Fundo do cardápio de mesa atualizado!');
+  } catch(e) {
+    console.error('uploadTabletSplashBg:', e);
+    sbToast('err', 'Erro ao enviar imagem: ' + (e.message || ''));
+  } finally {
+    sbLoading(false);
+  }
+}
+
+async function removerTabletSplashBg() {
+  sbLoading(true);
+  try {
+    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, tablet_splash_bg_url: null });
+    if (error) throw new Error(error.message || JSON.stringify(error));
+    const prev = document.getElementById('cp-tablet-splash-preview');
+    if (prev) prev.style.backgroundImage = '';
+    sbToast('ok', 'Removido — volta a usar o banner da loja.');
+  } catch(e) {
+    sbToast('err', 'Erro ao remover: ' + (e.message || ''));
+  } finally {
+    sbLoading(false);
+  }
+}
+
+function copiarLinkTablet() {
+  const inp = document.getElementById('cp-tablet-link');
+  if (!inp || !inp.value) return;
+  navigator.clipboard.writeText(inp.value).then(() => sbToast('ok', 'Link copiado!')).catch(() => {
+    inp.select(); document.execCommand('copy'); sbToast('ok', 'Link copiado!');
+  });
+}
+
+async function cpCarregarTabletSplash() {
+  try {
+    const { data } = await sb.from('store_config').select('tablet_splash_bg_url').eq('tenant_id', _sessao?.tenant_id).single();
+    const prev = document.getElementById('cp-tablet-splash-preview');
+    if (prev && data?.tablet_splash_bg_url) prev.style.backgroundImage = `url(${data.tablet_splash_bg_url})`;
+    const linkInp = document.getElementById('cp-tablet-link');
+    if (linkInp) {
+      const linkBase = await _evoCardapioLinkAtual();
+      linkInp.value = linkBase.replace('/index.html', '/mesa-tablet.html');
+    }
+  } catch(e) { console.warn('cpCarregarTabletSplash:', e); }
+}
 
 async function cpUploadImagem(input) {
   const file = input.files[0];

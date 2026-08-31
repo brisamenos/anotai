@@ -1209,6 +1209,12 @@ const MIGRATIONS = [
     `ALTER TABLE orders ADD COLUMN scheduled_for TEXT;
      ALTER TABLE store_config ADD COLUMN permitir_agendamento INTEGER DEFAULT 1`
   },
+  { version:81, description:'fundo do portal de boas-vindas do cardápio de mesa/tablet', up:
+    `ALTER TABLE store_config ADD COLUMN tablet_splash_bg_url TEXT`
+  },
+  { version:82, description:'identifica de qual canal veio o pedido (ex: tablet fixo na mesa)', up:
+    `ALTER TABLE orders ADD COLUMN canal TEXT`
+  },
 ]
 
 function runMigrations() {
@@ -2340,13 +2346,13 @@ agendarResetDiarioPedidos()
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento','tablet_splash_bg_url'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','image_url','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','video_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','hide_price','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','taxa_servico','clientes_json','pagamentos_json','nome','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','session_ref','garcom_id','garcom_nome','customer_id','client_request_id','order_num','wa_track','scheduled_for','created_at'],
+  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','session_ref','garcom_id','garcom_nome','customer_id','client_request_id','order_num','wa_track','scheduled_for','canal','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','fornecedor_id','updated_at'],
   estoque_receitas: ['id','tenant_id','item_id','estoque_id','qty','unit','ativo','created_at','updated_at'],
@@ -3310,7 +3316,7 @@ function handleTenantInfo(params) {
     : id ? db.prepare('SELECT id,nome,slug FROM tenants WHERE id=? AND ativo=1').get(id)
     : db.prepare('SELECT id,nome,slug FROM tenants WHERE ativo=1 ORDER BY id ASC LIMIT 1').get()
   if (!t) return { error: 'Restaurante não encontrado' }
-  const cfg = db.prepare('SELECT store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_cor_texto,store_tema,cats_carrossel,store_tempo_entrega,store_tempo_retirada,store_avaliacao,store_whatsapp,promo_banner_ativo,promo_banners FROM store_config WHERE tenant_id=?').get(t.id)
+  const cfg = db.prepare('SELECT store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_cor_texto,store_tema,cats_carrossel,store_tempo_entrega,store_tempo_retirada,store_avaliacao,store_whatsapp,promo_banner_ativo,promo_banners,tablet_splash_bg_url FROM store_config WHERE tenant_id=?').get(t.id)
   return { ...t, branding: cfg || {} }
 }
 

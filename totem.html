@@ -405,6 +405,73 @@ input,textarea{font-family:inherit}
 @keyframes dotPulse{0%,80%,100%{opacity:.2}40%{opacity:1}}
 
 /* ═══════════════════════════════════════
+   PORTAL DE BOAS-VINDAS — tela cheia do tablet de mesa
+═══════════════════════════════════════ */
+#mesa-gate{
+  position:fixed;inset:0;z-index:9500;
+  display:flex;align-items:flex-end;justify-content:center;
+  transition:opacity .5s ease, visibility .5s ease;
+  overflow:hidden;
+}
+#mesa-gate.out{ opacity:0;visibility:hidden;pointer-events:none }
+#mesa-gate-bg{
+  position:absolute;inset:0;
+  background:linear-gradient(160deg,#151312 0%,#0c0b0a 100%);
+  background-size:cover;background-position:center;
+  transform:scale(1.06);
+  animation:mesaGateBgIn 12s ease-in-out infinite alternate;
+}
+@keyframes mesaGateBgIn{ from{transform:scale(1.06)} to{transform:scale(1.13)} }
+#mesa-gate-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(180deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,.35) 55%, rgba(0,0,0,.88) 100%);
+}
+#mesa-gate-content{
+  position:relative;z-index:1;
+  width:100%;max-width:560px;
+  padding:0 32px calc(56px + env(safe-area-inset-bottom,0px));
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  animation:mesaGateContentIn 1s cubic-bezier(.16,1,.3,1);
+}
+@keyframes mesaGateContentIn{
+  from{ opacity:0;transform:translateY(24px) }
+  to{ opacity:1;transform:none }
+}
+#mesa-gate-logo-wrap{
+  width:96px;height:96px;border-radius:26px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.16);
+  backdrop-filter:blur(8px);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:22px;
+  box-shadow:0 20px 50px -12px rgba(0,0,0,.6);
+}
+#mesa-gate-logo-img{ width:100%;height:100%;object-fit:cover;border-radius:26px }
+#mesa-gate-emoji{ font-size:44px }
+#mesa-gate-storename{
+  font-family:'Fraunces',serif;font-weight:900;font-size:34px;line-height:1.15;
+  color:#fff;margin-bottom:10px;text-shadow:0 4px 24px rgba(0,0,0,.4);
+}
+#mesa-gate-tagline{
+  font-size:15px;color:rgba(255,255,255,.72);margin-bottom:34px;
+  max-width:380px;line-height:1.5;
+}
+#mesa-gate-btn{
+  display:inline-flex;align-items:center;gap:10px;
+  padding:18px 44px;border-radius:99px;border:none;cursor:pointer;
+  background:var(--accent-g,var(--accent));color:#fff;
+  font-family:'DM Sans',sans-serif;font-size:16px;font-weight:700;letter-spacing:.2px;
+  box-shadow:0 16px 40px -8px rgba(var(--accent-rgb,249,115,22),.6), 0 0 0 1px rgba(255,255,255,.08) inset;
+  animation:mesaGateBtnPulse 2.6s ease-in-out infinite;
+}
+@keyframes mesaGateBtnPulse{
+  0%,100%{ box-shadow:0 16px 40px -8px rgba(var(--accent-rgb,249,115,22),.6), 0 0 0 1px rgba(255,255,255,.08) inset }
+  50%{ box-shadow:0 16px 52px -4px rgba(var(--accent-rgb,249,115,22),.85), 0 0 0 1px rgba(255,255,255,.08) inset }
+}
+#mesa-gate-btn:active{ transform:scale(.96) }
+
+
+/* ═══════════════════════════════════════
    HERO — banner + cartão flutuante (estilo Goomer)
 ═══════════════════════════════════════ */
 .hero{
@@ -1202,6 +1269,7 @@ input,textarea{font-family:inherit}
   border-color:var(--accent);background:rgba(var(--accent-rgb,249,115,22),.14);color:var(--accent);
 }
 .mesa-num-outro{ font-size:11.5px;font-weight:700 }
+
 
 /* pagamento */
 .pay-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
@@ -2862,6 +2930,82 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
   .ac-ico:hover{ transform:none; }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   LAYOUT DE TOTEM — exclusivo desse arquivo (mesa-tablet.html)
+   Categorias, busca e navegação ficam fixas numa faixa à direita;
+   o lado esquerdo (hero + produtos) usa o espaço largo da tela.
+   Pensado pra tela grande, na horizontal — se abrir numa tela
+   estreita, ativa um empilhamento vertical de segurança lá embaixo.
+══════════════════════════════════════════════════════════════ */
+:root{ --totem-sidebar-w: 340px; }
+
+body{
+  padding-bottom:0;
+  padding-right:var(--totem-sidebar-w);
+}
+
+/* Faixa direita — busca + categorias, fixa, com scroll próprio */
+.sticky-bar{
+  position:fixed;top:0;right:0;left:auto;bottom:132px;width:var(--totem-sidebar-w);
+  display:flex;flex-direction:column;
+  background:var(--s1);border-left:1px solid var(--border);border-bottom:none;
+  padding:22px 18px 12px;overflow-y:auto;z-index:200;
+}
+.search-panel{ max-height:none!important;overflow:visible;flex-shrink:0 }
+.search-wrap{ margin:0 0 16px }
+.cats-scroll{
+  display:flex;flex-direction:column;overflow-x:visible;overflow-y:auto;
+  padding:0;gap:8px;flex:1;
+}
+.cat-btn{ width:100%;justify-content:flex-start;padding:11px 16px }
+.cats-scroll.carousel{ flex-direction:column;padding:0;gap:8px }
+.cats-scroll.carousel .cat-btn{
+  flex-direction:row;width:100%;text-align:left;padding:9px 12px;
+  min-width:0;border-radius:12px;gap:10px;
+}
+
+/* Navegação — reaproveita o componente de sempre, só reposiciona pra
+   ficar embaixo da faixa de categorias, dentro da mesma coluna direita. */
+.bottom-nav{
+  position:fixed;left:auto;right:0;bottom:0;width:var(--totem-sidebar-w);
+  max-width:none;margin:0;z-index:201;
+  border-top:1px solid var(--border);border-left:1px solid var(--border);
+}
+
+/* Botão do carrinho — sobe pra dentro da coluna direita, acima da navegação */
+.cart-float{
+  left:auto;right:20px;transform:none;
+  bottom:calc(76px + env(safe-area-inset-bottom,0px));
+  width:calc(var(--totem-sidebar-w) - 40px);
+}
+.cart-float .cart-btn{ width:100%;justify-content:center }
+
+/* Telas estreitas (tablet vertical, por engano ou variação de modelo):
+   volta pro empilhamento normal de cima pra baixo, com categorias no
+   topo — evita ficar ilegível se o totem girar ou for menor que o
+   esperado. */
+/* Botão flutuante de "acompanhar pedido" — sem isso, ficava por cima da
+   faixa direita nova (os dois são fixos no canto superior direito). */
+.track-fab{ right:calc(var(--totem-sidebar-w) + 20px) }
+
+@media (max-width:900px){
+  body{ padding-right:0;padding-bottom:calc(64px + env(safe-area-inset-bottom,0px)) }
+  #totem-sidebar-brand{ display:none!important }
+  .track-fab{ right:16px }
+  .sticky-bar{
+    position:sticky;top:0;right:auto;left:auto;bottom:auto;width:auto;
+    flex-direction:column;border-left:none;border-bottom:1px solid var(--border);
+    padding:10px 0 0;
+  }
+  .search-wrap{ margin:0 16px 12px }
+  .cats-scroll{ flex-direction:row;overflow-x:auto;overflow-y:visible;padding:4px 16px 8px }
+  .cat-btn{ width:auto;justify-content:center }
+  .cats-scroll.carousel{ flex-direction:row;padding:4px 16px 8px }
+  .cats-scroll.carousel .cat-btn{ flex-direction:column;width:auto;text-align:center;min-width:64px }
+  .bottom-nav{ position:fixed;right:0;left:0;width:auto;max-width:520px;margin:0 auto;border-left:none }
+  .cart-float{ left:50%;right:auto;transform:translateX(-50%);width:auto }
+  .cart-float .cart-btn{ width:auto }
+}
 
 </style>
 <script src="/api-client.js"></script>
@@ -2875,6 +3019,27 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
     <div class="splash-dot"></div>
     <div class="splash-dot"></div>
     <div class="splash-dot"></div>
+  </div>
+</div>
+
+<!-- PORTAL DE BOAS-VINDAS (exclusivo do cardápio de mesa/tablet) —
+     tela cheia com fundo configurável pelo gestor, some ao tocar em
+     "Ver Cardápio". Fica por cima do cardápio normal, que já carrega
+     por baixo enquanto isso. -->
+<div id="mesa-gate">
+  <div id="mesa-gate-bg"></div>
+  <div id="mesa-gate-overlay"></div>
+  <div id="mesa-gate-content">
+    <div id="mesa-gate-logo-wrap">
+      <img id="mesa-gate-logo-img" src="" alt="" style="display:none">
+      <span id="mesa-gate-emoji">🍽️</span>
+    </div>
+    <div id="mesa-gate-storename">Bem-vindo(a)</div>
+    <div id="mesa-gate-tagline">Toque para ver o cardápio e fazer seu pedido</div>
+    <button id="mesa-gate-btn" onclick="abrirCardapioMesa()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Ver Cardápio
+    </button>
   </div>
 </div>
 
@@ -2974,6 +3139,13 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 
 <!-- STICKY: BUSCA (retrátil, aberta pelo botão "Busca" do menu inferior) + CATEGORIAS -->
 <div class="sticky-bar" id="sticky-bar">
+  <div id="totem-sidebar-brand" style="display:flex;align-items:center;gap:10px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+    <div id="totem-sidebar-logo" style="width:40px;height:40px;border-radius:10px;background:var(--s2);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">
+      <img id="totem-sidebar-logo-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:none">
+      <span id="totem-sidebar-emoji" style="font-size:18px">🍽️</span>
+    </div>
+    <div id="totem-sidebar-name" style="font-family:'Fraunces',serif;font-weight:800;font-size:15px;line-height:1.2">Cardápio</div>
+  </div>
   <div class="search-panel" id="search-panel">
     <div class="search-wrap">
       <span class="search-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M10 10l2.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
@@ -3606,8 +3778,11 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 
         <!-- mesa -->
         <div id="mesa-block" style="display:none">
-          <div class="form-section-label">Número da mesa</div>
-          <input class="form-input" id="f-mesa" placeholder="Ex: 5" type="number">
+          <div class="form-section-label">Qual é a sua mesa?</div>
+          <div id="mesa-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px"></div>
+          <div id="mesa-outro-wrap" style="display:none;margin-top:4px">
+            <input class="form-input" id="f-mesa" placeholder="Número da mesa" type="number" inputmode="numeric" oninput="_marcarMesaSelecionada(this.value)">
+          </div>
         </div>
         </div>
 
@@ -3959,6 +4134,39 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 </button>
 
 
+
+<!-- Script específico do cardápio de mesa/tablet (não existe no index.html
+     normal) — identifica o canal do pedido e controla o portal de
+     boas-vindas. -->
+<script>
+window._canalPedido = 'mesa_tablet';
+
+function abrirCardapioMesa() {
+  const gate = document.getElementById('mesa-gate');
+  if (gate) gate.classList.add('out');
+}
+
+// Se o tipo de entrega padrão do cardápio normal é "delivery", aqui faz
+// mais sentido já abrir direto em "Mesa" (o tablet fica fixo numa mesa,
+// é o caso de uso mais comum) — só troca se a loja permitir mesa nas
+// configurações; senão mantém o padrão de sempre.
+(function preferirMesaPorPadrao() {
+  const _tentar = () => {
+    if (typeof _tiposEntrega !== 'undefined' && Array.isArray(_tiposEntrega) && _tiposEntrega.includes('mesa') && typeof setDelivery === 'function') {
+      setDelivery('mesa');
+      return true;
+    }
+    return false;
+  };
+  // _tiposEntrega só fica pronto depois do config carregar — tenta por
+  // alguns segundos, sem travar nada se não conseguir.
+  let tentativas = 0;
+  const t = setInterval(() => {
+    tentativas++;
+    if (_tentar() || tentativas > 20) clearInterval(t);
+  }, 300);
+})();
+</script>
 
 </body>
 </html>

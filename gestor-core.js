@@ -690,7 +690,8 @@ function mapOrder(o) {
     mesa_num: o.mesa_num || null,
     garcom_id: o.garcom_id || null,
     garcom_nome: o.garcom_nome || '',
-    scheduled_for: o.scheduled_for || null
+    scheduled_for: o.scheduled_for || null,
+    canal: o.canal || null
   };
 }
 

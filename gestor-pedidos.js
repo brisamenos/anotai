@@ -360,6 +360,14 @@ function renderKanban() {
           ? '<div class="oc-agendado-badge">🕐 Agendado para ' + new Date(o.scheduled_for).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) + '</div>'
           : '';
 
+        // Selo de pedido feito pelo tablet fixo na mesa (mesa-tablet.html) —
+        // ajuda o gestor a distinguir de um pedido feito pelo celular do
+        // próprio cliente (cardápio normal), já que os dois criam pedido
+        // igual, só muda de onde veio.
+        const _tabletBadge = o.canal === 'mesa_tablet'
+          ? '<div class="oc-tablet-badge">📱 Pedido do Tablet</div>'
+          : '';
+
         const _tipoClass = isMesa ? ' card-mesa' : isRetirada ? ' card-retirada' : ' card-delivery';
 
         const _cardStyle = o._pixPendente
@@ -372,6 +380,7 @@ function renderKanban() {
 
         return '<div class="order-card' + _tipoClass + '"' + _cardStyle + ' onclick="openOrderDetail(' + o.id + ')">' +
           _agendadoBadge +
+          _tabletBadge +
           '<div class="oc-top"><span class="oc-id">#' + o.num + '</span>' + _tipoBadge + '<span class="oc-time">⏱ ' + o.time + '</span>' + _acougueBtn + '</div>' +
           _waNotif +
           '<div class="oc-client">' + _escHtml(o.client) + (o.phone ? ' · ' + _escHtml(o.phone) : '') + '</div>' +
@@ -793,6 +802,10 @@ function openOrderDetail(id) {
       agBadgeEl.style.display = 'none';
     }
   }
+
+  // Selo de pedido feito pelo tablet da mesa
+  const tabletBadgeEl = document.getElementById('od-tablet-badge');
+  if (tabletBadgeEl) tabletBadgeEl.style.display = (o.canal === 'mesa_tablet') ? 'flex' : 'none';
 
   // Horário
   document.getElementById('od-timer').textContent = o.time || '';
