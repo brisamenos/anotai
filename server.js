@@ -5764,6 +5764,15 @@ const server = http.createServer(async (req,res) => {
       if (!buffer.length) { send(res,400,{error: ehVideo ? 'Vídeo vazio' : 'Imagem vazia'}); return }
       const limiteBytes = ehVideo ? MAX_ICONE_VIDEO_BYTES : 2*1024*1024
       if (buffer.length > limiteBytes) { send(res,413,{error: ehVideo ? 'Vídeo muito grande (máx 10MB)' : 'Imagem muito grande (máx 2MB)'}); return }
+      // Aceita PNG ou JPEG — checa os bytes de verdade do arquivo (não o
+      // nome), porque o arquivo sempre é salvo com nome ".png" pra combinar
+      // com o resto do sistema (que espera essa extensão em todo lugar),
+      // mesmo quando o conteúdo enviado é um JPEG de verdade.
+      if (!ehVideo) {
+        const ehPng  = buffer.length >= 8 && buffer[0]===0x89 && buffer[1]===0x50 && buffer[2]===0x4E && buffer[3]===0x47
+        const ehJpeg = buffer.length >= 3 && buffer[0]===0xFF && buffer[1]===0xD8 && buffer[2]===0xFF
+        if (!ehPng && !ehJpeg) { send(res,400,{error:'Envie uma imagem PNG ou JPEG válida'}); return }
+      }
       // Grava no volume persistente (ICONES_PADRAO_DIR), não em cardapio/img —
       // essa pasta faz parte do código-fonte e some a cada novo deploy.
       const fpath = path.join(ICONES_PADRAO_DIR,arquivo)
@@ -5800,9 +5809,27 @@ const server = http.createServer(async (req,res) => {
     const rel = upath.slice('/cardapio/img/'.length)
     if (ICONES_PADRAO_VALIDOS.has(rel)) {
       const customPath = path.join(ICONES_PADRAO_DIR, rel)
-      if (fs.existsSync(customPath)) { serveStatic(req,res,customPath,path.extname(customPath)); return }
+      if (fs.existsSync(customPath)) {
+        // O arquivo sempre é salvo com nome ".png" (pra combinar com o resto
+        // do sistema), mesmo quando o admin subiu um JPEG de verdade — então
+        // não dá pra confiar na extensão do nome pra saber o tipo de
+        // verdade. Lê só os primeiros bytes (rápido) pra descobrir se é PNG
+        // ou JPEG e mandar o Content-Type certo pro navegador.
+        let extReal = path.extname(customPath)
+        if (extReal === '.png') {
+          try {
+            const fd = fs.openSync(customPath, 'r')
+            const head = Buffer.alloc(3)
+            fs.readSync(fd, head, 0, 3, 0)
+            fs.closeSync(fd)
+            if (head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF) extReal = '.jpg'
+          } catch(e) {}
+        }
+        serveStatic(req,res,customPath,extReal); return
+      }
     }
   }
+
 
   if(req.method==='GET'&&(upath.startsWith('/uploads/')||upath.startsWith('/storage/v1/object/public/'))){
     const fname=path.basename(upath),fpath=path.join(UPLOADS_DIR,fname)
