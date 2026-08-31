@@ -575,6 +575,42 @@ function _safeParseArray(v) {
   return [];
 }
 
+// ── Qualidade do Cardápio (painel no topo do Gestor de Produtos) ──
+// Antes esses números eram fixos no HTML (35%, 29%, 50%...) — nunca
+// refletiam o cardápio de verdade, só um exemplo estático que ficou. Agora
+// calcula de verdade a partir dos itens carregados.
+function atualizarQualidadeCardapio() {
+  const total = items.length;
+  const scoreEl   = document.querySelector('#quality-score-circle');
+  const scoreTxt  = document.querySelector('#quality-score-txt');
+  const fotoEl    = document.querySelector('#qpill-fotos-val');
+  const descEl    = document.querySelector('#qpill-desc-val');
+  const promoEl   = document.querySelector('#qpill-promo-val');
+  if (!scoreEl) return; // painel não está nessa tela agora
+
+  if (!total) {
+    scoreEl.style.background = 'conic-gradient(var(--accent3) 0% 0%,var(--surface2) 0% 100%)';
+    if (scoreTxt) scoreTxt.textContent = '—';
+    if (fotoEl) fotoEl.textContent = '—';
+    if (descEl) descEl.textContent = '—';
+    if (promoEl) promoEl.innerHTML = '0 <span style="font-size:12px;color:var(--muted)">$</span>';
+    return;
+  }
+
+  const comFoto  = items.filter(i => i.imageUrl).length;
+  const comDesc  = items.filter(i => i.desc && i.desc.trim().length > 0).length;
+  const comPromo = items.filter(i => i.promo).length;
+  const pctFoto  = Math.round((comFoto  / total) * 100);
+  const pctDesc  = Math.round((comDesc  / total) * 100);
+  const score    = Math.round((pctFoto + pctDesc) / 2);
+
+  scoreEl.style.background = `conic-gradient(var(--accent3) 0% ${score}%,var(--surface2) ${score}% 100%)`;
+  if (scoreTxt) scoreTxt.textContent = score + '%';
+  if (fotoEl) fotoEl.textContent = pctFoto + '%';
+  if (descEl) descEl.textContent = pctDesc + '%';
+  if (promoEl) promoEl.innerHTML = comPromo + ' <span style="font-size:12px;color:var(--muted)">$</span>';
+}
+
 function mapItem(i) {
   return {
     id: i.id,
@@ -703,6 +739,7 @@ async function loadAllData(silent = false) {
     ]);
 
     if (itemsRes.data?.length)    items         = itemsRes.data.map(mapItem);
+    if (typeof atualizarQualidadeCardapio === 'function') atualizarQualidadeCardapio();
     if (catsRes.data?.length)     categories    = catsRes.data.map(c => ({
       id: c.id, name: c.name, label: c.label || c.name,
       type: c.type||'Itens principais', promo:!!c.promo, imageUrl: c.image_url || null, open:false
@@ -1488,6 +1525,7 @@ function subscribeOrders() {
           sb.from('categories').select('*').order('sort_order'),
         ]);
         if (itemsRes.data) items = itemsRes.data.map(mapItem);
+        if (typeof atualizarQualidadeCardapio === 'function') atualizarQualidadeCardapio();
         if (catsRes.data) categories = catsRes.data.map(c => ({
           id: c.id, name: c.name, label: c.label || c.name,
           type: c.type || 'Itens principais', promo: !!c.promo, imageUrl: c.image_url || null, open: false

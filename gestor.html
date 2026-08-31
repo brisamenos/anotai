@@ -739,14 +739,14 @@ function temaToggleRapido() {
   </div>
   <!-- Qualidade do Cardápio -->
   <div class="quality-bar">
-    <div class="quality-score" style="background:conic-gradient(var(--accent3) 0% 35%,var(--surface2) 35% 100%);box-shadow:0 0 0 3px var(--surface)">
-      <div style="position:absolute;inset:6px;background:var(--surface);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:13px;font-weight:800">35%</div>
+    <div class="quality-score" id="quality-score-circle" style="background:conic-gradient(var(--accent3) 0% 0%,var(--surface2) 0% 100%);box-shadow:0 0 0 3px var(--surface)">
+      <div style="position:absolute;inset:6px;background:var(--surface);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:13px;font-weight:800" id="quality-score-txt">—</div>
     </div>
     <div style="font-size:11.5px;color:var(--muted)">Qualidade<br>do Cardápio</div>
     <div class="quality-pills">
-      <div class="qpill"><div class="qpill-label">Itens promoções</div><div class="qpill-val">0 <span style="font-size:12px;color:var(--muted)">$</span></div><span class="qpill-btn" onclick="openAddItemModal()">Adicione promoções</span></div>
-      <div class="qpill"><div class="qpill-label">Cardápio com fotos</div><div class="qpill-val">29%</div><span class="qpill-btn" onclick="nav('imagens')" style="background:var(--accent3)">Adicione mais fotos</span></div>
-      <div class="qpill"><div class="qpill-label">Com descrições</div><div class="qpill-val">50%</div><span class="qpill-btn" onclick="openAddItemModal()" style="background:var(--accent3)">Adicione descrições</span></div>
+      <div class="qpill"><div class="qpill-label">Itens promoções</div><div class="qpill-val" id="qpill-promo-val">0 <span style="font-size:12px;color:var(--muted)">$</span></div><span class="qpill-btn" onclick="openAddItemModal()">Adicione promoções</span></div>
+      <div class="qpill"><div class="qpill-label">Cardápio com fotos</div><div class="qpill-val" id="qpill-fotos-val">—</div><span class="qpill-btn" onclick="nav('imagens')" style="background:var(--accent3)">Adicione mais fotos</span></div>
+      <div class="qpill"><div class="qpill-label">Com descrições</div><div class="qpill-val" id="qpill-desc-val">—</div><span class="qpill-btn" onclick="openAddItemModal()" style="background:var(--accent3)">Adicione descrições</span></div>
       <div class="qpill"><div class="qpill-label">Promoções categoria</div><div class="qpill-val">1 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span class="qpill-btn" style="background:var(--success)">Parabéns!</span></div>
     </div>
   </div>
