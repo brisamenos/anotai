@@ -674,15 +674,26 @@ function _renderKitGrupos(item, wrap, grupos) {
   }
 
   // ── Informações com ícones (preparos, ocasião, armazenamento) ──
-  const _chipRow = (lista, titulo, iconeDefault) => {
+  const _chipRow = (lista, titulo, iconeDefault, resolverIcone) => {
     if (!lista?.opcoes?.length) return '';
     const chips = lista.opcoes.map(o => {
-      const icon = o.icon
-        ? `<img src="${o.icon}" style="width:28px;height:28px;object-fit:contain" onerror="this.style.display='none'">`
-        : `<span style="font-size:20px">${iconeDefault}</span>`;
+      const nome = o.nome || o.id;
+      // Prioridade: 1) foto específica dessa opção, se alguém colocou uma
+      // (o.icon); 2) ícone padrão do admin pra esse tipo de preparo (só
+      // existe pra "Forma de preparo" — ocasião/armazenamento não têm
+      // catálogo próprio no admin, aí usam o ícone genérico mesmo);
+      // 3) o SVG genérico repetido, como sempre foi o fallback final.
+      let icon;
+      if (o.icon) {
+        icon = `<img src="${o.icon}" style="width:28px;height:28px;object-fit:contain" onerror="this.style.display='none'">`;
+      } else if (resolverIcone) {
+        icon = `<span style="font-size:20px;display:inline-flex">${resolverIcone(nome)}</span>`;
+      } else {
+        icon = `<span style="font-size:20px">${iconeDefault}</span>`;
+      }
       return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 10px;background:var(--s2,#1a1a1a);border:1.5px solid var(--border);border-radius:10px;min-width:60px;text-align:center;flex-shrink:0">
         <div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.04);border-radius:8px">${icon}</div>
-        <span style="font-size:10.5px;font-weight:600;color:var(--text);line-height:1.2">${o.nome || o.id}</span>
+        <span style="font-size:10.5px;font-weight:600;color:var(--text);line-height:1.2">${nome}</span>
       </div>`;
     }).join('');
     return `<div style="margin-top:14px">
@@ -692,7 +703,7 @@ function _renderKitGrupos(item, wrap, grupos) {
   };
 
   const infoHtml = [
-    _chipRow(preparosGrp,  'Forma de preparo', '<svg width=\'20\' height=\'20\' viewBox=\'0 0 24 24\' fill=\'none\'><path d=\'M3 17h14a2 2 0 0 0 0-4H3\' stroke=\'currentColor\' stroke-width=\'1.5\' stroke-linecap=\'round\'/></svg>'),
+    _chipRow(preparosGrp,  'Forma de preparo', '<svg width=\'20\' height=\'20\' viewBox=\'0 0 24 24\' fill=\'none\'><path d=\'M3 17h14a2 2 0 0 0 0-4H3\' stroke=\'currentColor\' stroke-width=\'1.5\' stroke-linecap=\'round\'/></svg>', _getPreparoIcon),
     _chipRow(ocasiaoGrp,   'Tipo de ocasião',  '<svg width=\'20\' height=\'20\' viewBox=\'0 0 24 24\' fill=\'none\'><circle cx=\'12\' cy=\'12\' r=\'9\' stroke=\'currentColor\' stroke-width=\'1.5\'/><circle cx=\'12\' cy=\'12\' r=\'5\' stroke=\'currentColor\' stroke-width=\'1.4\'/><circle cx=\'12\' cy=\'12\' r=\'1.5\' fill=\'currentColor\'/></svg>'),
     _chipRow(armazenGrp,   'Armazenamento',    '<svg width=\'20\' height=\'20\' viewBox=\'0 0 24 24\' fill=\'none\'><path d=\'M12 3v18M3 12h18M5.5 5.5l13 13M18.5 5.5l-13 13\' stroke=\'currentColor\' stroke-width=\'1.4\' stroke-linecap=\'round\'/></svg>'),
   ].join('');
