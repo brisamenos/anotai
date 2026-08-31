@@ -1401,7 +1401,7 @@ async function cpCarregarTabletSplash() {
     const linkInp = document.getElementById('cp-tablet-link');
     if (linkInp) {
       const linkBase = await _evoCardapioLinkAtual();
-      linkInp.value = linkBase.replace('/index.html', '/mesa-tablet.html');
+      linkInp.value = linkBase.replace('/index.html', '/totem.html');
     }
   } catch(e) { console.warn('cpCarregarTabletSplash:', e); }
 }

@@ -2931,80 +2931,85 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 }
 
 /* ══════════════════════════════════════════════════════════════
-   LAYOUT DE TOTEM — exclusivo desse arquivo (mesa-tablet.html)
-   Categorias, busca e navegação ficam fixas numa faixa à direita;
-   o lado esquerdo (hero + produtos) usa o espaço largo da tela.
-   Pensado pra tela grande, na horizontal — se abrir numa tela
-   estreita, ativa um empilhamento vertical de segurança lá embaixo.
+   LAYOUT DE TOTEM — exclusivo desse arquivo (totem.html)
+   Categorias, busca e navegação ficam fixas numa faixa à ESQUERDA;
+   o lado direito (hero + produtos) usa o espaço largo da tela.
+   Mesma estrutura em tela larga (totem deitado) e estreita (tablet
+   em pé) — só muda a largura da faixa, pra caber categoria com nome
+   comprido mesmo numa tela menor.
 ══════════════════════════════════════════════════════════════ */
-:root{ --totem-sidebar-w: 340px; }
+:root{ --totem-sidebar-w: 360px; }
 
 body{
   padding-bottom:0;
-  padding-right:var(--totem-sidebar-w);
+  padding-left:var(--totem-sidebar-w);
 }
 
-/* Faixa direita — busca + categorias, fixa, com scroll próprio */
+/* Faixa esquerda — marca + busca + categorias, fixa, com scroll próprio */
 .sticky-bar{
-  position:fixed;top:0;right:0;left:auto;bottom:132px;width:var(--totem-sidebar-w);
+  position:fixed;top:0;left:0;right:auto;bottom:132px;width:var(--totem-sidebar-w);
   display:flex;flex-direction:column;
-  background:var(--s1);border-left:1px solid var(--border);border-bottom:none;
-  padding:22px 18px 12px;overflow-y:auto;z-index:200;
+  background:var(--s1);border-right:1px solid var(--border);border-bottom:none;border-left:none;
+  padding:24px 18px 12px;overflow-y:auto;z-index:200;
 }
+#totem-sidebar-brand{ margin-bottom:20px!important;padding-bottom:18px!important }
+#totem-sidebar-logo{ width:48px!important;height:48px!important;border-radius:12px!important }
+#totem-sidebar-name{ font-size:18px!important }
 .search-panel{ max-height:none!important;overflow:visible;flex-shrink:0 }
-.search-wrap{ margin:0 0 16px }
+.search-wrap{ margin:0 0 18px }
 .cats-scroll{
   display:flex;flex-direction:column;overflow-x:visible;overflow-y:auto;
-  padding:0;gap:8px;flex:1;
+  padding:0;gap:10px;flex:1;
 }
-.cat-btn{ width:100%;justify-content:flex-start;padding:11px 16px }
-.cats-scroll.carousel{ flex-direction:column;padding:0;gap:8px }
+/* Categorias bem maiores — é o elemento mais importante dessa faixa */
+.cat-btn{
+  width:100%;justify-content:flex-start;padding:18px 20px;
+  font-size:16.5px;font-weight:700;border-radius:14px;
+  min-height:60px;
+}
+.cats-scroll.carousel{ flex-direction:column;padding:0;gap:10px }
 .cats-scroll.carousel .cat-btn{
-  flex-direction:row;width:100%;text-align:left;padding:9px 12px;
-  min-width:0;border-radius:12px;gap:10px;
+  flex-direction:row;width:100%;text-align:left;padding:14px 16px;
+  min-width:0;border-radius:14px;gap:14px;min-height:60px;
 }
+.cat-btn-icon, .cat-btn-pill-icon{ width:38px!important;height:38px!important }
+.cats-scroll.carousel .cat-btn-icon{ width:42px!important;height:42px!important }
 
 /* Navegação — reaproveita o componente de sempre, só reposiciona pra
-   ficar embaixo da faixa de categorias, dentro da mesma coluna direita. */
+   ficar embaixo da faixa de categorias, dentro da mesma coluna esquerda. */
 .bottom-nav{
-  position:fixed;left:auto;right:0;bottom:0;width:var(--totem-sidebar-w);
+  position:fixed;right:auto;left:0;bottom:0;width:var(--totem-sidebar-w);
   max-width:none;margin:0;z-index:201;
-  border-top:1px solid var(--border);border-left:1px solid var(--border);
+  border-top:1px solid var(--border);border-right:1px solid var(--border);
 }
 
-/* Botão do carrinho — sobe pra dentro da coluna direita, acima da navegação */
+/* Botão do carrinho — sobe pra dentro da coluna esquerda, acima da navegação */
 .cart-float{
-  left:auto;right:20px;transform:none;
+  right:auto;left:20px;transform:none;
   bottom:calc(76px + env(safe-area-inset-bottom,0px));
   width:calc(var(--totem-sidebar-w) - 40px);
 }
 .cart-float .cart-btn{ width:100%;justify-content:center }
 
-/* Telas estreitas (tablet vertical, por engano ou variação de modelo):
-   volta pro empilhamento normal de cima pra baixo, com categorias no
-   topo — evita ficar ilegível se o totem girar ou for menor que o
-   esperado. */
-/* Botão flutuante de "acompanhar pedido" — sem isso, ficava por cima da
-   faixa direita nova (os dois são fixos no canto superior direito). */
-.track-fab{ right:calc(var(--totem-sidebar-w) + 20px) }
+/* Cartão da loja simplificado — só logo, banner e nome. Endereço, tempo de
+   entrega, avaliação e pedido mínimo não fazem sentido aqui: o cliente já
+   está dentro do estabelecimento, sentado, olhando o totem. */
+.hero-address-inline, .hero-meta, .trust-bar{ display:none!important }
 
+/* Telas estreitas (tablet em pé/retrato): mesma faixa lateral, só mais
+   fina, pra sobrar espaço de verdade pro cardápio numa tela menor. */
 @media (max-width:900px){
-  body{ padding-right:0;padding-bottom:calc(64px + env(safe-area-inset-bottom,0px)) }
-  #totem-sidebar-brand{ display:none!important }
-  .track-fab{ right:16px }
-  .sticky-bar{
-    position:sticky;top:0;right:auto;left:auto;bottom:auto;width:auto;
-    flex-direction:column;border-left:none;border-bottom:1px solid var(--border);
-    padding:10px 0 0;
-  }
-  .search-wrap{ margin:0 16px 12px }
-  .cats-scroll{ flex-direction:row;overflow-x:auto;overflow-y:visible;padding:4px 16px 8px }
-  .cat-btn{ width:auto;justify-content:center }
-  .cats-scroll.carousel{ flex-direction:row;padding:4px 16px 8px }
-  .cats-scroll.carousel .cat-btn{ flex-direction:column;width:auto;text-align:center;min-width:64px }
-  .bottom-nav{ position:fixed;right:0;left:0;width:auto;max-width:520px;margin:0 auto;border-left:none }
-  .cart-float{ left:50%;right:auto;transform:translateX(-50%);width:auto }
-  .cart-float .cart-btn{ width:auto }
+  :root{ --totem-sidebar-w: 220px; }
+  .cat-btn{ font-size:13.5px;padding:14px 12px;min-height:52px }
+  .cats-scroll.carousel .cat-btn{ padding:10px 10px;min-height:52px;gap:10px }
+  #totem-sidebar-name{ font-size:15px!important }
+  .bnav-item span:last-child{ font-size:9px }
+}
+@media (max-width:560px){
+  :root{ --totem-sidebar-w: 96px; }
+  #totem-sidebar-name, .search-wrap{ display:none!important }
+  .cat-btn{ flex-direction:column;text-align:center;font-size:10px;line-height:1.15;padding:10px 3px;gap:4px;min-height:56px;white-space:normal;word-break:break-word }
+  .bnav-item span:last-child{ display:none }
 }
 
 </style>
@@ -4139,7 +4144,7 @@ body{
      normal) — identifica o canal do pedido e controla o portal de
      boas-vindas. -->
 <script>
-window._canalPedido = 'mesa_tablet';
+window._canalPedido = 'totem';
 
 function abrirCardapioMesa() {
   const gate = document.getElementById('mesa-gate');

@@ -2145,7 +2145,11 @@ async function saveEditItem() {
 
   it.name        = novoNome;
   it.desc        = document.getElementById('edit-desc').value.trim();
-  it.price       = parseFloat(document.getElementById('edit-price').value) || it.price;
+  // Antes usava "|| it.price" — como 0 é "falso" em JS, digitar 0 no preço
+  // nunca salvava de verdade, sempre voltava pro preço antigo. Isso quebrava
+  // exatamente quem usa hide_price (preço 0, valor real só nos adicionais).
+  const _novoPrecoRaw = parseFloat(document.getElementById('edit-price').value);
+  it.price       = isNaN(_novoPrecoRaw) ? it.price : _novoPrecoRaw;
   it.priceOld    = parseFloat(document.getElementById('edit-price-old').value) || null;
   const catEl    = document.getElementById('edit-cat');
   it.catKey      = catEl ? catEl.value : it.catKey;
