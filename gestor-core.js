@@ -739,7 +739,7 @@ async function loadAllData(silent = false) {
     ]);
 
     if (itemsRes.data?.length)    items         = itemsRes.data.map(mapItem);
-    if (typeof atualizarQualidadeCardapio === 'function') atualizarQualidadeCardapio();
+    if (typeof atualizarQualidadeCardapio === 'function') { try { atualizarQualidadeCardapio(); } catch(e) { console.warn('[qualidade]', e); } }
     if (catsRes.data?.length)     categories    = catsRes.data.map(c => ({
       id: c.id, name: c.name, label: c.label || c.name,
       type: c.type||'Itens principais', promo:!!c.promo, imageUrl: c.image_url || null, open:false
@@ -1525,7 +1525,7 @@ function subscribeOrders() {
           sb.from('categories').select('*').order('sort_order'),
         ]);
         if (itemsRes.data) items = itemsRes.data.map(mapItem);
-        if (typeof atualizarQualidadeCardapio === 'function') atualizarQualidadeCardapio();
+        if (typeof atualizarQualidadeCardapio === 'function') { try { atualizarQualidadeCardapio(); } catch(e) { console.warn('[qualidade]', e); } }
         if (catsRes.data) categories = catsRes.data.map(c => ({
           id: c.id, name: c.name, label: c.label || c.name,
           type: c.type || 'Itens principais', promo: !!c.promo, imageUrl: c.image_url || null, open: false

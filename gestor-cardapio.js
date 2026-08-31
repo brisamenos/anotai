@@ -1502,7 +1502,7 @@ function getFiltered(){
 }
 
 function renderTable(){
-  if (typeof atualizarQualidadeCardapio === 'function') atualizarQualidadeCardapio();
+  if (typeof atualizarQualidadeCardapio === 'function') { try { atualizarQualidadeCardapio(); } catch(e) { console.warn('[qualidade]', e); } }
   const data=getFiltered();
   const rc=document.getElementById('row-count');
   if(rc) rc.textContent=data.length+' registro'+(data.length!==1?'s':'');
