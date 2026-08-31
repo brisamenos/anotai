@@ -372,11 +372,22 @@ function renderMenu() {
       const gridClass = (_segmento === 'acougue' || _catsCarrossel) ? 'item-grid carousel' : 'item-grid';
       html += `<div class="${gridClass}">${normalItems.map(itemCard).join('')}</div>`;
     }
-    // Se o filtro for de uma categoria checklist, mostra ela expandida
+    // Se o filtro for de uma categoria checklist, mostra ela expandida —
+    // no açougue, em cards (igual a visão geral já fazia); nos outros
+    // segmentos, mantém a lista com checkbox de sempre. Antes, esse "Ver
+    // mais" sempre caía na lista com checkbox pra qualquer segmento — só a
+    // tela inicial tinha o tratamento certo pro açougue.
     const filteredChecklistCat = checklistCats.find(c => c.name === activeCat || c.label === activeCat);
     if (filteredChecklistCat) {
-      const catItems = allItems.filter(i => i.cat_key === filteredChecklistCat.name || i.cat === filteredChecklistCat.label);
-      html += renderChecklistSection(filteredChecklistCat, catItems, true);
+      const catItems = allItems.filter(i => (i.cat_key === filteredChecklistCat.name || i.cat === filteredChecklistCat.label) && i.status !== 'pausado');
+      if (_segmento === 'acougue') {
+        if (catItems.length) {
+          const gridClassCl = _catsCarrossel ? 'item-grid carousel' : 'item-grid';
+          html += `<div class="section"><div class="section-label-row"><div class="section-label">${filteredChecklistCat.label || filteredChecklistCat.name}</div></div><div class="${gridClassCl}">${catItems.map(itemCard).join('')}</div></div>`;
+        }
+      } else {
+        html += renderChecklistSection(filteredChecklistCat, catItems, true);
+      }
     }
     html += '</div>';
     const _menuWrapEl2 = document.getElementById('menu-wrap');
