@@ -138,7 +138,7 @@ const GESTOR_TEMAS = [
   },
   {
     key: 'dourado',
-    nome: 'Dourado ButherBox',
+    nome: 'Dourado ButcherBox',
     desc: 'Preto premium com acentos dourados',
     emoji: '⚜️',
     tipo: 'dark',
@@ -196,7 +196,7 @@ function temaNormalizarKey(key) {
     'cafe':'escuro', 'lavanda':'escuro', 'cereja':'escuro', 'crepusculo':'escuro', 'esmeralda':'escuro',
     'claro':'claro', 'light':'claro', 'artico':'claro', 'classico':'claro', 'minimalista':'claro',
     'noturno':'noturno',
-    'dourado':'dourado', 'gold':'dourado', 'butherbox':'dourado'
+    'dourado':'dourado', 'gold':'dourado', 'butcherbox':'dourado'
   };
   return mapa[key] || 'claro';
 }

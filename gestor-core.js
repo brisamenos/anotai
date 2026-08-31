@@ -502,7 +502,7 @@ async function _carregarSegmento() {
 function _adaptarParaSegmento() {
   if (_segmento !== 'acougue') return;
   // Loja açougue que nunca escolheu um tema (ninguém mexeu nas configurações
-  // ainda) já abre direto no Dourado ButherBox, em vez do azul padrão. Se o
+  // ainda) já abre direto no Dourado ButcherBox, em vez do azul padrão. Se o
   // gestor já tinha escolhido algum tema antes (mesmo que fosse o próprio
   // Claro de propósito), essa escolha é respeitada e não é sobrescrita.
   if (window._temaEraPadrao && typeof temaAplicarCompleto === 'function') {
@@ -510,17 +510,17 @@ function _adaptarParaSegmento() {
     try { sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, gestor_tema: 'dourado' }).then(()=>{}).catch(()=>{}); } catch(e) {}
     window._temaEraPadrao = false; // já resolvido, não repete em re-chamadas
   }
-  // Logo e nome do topo do gestor — troca pra ButherBox junto com o tema.
+  // Logo e nome do topo do gestor — troca pra ButcherBox junto com o tema.
   // Isso é sempre aplicado (não só na 1ª vez), diferente do tema — a marca
   // do açougue é fixa, não é uma "preferência" que o gestor escolhe.
   try {
-    document.title = 'ButherBox';
+    document.title = 'ButcherBox';
     const logoImg = document.getElementById('gestor-logo-img');
     const logoTxt = document.getElementById('gestor-logo-txt');
-    if (logoImg) { logoImg.src = 'https://i.ibb.co/Vp20T2dY/1788015296642.png'; logoImg.alt = 'ButherBox'; }
-    if (logoTxt) logoTxt.textContent = 'ButherBox';
+    if (logoImg) { logoImg.src = 'https://i.ibb.co/Vp20T2dY/1788015296642.png'; logoImg.alt = 'ButcherBox'; }
+    if (logoTxt) logoTxt.textContent = 'ButcherBox';
     const waEmptyBrand = document.getElementById('wa-conv-empty-brand');
-    if (waEmptyBrand) waEmptyBrand.textContent = 'ButherBox · WhatsApp';
+    if (waEmptyBrand) waEmptyBrand.textContent = 'ButcherBox · WhatsApp';
   } catch(e) {}
   // Adiciona classe no body — CSS oculta tudo com data-hide-acougue
   document.body.classList.add('modo-acougue');
@@ -856,7 +856,7 @@ async function loadAllData(silent = false) {
       }
       // Guarda se o tema aplicado é só o padrão de fábrica (ninguém escolheu
       // nada ainda) — usado logo abaixo, quando o segmento chegar, pra saber
-      // se pode trocar sozinho pro Dourado ButherBox ou se o gestor já tem
+      // se pode trocar sozinho pro Dourado ButcherBox ou se o gestor já tem
       // uma preferência própria que não deve ser sobrescrita.
       window._temaEraPadrao = !modoSalvo;
       modoSalvo = modoSalvo || 'claro';

@@ -860,6 +860,15 @@ function _planoSaasLabel(plano) {
   return 'Essencial'
 }
 
+// Nome da marca exibido pro tenant conforme o segmento — açougue usa a marca
+// nova (ButcherBox), os demais segmentos continuam com "Estima Food". Só usar
+// isso onde o segmento do tenant já é conhecido (ex: mensagens de cobrança
+// pra tenant já cadastrado) — no primeiro contato de um prospect novo, antes
+// dele escolher o segmento, não dá pra saber ainda, então fica "Estima Food".
+function _brandNome(segmento) {
+  return segmento === 'acougue' ? 'ButcherBox' : 'Estima Food'
+}
+
 const ADMIN_FISCAL_LIMITE_PADRAO = 500
 const ADMIN_FISCAL_VALOR_EXCEDENTE_PADRAO = 0.10
 const ADMIN_FISCAL_PLANO_VALOR_PADRAO = 159.90
@@ -1303,7 +1312,7 @@ function _iniciarAutoCobrancaJob(ctx) {
               const msg = [
                 `🧾 *Lembrete: sua mensalidade vence em breve*`,
                 ``,
-                `Olá, *${t.nome}*! Seu plano *${planoNome}* do Estima Food vence em *2 dias*.`,
+                `Olá, *${t.nome}*! Seu plano *${planoNome}* do ${_brandNome(t.segmento)} vence em *2 dias*.`,
                 ``,
                 `💰 *Valor:* R$ ${valorTxt}`,
                 `⏰ *Pague até:* ${venceEmTxt}`,
@@ -6080,7 +6089,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
                   `💰 *Valor:* R$ ${valorTxt}`,
                   `📅 *Próximo vencimento:* ${venceTxt}`,
                   ``,
-                  `Seu acesso continua ativo. Obrigado por usar o *Estima Food*! 🍽️`
+                  `Seu acesso continua ativo. Obrigado por usar o *${_brandNome(tenant.segmento)}*! 🍽️`
                 ].join('\n')
                 const instCob = _getInstanciaCobranca(db, EVO_INST)
                 await sendWA(telefone, msg, instCob)
@@ -8608,7 +8617,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         ``,
         `Olá ${(gestor?.nome || tenant.nome).split(' ')[0]}! 👋`,
         ``,
-        `Sua mensalidade do *Estima Food* está disponível para pagamento:`,
+        `Sua mensalidade do *${_brandNome(tenant.segmento)}* está disponível para pagamento:`,
         ``,
         `💰 *Valor:* R$ ${valorTxt}`,
         `📅 *Período:* ${fatura.meses} ${fatura.meses === 1 ? 'mês' : 'meses'}`,
