@@ -355,20 +355,54 @@ function financeResumeRealtime() {
   }, 600);
 }
 
+// Detecta um "finance_auth" que o navegador acha válido (expires_at ainda no
+// futuro) mas que o servidor já não reconhece mais — acontece sempre que o
+// processo reinicia (deploy, crash, etc.), porque o token fica só na memória
+// do servidor (financeAuthTokens = new Map()), nunca no banco. Sem isso, o
+// gestor entrava normal na aba Relatórios/Caixa/DRE (o gate do lado do
+// cliente já achava liberado) e os dados que dependem desse token (ex: a
+// seção "Entradas" dos relatórios, que lê "movimentos") voltavam vazios pra
+// sempre, sem nenhum aviso — só resolvia fechando e abrindo o painel de novo.
+let _financeStaleHandling = false;
+function _financeHandleStaleToken() {
+  if (_financeStaleHandling) return;
+  const hadAuth = !!sessionStorage.getItem('finance_auth');
+  if (!hadAuth) return;
+  _financeStaleHandling = true;
+  sessionStorage.removeItem('finance_auth');
+  if (typeof sbToast === 'function') sbToast('err', 'Sessão financeira expirada no servidor — informe a senha novamente.');
+  const curId = document.querySelector('.page.on')?.id?.replace('page-', '') || null;
+  if (curId && typeof financeOpenUnlockModal === 'function' && !document.getElementById('finance-auth-modal')) {
+    financeOpenUnlockModal(() => { if (typeof nav === 'function') nav(curId); });
+  }
+  setTimeout(() => { _financeStaleHandling = false; }, 1000);
+}
+
 (function patchFinanceFetchHeaders(){
   if (window.__financeFetchPatched) return;
   window.__financeFetchPatched = true;
   const nativeFetch = window.fetch.bind(window);
   window.fetch = function(input, init) {
+    let apiUrl = false;
     try {
       const url = typeof input === 'string' ? input : (input?.url || '');
-      const apiUrl = url.startsWith('/api/') || url.startsWith(location.origin + '/api/');
+      apiUrl = url.startsWith('/api/') || url.startsWith(location.origin + '/api/');
       if (apiUrl && !url.includes('/api/finance-auth/verify')) {
         init = init || {};
         init.headers = financeMergeHeaders(init.headers || (typeof input !== 'string' ? input.headers : undefined));
       }
     } catch(e) {}
-    return nativeFetch(input, init);
+    const p = nativeFetch(input, init);
+    if (apiUrl) {
+      p.then(res => {
+        if (res && res.status === 403) {
+          res.clone().json().then(data => {
+            if (data && data.error === 'FINANCE_LOCKED') _financeHandleStaleToken();
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+    return p;
   };
 })();
 
