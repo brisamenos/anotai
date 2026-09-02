@@ -904,14 +904,27 @@ async function init() {
     // Sempre grava cardapio_session (chave dedicada, não conflita com gestor)
     sessionStorage.setItem('cardapio_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
     // Grava sys_session SOMENTE se não houver sessão de gestor/admin válida
-    // (garante compatibilidade com versões antigas do api-client.js)
-    try {
-      const _ex = JSON.parse(sessionStorage.getItem('sys_session') || 'null');
-      if (!_ex || !(_ex.nome || _ex.role)) {
+    // (garante compatibilidade com versões antigas do api-client.js) — e
+    // NUNCA quando este cardápio está rodando dentro do preview ao vivo
+    // embutido no painel do gestor (iframe #cp-iframe em gestor.html).
+    // Nesse iframe, sessionStorage é COMPARTILHADO com a aba do gestor
+    // (mesma origem) — escrever aqui arriscava sobrescrever a sessão de
+    // login do próprio gestor (perdendo token/nome/role) toda vez que o
+    // preview recarregava, por exemplo depois de qualquer edição no
+    // cardápio público. Isso derrubava o gestor silenciosamente (401 nas
+    // chamadas seguintes) até ele sair e entrar de novo.
+    const _dentroDeIframe = (function () {
+      try { return window.self !== window.top; } catch (e) { return true; } // acesso bloqueado = trata como iframe, por segurança
+    })();
+    if (!_dentroDeIframe) {
+      try {
+        const _ex = JSON.parse(sessionStorage.getItem('sys_session') || 'null');
+        if (!_ex || !(_ex.nome || _ex.role)) {
+          sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
+        }
+      } catch(e) {
         sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
       }
-    } catch(e) {
-      sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
     }
     applyBranding(info.branding, info.nome);
 
