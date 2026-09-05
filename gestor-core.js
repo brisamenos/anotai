@@ -242,19 +242,14 @@ function _verificarSessao() {
     if (!raw) { window.location.href = 'login.html'; return false; }
     _sessao = JSON.parse(raw);
     _billingLocked = !!_sessao.billing_locked;
-    // Sessão dura 30 dias (antes eram só 8h) — como agora ela sobrevive a
-    // fechar o navegador, faz sentido durar bem mais, tipo "continuar
-    // logado" de verdade, e não só dentro do mesmo dia.
-    const SESSION_TTL = 30 * 24 * 60 * 60 * 1000;
-    if (Date.now() - _sessao.ts > SESSION_TTL) {
-      sessionStorage.removeItem('sys_session');
-      // No Electron a sessão é renovada automaticamente — não expirar aqui
-      if (!window.ElectronPrint) { window.location.href = 'login.html'; return false; }
-      // Se Electron: renova o ts e continua
-      _sessao.ts = Date.now();
-      sessionStorage.setItem('sys_session', JSON.stringify(_sessao));
-      if (window.ElectronPrint?.saveSession) window.ElectronPrint.saveSession(_sessao).catch(()=>{});
-    }
+    // Sessão não expira mais sozinha no navegador (antes forçava logout
+    // depois de 30 dias contados do login original, mesmo que o gestor
+    // usasse o painel todo dia — isso já é controlado no servidor, que
+    // renova a sessão enquanto ela estiver em uso). Aqui só mantemos o
+    // "ts" sempre fresco.
+    _sessao.ts = Date.now();
+    sessionStorage.setItem('sys_session', JSON.stringify(_sessao));
+    if (window.ElectronPrint?.saveSession) window.ElectronPrint.saveSession(_sessao).catch(()=>{});
     const nome = _sessao.nome || 'Usuário';
     const role = _sessao.role || 'gestor';
     // Salva sessão no Electron para auto-login na próxima abertura
@@ -2225,6 +2220,18 @@ document.addEventListener('visibilitychange', () => {
     if (!_rtConnected) subscribeOrders();
   }
 });
+
+// Rechecagem periódica do status do plano (a cada 5min, só se visível).
+// _carregarPlano() só rodava 1x ao abrir a página — se por qualquer
+// motivo o painel ficasse marcado como "bloqueado" indevidamente
+// (ex: dado desatualizado no momento do carregamento), não existia
+// nenhum outro ponto no código que voltasse a checar isso sozinho:
+// o gestor ficava travado até sair e entrar de novo. Agora se
+// autocorrige sem precisar disso.
+setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  if (typeof billingRefreshLockStatus === 'function') billingRefreshLockStatus({ reload: false });
+}, 5 * 60 * 1000);
 
 // Polling de 12s — só re-renderiza se houver mudança real no banco
 let _lastPollHash = '';

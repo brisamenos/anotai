@@ -1571,11 +1571,12 @@ function validarSessaoGarcom(req, tenantId, table) {
   return s
 }
 const ADMIN_SESSION_TTL  = 8 * 60 * 60 * 1000
-// 30 dias — alinhado com a duração de sessão "continuar logado" que o
-// gestor.html já promete no navegador (ver _verificarSessao em
-// gestor-core.js). Se ficasse menor, o painel pareceria logado mas toda
-// escrita passaria a falhar sem aviso depois de algumas horas.
-const GESTOR_SESSION_TTL = 30 * 24 * 60 * 60 * 1000
+// Sem expiração de fato: sessão do gestor não deve mais forçar logout.
+// Antes eram 30 dias — motivo de pedidos "sumirem" sem aviso quando o
+// token expirava no meio do uso. Valor bem alto (100 anos) mantém a
+// mesma lógica de sliding expiration (ver validarSessaoGestor) sem
+// nunca derrubar a sessão na prática.
+const GESTOR_SESSION_TTL = 100 * 365 * 24 * 60 * 60 * 1000
 function criarSessaoAdmin(user) {
   const token = crypto.randomBytes(32).toString('hex')
   const ts = Date.now()
