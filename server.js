@@ -5013,7 +5013,13 @@ function _resolverOpenAIKey(tenantId) {
   try {
     const cfg = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tenantId)
     const ia  = jsonParse(cfg?.ia_config) || {}
-    return ia.openai_key || process.env.OPENAI_API_KEY || null
+    if (ia.openai_key) return ia.openai_key
+    // Chave própria do tenant não existe — cai pra chave global da plataforma,
+    // a mesma salva na tela "Agente IA" do admin (tenant_id='_global'). É o
+    // mesmo lugar que o resto do sistema já usa como fallback de IA.
+    const cfgG = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const iaG  = jsonParse(cfgG?.ia_config) || {}
+    return iaG.openai_key || process.env.OPENAI_API_KEY || null
   } catch (e) { return process.env.OPENAI_API_KEY || null }
 }
 
