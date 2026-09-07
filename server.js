@@ -5670,6 +5670,29 @@ async function handleIAWebhook(req, res) {
       // responde manualmente. Isso reduz drasticamente a interação
       // automatizada e evita banimento.
       // ════════════════════════════════════════════════════════════════
+      // ════════════════════════════════════════════════════════════════
+      // ── PEDIDO POR TEXTO (add-on de voz) — checado ANTES dos 4 intents
+      // abaixo. Motivo: o intent [4] (saudação/cardápio) dispara pra
+      // QUALQUER primeira mensagem do dia, não importa o conteúdo — sem
+      // checar pedido antes, "quero um x-tudo" como primeira mensagem do
+      // dia nunca vira pedido, sempre cai só no link do cardápio.
+      // Reaproveita o MESMO pipeline do áudio (extração + confirmação); só
+      // segue se a IA achar pelo menos 1 item de verdade, senão passa a
+      // vez pro roteador normal (saudação/status/cupom/horário/silêncio).
+      const _tRowTxt = db.prepare('SELECT voz_ativo FROM tenants WHERE id=?').get(tenantId)
+      if (_tRowTxt?.voz_ativo && _vozDentroDoLimite(tenantId, phone)) {
+        const _abertaChkTxt = isLojaAbertaServer(tenantId)
+        if (_abertaChkTxt.aberto) {
+          const extraidoTxt = await extrairPedidoDeTexto(tenantId, msgFull)
+          if (extraidoTxt && extraidoTxt.itens.length > 0) {
+            _vozRegistrarUso(tenantId, phone)
+            log('🎙️', `[VOZ-TXT] Pedido por texto detectado [${tenantId}] ${phone}: "${msgFull.slice(0, 80)}"`)
+            await _vozIniciarConfirmacao(tenantId, phone, inst, extraidoTxt)
+            return
+          }
+        }
+      }
+      // ════════════════════════════════════════════════════════════════
       const tenantRow=db.prepare("SELECT slug FROM tenants WHERE id=?").get(tenantId)
       const proto=req.headers['x-forwarded-proto']||'https', host=req.headers['host']||''
       const linkCardapio=`${proto}://${host}/index.html?slug=${tenantRow?.slug||tenantId}`
@@ -5950,26 +5973,11 @@ async function handleIAWebhook(req, res) {
           ])
         }
       }
-      // [5] FORA DO ESCOPO — tenta como pedido por texto (se o add-on de voz
-      // estiver ativo) antes de desistir. Reaproveita o MESMO pipeline do
-      // áudio (extração + confirmação), só pulando a etapa de transcrição.
-      // Só segue adiante se a IA achar pelo menos 1 item de verdade — senão
-      // mantém o silêncio de sempre (não quero o bot respondendo "não
-      // entendi seu pedido" pra qualquer mensagem solta que caiu aqui).
+      // [5] OUTRAS MENSAGENS — SILÊNCIO ────────────────────────
+      // Não responde. Deixa o atendente humano cuidar. Isso reduz
+      // drasticamente o volume de mensagens automáticas e protege
+      // contra banimento do número no WhatsApp.
       else {
-        const _tRowTxt = db.prepare('SELECT voz_ativo FROM tenants WHERE id=?').get(tenantId)
-        if (_tRowTxt?.voz_ativo && _vozDentroDoLimite(tenantId, phone)) {
-          const _abertaChkTxt = isLojaAbertaServer(tenantId)
-          if (_abertaChkTxt.aberto) {
-            _vozRegistrarUso(tenantId, phone)
-            const extraidoTxt = await extrairPedidoDeTexto(tenantId, msgFull)
-            if (extraidoTxt && extraidoTxt.itens.length > 0) {
-              log('🎙️', `[VOZ-TXT] Pedido por texto detectado [${tenantId}] ${phone}: "${msgFull.slice(0, 80)}"`)
-              await _vozIniciarConfirmacao(tenantId, phone, inst, extraidoTxt)
-              return
-            }
-          }
-        }
         log('🔇', `[IA] Fora do escopo — silêncio | ${phone} [${tenantId}] | "${msgFull.slice(0, 80)}"`)
         return
       }
