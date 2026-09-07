@@ -4756,8 +4756,12 @@ function _vozLerDraft(tenantId, phone) {
     return JSON.parse(row.dados)
   } catch (e) { return null }
 }
+// Retorna true só se REALMENTE apagou uma linha — usado como trava contra
+// duas mensagens "sim" duplicadas (reenvio de rede do WhatsApp) chegarem
+// quase juntas e criarem o pedido duas vezes. Só quem apaga de verdade
+// segue em frente; o outro encontra o rascunho já removido e para ali.
 function _vozApagarDraft(tenantId, phone) {
-  try { db.prepare('DELETE FROM voz_pedidos_pendentes WHERE tenant_id=? AND phone=?').run(tenantId, phone) } catch (e) {}
+  try { return db.prepare('DELETE FROM voz_pedidos_pendentes WHERE tenant_id=? AND phone=?').run(tenantId, phone).changes > 0 } catch (e) { return false }
 }
 setInterval(() => {
   try {
@@ -4811,28 +4815,147 @@ async function _vozResolverModoPix(tenantId) {
   } catch (e) { return { online: false, manualDisponivel: false } }
 }
 
+// Fila de pendências de grupo obrigatório (ex: Borda) ainda sem escolha —
+// pega o primeiro item da lista que ainda tem grupo faltando.
+function _vozProximaPendenciaGrupo(itens) {
+  for (let idx = 0; idx < itens.length; idx++) {
+    const it = itens[idx]
+    if (it.gruposFaltando && it.gruposFaltando.length) return { itemIndex: idx, item: it, grupo: it.gruposFaltando[0] }
+  }
+  return null
+}
+
+function _vozTiposEntregaDisponiveis(tenantId) {
+  const sc = db.prepare('SELECT tipos_entrega, delivery_fee_config FROM store_config WHERE tenant_id=?').get(tenantId)
+  let tipos = ['delivery', 'retirada', 'mesa']
+  try { const p = sc?.tipos_entrega ? JSON.parse(sc.tipos_entrega) : null; if (Array.isArray(p) && p.length) tipos = p } catch {}
+  // "mesa" não é suportado por voz — não dá pra saber em qual mesa física
+  // o cliente está sem ele digitar/mostrar isso de outra forma.
+  tipos = tipos.filter(t => t === 'delivery' || t === 'retirada')
+  // Pausa rápida de delivery (o gestor liga/desliga isso na hora, ex: "muito
+  // cheio agora") — o cardápio já remove "delivery" das opções nesse caso,
+  // então o voz precisa respeitar a mesma pausa, senão aceita pedido que a
+  // loja não quer aceitar naquele momento.
+  try {
+    const feeConfig = sc?.delivery_fee_config ? JSON.parse(sc.delivery_fee_config) : {}
+    if (feeConfig?.delivery_pausado) tipos = tipos.filter(t => t !== 'delivery')
+  } catch {}
+  return tipos
+}
+
+function _vozPontosRetirada(tenantId) {
+  const sc = db.prepare('SELECT store_address, pickup_addresses FROM store_config WHERE tenant_id=?').get(tenantId)
+  let pontos = []
+  try { pontos = sc?.pickup_addresses ? JSON.parse(sc.pickup_addresses) : [] } catch {}
+  const todos = []
+  if (sc?.store_address) todos.push({ nome: 'Principal', endereco: sc.store_address })
+  if (Array.isArray(pontos)) pontos.forEach(p => todos.push({ nome: p.nome || 'Filial', endereco: p.endereco || '' }))
+  return todos
+}
+
 async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido) {
   if (!extraido.itens.length) {
     const motivo = extraido.nao_entendido ? ` (${extraido.nao_entendido})` : ''
     await sendWA(phone, `Não consegui identificar nenhum item do cardápio no seu áudio${motivo}. Pode tentar de novo ou escrever o pedido?`, inst)
     return
   }
-  const sc = db.prepare('SELECT delivery_fee_config FROM store_config WHERE tenant_id=?').get(tenantId)
+  await _vozProcessarGruposPendentes(tenantId, phone, inst, {
+    itens: extraido.itens,
+    bairro: extraido.bairro,
+    tipo_pedido: extraido.tipo_pedido,
+    forma_pagamento: extraido.forma_pagamento,
+    observacao_geral: extraido.observacao_geral
+  })
+}
+
+// Pergunta, um de cada vez, qualquer grupo obrigatório (ex: Borda) que o
+// áudio não tenha esclarecido — só segue pro tipo de pedido/endereço quando
+// TODOS os itens já tiverem grupo resolvido (preço final fechado).
+async function _vozProcessarGruposPendentes(tenantId, phone, inst, draft) {
+  const pend = _vozProximaPendenciaGrupo(draft.itens)
+  if (pend) {
+    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_grupo', ...draft })
+    const fmt = v => v.toFixed(2).replace('.', ',')
+    const opcoesTxt = pend.grupo.opcoes.map(o => o.preco > 0 ? `${o.nome} (+R$${fmt(o.preco)})` : o.nome).join(', ')
+    await sendWA(phone, `Pro seu *${pend.item.name}*, qual ${pend.grupo.nome.toLowerCase()}? Opções: ${opcoesTxt}`, inst)
+    return
+  }
+  // Todos os grupos resolvidos — fecha o preço final de cada item (base +
+  // extras escolhidos) e monta a descrição pro resumo/comanda.
+  const itensFinal = draft.itens.map(it => {
+    const extras = (it.gruposResolvidos || []).reduce((s, g) => s + g.precoExtra, 0)
+    const fmt = v => v.toFixed(2).replace('.', ',')
+    const obsGrupos = (it.gruposResolvidos || []).map(g => `${g.nome}: ${g.opcaoNome}${g.precoExtra > 0 ? ` (+R$${fmt(g.precoExtra)})` : ''}`).join(' · ')
+    return { id: it.id, name: it.name, qty: it.qty, price: it.price + extras, obs: [obsGrupos, it.obs].filter(Boolean).join(' | ') }
+  })
+  await _vozResolverTipoEEndereco(tenantId, phone, inst, { itens: itensFinal, bairro: draft.bairro, tipo_pedido: draft.tipo_pedido, forma_pagamento: draft.forma_pagamento, observacao_geral: draft.observacao_geral })
+}
+
+// Resolve tipo de pedido (entrega/retirada) e, a partir dele, o
+// endereço/taxa — depois segue pra forma de pagamento.
+async function _vozResolverTipoEEndereco(tenantId, phone, inst, draft) {
+  const tiposDisp = _vozTiposEntregaDisponiveis(tenantId)
+  if (!tiposDisp.length) {
+    await sendWA(phone, 'No momento o pedido por voz não está disponível pra essa loja. Fale com o atendente ou use o cardápio.', inst)
+    return
+  }
+  if (draft.tipo_pedido === 'mesa') {
+    await sendWA(phone, 'Pedido por voz ainda não funciona pra quem já está numa mesa do restaurante — chame o garçom ou use o cardápio/totem da mesa.', inst)
+    return
+  }
+  let tipo = draft.tipo_pedido
+  if (!tipo) {
+    if (tiposDisp.length === 1) {
+      tipo = tiposDisp[0]
+    } else {
+      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_tipo_entrega', ...draft })
+      await sendWA(phone, 'Vai ser *entrega* ou *retirada*?', inst)
+      return
+    }
+  }
+  if (!tiposDisp.includes(tipo)) {
+    await sendWA(phone, `Essa loja não trabalha com ${tipo === 'delivery' ? 'entrega' : 'retirada'} no momento. Pode ser ${tiposDisp.includes('delivery') ? 'entrega' : 'retirada'}?`, inst)
+    return
+  }
+  if (tipo === 'retirada') {
+    const pontos = _vozPontosRetirada(tenantId)
+    if (pontos.length > 1) {
+      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_ponto_retirada', ...draft, tipo_pedido: tipo })
+      const opcoesTxt = pontos.map((p, i) => `${i + 1}. ${p.nome}${p.endereco ? ' — ' + p.endereco : ''}`).join('\n')
+      await sendWA(phone, `De qual unidade vai ser a retirada?\n${opcoesTxt}`, inst)
+      return
+    }
+    const addr = pontos.length === 1 ? ['Retirada', pontos[0].endereco].filter(Boolean).join(' — ') : 'Retirada no balcão'
+    await _vozContinuarPagamento(tenantId, phone, inst, { ...draft, tipo_pedido: 'retirada', addr, taxa: 0 })
+    return
+  }
+  // delivery — pedido mínimo só vale pra entrega (mesma regra do cardápio)
+  const sc = db.prepare('SELECT delivery_fee_config, pedido_minimo FROM store_config WHERE tenant_id=?').get(tenantId)
+  const pedidoMinimo = parseFloat(sc?.pedido_minimo) || 0
+  const subtotalCheck = draft.itens.reduce((s, i) => s + i.price * i.qty, 0)
+  if (pedidoMinimo > 0 && subtotalCheck < pedidoMinimo) {
+    const fmt = v => v.toFixed(2).replace('.', ',')
+    await sendWA(phone, `O pedido mínimo pra entrega é R$${fmt(pedidoMinimo)} — faltam R$${fmt(pedidoMinimo - subtotalCheck)}. Quer adicionar mais alguma coisa?`, inst)
+    return
+  }
   const feeConfig = sc?.delivery_fee_config ? jsonParse(sc.delivery_fee_config) : {}
-  const resTaxa = _vozResolverTaxa(feeConfig, extraido.bairro)
+  const resTaxa = _vozResolverTaxa(feeConfig, draft.bairro)
   if (!resTaxa.suportado) {
-    await sendWA(phone, 'No momento o pedido por voz só funciona pra entrega por bairro ou taxa fixa. Pode finalizar pelo cardápio da loja ou me falar se prefere retirar no balcão?', inst)
+    await sendWA(phone, 'No momento o pedido por voz só calcula entrega por bairro ou taxa fixa. Pode finalizar pelo cardápio da loja ou prefere retirada?', inst)
     return
   }
   if (!resTaxa.resolvido) {
-    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_bairro', itens: extraido.itens, forma_pagamento: extraido.forma_pagamento, observacao_geral: extraido.observacao_geral })
+    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_bairro', ...draft, tipo_pedido: 'delivery' })
     const sugestoesTxt = resTaxa.sugestoes?.length ? ` Você quis dizer: ${resTaxa.sugestoes.join(', ')}?` : ''
     await sendWA(phone, `Pra qual bairro é a entrega?${sugestoesTxt}`, inst)
     return
   }
-  const addrFinal = resTaxa.addrLabel || extraido.bairro
-  if (!extraido.forma_pagamento) {
-    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pagamento', itens: extraido.itens, addr: addrFinal, taxa: resTaxa.taxa, observacao_geral: extraido.observacao_geral })
+  await _vozContinuarPagamento(tenantId, phone, inst, { ...draft, tipo_pedido: 'delivery', addr: resTaxa.addrLabel || draft.bairro, taxa: resTaxa.taxa })
+}
+
+async function _vozContinuarPagamento(tenantId, phone, inst, draft) {
+  if (!draft.forma_pagamento) {
+    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pagamento', ...draft })
     const pixInfo = await _vozResolverModoPix(tenantId)
     const opcoes = ['*dinheiro*']
     if (pixInfo.online || pixInfo.manualDisponivel) opcoes.push('*pix*')
@@ -4840,29 +4963,47 @@ async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido) {
     await sendWA(phone, `Como prefere pagar? Responda ${opcoesTxt}.`, inst)
     return
   }
-  await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { itens: extraido.itens, addr: addrFinal, taxa: resTaxa.taxa, forma_pagamento: extraido.forma_pagamento, observacao_geral: extraido.observacao_geral })
+  // Cartão ainda não é aceito por voz — normaliza pra dinheiro aqui (antes da
+  // pergunta de troco), guardando o aviso pra mostrar no resumo final.
+  if (draft.forma_pagamento === 'cartao') draft = { ...draft, forma_pagamento: 'dinheiro', _eraCartao: true }
+  // Pagamento em dinheiro: o cardápio sempre pergunta troco no checkout —
+  // replica aqui antes de fechar o resumo, pra não deixar o entregador sem
+  // saber se precisa levar troco.
+  if (draft.forma_pagamento === 'dinheiro' && draft.troco === undefined) {
+    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_troco', ...draft })
+    await sendWA(phone, 'Precisa de troco? Se sim, me diga pra quanto (ex: "pra 50 reais"). Se não precisar, responda *não*.', inst)
+    return
+  }
+  await _vozMontarConfirmacaoFinal(tenantId, phone, inst, draft)
 }
 
-// Monta e envia o resumo final (itens + entrega + pagamento) e salva o
-// rascunho no estado "aguardando_confirmacao" — separado de
-// _vozIniciarConfirmacao pra poder ser chamado tanto direto (quando o áudio
-// já trouxe tudo) quanto depois de perguntar bairro/pagamento separadamente.
+// Monta e envia o resumo final (itens + entrega/retirada + pagamento) e
+// salva o rascunho no estado "aguardando_confirmacao".
 async function _vozMontarConfirmacaoFinal(tenantId, phone, inst, draft) {
   const subtotal = draft.itens.reduce((s, i) => s + i.price * i.qty, 0)
-  const total = subtotal + draft.taxa
+  const taxa = parseFloat(draft.taxa) || 0
+  const total = subtotal + taxa
   const fmt = v => v.toFixed(2).replace('.', ',')
   const listaItens = draft.itens.map(i => `${i.qty}x ${i.name}${i.obs ? ` (${i.obs})` : ''}`).join('\n')
-  const pagLabel = draft.forma_pagamento === 'pix' ? 'PIX' : draft.forma_pagamento === 'cartao' ? 'Cartão (ainda não aceito por voz — será dinheiro na entrega)' : 'Dinheiro na entrega'
+  let pagLabel = draft.forma_pagamento === 'pix' ? 'PIX' : draft._eraCartao ? 'Cartão (ainda não aceito por voz — será dinheiro na entrega)' : 'Dinheiro na entrega'
+  if (draft.forma_pagamento === 'dinheiro' && draft.troco) {
+    pagLabel += draft.troco === -1 ? ' (precisa de troco, valor a combinar)' : ` (troco para R$${fmt(draft.troco)})`
+  }
+  const linhaEntrega = draft.tipo_pedido === 'retirada'
+    ? `Retirada: ${draft.addr}`
+    : `Entrega: ${draft.addr}${taxa > 0 ? `\nTaxa de entrega: R$${fmt(taxa)}` : ''}`
   _vozSalvarDraft(tenantId, phone, {
     estado: 'aguardando_confirmacao',
     itens: draft.itens,
+    tipo_pedido: draft.tipo_pedido,
     addr: draft.addr,
-    taxa: draft.taxa,
-    forma_pagamento: draft.forma_pagamento === 'cartao' ? 'dinheiro' : draft.forma_pagamento,
+    taxa,
+    forma_pagamento: draft.forma_pagamento,
+    troco: draft.troco ?? null,
     observacao_geral: draft.observacao_geral
   })
   await sendWA(phone,
-    `🎙️ Confirma seu pedido?\n\n${listaItens}\n\nEntrega: ${draft.addr}\nSubtotal: R$${fmt(subtotal)}\nTaxa de entrega: R$${fmt(draft.taxa)}\n*Total: R$${fmt(total)}*\nPagamento: ${pagLabel}\n\nResponda *sim* pra confirmar ou *não* pra cancelar.`,
+    `🎙️ Confirma seu pedido?\n\n${listaItens}\n\n${linhaEntrega}\nSubtotal: R$${fmt(subtotal)}\n*Total: R$${fmt(total)}*\nPagamento: ${pagLabel}\n\nResponda *sim* pra confirmar ou *não* pra cancelar.`,
     inst)
 }
 
@@ -4902,6 +5043,7 @@ async function _vozCriarPedido(tenantId, phone, inst, draft, nomeCliente) {
     taxa: draft.taxa,
     status,
     pag,
+    ...(pag === 'dinheiro' && draft.troco ? { troco: draft.troco } : {}),
     // Ativa o acompanhamento automático via WhatsApp — é o que já faz o
     // sistema mandar sozinho a mensagem de "pagamento confirmado" pro
     // cliente quando o gestor aprovar o PIX manual (ver /api/order-status).
@@ -5056,20 +5198,62 @@ async function transcreverAudioWhatsapp(base64, mimetype, tenantId) {
 // do tenant como contexto — a IA só pode escolher item_id que exista na lista
 // enviada (nunca inventa item nem preço; o preço final sempre vem do catálogo,
 // nunca do que a IA disser). Retorna null se a chamada falhar por completo.
+// Detecta itens complexos demais pra montar preço com segurança por voz:
+// pizza com tamanho/meio-a-meio variável e açougue por peso/corte. Esses
+// continuam de fora — cliente pede pelo cardápio normal. Grupo genérico
+// obrigatório (ex: "Borda", "Molho") NÃO entra aqui — esses agora são
+// perguntados por voz em vez de excluídos.
+function _vozItemEhComplexo(item) {
+  if (item.item_type === 'kg' || item.item_type === 'pizza') return true
+  let grupos = []
+  try { grupos = item.custom_groups ? JSON.parse(item.custom_groups) : [] } catch {}
+  if (Array.isArray(grupos) && grupos.some(g => ['pizza_sizes', 'tamanhos_pizza', 'cortes', 'pesos'].includes(g?.tipo))) return true
+  const catTxt = `${item.cat || ''} ${item.cat_key || ''}`.toLowerCase()
+  if (catTxt.includes('pizza')) return true
+  return false
+}
+
+// Grupos genéricos obrigatórios de um item (ex: Borda) — exclui os tipos
+// especiais já tratados por _vozItemEhComplexo (não deveriam sobrar aqui,
+// mas filtra de novo por segurança).
+function _vozGruposObrigatorios(item) {
+  let grupos = []
+  try { grupos = item.custom_groups ? JSON.parse(item.custom_groups) : [] } catch {}
+  if (!Array.isArray(grupos)) return []
+  return grupos.filter(g => g?.required === true && !['pizza_sizes', 'tamanhos_pizza', 'cortes', 'pesos'].includes(g?.tipo) && Array.isArray(g.opcoes) && g.opcoes.length)
+}
+
 async function extrairPedidoDeTexto(tenantId, texto) {
   try {
     const apiKey = _resolverOpenAIKey(tenantId)
     if (!apiKey) { log('⚠️', `[VOZ] Sem chave OpenAI pra extração — tenant=${tenantId}`); return null }
-    const itensAtivos = db.prepare("SELECT id,name,price FROM menu_items WHERE tenant_id=? AND COALESCE(status,'ativo')!='pausado'").all(tenantId)
-    if (!itensAtivos.length) return { itens: [], bairro: null, observacao_geral: null, nao_entendido: 'Cardápio vazio ou não configurado.' }
-    const cardapioCtx = itensAtivos.map(i => ({ id: i.id, nome: i.name, preco: parseFloat(i.price) || 0 }))
+    // Exclui itens vendidos por peso (açougue) ou de preço escondido (o real
+    // está nos adicionais) — não dá pra cobrar certo só com o preço base.
+    // Grupos obrigatórios genéricos (ex: Borda) NÃO excluem mais o item —
+    // eles entram no contexto da IA pra ela tentar capturar a escolha, ou o
+    // sistema pergunta depois se não veio no áudio.
+    const itensRaw = db.prepare("SELECT id,name,price,item_type,custom_groups,hide_price,cat,cat_key FROM menu_items WHERE tenant_id=? AND COALESCE(status,'ativo')!='pausado'").all(tenantId)
+    const itensAtivos = itensRaw.filter(i => {
+      if (i.hide_price) return false
+      if (_vozItemEhComplexo(i)) return false
+      return true
+    })
+    if (!itensAtivos.length) return { itens: [], bairro: null, tipo_pedido: null, forma_pagamento: null, observacao_geral: null, nao_entendido: itensRaw.length ? 'Todos os itens do cardápio precisam de alguma escolha (sabor, tamanho, peso) que ainda não dá pra fazer por áudio.' : 'Cardápio vazio ou não configurado.' }
+    const cardapioCtx = itensAtivos.map(i => {
+      const grupos = _vozGruposObrigatorios(i)
+      const base = { id: i.id, nome: i.name, preco: parseFloat(i.price) || 0 }
+      if (grupos.length) base.grupos_obrigatorios = grupos.map(g => ({ nome: g.nome, opcoes: g.opcoes.map(o => ({ nome: o.nome, preco_extra: parseFloat(o.preco) || 0 })) }))
+      return base
+    })
     const sysPrompt = [
       'Você extrai pedidos de restaurante a partir de um texto transcrito de áudio de WhatsApp.',
       'Responda APENAS com um JSON válido, sem nenhum texto fora do JSON, no formato:',
-      '{"itens":[{"item_id":123,"qty":1,"obs":""}],"bairro":"nome do bairro ou null","forma_pagamento":"dinheiro|pix|cartao|null","observacao_geral":"texto ou null","nao_entendido":"texto ou null"}',
+      '{"itens":[{"item_id":123,"qty":1,"obs":"","escolhas":[{"grupo":"Borda","opcao":"Catupiry"}]}],"bairro":"nome do bairro ou null","tipo_pedido":"delivery|retirada|mesa|null","forma_pagamento":"dinheiro|pix|cartao|null","observacao_geral":"texto ou null","nao_entendido":"texto ou null"}',
       'Regras: use SOMENTE item_id que existam na lista de cardápio fornecida — nunca invente um id.',
+      'Se o item tiver "grupos_obrigatorios" no cardápio, é PRECISO escolher uma opção de cada grupo — se o cliente já disse no áudio (ex: "borda catupiry"), preencha em "escolhas" usando o nome EXATO da opção fornecida; se não disse, deixe "escolhas" vazio pra esse item (o sistema pergunta depois).',
       'Se o cliente mencionar algo que não existe no cardápio, não invente um item parecido: descreva em "nao_entendido".',
       'Se o cliente não falar bairro/endereço, deixe "bairro" como null.',
+      'Se o cliente disser que vai buscar/retirar, "tipo_pedido"="retirada". Se disser que é pra entregar/mandar em casa, "tipo_pedido"="delivery". Se disser que está numa mesa do restaurante, "tipo_pedido"="mesa". Se não falar nada sobre isso, deixe null.',
       'Se o cliente não falar forma de pagamento, deixe "forma_pagamento" como null — não assuma dinheiro por padrão.',
       '"obs" é só pra observação daquele item específico (ex: "sem cebola"), não pro pedido inteiro.'
     ].join(' ')
@@ -5095,13 +5279,31 @@ async function extrairPedidoDeTexto(tenantId, texto) {
         const item = mapaCardapio.get(parseInt(it.item_id))
         if (!item) return null // ignora qualquer id que a IA tenha inventado
         const qty = Math.max(1, parseInt(it.qty) || 1)
-        return { id: item.id, name: item.name, price: parseFloat(item.price) || 0, qty, obs: String(it.obs || '').slice(0, 200) }
+        const gruposObrig = _vozGruposObrigatorios(item)
+        // Resolve as escolhas que a IA já capturou do áudio, batendo o nome
+        // da opção contra a lista real do grupo (evita aceitar algo inventado).
+        const escolhasIA = Array.isArray(it.escolhas) ? it.escolhas : []
+        const gruposResolvidos = [] // [{nome, opcaoNome, precoExtra}]
+        const gruposFaltando = []   // [{nome, opcoes:[{nome,preco}]}]
+        for (const g of gruposObrig) {
+          const escolha = escolhasIA.find(e => _normBairro(e?.grupo || '') === _normBairro(g.nome))
+          const opcaoMatch = escolha ? g.opcoes.find(o => _normBairro(o.nome) === _normBairro(escolha.opcao || '')) : null
+          if (opcaoMatch) gruposResolvidos.push({ nome: g.nome, opcaoNome: opcaoMatch.nome, precoExtra: parseFloat(opcaoMatch.preco) || 0 })
+          else gruposFaltando.push({ nome: g.nome, opcoes: g.opcoes.map(o => ({ nome: o.nome, preco: parseFloat(o.preco) || 0 })) })
+        }
+        return {
+          id: item.id, name: item.name, price: parseFloat(item.price) || 0, qty,
+          obs: String(it.obs || '').slice(0, 200),
+          gruposResolvidos, gruposFaltando
+        }
       })
       .filter(Boolean)
     const formaPagValida = ['dinheiro', 'pix', 'cartao'].includes(parsed.forma_pagamento) ? parsed.forma_pagamento : null
+    const tipoPedidoValido = ['delivery', 'retirada', 'mesa'].includes(parsed.tipo_pedido) ? parsed.tipo_pedido : null
     return {
       itens,
       bairro: parsed.bairro ? String(parsed.bairro).slice(0, 80) : null,
+      tipo_pedido: tipoPedidoValido,
       forma_pagamento: formaPagValida,
       observacao_geral: parsed.observacao_geral ? String(parsed.observacao_geral).slice(0, 300) : null,
       nao_entendido: parsed.nao_entendido ? String(parsed.nao_entendido).slice(0, 300) : null
@@ -5171,6 +5373,15 @@ async function handleIAWebhook(req, res) {
               return
             }
             log('🎙️', `[VOZ] Transcrito [${tenantId}] ${phoneVoz}: "${texto}"`)
+            // Checa loja aberta ANTES de gastar a chamada de extração — evita o
+            // cliente passar por todo o fluxo (itens, bairro, pagamento) só pra
+            // descobrir no final que a loja está fechada. Agendamento não é
+            // suportado por voz ainda; nesse caso, direciona pro cardápio.
+            const _abertaChk = isLojaAbertaServer(tenantId)
+            if (!_abertaChk.aberto) {
+              await sendWA(phoneVoz, `${_abertaChk.motivo || 'Loja fechada no momento.'} Se quiser agendar o pedido, finalize pelo cardápio da loja.`, inst)
+              return
+            }
             const extraido = await extrairPedidoDeTexto(tenantId, texto)
             if (!extraido) {
               await sendWA(phoneVoz, 'Entendi o áudio, mas tive um problema pra montar o pedido. Pode tentar de novo ou escrever?', inst)
@@ -5219,11 +5430,57 @@ async function handleIAWebhook(req, res) {
     if (vozDraft) {
       const inst = cfg.evo_instance || EVO_INST
       const msgNorm = msg.trim().toLowerCase()
+      if (vozDraft.estado === 'aguardando_grupo') {
+        const pend = _vozProximaPendenciaGrupo(vozDraft.itens)
+        if (!pend) { _vozApagarDraft(tenantId, phone); send(res,200,{ok:true, voz:true}); return }
+        const digitado = msg.trim()
+        const opcaoMatch = pend.grupo.opcoes.find(o => _normBairro(o.nome) === _normBairro(digitado))
+          || pend.grupo.opcoes.find(o => _normBairro(o.nome).includes(_normBairro(digitado)) || _normBairro(digitado).includes(_normBairro(o.nome)))
+        if (!opcaoMatch) {
+          const opcoesTxt = pend.grupo.opcoes.map(o => o.nome).join(', ')
+          await sendWA(phone, `Não entendi. Opções pra *${pend.grupo.nome}*: ${opcoesTxt}`, inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        const itensAtualizados = vozDraft.itens.map((it, idx) => {
+          if (idx !== pend.itemIndex) return it
+          return {
+            ...it,
+            gruposFaltando: it.gruposFaltando.slice(1),
+            gruposResolvidos: [...(it.gruposResolvidos || []), { nome: pend.grupo.nome, opcaoNome: opcaoMatch.nome, precoExtra: parseFloat(opcaoMatch.preco) || 0 }]
+          }
+        })
+        await _vozProcessarGruposPendentes(tenantId, phone, inst, { ...vozDraft, itens: itensAtualizados })
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_tipo_entrega') {
+        let tipo = null
+        if (/\bentrega\b|\bdelivery\b/i.test(msgNorm)) tipo = 'delivery'
+        else if (/\bretirad|\bretirar\b|\bbuscar\b/i.test(msgNorm)) tipo = 'retirada'
+        if (!tipo) {
+          await sendWA(phone, 'Não entendi — responda *entrega* ou *retirada*.', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        await _vozResolverTipoEEndereco(tenantId, phone, inst, { ...vozDraft, tipo_pedido: tipo })
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_ponto_retirada') {
+        const pontos = _vozPontosRetirada(tenantId)
+        const idxDigitado = parseInt(msg.trim())
+        let ponto = (idxDigitado >= 1 && idxDigitado <= pontos.length) ? pontos[idxDigitado - 1] : null
+        if (!ponto) ponto = pontos.find(p => _normBairro(p.nome).includes(_normBairro(msg.trim())))
+        if (!ponto) {
+          await sendWA(phone, 'Não entendi — responda com o número da unidade.', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        const addr = ['Retirada', ponto.endereco || ponto.nome].filter(Boolean).join(' — ')
+        await _vozContinuarPagamento(tenantId, phone, inst, { ...vozDraft, addr, taxa: 0 })
+        send(res,200,{ok:true, voz:true}); return
+      }
       if (vozDraft.estado === 'aguardando_bairro') {
         const feeConfig = cfg.delivery_fee_config ? jsonParse(cfg.delivery_fee_config) : {}
         const resTaxa = _vozResolverTaxa(feeConfig, msg.trim())
         if (resTaxa.suportado && resTaxa.resolvido) {
-          await _vozIniciarConfirmacao(tenantId, phone, inst, { itens: vozDraft.itens, bairro: resTaxa.addrLabel, forma_pagamento: vozDraft.forma_pagamento, observacao_geral: vozDraft.observacao_geral })
+          await _vozContinuarPagamento(tenantId, phone, inst, { ...vozDraft, addr: resTaxa.addrLabel, taxa: resTaxa.taxa })
         } else {
           const sugestoesTxt = resTaxa.sugestoes?.length ? ` Você quis dizer: ${resTaxa.sugestoes.join(', ')}?` : ''
           await sendWA(phone, `Não encontrei esse bairro na nossa área de entrega.${sugestoesTxt} Pode confirmar o nome do bairro?`, inst)
@@ -5242,19 +5499,49 @@ async function handleIAWebhook(req, res) {
           await sendWA(phone, 'Não entendi — responda *dinheiro* ou *pix*.', inst)
           send(res,200,{ok:true, voz:true}); return
         }
-        await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { itens: vozDraft.itens, addr: vozDraft.addr, taxa: vozDraft.taxa, forma_pagamento: forma, observacao_geral: vozDraft.observacao_geral })
+        await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...vozDraft, forma_pagamento: forma })
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_troco') {
+        let troco = null
+        if (!/^n[aã]o\b|^nao\b|sem troco/i.test(msgNorm)) {
+          const valorMatch = msg.match(/(\d+[.,]?\d*)/)
+          troco = valorMatch ? parseFloat(valorMatch[1].replace(',', '.')) : -1
+        }
+        await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...vozDraft, troco })
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_nome') {
+        const nomeDigitado = msg.trim().slice(0, 60)
+        if (!nomeDigitado || nomeDigitado.length < 2) {
+          await sendWA(phone, 'Não peguei seu nome — pode escrever de novo?', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        if (_vozApagarDraft(tenantId, phone)) {
+          await _vozCriarPedido(tenantId, phone, inst, vozDraft, nomeDigitado)
+        }
         send(res,200,{ok:true, voz:true}); return
       }
       if (vozDraft.estado === 'aguardando_confirmacao') {
         const _simRegex = /^(sim|s|confirmo|confirma|isso|ok|pode|correto|certo)\b/i
         const _naoRegex = /^(n[aã]o|nao|n|cancela|cancelar|errado)\b/i
         if (_simRegex.test(msgNorm)) {
-          _vozApagarDraft(tenantId, phone)
-          const nomeCli = data?.pushName || (db.prepare('SELECT name FROM customers WHERE tenant_id=? AND phone=?').get(tenantId, phone)?.name) || null
-          await _vozCriarPedido(tenantId, phone, inst, vozDraft, nomeCli)
+          const nomeCli = data?.pushName || (db.prepare(`SELECT name FROM customers WHERE tenant_id=? AND ${phoneLookupSql('phone')} ORDER BY id DESC LIMIT 1`).get(tenantId, ...phoneLookupArgs(phone))?.name) || null
+          if (!nomeCli) {
+            // O cardápio sempre pede o nome no checkout — sem pushName do
+            // WhatsApp nem cadastro anterior, pergunta em vez de criar o
+            // pedido com "Cliente WhatsApp" genérico no kanban do gestor.
+            _vozSalvarDraft(tenantId, phone, { ...vozDraft, estado: 'aguardando_nome' })
+            await sendWA(phone, 'Qual seu nome, por favor?', inst)
+          } else if (_vozApagarDraft(tenantId, phone)) {
+            // Só segue se REALMENTE apagou agora — protege contra mensagem "sim"
+            // duplicada (reenvio de rede do WhatsApp) criar o pedido 2x.
+            await _vozCriarPedido(tenantId, phone, inst, vozDraft, nomeCli)
+          }
         } else if (_naoRegex.test(msgNorm)) {
-          _vozApagarDraft(tenantId, phone)
-          await sendWA(phone, 'Pedido cancelado. Se quiser, mande outro áudio ou fale com a loja.', inst)
+          if (_vozApagarDraft(tenantId, phone)) {
+            await sendWA(phone, 'Pedido cancelado. Se quiser, mande outro áudio ou fale com a loja.', inst)
+          }
         } else {
           await sendWA(phone, 'Não entendi — responda *sim* pra confirmar o pedido ou *não* pra cancelar.', inst)
         }
