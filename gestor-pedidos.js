@@ -368,6 +368,13 @@ function renderKanban() {
           ? '<div class="oc-tablet-badge">📱 Pedido do Totem</div>'
           : '';
 
+        // Selo de pedido feito por voz (áudio no WhatsApp, transcrito e
+        // montado automaticamente) — ajuda o gestor a identificar de cara
+        // caso a IA tenha entendido algo errado do áudio.
+        const _vozBadge = o.canal === 'voz_whatsapp'
+          ? '<div class="oc-voz-badge">🎙️ Pedido por Voz</div>'
+          : '';
+
         const _tipoClass = isMesa ? ' card-mesa' : isRetirada ? ' card-retirada' : ' card-delivery';
 
         const _cardStyle = o._pixPendente
@@ -381,6 +388,7 @@ function renderKanban() {
         return '<div class="order-card' + _tipoClass + '"' + _cardStyle + ' onclick="openOrderDetail(' + o.id + ')">' +
           _agendadoBadge +
           _tabletBadge +
+          _vozBadge +
           '<div class="oc-top"><span class="oc-id">#' + o.num + '</span>' + _tipoBadge + '<span class="oc-time">⏱ ' + o.time + '</span>' + _acougueBtn + '</div>' +
           _waNotif +
           '<div class="oc-client">' + _escHtml(o.client) + (o.phone ? ' · ' + _escHtml(o.phone) : '') + '</div>' +

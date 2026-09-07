@@ -394,6 +394,12 @@ body{
   background:rgba(14,165,233,.14);border:1px solid rgba(14,165,233,.3);
   border-radius:7px;padding:4px 8px;margin-bottom:7px;
 }
+.oc-voz-badge{
+  display:flex;align-items:center;gap:5px;
+  font-size:10.5px;font-weight:700;color:#f0abfc;
+  background:rgba(217,70,239,.14);border:1px solid rgba(217,70,239,.3);
+  border-radius:7px;padding:4px 8px;margin-bottom:7px;
+}
 .oc-id{font-weight:700;font-size:12.5px}
 .oc-tipo-badge{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.3px;flex-shrink:0}
 .oc-tipo-delivery{background:rgba(255,255,255,.15);color:#7dd3fc;border:1px solid rgba(255,255,255,.25)}

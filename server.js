@@ -1215,6 +1215,26 @@ const MIGRATIONS = [
   { version:82, description:'identifica de qual canal veio o pedido (ex: tablet fixo na mesa)', up:
     `ALTER TABLE orders ADD COLUMN canal TEXT`
   },
+  { version:83, description:'add-on de pedido por voz via WhatsApp — liga/desliga por tenant, ativado só pelo admin', up:
+    `ALTER TABLE tenants ADD COLUMN voz_ativo INTEGER DEFAULT 0`
+  },
+  { version:84, description:'log de uso do pedido por voz (WhatsApp) — controla limite de áudios por telefone/hora, evita custo de transcrição sem controle', up:
+    `CREATE TABLE IF NOT EXISTS voz_uso_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      ts INTEGER NOT NULL
+    )`
+  },
+  { version:85, description:'rascunho de pedido por voz aguardando confirmação do cliente (sim/não) antes de criar o pedido de verdade', up:
+    `CREATE TABLE IF NOT EXISTS voz_pedidos_pendentes (
+      tenant_id TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      dados TEXT NOT NULL,
+      ts INTEGER NOT NULL,
+      PRIMARY KEY (tenant_id, phone)
+    )`
+  },
 ]
 
 function runMigrations() {
@@ -2345,7 +2365,7 @@ try {
 agendarResetDiarioPedidos()
 
 const TABLE_COLS = {
-  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca'],
+  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca','voz_ativo'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento','tablet_splash_bg_url'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','image_url','sort_order','ativo'],
@@ -4647,7 +4667,441 @@ setInterval(() => {
     if (r.changes > 0) log('🧹', `[PAUSA] Limpou ${r.changes} pausa(s) antiga(s) do banco`)
   } catch {}
 }, 60*60*1000)
+// Limite de uso do pedido por voz — protege contra custo de transcrição sem
+// controle (cliente mandando dezenas de áudios seguidos). Configurável aqui;
+// não existe tela pra isso ainda, é intencionalmente conservador.
+const VOZ_LIMITE_POR_HORA = 8
+function _vozDentroDoLimite(tenantId, phone) {
+  try {
+    const umaHoraAtras = Date.now() - 60 * 60 * 1000
+    const row = db.prepare('SELECT COUNT(*) AS c FROM voz_uso_log WHERE tenant_id=? AND phone=? AND ts>?').get(tenantId, phone, umaHoraAtras)
+    return (row?.c || 0) < VOZ_LIMITE_POR_HORA
+  } catch (e) { return true } // falha na checagem não deve travar o cliente
+}
+function _vozRegistrarUso(tenantId, phone) {
+  try { db.prepare('INSERT INTO voz_uso_log (tenant_id,phone,ts) VALUES (?,?,?)').run(tenantId, phone, Date.now()) } catch (e) {}
+}
+// Limpa logs de uso com mais de 24h — só serve pra checagem da última hora,
+// não precisa guardar histórico.
+setInterval(() => {
+  try {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000
+    const r = db.prepare('DELETE FROM voz_uso_log WHERE ts < ?').run(cutoff)
+    if (r.changes > 0) log('🧹', `[VOZ] Limpou ${r.changes} log(s) de uso antigo(s)`)
+  } catch {}
+}, 60 * 60 * 1000)
+
+// ── Matching de bairro (portado de cardapio-cart.js) ─────────────────────
+// Mesma lógica usada no cardápio pra bater o bairro digitado com a lista
+// cadastrada pelo gestor — exato, depois substring, depois fuzzy. Usada aqui
+// pra dar uma PRÉVIA de taxa no fluxo de voz antes de confirmar o pedido; a
+// validação final e oficial continua sendo feita pelo endpoint de criação
+// de pedido (handleREST), que já revalida tudo de novo.
+function _normBairro(s) {
+  return (s || '').toString().trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+}
+function _levenshtein(a, b) {
+  if (a === b) return 0
+  if (!a.length) return b.length
+  if (!b.length) return a.length
+  const m = a.length, n = b.length
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...new Array(n).fill(0)])
+  for (let j = 0; j <= n; j++) dp[0][j] = j
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
+    }
+  }
+  return dp[m][n]
+}
+function _matchBairro(digitadoRaw, bairrosLista) {
+  if (!digitadoRaw || !Array.isArray(bairrosLista) || !bairrosLista.length) return null
+  const digitado = _normBairro(digitadoRaw)
+  if (!digitado) return null
+  const exato = bairrosLista.find(b => _normBairro(b.bairro || b) === digitado)
+  if (exato) return exato
+  const subset = bairrosLista.filter(b => {
+    const cad = _normBairro(b.bairro || b)
+    return cad.includes(digitado) || digitado.includes(cad)
+  })
+  if (subset.length === 1) return subset[0]
+  const distancias = bairrosLista
+    .map(b => ({ b, d: _levenshtein(digitado, _normBairro(b.bairro || b)) }))
+    .sort((a, b) => a.d - b.d)
+  const melhor = distancias[0], segundoMelhor = distancias[1]
+  if (melhor) {
+    const tamanhoMin = Math.min(digitado.length, _normBairro(melhor.b.bairro || melhor.b).length)
+    const tolerancia = tamanhoMin >= 5 ? 2 : 1
+    if (melhor.d <= tolerancia && (!segundoMelhor || segundoMelhor.d > melhor.d)) return melhor.b
+  }
+  return null
+}
+
+// ── Rascunho de pedido por voz (aguardando confirmação) ──────────────────
+function _vozSalvarDraft(tenantId, phone, dados) {
+  try {
+    db.prepare('INSERT OR REPLACE INTO voz_pedidos_pendentes (tenant_id,phone,dados,ts) VALUES (?,?,?,?)')
+      .run(tenantId, phone, JSON.stringify(dados), Date.now())
+  } catch (e) { log('❌', '[VOZ] Falha ao salvar rascunho:', e.message) }
+}
+function _vozLerDraft(tenantId, phone) {
+  try {
+    const row = db.prepare('SELECT dados, ts FROM voz_pedidos_pendentes WHERE tenant_id=? AND phone=?').get(tenantId, phone)
+    if (!row) return null
+    // Rascunho expira em 15min — evita confirmar/cancelar um pedido antigo por engano
+    if (Date.now() - row.ts > 15 * 60 * 1000) { _vozApagarDraft(tenantId, phone); return null }
+    return JSON.parse(row.dados)
+  } catch (e) { return null }
+}
+function _vozApagarDraft(tenantId, phone) {
+  try { db.prepare('DELETE FROM voz_pedidos_pendentes WHERE tenant_id=? AND phone=?').run(tenantId, phone) } catch (e) {}
+}
+setInterval(() => {
+  try {
+    const cutoff = Date.now() - 60 * 60 * 1000
+    const r = db.prepare('DELETE FROM voz_pedidos_pendentes WHERE ts < ?').run(cutoff)
+    if (r.changes > 0) log('🧹', `[VOZ] Limpou ${r.changes} rascunho(s) de pedido expirado(s)`)
+  } catch {}
+}, 60 * 60 * 1000)
+
+// Tenta resolver a taxa de entrega a partir de um texto de bairro falado,
+// contra a configuração de entrega da loja. Só cobre 'fixo' e 'por_bairro' —
+// 'por_km' depende de GPS, que não existe no fluxo de voz, então esses casos
+// (e config incompleta) retornam suportado:false pra o fluxo pedir pro
+// cliente terminar pelo cardápio normal em vez de arriscar uma taxa errada.
+function _vozResolverTaxa(feeConfig, bairroTexto) {
+  const cfg = feeConfig || {}
+  if (cfg.tipo === 'fixo') {
+    return { suportado: true, resolvido: true, taxa: parseFloat(cfg.valor ?? cfg.value ?? 0) || 0, addrLabel: bairroTexto || null }
+  }
+  if (cfg.tipo === 'por_bairro') {
+    const bairros = Array.isArray(cfg.bairros) ? cfg.bairros : []
+    if (!bairros.length) return { suportado: false }
+    if (!bairroTexto) return { suportado: true, resolvido: false, sugestoes: [] }
+    const match = _matchBairro(bairroTexto, bairros)
+    if (match) return { suportado: true, resolvido: true, taxa: parseFloat(match.taxa) || 0, addrLabel: match.bairro }
+    const sugestoes = bairros
+      .map(b => ({ nome: b.bairro, d: _levenshtein(_normBairro(bairroTexto), _normBairro(b.bairro)) }))
+      .sort((a, b) => a.d - b.d).slice(0, 3).map(s => s.nome)
+    return { suportado: true, resolvido: false, sugestoes }
+  }
+  return { suportado: false }
+}
+
 const _lastDayMsg  = new Map() // rastreia primeira msg do dia: "tenant:phone" → "YYYY-MM-DD"
+
+// Inicia (ou avança) a confirmação de um pedido por voz: dado o que a IA já
+// extraiu do áudio, tenta resolver a taxa de entrega e manda a mensagem
+// certa pro cliente — ou pede o bairro, ou já pede a confirmação final.
+// Resolve se o PIX é online (Mercado Pago) ou manual (chave copia-e-cola)
+// pra esse tenant — chama o mesmo endpoint que o cardápio usa (/api/pix/config)
+// e aplica a MESMA fórmula de decisão do front, pra nunca divergir do que o
+// cardápio normal já faz.
+async function _vozResolverModoPix(tenantId) {
+  try {
+    const r = await fetch(`http://localhost:${PORT}/api/pix/config`, { headers: { 'x-tenant-id': tenantId } })
+    const d = await r.json().catch(() => ({}))
+    if (!r.ok) return { online: false, manualDisponivel: false }
+    const temChaveManual = !!(d.pix_key_manual && String(d.pix_key_manual).trim())
+    const online = d.pix_ativo_gestor === true || (d.pix_ativo_definido !== true && d.mp_configurado === true && !temChaveManual)
+    return { online, manualDisponivel: temChaveManual, chave: d.pix_key_manual, tipo: d.pix_key_manual_tipo, banco: d.pix_key_manual_banco }
+  } catch (e) { return { online: false, manualDisponivel: false } }
+}
+
+async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido) {
+  if (!extraido.itens.length) {
+    const motivo = extraido.nao_entendido ? ` (${extraido.nao_entendido})` : ''
+    await sendWA(phone, `Não consegui identificar nenhum item do cardápio no seu áudio${motivo}. Pode tentar de novo ou escrever o pedido?`, inst)
+    return
+  }
+  const sc = db.prepare('SELECT delivery_fee_config FROM store_config WHERE tenant_id=?').get(tenantId)
+  const feeConfig = sc?.delivery_fee_config ? jsonParse(sc.delivery_fee_config) : {}
+  const resTaxa = _vozResolverTaxa(feeConfig, extraido.bairro)
+  if (!resTaxa.suportado) {
+    await sendWA(phone, 'No momento o pedido por voz só funciona pra entrega por bairro ou taxa fixa. Pode finalizar pelo cardápio da loja ou me falar se prefere retirar no balcão?', inst)
+    return
+  }
+  if (!resTaxa.resolvido) {
+    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_bairro', itens: extraido.itens, forma_pagamento: extraido.forma_pagamento, observacao_geral: extraido.observacao_geral })
+    const sugestoesTxt = resTaxa.sugestoes?.length ? ` Você quis dizer: ${resTaxa.sugestoes.join(', ')}?` : ''
+    await sendWA(phone, `Pra qual bairro é a entrega?${sugestoesTxt}`, inst)
+    return
+  }
+  const addrFinal = resTaxa.addrLabel || extraido.bairro
+  if (!extraido.forma_pagamento) {
+    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pagamento', itens: extraido.itens, addr: addrFinal, taxa: resTaxa.taxa, observacao_geral: extraido.observacao_geral })
+    const pixInfo = await _vozResolverModoPix(tenantId)
+    const opcoes = ['*dinheiro*']
+    if (pixInfo.online || pixInfo.manualDisponivel) opcoes.push('*pix*')
+    const opcoesTxt = opcoes.length > 1 ? opcoes.join(' ou ') : opcoes[0]
+    await sendWA(phone, `Como prefere pagar? Responda ${opcoesTxt}.`, inst)
+    return
+  }
+  await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { itens: extraido.itens, addr: addrFinal, taxa: resTaxa.taxa, forma_pagamento: extraido.forma_pagamento, observacao_geral: extraido.observacao_geral })
+}
+
+// Monta e envia o resumo final (itens + entrega + pagamento) e salva o
+// rascunho no estado "aguardando_confirmacao" — separado de
+// _vozIniciarConfirmacao pra poder ser chamado tanto direto (quando o áudio
+// já trouxe tudo) quanto depois de perguntar bairro/pagamento separadamente.
+async function _vozMontarConfirmacaoFinal(tenantId, phone, inst, draft) {
+  const subtotal = draft.itens.reduce((s, i) => s + i.price * i.qty, 0)
+  const total = subtotal + draft.taxa
+  const fmt = v => v.toFixed(2).replace('.', ',')
+  const listaItens = draft.itens.map(i => `${i.qty}x ${i.name}${i.obs ? ` (${i.obs})` : ''}`).join('\n')
+  const pagLabel = draft.forma_pagamento === 'pix' ? 'PIX' : draft.forma_pagamento === 'cartao' ? 'Cartão (ainda não aceito por voz — será dinheiro na entrega)' : 'Dinheiro na entrega'
+  _vozSalvarDraft(tenantId, phone, {
+    estado: 'aguardando_confirmacao',
+    itens: draft.itens,
+    addr: draft.addr,
+    taxa: draft.taxa,
+    forma_pagamento: draft.forma_pagamento === 'cartao' ? 'dinheiro' : draft.forma_pagamento,
+    observacao_geral: draft.observacao_geral
+  })
+  await sendWA(phone,
+    `🎙️ Confirma seu pedido?\n\n${listaItens}\n\nEntrega: ${draft.addr}\nSubtotal: R$${fmt(subtotal)}\nTaxa de entrega: R$${fmt(draft.taxa)}\n*Total: R$${fmt(total)}*\nPagamento: ${pagLabel}\n\nResponda *sim* pra confirmar ou *não* pra cancelar.`,
+    inst)
+}
+
+// Cria o pedido de verdade — reaproveita o MESMO endpoint que o cardápio
+// público usa (self-call HTTP interno), pra herdar de graça todas as
+// validações que já existem lá (bairro bloqueado, delivery pausado, loja
+// fechada, etc.), em vez de duplicar essa lógica aqui.
+async function _vozCriarPedido(tenantId, phone, inst, draft, nomeCliente) {
+  const subtotal = draft.itens.reduce((s, i) => s + i.price * i.qty, 0)
+  const total = subtotal + (parseFloat(draft.taxa) || 0)
+  const fmt = v => v.toFixed(2).replace('.', ',')
+  const items = draft.itens.map(i => ({ id: i.id, qty: i.qty, name: i.name, price: i.price, cat: '', cat_key: '', obs: i.obs || '' }))
+  const reqId = 'vzc_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10)
+
+  // Resolve forma de pagamento ANTES de criar o pedido, pra já gravar com o
+  // pag/status certo (evita ficar corrigindo depois com PATCH em cascata).
+  let pixInfo = { online: false, manualDisponivel: false }
+  const querPix = draft.forma_pagamento === 'pix'
+  if (querPix) pixInfo = await _vozResolverModoPix(tenantId)
+  let pag = 'dinheiro', status = 'analise'
+  if (querPix && pixInfo.online) { pag = 'pix'; status = 'aguardando_pix' }
+  else if (querPix && pixInfo.manualDisponivel) { pag = 'pix_manual'; status = 'aguardando_pix' }
+  else if (querPix) {
+    await sendWA(phone, 'Não consegui gerar PIX pra essa loja no momento — vou registrar seu pedido como pagamento na entrega (dinheiro). Se preferir, fale com a loja.', inst)
+  }
+
+  const body = {
+    tenant_id: tenantId,
+    client_request_id: reqId,
+    origem_pedido: 'cardapio_publico',
+    canal: 'voz_whatsapp',
+    client: nomeCliente || 'Cliente WhatsApp',
+    phone,
+    addr: draft.addr,
+    items,
+    total: subtotal,
+    taxa: draft.taxa,
+    status,
+    pag,
+    // Ativa o acompanhamento automático via WhatsApp — é o que já faz o
+    // sistema mandar sozinho a mensagem de "pagamento confirmado" pro
+    // cliente quando o gestor aprovar o PIX manual (ver /api/order-status).
+    // Sem isso, essa notificação automática nem dispara.
+    wa_track: 1,
+    time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  }
+  let data
+  try {
+    const r = await fetch(`http://localhost:${PORT}/api/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
+      body: JSON.stringify(body)
+    })
+    data = await r.json().catch(() => ({}))
+    if (!r.ok) {
+      log('❌', `[VOZ] Falha ao criar pedido [${tenantId}] ${phone}:`, data?.error || r.status)
+      await sendWA(phone, `Não consegui finalizar seu pedido automaticamente: ${data?.error || 'erro desconhecido'}. Por favor finalize pelo cardápio da loja ou fale com o atendente.`, inst)
+      return
+    }
+  } catch (e) {
+    log('❌', '[VOZ] erro na criação do pedido:', e.message)
+    await sendWA(phone, 'Tive um problema técnico ao finalizar seu pedido. Por favor finalize pelo cardápio da loja ou fale com o atendente.', inst)
+    return
+  }
+  const numero = data?.order_num || data?.id
+
+  if (pag === 'dinheiro') {
+    await sendWA(phone, `✅ Pedido #${numero} confirmado! Já caiu no sistema da loja e logo começa a ser preparado.`, inst)
+    return
+  }
+
+  if (pag === 'pix') {
+    try {
+      const pr = await fetch(`http://localhost:${PORT}/api/pix/criar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
+        body: JSON.stringify({ order_id: data.id, valor: total, client: nomeCliente || 'Cliente WhatsApp', phone })
+      })
+      const pd = await pr.json().catch(() => ({}))
+      if (pr.ok && pd?.qr_code) {
+        await sendWA(phone, `✅ Pedido #${numero} confirmado! Segue o PIX pra pagamento — R$${fmt(total)}:`, inst)
+        await new Promise(res2 => setTimeout(res2, 1000))
+        await sendWA(phone, pd.qr_code, inst)
+        if (pd.qr_code_base64) await sendWAImage(phone, pd.qr_code_base64, `📱 QR Code PIX — R$${fmt(total)}`, inst)
+        return
+      }
+      log('⚠️', `[VOZ] PIX online falhou [${tenantId}] pedido#${numero}:`, pd?.error || pr.status)
+    } catch (e) { log('⚠️', '[VOZ] erro ao gerar PIX online:', e.message) }
+    // Online falhou — cai pro manual se existir, senão avisa e mantém "aguardando_pix"
+    // (a loja consegue ver e resolver manualmente pelo painel).
+    if (pixInfo.manualDisponivel) {
+      try {
+        await fetch(`http://localhost:${PORT}/api/orders?id=eq.${data.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
+          body: JSON.stringify({ pag: 'pix_manual' })
+        })
+      } catch (e) {}
+      await _vozEnviarPixManual(phone, inst, numero, total, pixInfo)
+      return
+    }
+    await sendWA(phone, `✅ Pedido #${numero} confirmado, mas não consegui gerar o PIX automaticamente. A loja vai te enviar os dados de pagamento em instantes.`, inst)
+    return
+  }
+
+  if (pag === 'pix_manual') {
+    await _vozEnviarPixManual(phone, inst, numero, total, pixInfo)
+  }
+}
+
+async function _vozEnviarPixManual(phone, inst, numero, total, pixInfo) {
+  const fmt = v => v.toFixed(2).replace('.', ',')
+  await sendWA(phone,
+    `✅ Pedido #${numero} confirmado! Pague via PIX:\n\nChave (${pixInfo.tipo || 'aleatória'}): ${pixInfo.chave}\n${pixInfo.banco ? `Banco: ${pixInfo.banco}\n` : ''}Valor: R$${fmt(total)}\n\n📎 Depois de pagar, me envie o comprovante aqui. Seu pedido só entra em preparo depois que a loja confirmar o pagamento — você recebe uma mensagem assim que isso acontecer.`,
+    inst)
+}
+
+// ── Pedido por voz (WhatsApp) — download + transcrição ──────────────────
+// Baixa o áudio de uma mensagem do WhatsApp via Evolution API. Mesma chamada
+// já usada em /api/wa/media (routes.js) pro atendente ouvir áudio no painel
+// manualmente — aqui é a versão automática, chamada pelo robô.
+async function baixarMidiaWhatsapp(tenantId, messageId, remoteJid) {
+  try {
+    const cfg  = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
+    const inst = cfg?.evo_instance || EVO_INST
+    const r = await fetch(`${EVO_URL}/chat/getBase64FromMediaMessage/${inst}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', apikey: EVO_KEY },
+      body:    JSON.stringify({ message: { key: { id: messageId, remoteJid } }, convertTo: 'base64', convertToMp4: false }),
+      signal: AbortSignal.timeout(30000)
+    })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok || !(data.base64 || data.data)) return null
+    return { base64: data.base64 || data.data, mimetype: data.mimetype || data.mimeType || 'audio/ogg' }
+  } catch (e) { log('❌', '[VOZ] Falha ao baixar áudio:', e.message); return null }
+}
+
+// Transcreve o áudio via Whisper (OpenAI). Usa a chave própria do tenant se
+// ele tiver cadastrado uma (mesmo campo openai_key do painel do gestor/admin,
+// hoje sem uso porque o robô de texto virou determinístico), senão cai pra
+// chave global da plataforma (OPENAI_API_KEY no ambiente) — o custo da
+// transcrição já está embutido no valor do add-on cobrado do tenant.
+// Resolve a chave OpenAI a usar pra um tenant: chave própria dele (mesmo
+// campo do painel do gestor/admin, hoje sem uso porque o robô de texto virou
+// determinístico) ou, na falta dela, a chave global da plataforma — o custo
+// já está embutido no valor do add-on de voz cobrado do tenant.
+function _resolverOpenAIKey(tenantId) {
+  try {
+    const cfg = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tenantId)
+    const ia  = jsonParse(cfg?.ia_config) || {}
+    return ia.openai_key || process.env.OPENAI_API_KEY || null
+  } catch (e) { return process.env.OPENAI_API_KEY || null }
+}
+
+async function transcreverAudioWhatsapp(base64, mimetype, tenantId) {
+  try {
+    const apiKey = _resolverOpenAIKey(tenantId)
+    if (!apiKey) { log('⚠️', `[VOZ] Sem chave OpenAI configurada (tenant nem global) — tenant=${tenantId}`); return null }
+    const buffer = Buffer.from(String(base64 || ''), 'base64')
+    if (!buffer.length) return null
+    const ext  = String(mimetype || '').includes('mp4') ? 'mp4' : 'ogg'
+    const form = new FormData()
+    form.append('file', new Blob([buffer], { type: mimetype || 'audio/ogg' }), `audio.${ext}`)
+    form.append('model', 'whisper-1')
+    form.append('language', 'pt')
+    // Mesma correção já usada no backup pro Telegram: enviar o FormData/Blob
+    // direto pro fetch nativo do Node pode truncar o upload — serializa num
+    // Buffer fixo com Content-Length explícito antes de mandar.
+    const formResponse = new Response(form)
+    const contentType  = formResponse.headers.get('content-type')
+    const bodyBuf       = Buffer.from(await formResponse.arrayBuffer())
+    const r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': contentType, 'Content-Length': String(bodyBuf.length) },
+      body: bodyBuf,
+      signal: AbortSignal.timeout(30000)
+    })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok) { log('❌', '[VOZ] Whisper erro:', data?.error?.message || r.status); return null }
+    return String(data?.text || '').trim() || null
+  } catch (e) { log('❌', '[VOZ] Falha na transcrição:', e.message); return null }
+}
+
+// Extrai itens + bairro a partir do texto transcrito, usando o cardápio real
+// do tenant como contexto — a IA só pode escolher item_id que exista na lista
+// enviada (nunca inventa item nem preço; o preço final sempre vem do catálogo,
+// nunca do que a IA disser). Retorna null se a chamada falhar por completo.
+async function extrairPedidoDeTexto(tenantId, texto) {
+  try {
+    const apiKey = _resolverOpenAIKey(tenantId)
+    if (!apiKey) { log('⚠️', `[VOZ] Sem chave OpenAI pra extração — tenant=${tenantId}`); return null }
+    const itensAtivos = db.prepare("SELECT id,name,price FROM menu_items WHERE tenant_id=? AND status='ativo'").all(tenantId)
+    if (!itensAtivos.length) return { itens: [], bairro: null, observacao_geral: null, nao_entendido: 'Cardápio vazio ou não configurado.' }
+    const cardapioCtx = itensAtivos.map(i => ({ id: i.id, nome: i.name, preco: parseFloat(i.price) || 0 }))
+    const sysPrompt = [
+      'Você extrai pedidos de restaurante a partir de um texto transcrito de áudio de WhatsApp.',
+      'Responda APENAS com um JSON válido, sem nenhum texto fora do JSON, no formato:',
+      '{"itens":[{"item_id":123,"qty":1,"obs":""}],"bairro":"nome do bairro ou null","forma_pagamento":"dinheiro|pix|cartao|null","observacao_geral":"texto ou null","nao_entendido":"texto ou null"}',
+      'Regras: use SOMENTE item_id que existam na lista de cardápio fornecida — nunca invente um id.',
+      'Se o cliente mencionar algo que não existe no cardápio, não invente um item parecido: descreva em "nao_entendido".',
+      'Se o cliente não falar bairro/endereço, deixe "bairro" como null.',
+      'Se o cliente não falar forma de pagamento, deixe "forma_pagamento" como null — não assuma dinheiro por padrão.',
+      '"obs" é só pra observação daquele item específico (ex: "sem cebola"), não pro pedido inteiro.'
+    ].join(' ')
+    const userPrompt = JSON.stringify({ texto_transcrito: texto, cardapio: cardapioCtx })
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userPrompt }]
+      }),
+      signal: AbortSignal.timeout(30000)
+    })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok) { log('❌', '[VOZ] Extração erro:', data?.error?.message || r.status); return null }
+    let parsed
+    try { parsed = JSON.parse(data?.choices?.[0]?.message?.content || '{}') } catch { return null }
+    const mapaCardapio = new Map(itensAtivos.map(i => [i.id, i]))
+    const itens = (Array.isArray(parsed.itens) ? parsed.itens : [])
+      .map(it => {
+        const item = mapaCardapio.get(parseInt(it.item_id))
+        if (!item) return null // ignora qualquer id que a IA tenha inventado
+        const qty = Math.max(1, parseInt(it.qty) || 1)
+        return { id: item.id, name: item.name, price: parseFloat(item.price) || 0, qty, obs: String(it.obs || '').slice(0, 200) }
+      })
+      .filter(Boolean)
+    const formaPagValida = ['dinheiro', 'pix', 'cartao'].includes(parsed.forma_pagamento) ? parsed.forma_pagamento : null
+    return {
+      itens,
+      bairro: parsed.bairro ? String(parsed.bairro).slice(0, 80) : null,
+      forma_pagamento: formaPagValida,
+      observacao_geral: parsed.observacao_geral ? String(parsed.observacao_geral).slice(0, 300) : null,
+      nao_entendido: parsed.nao_entendido ? String(parsed.nao_entendido).slice(0, 300) : null
+    }
+  } catch (e) { log('❌', '[VOZ] Falha na extração do pedido:', e.message); return null }
+}
 
 async function handleIAWebhook(req, res) {
   const body = req._parsedBody !== undefined ? req._parsedBody : await readBody(req)
@@ -4678,12 +5132,129 @@ async function handleIAWebhook(req, res) {
       }
       send(res,200,{ok:true}); return
     }
+    // ── Pedido por voz (WhatsApp) ────────────────────────────────────
+    // Mensagem de áudio (voice note) do cliente — só processa se o tenant
+    // tiver o add-on ativado pelo admin (tenants.voz_ativo). Sem isso,
+    // mantém o comportamento de sempre: áudio é ignorado (msg vazio cai
+    // no early-return logo abaixo).
+    const audioMsg = body?.data?.message?.audioMessage || null
+    if (!msg && audioMsg && from && tenantId) {
+      const phoneVoz = phoneUtils.cleanWhatsappJid(from)
+      const tRow = phoneVoz ? db.prepare('SELECT voz_ativo FROM tenants WHERE id=?').get(tenantId) : null
+      if (phoneVoz && tRow?.voz_ativo) {
+        send(res, 200, { ok: true, voz: true }) // responde rápido — processa em background
+        ;(async () => {
+          try {
+            const cfgV = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
+            const inst = cfgV?.evo_instance || EVO_INST
+            if (msgId) await markAsRead(phoneVoz, msgId, inst)
+            if (!_vozDentroDoLimite(tenantId, phoneVoz)) {
+              log('🚫', `[VOZ] Limite de áudios/hora atingido — ${phoneVoz} [${tenantId}]`)
+              await sendWA(phoneVoz, 'Você enviou muitos áudios em pouco tempo 🙏 Aguarde alguns minutos ou escreva seu pedido, por favor.', inst)
+              return
+            }
+            _vozRegistrarUso(tenantId, phoneVoz)
+            const media = await baixarMidiaWhatsapp(tenantId, msgId, from)
+            if (!media?.base64) {
+              await sendWA(phoneVoz, 'Não consegui baixar seu áudio 😕 Pode tentar reenviar ou escrever o pedido?', inst)
+              return
+            }
+            const texto = await transcreverAudioWhatsapp(media.base64, media.mimetype, tenantId)
+            if (!texto) {
+              await sendWA(phoneVoz, 'Não consegui entender o áudio 😕 Pode tentar de novo ou escrever o pedido?', inst)
+              return
+            }
+            log('🎙️', `[VOZ] Transcrito [${tenantId}] ${phoneVoz}: "${texto}"`)
+            const extraido = await extrairPedidoDeTexto(tenantId, texto)
+            if (!extraido) {
+              await sendWA(phoneVoz, 'Entendi o áudio, mas tive um problema pra montar o pedido. Pode tentar de novo ou escrever?', inst)
+              return
+            }
+            await _vozIniciarConfirmacao(tenantId, phoneVoz, inst, extraido)
+          } catch (e) { log('❌', '[VOZ] erro no processamento do áudio:', e.message) }
+        })()
+        return
+      }
+      // Sem add-on ativo: ignora o áudio, igual já acontecia antes de existir essa função
+      send(res, 200, { ok: true }); return
+    }
+
+    // ── Comprovante de PIX manual (imagem) enviado pelo cliente ──────
+    // Só reconhece/responde se houver um pedido por voz dele aguardando
+    // esse pagamento — não interfere em nenhum outro fluxo de imagem.
+    const imageMsg = body?.data?.message?.imageMessage || null
+    if (!msg && imageMsg && from && tenantId) {
+      const phoneImg = phoneUtils.cleanWhatsappJid(from)
+      if (phoneImg) {
+        const pedidoPix = db.prepare(`
+          SELECT id FROM orders
+          WHERE tenant_id=? AND phone=? AND status='aguardando_pix' AND pag='pix_manual' AND canal='voz_whatsapp'
+          ORDER BY id DESC LIMIT 1
+        `).get(tenantId, phoneImg)
+        if (pedidoPix) {
+          const cfgImg = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
+          await sendWA(phoneImg, '📎 Recebi seu comprovante! Assim que a loja confirmar o pagamento, seu pedido entra em preparo e eu te aviso por aqui.', cfgImg?.evo_instance || EVO_INST)
+          send(res, 200, { ok: true, voz: true }); return
+        }
+      }
+    }
+
     if (!msg||!from) { send(res,200,{ok:true}); return }
     const phone = phoneUtils.cleanWhatsappJid(from)
     if (!phone) { send(res,200,{ok:true}); return }
     if (!tenantId) { send(res,200,{ok:true}); return }
     const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,store_descricao,store_whatsapp,store_tempo_entrega,store_tempo_retirada,delivery_fee_config,horarios_config,store_open,order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
     if (!cfg) { send(res,200,{ok:true}); return }
+    // ── Pedido por voz: resposta a um rascunho pendente ──────────────
+    // Tem prioridade sobre tudo (acompanhamento, robô determinístico) porque
+    // é uma mini-conversa curta e já em andamento — uma resposta tipo "sim"
+    // aqui não deve cair no roteador normal por engano.
+    const vozDraft = _vozLerDraft(tenantId, phone)
+    if (vozDraft) {
+      const inst = cfg.evo_instance || EVO_INST
+      const msgNorm = msg.trim().toLowerCase()
+      if (vozDraft.estado === 'aguardando_bairro') {
+        const feeConfig = cfg.delivery_fee_config ? jsonParse(cfg.delivery_fee_config) : {}
+        const resTaxa = _vozResolverTaxa(feeConfig, msg.trim())
+        if (resTaxa.suportado && resTaxa.resolvido) {
+          await _vozIniciarConfirmacao(tenantId, phone, inst, { itens: vozDraft.itens, bairro: resTaxa.addrLabel, forma_pagamento: vozDraft.forma_pagamento, observacao_geral: vozDraft.observacao_geral })
+        } else {
+          const sugestoesTxt = resTaxa.sugestoes?.length ? ` Você quis dizer: ${resTaxa.sugestoes.join(', ')}?` : ''
+          await sendWA(phone, `Não encontrei esse bairro na nossa área de entrega.${sugestoesTxt} Pode confirmar o nome do bairro?`, inst)
+        }
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_pagamento') {
+        const _pixRegex = /\bpix\b/i
+        const _dinheiroRegex = /\b(dinheiro|especie|espécie|cash)\b/i
+        const _cartaoRegex = /\bcart[aã]o\b/i
+        let forma = null
+        if (_pixRegex.test(msgNorm)) forma = 'pix'
+        else if (_dinheiroRegex.test(msgNorm)) forma = 'dinheiro'
+        else if (_cartaoRegex.test(msgNorm)) forma = 'cartao'
+        if (!forma) {
+          await sendWA(phone, 'Não entendi — responda *dinheiro* ou *pix*.', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { itens: vozDraft.itens, addr: vozDraft.addr, taxa: vozDraft.taxa, forma_pagamento: forma, observacao_geral: vozDraft.observacao_geral })
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_confirmacao') {
+        const _simRegex = /^(sim|s|confirmo|confirma|isso|ok|pode|correto|certo)\b/i
+        const _naoRegex = /^(n[aã]o|nao|n|cancela|cancelar|errado)\b/i
+        if (_simRegex.test(msgNorm)) {
+          _vozApagarDraft(tenantId, phone)
+          const nomeCli = data?.pushName || (db.prepare('SELECT name FROM customers WHERE tenant_id=? AND phone=?').get(tenantId, phone)?.name) || null
+          await _vozCriarPedido(tenantId, phone, inst, vozDraft, nomeCli)
+        } else if (_naoRegex.test(msgNorm)) {
+          _vozApagarDraft(tenantId, phone)
+          await sendWA(phone, 'Pedido cancelado. Se quiser, mande outro áudio ou fale com a loja.', inst)
+        } else {
+          await sendWA(phone, 'Não entendi — responda *sim* pra confirmar o pedido ou *não* pra cancelar.', inst)
+        }
+        send(res,200,{ok:true, voz:true}); return
+      }
+    }
     if (await responderAcompanhamentoWhatsapp({ tenantId, phone, text: msg, msgIds: msgId ? [msgId] : [], cfg })) {
       const pendingBufKey = `buf:${tenantId}:${phone}`
       if (_msgBuffer.has(pendingBufKey)) {
@@ -5074,15 +5645,15 @@ async function handleIAWebhook(req, res) {
         const aviso = _avisoFechado ? `\n${_avisoFechado}` : ''
         if (_isPrimeiraMsgDia || _isSoSaudacao) {
           resposta = _pickOne([
-            `${_saudacaoHora}! Bem-vindo(a) ao ${nomeLojaFmt}.${aviso}\nConfira nosso cardápio: ${linkCardapio}`,
-            `${_saudacaoHora}! Aqui é da ${nomeLojaFmt}.${aviso}\nNosso cardápio: ${linkCardapio}`,
-            `${_saudacaoHora}! Que bom te ver por aqui.${aviso}\nDá uma olhada: ${linkCardapio}`
+            `${_saudacaoHora}! 😊 Seja muito bem-vindo(a) ao ${nomeLojaFmt}!${aviso}\nDá uma olhadinha no nosso cardápio, tem coisa boa esperando por você: ${linkCardapio}`,
+            `${_saudacaoHora}! 👋 Que bom te ver por aqui! Aqui é a ${nomeLojaFmt}.${aviso}\nConfira nosso cardápio e escolhe o que mais te agradar: ${linkCardapio}`,
+            `${_saudacaoHora}! 🍽️ Bem-vindo(a) ao ${nomeLojaFmt} — vai ser um prazer te atender!${aviso}\nNosso cardápio completo está aqui: ${linkCardapio}`
           ])
         } else {
           resposta = _pickOne([
-            `${aviso ? aviso + '\n' : ''}Aqui está nosso cardápio: ${linkCardapio}`,
-            `${aviso ? aviso + '\n' : ''}Cardápio: ${linkCardapio}`,
-            `${aviso ? aviso + '\n' : ''}Confere nosso cardápio: ${linkCardapio}`
+            `${aviso ? aviso + '\n' : ''}Claro! 😋 Aqui está nosso cardápio: ${linkCardapio}`,
+            `${aviso ? aviso + '\n' : ''}Segue nosso cardápio completinho: ${linkCardapio}`,
+            `${aviso ? aviso + '\n' : ''}Aqui está, dá uma olhada: ${linkCardapio} 🍽️`
           ])
         }
       }

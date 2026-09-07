@@ -1163,6 +1163,15 @@ td{padding:12px 16px;color:#dce6f7}
           </div>
           <!-- campo legado mantido oculto: guarda o mesmo valor do plano único no backend -->
           <input type="hidden" id="adm-preco-essencial" value="79.99">
+
+          <div style="margin-top:14px;display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px solid rgba(139,92,246,.2);border-radius:12px;background:rgba(139,92,246,.03)">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:700">Add-on: Pedido por voz (WhatsApp)</div>
+              <div style="font-size:11.5px;color:var(--muted)">Acréscimo mensal por tenant, ativado individualmente na ficha do cliente</div>
+            </div>
+            <span style="font-size:13px;color:var(--muted)">R$</span>
+            <input class="minput" id="adm-preco-addon-voz" type="number" step="0.01" min="0" value="89.90" style="width:90px;text-align:center">
+          </div>
         </div>
 
         <div class="infobox infobox-orange" style="margin-bottom:20px;display:flex;align-items:flex-start;gap:12px">
@@ -2120,6 +2129,13 @@ td{padding:12px 16px;color:#dce6f7}
         <span style="font-size:11.5px;color:var(--muted)">Número que vai receber os lembretes automáticos de vencimento e o QR Code do PIX. Se deixar em branco, usa o WhatsApp da loja.</span>
       </div>
     </div>
+    <div class="mrow2" style="margin-top:12px" id="cli-voz-row">
+      <div class="mrow" style="margin:0;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="cli-voz-ativo" style="width:16px;height:16px;margin:0">
+        <label class="mlabel" for="cli-voz-ativo" style="margin:0;cursor:pointer">Pedido por voz (WhatsApp) <span id="cli-voz-preco-label" style="color:var(--muted);font-weight:400"></span></label>
+      </div>
+      <span style="font-size:11.5px;color:var(--muted)">Cliente manda áudio no WhatsApp e o sistema monta o pedido sozinho. Ao marcar, o valor entra automaticamente na próxima fatura deste cliente.</span>
+    </div>
     <div class="mrow2" style="margin-top:12px" id="cli-valor-validade-row">
       <div class="mrow" style="margin:0">
         <label class="mlabel">Preço personalizado válido até <span style="color:var(--muted);font-weight:400">(opcional — ex: promoção de 6 meses)</span></label>
@@ -2785,23 +2801,34 @@ async function carregarPrecosPlanos() {
     const d = await res.json();
     if (d.essencial !== undefined) document.getElementById('adm-preco-essencial').value = parseFloat(d.essencial).toFixed(2);
     if (d.premium   !== undefined) document.getElementById('adm-preco-premium').value   = parseFloat(d.premium).toFixed(2);
+    if (d.addon_voz !== undefined) document.getElementById('adm-preco-addon-voz').value = parseFloat(d.addon_voz).toFixed(2);
+    _atualizarLabelPrecoVoz();
   } catch(e) {}
+}
+
+function _atualizarLabelPrecoVoz() {
+  const el = document.getElementById('cli-voz-preco-label');
+  if (!el) return;
+  const preco = parseFloat(document.getElementById('adm-preco-addon-voz')?.value) || 89.90;
+  el.textContent = `(+R$${preco.toFixed(2)}/mês)`;
 }
 
 async function salvarPrecosPlanos() {
   const premium = parseFloat(document.getElementById('adm-preco-premium').value) || 0;
+  const addonVoz = parseFloat(document.getElementById('adm-preco-addon-voz').value) || 0;
   try {
     const r = await fetch('/api/admin/planos/precos', {
       method: 'POST', headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
       // O sistema ficou com um único plano: mantém preco_essencial = preco_premium
       // internamente por compatibilidade (colunas antigas), mas só existe um preço no painel.
-      body: JSON.stringify({ preco_essencial: premium, preco_premium: premium })
+      body: JSON.stringify({ preco_essencial: premium, preco_premium: premium, preco_addon_voz: addonVoz })
     });
     if (r.status === 401) { toast('err','Sessão expirada'); setTimeout(doLogout,1500); return; }
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    await auditLog('planos.alterar_precos', null, { premium });
+    await auditLog('planos.alterar_precos', null, { premium, addon_voz: addonVoz });
     toast('ok', 'Preço salvo com sucesso!');
+    _atualizarLabelPrecoVoz();
     calcularFinanceiro(); // recalcula MRR/ARR com o novo preço
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
@@ -3227,6 +3254,8 @@ function abrirModalCliente(id) { _abrirModalClienteAsync(id); }
 async function _abrirModalClienteAsync(id) {
   document.getElementById('m-cli-titulo').textContent = id ? 'Editar Cliente' : 'Novo Cliente';
   ['cli-id','cli-nome','cli-slug','cli-email','cli-senha','cli-gestor-nome','cli-expira','cli-valor-personalizado','cli-valor-expira','cli-telefone-cobranca'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
+  document.getElementById('cli-voz-ativo').checked = false;
+  _atualizarLabelPrecoVoz();
   document.getElementById('cli-plano').value    = 'premium';
   document.getElementById('cli-segmento').value = 'restaurante';
   document.getElementById('cli-ativo').value  = 'true';
@@ -3250,6 +3279,7 @@ async function _abrirModalClienteAsync(id) {
       document.getElementById('cli-valor-personalizado').value = (c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? c.valor_mensalidade : '';
       document.getElementById('cli-valor-expira').value = c.valor_mensalidade_expira_em ? String(c.valor_mensalidade_expira_em).slice(0,10) : '';
       document.getElementById('cli-telefone-cobranca').value = c.telefone_cobranca || '';
+      document.getElementById('cli-voz-ativo').checked = !!c.voz_ativo;
     }
     try {
       const r = await fetch('/api/admin-backup/ia-config?tenant_id='+id, { headers: adminAuthHeader() });
@@ -3290,12 +3320,13 @@ async function salvarCliente() {
   const telefoneCobrancaRaw = (document.getElementById('cli-telefone-cobranca').value || '').replace(/\D/g,'');
   if (telefoneCobrancaRaw && telefoneCobrancaRaw.length !== 10 && telefoneCobrancaRaw.length !== 11) { toast('err','Telefone de cobrança inválido — use DDD + número (10 ou 11 dígitos)'); return; }
   const telefoneCobranca = telefoneCobrancaRaw || null;
+  const vozAtivo = document.getElementById('cli-voz-ativo').checked;
   if (!nome||!slug) { toast('err','Preencha nome e slug'); return; }
   if (!id && (!gestorNome||!email||!senha)) { toast('err','Preencha todos os dados do gestor'); return; }
   let error;
   if (id) {
-    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segmento, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira, telefone_cobranca: telefoneCobranca }).eq('id',id));
-    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segmento,valor_mensalidade:valorPersonalizado,valor_mensalidade_expira_em:valorExpira,telefone_cobranca:telefoneCobranca}; }
+    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segmento, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira, telefone_cobranca: telefoneCobranca, voz_ativo: vozAtivo }).eq('id',id));
+    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segmento,valor_mensalidade:valorPersonalizado,valor_mensalidade_expira_em:valorExpira,telefone_cobranca:telefoneCobranca,voz_ativo:vozAtivo}; }
     const iaKeyVal = (document.getElementById('cli-ia-key')?.value || '').trim();
     if (!error && iaKeyVal && !iaKeyVal.startsWith('•')) {
       try {
