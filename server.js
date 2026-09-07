@@ -5060,7 +5060,7 @@ async function extrairPedidoDeTexto(tenantId, texto) {
   try {
     const apiKey = _resolverOpenAIKey(tenantId)
     if (!apiKey) { log('⚠️', `[VOZ] Sem chave OpenAI pra extração — tenant=${tenantId}`); return null }
-    const itensAtivos = db.prepare("SELECT id,name,price FROM menu_items WHERE tenant_id=? AND status='ativo'").all(tenantId)
+    const itensAtivos = db.prepare("SELECT id,name,price FROM menu_items WHERE tenant_id=? AND COALESCE(status,'ativo')!='pausado'").all(tenantId)
     if (!itensAtivos.length) return { itens: [], bairro: null, observacao_geral: null, nao_entendido: 'Cardápio vazio ou não configurado.' }
     const cardapioCtx = itensAtivos.map(i => ({ id: i.id, nome: i.name, preco: parseFloat(i.price) || 0 }))
     const sysPrompt = [
