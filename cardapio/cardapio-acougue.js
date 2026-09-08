@@ -202,6 +202,9 @@ function _getPreparoIcon(nome) {
   else if (n.includes('frigideira') || n.includes('frigid')) key = 'frigideira';
   else if (n.includes('forno'))      key = 'forno';
   else if (n.includes('airfryer') || n.includes('air fryer')) key = 'airfryer';
+  else if (n.includes('panela'))     key = 'panela';
+  else if (n.includes('ensopado'))   key = 'ensopado';
+  else if (n.includes('espeto'))     key = 'espeto';
   if (key && _preparoImgMap[key]) {
     const html = _preparoMediaHtml(key, _preparoImgMap[key], nome, 20);
     if (html) return html;
@@ -759,8 +762,15 @@ function _renderAcougueGrupos(item, wrap, grupos) {
   if (preparosGrp?.opcoes?.length) {
     const chips = preparosGrp.opcoes.map(o => {
       const slug = _slug(o.nome || o.id);
+      // Prioridade: 1) imagem própria salva nessa opção (o.icon — é o que o
+      // admin edita em "Ícones do Açougue" e o corte já usava assim);
+      // 2) tenta adivinhar pelo nome como fallback pra dados antigos que
+      // não tinham esse campo preenchido.
+      const iconHtml = (o.icon && (o.icon.startsWith('http') || o.icon.startsWith('/')))
+        ? `<img src="${o.icon}" style="width:20px;height:20px;object-fit:contain" onerror="this.outerHTML=${JSON.stringify(_getPreparoIcon(o.nome || o.id))}">`
+        : _getPreparoIcon(o.nome || o.id);
       return `<div class="preparo-chip" id="preparo-chip-${slug}" onclick="togglePreparo('${_escape(o.nome||o.id)}',this)">
-        <div class="preparo-chip-icon">${_getPreparoIcon(o.nome||o.id)}</div>
+        <div class="preparo-chip-icon">${iconHtml}</div>
         <span>${o.nome||o.id}</span>
       </div>`;
     }).join('');
