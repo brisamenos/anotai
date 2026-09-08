@@ -2434,6 +2434,17 @@ async function garcomPrint(order, newItems) {
 
     const itensCozinha = items.filter(isCozinha);
     const itensBebida  = items.filter(i => !isCozinha(i));
+
+    // "Somente caixa — sem via de cozinha": existia só como opção no menu,
+    // nunca tinha sido implementada de verdade — caía no mesmo caminho da
+    // "Via única" e imprimia os itens de cozinha do mesmo jeito. Nesse modo,
+    // o envio do pedido pra cozinha não deve imprimir nada — só a impressão
+    // da conta (imprimirContaMesa), no fechamento, continua funcionando.
+    if (viaMode === 'somente_principal') {
+      console.log('[GARCOM PRINT] Modo "somente caixa" — não imprime via de cozinha ao enviar pedido.');
+      return;
+    }
+
     const htmlCozinha  = montarVia('VIA DA COZINHA', itensCozinha);
     const htmlBar      = montarVia('VIA DO BAR', itensBebida);
     const setorJobs    = _garcomBuildSetorJobs(order, cfg, itensCozinha, printerCozinha);

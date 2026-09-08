@@ -1348,7 +1348,11 @@ function subscribeOrders() {
           setTimeout(() => advanceOrderById(p.new.id), 800);
         }
         // Auto-impressão se modo automático estiver ativo (bebidas não imprimem)
-        if ((window._printMode || _printMode) === 'auto') printOrder(mapOrder(p.new));
+        // Pedido de mesa já é impresso pelo próprio app do garçom (garcom.html,
+        // respeitando o "Modo das vias" configurado) — imprimir de novo aqui
+        // duplicava o papel. Só imprime automaticamente pedidos que NÃO têm
+        // esse controle próprio (cardápio, WhatsApp, voz, etc.)
+        if ((window._printMode || _printMode) === 'auto' && !p.new.mesa_num) printOrder(mapOrder(p.new));
       }
       // Atualiza cache de mesa e rerenderiza SEM nova query ao banco
       if (p.new.mesa_num) {
@@ -1404,7 +1408,7 @@ function subscribeOrders() {
           printOrder(mapped);
         } else {
           if (_autoAcceptOn && !isPixManualPendente) setTimeout(() => advanceOrderById(p.new.id), 800);
-          if ((window._printMode || _printMode) === 'auto' && !isPixManualPendente) printOrder(mapped);
+          if ((window._printMode || _printMode) === 'auto' && !isPixManualPendente && !p.new.mesa_num) printOrder(mapped);
         }
         return;
       }
@@ -1739,7 +1743,7 @@ function _subscribeOrdersSSE() {
         showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(order.id, order.order_num)} - ${order.client}`);
         sendBrowserNotif(`Novo pedido #${_orderNum(order.id, order.order_num)}`, `${order.client} - ${itemsList}`);
         if (_autoAcceptOn && mapped.status === 'analise') setTimeout(() => advanceOrderById(order.id), 800);
-        if ((window._printMode || _printMode) === 'auto') printOrder(mapped);
+        if ((window._printMode || _printMode) === 'auto' && !order.mesa_num) printOrder(mapped);
       }
     } catch(err) { console.error('[ORDERS-SSE INSERT] error:', err); }
   });
@@ -1794,7 +1798,7 @@ function _subscribeOrdersSSE() {
           printOrder(mapped);
         } else {
           if (_autoAcceptOn && !isPixManualPendente) setTimeout(() => advanceOrderById(order.id), 800);
-          if ((window._printMode || _printMode) === 'auto' && !isPixManualPendente) printOrder(mapped);
+          if ((window._printMode || _printMode) === 'auto' && !isPixManualPendente && !order.mesa_num) printOrder(mapped);
         }
         return;
       }
@@ -2310,7 +2314,7 @@ setInterval(async () => {
             showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(o.id, o.order_num)} — ${o.client}`);
             sendBrowserNotif(`Novo pedido #${_orderNum(o.id, o.order_num)}`, `${o.client} — ${items}`);
             if (_autoAcceptOn && o.status === 'analise') setTimeout(() => advanceOrderById(o.id), 800);
-            if ((window._printMode || _printMode) === 'auto' && !(o.status === 'aguardando_pix' && o.pag !== 'pix_manual')) printOrder(mapOrder(o));
+            if ((window._printMode || _printMode) === 'auto' && !(o.status === 'aguardando_pix' && o.pag !== 'pix_manual') && !o.mesa_num) printOrder(mapOrder(o));
             // Atualiza cache mesa se for pedido de mesa
             if (o.mesa_num) { _patchOrderInCache(o); _renderMesaPageFromCache(); }
           }
