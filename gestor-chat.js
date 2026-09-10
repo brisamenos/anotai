@@ -203,9 +203,19 @@
       }
       @media(max-width:760px){
         #gestor-chat-root{right:auto;bottom:auto}
-        .gc-fab{right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px))}
-        .gc-fab{width:54px;height:54px;border-radius:18px}
+        /* Abinha lateral (não mais botão flutuante em cima da barra de
+           baixo/outras ferramentas) — fica encostada na borda direita,
+           na metade da altura da tela. */
+        .gc-fab{
+          right:0;bottom:auto;top:40%;
+          width:30px;height:58px;border-radius:14px 0 0 14px;
+          box-shadow:-3px 3px 14px rgba(37,99,235,.4);
+        }
+        .gc-fab svg{width:16px;height:16px}
+        .gc-fab-badge{left:-6px;right:auto;top:-6px}
         .gc-panel{position:fixed;left:8px;right:8px;top:58px;bottom:calc(8px + env(safe-area-inset-bottom,0px));width:auto;min-width:0;max-height:calc(100vh - 66px - env(safe-area-inset-bottom,0px));border-radius:18px}
+        .gc-panel.on{animation:gcPanelInRight .22s cubic-bezier(.34,1.1,.64,1)}
+        @keyframes gcPanelInRight{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
         .gc-panel>.gc-head{padding:0 10px 0 12px;gap:9px}
         .gc-head-count{display:none}
         .gc-back{display:flex}
