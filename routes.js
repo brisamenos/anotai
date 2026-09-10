@@ -4438,6 +4438,34 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Sincroniza retroativamente o robô pra faturas pendentes que já
+  // existiam antes dessa funcionalidade (ou que por qualquer motivo não
+  // geraram o aviso na hora certa). Sem isso, só fatura NOVA (gerada depois
+  // dessa atualização) ganhava o robô automaticamente.
+  if (req.method === 'POST' && upath === '/api/admin/robo-fatura/sincronizar') {
+    const adm = validarSessaoAdmin(req)
+    if (!adm) { send(res, 401, { error: 'Sessão admin inválida' }); return true }
+    try {
+      const pendentes = db.prepare(`
+        SELECT f.tenant_id, f.plano, f.valor, f.vence_em
+        FROM faturas f
+        WHERE f.status='pendente'
+          AND f.id = (SELECT MAX(f2.id) FROM faturas f2 WHERE f2.tenant_id = f.tenant_id AND f2.status='pendente')
+      `).all()
+      let criados = 0
+      for (const f of pendentes) {
+        _upsertRoboFaturaAlert(db, sseBroadcast, f.tenant_id, {
+          planoNome: _planoSaasLabel(f.plano),
+          valorTxt: parseFloat(f.valor).toFixed(2).replace('.', ','),
+          venceEmTxt: new Date(f.vence_em + 'T00:00:00').toLocaleDateString('pt-BR')
+        })
+        criados++
+      }
+      send(res, 200, { ok: true, criados })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
   // ── Fatura pendente do tenant (pro botão "Pagar agora" do robô) ─────
   // Devolve só o necessário pra mostrar o QR/copia-cola — nunca o histórico
   // inteiro, e nunca dado de outro tenant (sempre filtrado pelo header).
