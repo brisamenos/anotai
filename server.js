@@ -2546,6 +2546,17 @@ async function responderAcompanhamentoWhatsapp({ tenantId, phone, text, msgIds =
     `).get(tenantId, ...phoneArgs)
   }
 
+  // Pedido já cancelado — não faz sentido o robô responder com a barra de
+  // progresso completa (Recebido > Em preparo > ... > Entregue) pra um
+  // pedido que nunca passou por esses passos de verdade. "Entregue" fica
+  // de fora dessa checagem de propósito: é o final feliz normal de quase
+  // todo pedido, e é comum o cliente confirmar "chegou?" logo depois — aí
+  // sim faz sentido o robô responder confirmando.
+  if (pedido && String(pedido.status || '').toLowerCase() === 'cancelado') {
+    log('🔇', `[wa_track] Pedido #${pedido.id} está cancelado — não responde acompanhamento automático`)
+    return false
+  }
+
   let resposta = ''
   if (pedido) {
     const statusRaw = String(pedido.status || '').toLowerCase()
@@ -2569,9 +2580,9 @@ async function responderAcompanhamentoWhatsapp({ tenantId, phone, text, msgIds =
     })
     log('✅', `[wa_track] Pedido #${pedido.id} ativado por solicitação de acompanhamento no WhatsApp`)
   } else if (info.number) {
-    resposta = `Nao localizei o pedido *#${String(info.number).padStart(3, '0')}* para este WhatsApp. Confira o numero do pedido ou fale com a loja.`
+    resposta = `🔎 Não encontrei o pedido *#${String(info.number).padStart(3, '0')}* aqui pra esse número de WhatsApp. Confere se o número do pedido está certo, ou chama a loja que a gente te ajuda!`
   } else {
-    resposta = 'Nao localizei um pedido recente para este WhatsApp. Se acabou de fazer o pedido com outro numero, fale com a loja para conferir.'
+    resposta = '🔎 Não encontrei nenhum pedido recente pra esse número de WhatsApp. Se você fez o pedido com outro número, chama a loja que a gente confere pra você!'
   }
 
   try {
@@ -5866,6 +5877,12 @@ async function handleIAWebhook(req, res) {
           // Sem número citado — pega o pedido mais recente do cliente
           ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} ORDER BY id DESC LIMIT 1`).get(tenantId, ..._phoneArgs)
         }
+        if (ped && String(ped.status || '').toLowerCase() === 'cancelado') {
+          // Mesmo motivo do acompanhamento automático: não faz sentido mostrar
+          // a barra de progresso completa pra um pedido que foi cancelado e
+          // nunca passou por esses passos de verdade.
+          ped = null
+        }
         if (ped) {
           const pedNum = _iaPedNum(ped)
           const td = _tempoDecorrido(ped.created_at)
@@ -5892,15 +5909,15 @@ async function handleIAWebhook(req, res) {
           if (_numMatch) {
             const nInfo = String(parseInt(_numMatch[1])).padStart(3, '0')
             resposta = _pickOne([
-              `Nao localizei o pedido *#${nInfo}* para este WhatsApp. Confira o numero do pedido ou fale com a loja.`,
-              `Nao encontrei o pedido *#${nInfo}* vinculado a este WhatsApp. Se precisar, um atendente pode conferir pra voce.`,
-              `Esse pedido *#${nInfo}* nao apareceu para este WhatsApp. Confere o numero e me chama de novo.`
+              `🔎 Não encontrei o pedido *#${nInfo}* pra esse WhatsApp. Confere o número ou chama a loja que a gente te ajuda!`,
+              `🔎 Não achei o pedido *#${nInfo}* vinculado a esse número. Se precisar, um atendente confere pra você.`,
+              `🔎 Esse pedido *#${nInfo}* não apareceu aqui pra esse WhatsApp. Confere o número e me chama de novo!`
             ])
           } else {
           resposta = _pickOne([
-            `Não localizei seu pedido. Pra fazer um novo: ${linkCardapio}`,
-            `Não achei pedido recente seu. Confira o cardápio: ${linkCardapio}`,
-            `Não encontrei pedido seu por aqui. Cardápio: ${linkCardapio}`
+            `🔎 Não encontrei nenhum pedido seu por aqui. Bora fazer um novo? 😋 ${linkCardapio}`,
+            `🔎 Não achei pedido recente seu. Dá uma olhada no cardápio: ${linkCardapio}`,
+            `🔎 Não encontrei pedido seu por aqui. Cardápio completo: ${linkCardapio}`
           ])
           }
         }
@@ -6120,6 +6137,12 @@ const ICONES_PADRAO_VALIDOS = new Set([
   'tags/panela.png',
   'tags/smoker.png',
   'tags/wind.png',
+  'ocasiao/churrasco.png',
+  'ocasiao/dia_a_dia.png',
+  'ocasiao/final_semana.png',
+  'ocasiao/festas.png',
+  'ocasiao/especial.png',
+  'ocasiao/semana.png',
 ])
 // Vídeos das "Formas de preparo" (tags) — recurso exclusivo dessa seção,
 // não existe pra cortes. Um único arquivo por preparo (sem variante

@@ -62,24 +62,24 @@ function subtotalItems(items) {
 function deliveryKind(addr) {
   const text = cleanText(addr)
   const lower = text.toLowerCase()
-  if (!text) return { kind: 'retirada', title: 'Retirada', detail: 'Retirada no balcao' }
-  if (/^mesa\b/i.test(text)) return { kind: 'mesa', title: 'Mesa', detail: text }
-  if (/^retirada\b/i.test(text) || lower.includes('balcao')) return { kind: 'retirada', title: 'Retirada', detail: text }
-  return { kind: 'delivery', title: 'Entrega', detail: text }
+  if (!text) return { kind: 'retirada', title: '🏠 Retirada', detail: 'Retirada no balcao' }
+  if (/^mesa\b/i.test(text)) return { kind: 'mesa', title: '🪑 Mesa', detail: text }
+  if (/^retirada\b/i.test(text) || lower.includes('balcao')) return { kind: 'retirada', title: '🏠 Retirada', detail: text }
+  return { kind: 'delivery', title: '🛵 Entrega', detail: text }
 }
 
 function statusLabel(status, kind) {
-  const deliveryReady = kind === 'delivery' ? 'Pronto para sair para entrega' : 'Pronto para retirada/consumo'
+  const deliveryReady = kind === 'delivery' ? '📦 Pronto, já vai sair para entrega' : '✅ Pronto para retirada/consumo'
   const labels = {
-    aguardando_pix: 'Aguardando pagamento PIX',
-    aguardando_cartao: 'Aguardando pagamento no cartao',
-    analise: 'Pedido recebido, aguardando confirmacao',
-    producao: 'Em preparo',
+    aguardando_pix: '⏳ Aguardando pagamento PIX',
+    aguardando_cartao: '⏳ Aguardando pagamento no cartão',
+    analise: '📝 Recebemos seu pedido! Aguardando confirmação',
+    producao: '👨‍🍳 Em preparo',
     pronto: deliveryReady,
-    saiu: 'Saiu para entrega',
-    entregue: 'Entregue',
-    cancelado: 'Cancelado',
-    finalizado: 'Finalizado'
+    saiu: '🛵 Saiu para entrega',
+    entregue: '✅ Entregue — bom apetite! 😋',
+    cancelado: '❌ Cancelado',
+    finalizado: '✅ Finalizado'
   }
   return labels[status] || cleanText(status || 'Em andamento')
 }
@@ -130,16 +130,16 @@ function buildOrderTrackingMessage(options) {
   const troco = Number(order.troco || 0)
 
   const lines = [
-    `*${storeName}*`,
+    `*${storeName}* 🍽️`,
     orderTitle,
     '',
     `Status atual: ${statusLabel(order.status, delivery.kind)}${elapsedText ? ` - feito ${elapsedText}` : ''}`,
     `Progresso: ${progressLine(order.status, delivery.kind)}`,
     '',
-    '*Itens do pedido*',
+    '🧾 *Itens do pedido*',
     formatOrderItems(items),
     '',
-    '*Valores*'
+    '💰 *Valores*'
   ]
 
   if (subtotal > 0) lines.push(`Subtotal dos itens: R$ ${moneyBR(subtotal)}`)
@@ -153,7 +153,7 @@ function buildOrderTrackingMessage(options) {
 
   lines.push('', `*${delivery.title}*`, delivery.detail)
   if (includeTrackingNote) {
-    lines.push('', '_Vou te avisar por aqui a cada novidade do seu pedido._')
+    lines.push('', '_📲 Vou te avisar por aqui a cada novidade do seu pedido!_')
   }
 
   return lines.join('\n')
