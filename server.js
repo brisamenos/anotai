@@ -1292,6 +1292,8 @@ garantirColuna('store_config', 'order_auto_reset_daily', "INTEGER DEFAULT 0")
 garantirColuna('store_config', 'order_auto_reset_last_date', "TEXT")
 garantirColuna('store_config', 'store_banners', "TEXT DEFAULT '[]'")
 garantirColuna('admin_alerts', 'display_mode', "TEXT DEFAULT 'banner'")
+garantirColuna('admin_alerts', 'cta_label', "TEXT DEFAULT ''")
+garantirColuna('admin_alerts', 'cta_whatsapp', "TEXT DEFAULT ''")
 garantirColuna('radio_messages', 'audio_mime', "TEXT DEFAULT 'audio/webm'")
 garantirColuna('mesas', 'clientes_json', "TEXT DEFAULT '[]'")
 garantirColuna('mesas', 'pagamentos_json', "TEXT DEFAULT '[]'")
@@ -2395,7 +2397,7 @@ const TABLE_COLS = {
   faturas:      ['id','tenant_id','plano','valor','meses','metodo','status','link_pagamento','mp_payment_id','mp_external_ref','qr_code','qr_code_base64','vence_em','pago_em','cancelado_em','obs','created_at'],
   plano_assinaturas: ['id','tenant_id','plano','valor','status','mp_preapproval_id','mp_external_ref','payer_email','payment_method_id','last_authorized_payment_id','last_payment_id','last_payment_status','next_payment_at','started_at','canceled_at','updated_at','created_at'],
   admin_audit_log: ['id','admin_id','admin_nome','admin_email','acao','alvo_tipo','alvo_id','alvo_nome','detalhes','ip','user_agent','created_at'],
-  admin_alerts: ['id','tipo','titulo','mensagem','display_mode','bg_color','text_color','font_family','target_all','target_tenants','ativo','created_by','created_at','updated_at','expires_at'],
+  admin_alerts: ['id','tipo','titulo','mensagem','display_mode','bg_color','text_color','font_family','cta_label','cta_whatsapp','target_all','target_tenants','ativo','created_by','created_at','updated_at','expires_at'],
 }
 // Colunas que NUNCA aparecem na resposta GET — mas ainda funcionam como filtro WHERE e em escrita
 const STRIP_FROM_OUTPUT = {

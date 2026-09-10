@@ -1856,6 +1856,7 @@ let _adminAnnouncementsSseTenant = null;
 let _adminAnnouncementsSseAll = null;
 let _adminAnnouncementsRefreshTimer = null;
 let _adminAnnPopupDismissed = new Set();
+let _adminAnnRoboDismissed = new Set();
 
 function _adminAnnEscape(s) {
   if (s == null) return '';
@@ -1863,7 +1864,7 @@ function _adminAnnEscape(s) {
 }
 
 function _adminAnnTipoLabel(tipo) {
-  return ({ aviso:'Aviso', promocao:'Promo', alerta:'Alerta', novidade:'Novo' })[tipo] || 'Aviso';
+  return ({ aviso:'Aviso', promocao:'Promo', alerta:'Alerta', novidade:'Novo', robo_fatura:'Fatura' })[tipo] || 'Aviso';
 }
 
 function _adminAnnColor(value) {
@@ -1896,6 +1897,125 @@ function _adminAnnStyle(a) {
 function _adminAnnTextStyle(a) {
   const tx = _adminAnnColor(a.text_color) || '#ffffff';
   return `color:${tx}!important`;
+}
+
+// ── Robô de notificação (lateral direita) ────────────────────────────────
+// Modo "robo" dos comunicados do admin: aparece como um card flutuante na
+// borda direita da tela, com um mascote, título/mensagem, e um botão
+// opcional que abre o WhatsApp direto (pra promoções, cobrança, etc.)
+let _adminAnnRoboIndex = 0;
+function _adminAnnRoboAvatarSvg() {
+  return `<svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+    <rect x="6" y="10" width="22" height="18" rx="7" fill="#fff" fill-opacity=".16"/>
+    <rect x="6" y="10" width="22" height="18" rx="7" stroke="#fff" stroke-width="1.6"/>
+    <circle cx="13.5" cy="19" r="2.1" fill="#fff"/>
+    <circle cx="20.5" cy="19" r="2.1" fill="#fff"/>
+    <path d="M17 10V5.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+    <circle cx="17" cy="4" r="1.8" fill="#fff"/>
+    <path d="M13 23.5c1.2 1 5.8 1 8 0" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+  </svg>`;
+}
+function _adminAnnRoboWaLink(a) {
+  const digits = String(a.cta_whatsapp || '').replace(/\D/g, '');
+  if (!digits) return null;
+  const num = digits.startsWith('55') ? digits : `55${digits}`;
+  const txt = encodeURIComponent(`Oi! Vi o aviso "${a.titulo || a.mensagem.slice(0, 40)}" no meu painel.`);
+  return `https://wa.me/${num}?text=${txt}`;
+}
+function fecharAdminAnnouncementRobo(id) {
+  _adminAnnRoboDismissed.add(String(id));
+  _renderAdminAnnouncementRobo();
+}
+// Busca a fatura pendente do tenant e mostra o PIX (QR + copia-cola) num
+// modal simples, sem sair do painel — chamado pelo botão "Pagar agora" do
+// robô de fatura vencendo.
+async function _abrirPixRoboFatura(btn) {
+  const original = btn.textContent;
+  btn.textContent = 'Carregando...'; btn.disabled = true;
+  try {
+    const tid = _sessao?.tenant_id;
+    const r = await fetch('/api/gestor/fatura-pendente', { headers: { 'x-tenant-id': tid } });
+    const f = r.ok ? await r.json() : null;
+    if (!f || !f.qr_code) {
+      sbToast('err', 'Não encontrei uma fatura pendente pra pagar agora. Atualize a página e tente de novo.');
+      return;
+    }
+    const fmt = v => parseFloat(v || 0).toFixed(2).replace('.', ',');
+    const existing = document.getElementById('robo-pix-modal');
+    existing?.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'robo-pix-modal';
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:10095;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.62);backdrop-filter:blur(7px)';
+    wrap.innerHTML = `
+      <div style="width:min(360px,94vw);background:var(--surface);border:1px solid var(--border);border-radius:22px;box-shadow:0 28px 90px rgba(2,6,23,.48);overflow:hidden;text-align:center">
+        <div style="padding:18px 20px;background:#2563eb;color:#fff">
+          <div style="font-size:15px;font-weight:900">Pagamento via PIX</div>
+          <div style="font-size:22px;font-weight:900;margin-top:4px">R$ ${fmt(f.valor)}</div>
+        </div>
+        <div style="padding:20px">
+          ${f.qr_code_base64 ? `<img src="data:image/png;base64,${f.qr_code_base64}" style="width:200px;height:200px;margin:0 auto;border-radius:12px;border:1px solid var(--border)">` : ''}
+          <div style="font-size:11.5px;color:var(--muted);margin-top:14px;margin-bottom:6px">Ou copie o código:</div>
+          <textarea readonly style="width:100%;height:64px;font-size:10.5px;border:1px solid var(--border);border-radius:10px;padding:8px;resize:none;background:var(--surface2);color:var(--text)" onclick="this.select()">${f.qr_code}</textarea>
+          <button type="button" onclick="navigator.clipboard.writeText(${JSON.stringify(f.qr_code)});sbToast('ok','Código copiado!')" style="width:100%;margin-top:10px;padding:11px;border:none;border-radius:12px;background:#2563eb;color:#fff;font-weight:800;font-size:13px;cursor:pointer">Copiar código</button>
+          <button type="button" onclick="document.getElementById('robo-pix-modal')?.remove()" style="width:100%;margin-top:8px;padding:11px;border:1px solid var(--border);border-radius:12px;background:none;color:var(--text);font-weight:700;font-size:13px;cursor:pointer">Fechar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  } catch(e) {
+    sbToast('err', 'Não consegui carregar o PIX agora. Tenta de novo em instantes.');
+  } finally {
+    btn.textContent = original; btn.disabled = false;
+  }
+}
+
+function _renderAdminAnnouncementRobo() {
+  let el = document.getElementById('admin-ann-robo');
+  const robos = _adminAnnouncements.filter(a => {
+    const mode = String(a.display_mode || 'banner').toLowerCase();
+    return mode === 'robo' && !_adminAnnRoboDismissed.has(String(a.id));
+  });
+  if (!robos.length) { el?.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'admin-ann-robo';
+    el.style.cssText = 'position:fixed;right:16px;top:96px;z-index:2400;display:flex;flex-direction:column;gap:10px;max-width:min(320px,calc(100vw - 32px))';
+    document.body.appendChild(el);
+  }
+  const a = robos[_adminAnnRoboIndex % robos.length] || robos[0];
+  const bg = _adminAnnColor(a.bg_color) || '#2563eb';
+  const tx = _adminAnnColor(a.text_color) || '#ffffff';
+  const font = _adminAnnFont(a.font_family);
+  const waLink = _adminAnnRoboWaLink(a);
+  const contador = robos.length > 1 ? `<span style="font-size:10px;font-weight:800;opacity:.75;margin-left:6px">${_adminAnnRoboIndex + 1}/${robos.length}</span>` : '';
+  el.innerHTML = `
+    <div style="display:flex;gap:10px;align-items:flex-start;background:${bg};color:${tx};border-radius:16px 16px 4px 16px;padding:13px 14px;box-shadow:0 16px 40px rgba(2,8,23,.32);font-family:${font};animation:adminAnnRoboIn .28s cubic-bezier(.34,1.1,.64,1)">
+      <div style="flex-shrink:0;width:34px;height:34px;display:flex;align-items:center;justify-content:center">${_adminAnnRoboAvatarSvg()}</div>
+      <div style="min-width:0;flex:1">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.4px;opacity:.85">${_adminAnnEscape(_adminAnnTipoLabel(a.tipo))}${contador}</span>
+          <button type="button" onclick="fecharAdminAnnouncementRobo(${a.id})" style="background:rgba(255,255,255,.18);border:none;color:${tx};width:20px;height:20px;border-radius:50%;cursor:pointer;font-size:13px;line-height:1;flex-shrink:0">×</button>
+        </div>
+        ${a.titulo ? `<div style="font-size:13.5px;font-weight:900;margin-top:3px;line-height:1.25">${_adminAnnEscape(a.titulo)}</div>` : ''}
+        <div style="font-size:12.5px;line-height:1.45;margin-top:4px;white-space:pre-wrap;opacity:.96">${_adminAnnEscape(a.mensagem || '')}</div>
+        ${a.tipo === 'robo_fatura' ? `<button type="button" onclick="_abrirPixRoboFatura(this)" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;margin-right:6px;background:rgba(255,255,255,.94);color:#111;border:none;border-radius:999px;padding:7px 12px;font-size:11.5px;font-weight:900;cursor:pointer">
+          💳 Pagar agora (PIX)
+        </button>` : ''}
+        ${waLink ? `<a href="${waLink}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;background:rgba(255,255,255,.94);color:#111;border-radius:999px;padding:7px 12px;font-size:11.5px;font-weight:900;text-decoration:none">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13.5 7.75a5.75 5.75 0 1 1-9.6-4.28L2.5 1.5l1.97 1.17A5.72 5.72 0 0 1 13.5 7.75Z" stroke="#25D366" stroke-width="1.3"/><path d="M6 6.5c.3.8.9 1.5 1.5 2s1.5.9 2 .6l.5-.3c.2-.1.4-.1.5.1l.8 1.1c.1.2.1.4-.1.5-.8.5-2.1.5-3.2-.4C6.9 9.2 6 8 5.8 6.8c-.1-.6.1-1.1.4-1.3.2-.1.4-.1.5.1l.8 1.1c.1.1.1.3 0 .4l-.5.4Z" fill="#25D366"/></svg>
+          ${_adminAnnEscape(a.cta_label || 'Falar no WhatsApp')}
+        </a>` : ''}
+        ${robos.length > 1 ? `<button type="button" onclick="_adminAnnRoboIndex++;_renderAdminAnnouncementRobo()" style="display:block;margin-top:8px;background:none;border:none;color:${tx};opacity:.8;font-size:11px;font-weight:800;cursor:pointer;text-decoration:underline;padding:0">Próximo aviso</button>` : ''}
+      </div>
+    </div>
+  `;
+  if (!document.getElementById('admin-ann-robo-style')) {
+    const st = document.createElement('style');
+    st.id = 'admin-ann-robo-style';
+    st.textContent = '@keyframes adminAnnRoboIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}';
+    document.head.appendChild(st);
+  }
 }
 
 function _renderAdminAnnouncements() {
@@ -1989,6 +2109,7 @@ async function carregarAdminAnnouncementsGestor() {
     _adminAnnouncements = Array.isArray(rows) ? rows : [];
     _renderAdminAnnouncements();
     _renderAdminAnnouncementPopup();
+    _renderAdminAnnouncementRobo();
   } catch(e) {
     console.warn('[admin-alerts] erro:', e?.message || e);
   }
@@ -2006,7 +2127,15 @@ function _subscribeAdminAnnouncements() {
   try { _adminAnnouncementsSseAll?.close(); } catch {}
   _adminAnnouncementsSseTenant = new EventSource(`/sse/admin-alerts:${tid}`);
   _adminAnnouncementsSseAll = new EventSource('/sse/admin-alerts:all');
-  const onRefresh = () => _scheduleAdminAnnouncementsRefresh();
+  // Mesmo canal já usado pros avisos do robô — reaproveita aqui pra também
+  // revalidar o bloqueio de plano na hora que o pagamento é confirmado
+  // (_limparRoboFaturaAlert dispara nesse mesmo canal). Sem isso, o painel
+  // só se autocorrigia na checagem periódica de 5 em 5 minutos — o cliente
+  // tinha que atualizar a página na mão pra ver o desbloqueio.
+  const onRefresh = () => {
+    _scheduleAdminAnnouncementsRefresh();
+    if (typeof billingRefreshLockStatus === 'function') billingRefreshLockStatus({ reload: false });
+  };
   _adminAnnouncementsSseTenant.addEventListener('admin_alerts:REFRESH', onRefresh);
   _adminAnnouncementsSseAll.addEventListener('admin_alerts:REFRESH', onRefresh);
   _adminAnnouncementsSseTenant.onerror = () => {

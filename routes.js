@@ -1160,10 +1160,41 @@ function _expirarPromocoesVencidas(db, log) {
 }
 
 let _autoCobrancaJobIniciado = false
+// Cria (ou substitui) o aviso do "robô" na lateral do gestor avisando que a
+// fatura dele está vencendo. Usa tipo='robo_fatura' como marcador interno
+// (não aparece no seletor manual do admin) pra sempre existir só UM desse
+// tipo por tenant — se já tiver um de uma cobrança anterior, apaga antes de
+// criar o novo, em vez de empilhar avisos repetidos.
+function _upsertRoboFaturaAlert(db, sseBroadcast, tenantId, { planoNome, valorTxt, venceEmTxt }) {
+  try {
+    db.prepare("DELETE FROM admin_alerts WHERE tipo='robo_fatura' AND target_tenants LIKE ?").run(`%"${tenantId}"%`)
+    const cfgG = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const iaG = cfgG?.ia_config ? JSON.parse(cfgG.ia_config) : {}
+    const ctaWhatsapp = String(iaG.whatsapp_robo || '').replace(/\D/g, '')
+    const titulo = 'Fatura chegando! 🧾'
+    const mensagem = `Sua mensalidade do plano ${planoNome} vence em ${venceEmTxt} — valor R$ ${valorTxt}. Já mandei o PIX aqui no WhatsApp, mas se preferir resolver por aqui também dá!`
+    const info = db.prepare(`
+      INSERT INTO admin_alerts (tipo,titulo,mensagem,display_mode,bg_color,text_color,font_family,cta_label,cta_whatsapp,target_all,target_tenants,ativo,created_by,expires_at,created_at,updated_at)
+      VALUES ('robo_fatura',?,?,'robo','#f59e0b','#ffffff','outfit',?,?,0,?,1,'sistema',NULL,datetime('now'),datetime('now'))
+    `).run(titulo, mensagem, ctaWhatsapp ? 'Falar sobre o pagamento' : '', ctaWhatsapp, JSON.stringify([String(tenantId)]))
+    const row = db.prepare('SELECT * FROM admin_alerts WHERE id=?').get(info.lastInsertRowid)
+    if (sseBroadcast) sseBroadcast(`admin-alerts:${tenantId}`, 'admin_alerts:REFRESH', { id: row.id, action: 'insert', ts: Date.now() })
+  } catch(e) { /* aviso do robô é cosmético — nunca deve travar a cobrança de verdade por causa disso */ }
+}
+
+// Remove o robô de "fatura vencendo" desse tenant assim que o pagamento é
+// confirmado — não faz sentido continuar avisando depois que já foi pago.
+function _limparRoboFaturaAlert(db, sseBroadcast, tenantId) {
+  try {
+    const changed = db.prepare("DELETE FROM admin_alerts WHERE tipo='robo_fatura' AND target_tenants LIKE ?").run(`%"${tenantId}"%`)
+    if (changed.changes > 0 && sseBroadcast) sseBroadcast(`admin-alerts:${tenantId}`, 'admin_alerts:REFRESH', { action: 'delete', ts: Date.now() })
+  } catch(e) {}
+}
+
 function _iniciarAutoCobrancaJob(ctx) {
   if (_autoCobrancaJobIniciado) return
   _autoCobrancaJobIniciado = true
-  const { db, log, MP_TOKEN, EVO_URL, EVO_KEY, EVO_INST, sendWA, sendWAImage, marcarDirty } = ctx
+  const { db, log, MP_TOKEN, EVO_URL, EVO_KEY, EVO_INST, sendWA, sendWAImage, marcarDirty, sseBroadcast } = ctx
   log('🔄', 'Auto-cobrança job iniciado (intervalo: 6h)')
 
   async function tick() {
@@ -1297,6 +1328,15 @@ function _iniciarAutoCobrancaJob(ctx) {
           }
           marcarDirty()
 
+          // Robô na lateral do gestor avisando da fatura — independente de
+          // ter telefone de cobrança configurado ou não (o WA abaixo é outro
+          // canal, este aqui é o aviso dentro do próprio painel).
+          _upsertRoboFaturaAlert(db, sseBroadcast, t.id, {
+            planoNome: _planoSaasLabel(plano),
+            valorTxt: parseFloat(valor).toFixed(2).replace('.', ','),
+            venceEmTxt: new Date(venceEm + 'T00:00:00').toLocaleDateString('pt-BR')
+          })
+
           // Manda WA — prioriza o telefone de cobrança cadastrado no super admin;
           // se não houver, cai pro WhatsApp da loja (store_config)
           try {
@@ -1404,10 +1444,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!row) return row
     return {
       ...row,
-      display_mode: ['banner','popup','both'].includes(String(row.display_mode || '').toLowerCase()) ? String(row.display_mode).toLowerCase() : 'banner',
+      display_mode: ['banner','popup','both','robo'].includes(String(row.display_mode || '').toLowerCase()) ? String(row.display_mode).toLowerCase() : 'banner',
       bg_color: String(row.bg_color || '').trim(),
       text_color: String(row.text_color || '').trim(),
       font_family: String(row.font_family || '').trim() || 'outfit',
+      cta_label: String(row.cta_label || '').trim(),
+      cta_whatsapp: String(row.cta_whatsapp || '').trim(),
       target_all: row.target_all === 1 || row.target_all === true,
       ativo: row.ativo === 1 || row.ativo === true,
       target_tenants: _safeJson(row.target_tenants, [])
@@ -3251,7 +3293,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   }
   const _normalizeAdminAlertInput = (body) => {
     const tipos = new Set(['aviso', 'promocao', 'alerta', 'novidade'])
-    const modos = new Set(['banner', 'popup', 'both'])
+    const modos = new Set(['banner', 'popup', 'both', 'robo'])
     const fontes = new Set(['outfit', 'dm-sans', 'plus-jakarta', 'inter', 'system', 'serif', 'mono'])
     const color = (v, fallback = '') => {
       const s = String(v || '').trim()
@@ -3265,6 +3307,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const bgColor = color(body.bg_color)
     const textColor = color(body.text_color)
     const fontFamily = fontes.has(String(body.font_family || '').toLowerCase()) ? String(body.font_family).toLowerCase() : 'outfit'
+    // Botão opcional que abre o WhatsApp — só faz sentido em "banner"/"popup"/"robo"
+    // com mensagem pronta (ex: falar sobre uma promoção). Guarda só os dígitos
+    // do telefone; o link wa.me é montado na hora de exibir.
+    const ctaLabel = String(body.cta_label || '').trim().slice(0, 40)
+    const ctaWhatsappDigits = String(body.cta_whatsapp || '').replace(/\D/g, '')
+    const ctaWhatsapp = ctaWhatsappDigits ? ctaWhatsappDigits.slice(0, 15) : ''
     const targetAll = body.target_all === false || body.target_all === 0 || body.target_all === '0' ? 0 : 1
     let targetTenants = Array.isArray(body.target_tenants) ? body.target_tenants.map(String).filter(Boolean) : []
     if (!targetAll) {
@@ -3280,7 +3328,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       expiresAt = expiresAt.replace('T', ' ')
       if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(expiresAt)) expiresAt += ':00'
     }
-    return { tipo, displayMode, titulo, mensagem, bgColor, textColor, fontFamily, targetAll, targetTenants, ativo, expiresAt }
+    return { tipo, displayMode, titulo, mensagem, bgColor, textColor, fontFamily, ctaLabel, ctaWhatsapp, targetAll, targetTenants, ativo, expiresAt }
   }
   const indicadorComPermissaoGestor = (sess) => {
     if (!sess) return null
@@ -4390,12 +4438,28 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Fatura pendente do tenant (pro botão "Pagar agora" do robô) ─────
+  // Devolve só o necessário pra mostrar o QR/copia-cola — nunca o histórico
+  // inteiro, e nunca dado de outro tenant (sempre filtrado pelo header).
+  if (req.method === 'GET' && upath === '/api/gestor/fatura-pendente') {
+    const tid = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    const f = db.prepare(`
+      SELECT id, plano, valor, vence_em, qr_code, qr_code_base64, link_pagamento, status
+      FROM faturas
+      WHERE tenant_id=? AND status='pendente'
+      ORDER BY id DESC LIMIT 1
+    `).get(tid)
+    send(res, 200, f || null)
+    return true
+  }
+
   // ── Comunicados do admin exibidos no topo do gestor ─────
   if (req.method === 'GET' && upath === '/api/gestor/comunicados') {
     const tid = getTenantId(req, params)
     if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
     const rows = db.prepare(`
-      SELECT id,tipo,titulo,mensagem,display_mode,bg_color,text_color,font_family,target_all,target_tenants,ativo,created_at,updated_at,expires_at
+      SELECT id,tipo,titulo,mensagem,display_mode,bg_color,text_color,font_family,cta_label,cta_whatsapp,target_all,target_tenants,ativo,created_at,updated_at,expires_at
       FROM admin_alerts
       WHERE ativo=1
       ORDER BY created_at DESC
@@ -4414,9 +4478,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'GET' && upath === '/api/admin/comunicados') {
     const adm = validarSessaoAdmin(req)
     if (!adm) { send(res, 401, { error: 'Sessão admin inválida' }); return true }
+    // tipo='robo_fatura' é gerado sozinho pelo job de cobrança (um por
+    // tenant com fatura pendente) — fica de fora daqui pra não lotar a tela
+    // de gerenciar comunicados manuais com um aviso por cliente.
     const rows = db.prepare(`
-      SELECT id,tipo,titulo,mensagem,display_mode,bg_color,text_color,font_family,target_all,target_tenants,ativo,created_by,created_at,updated_at,expires_at
+      SELECT id,tipo,titulo,mensagem,display_mode,bg_color,text_color,font_family,cta_label,cta_whatsapp,target_all,target_tenants,ativo,created_by,created_at,updated_at,expires_at
       FROM admin_alerts
+      WHERE tipo <> 'robo_fatura'
       ORDER BY created_at DESC
       LIMIT 200
     `).all().map(_parseAdminAlert)
@@ -4431,9 +4499,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const body = await readBody(req)
       const data = _normalizeAdminAlertInput(body)
       const info = db.prepare(`
-        INSERT INTO admin_alerts (tipo,titulo,mensagem,display_mode,bg_color,text_color,font_family,target_all,target_tenants,ativo,created_by,expires_at,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'), datetime('now'))
-      `).run(data.tipo, data.titulo, data.mensagem, data.displayMode, data.bgColor, data.textColor, data.fontFamily, data.targetAll, JSON.stringify(data.targetTenants), data.ativo, adm.nome || adm.email || adm.user_id, data.expiresAt)
+        INSERT INTO admin_alerts (tipo,titulo,mensagem,display_mode,bg_color,text_color,font_family,cta_label,cta_whatsapp,target_all,target_tenants,ativo,created_by,expires_at,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'), datetime('now'))
+      `).run(data.tipo, data.titulo, data.mensagem, data.displayMode, data.bgColor, data.textColor, data.fontFamily, data.ctaLabel, data.ctaWhatsapp, data.targetAll, JSON.stringify(data.targetTenants), data.ativo, adm.nome || adm.email || adm.user_id, data.expiresAt)
       const row = db.prepare('SELECT * FROM admin_alerts WHERE id=?').get(info.lastInsertRowid)
       marcarDirty()
       _broadcastAdminAlerts(row, 'insert')
@@ -4453,9 +4521,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const data = _normalizeAdminAlertInput(body)
       db.prepare(`
         UPDATE admin_alerts
-        SET tipo=?, titulo=?, mensagem=?, display_mode=?, bg_color=?, text_color=?, font_family=?, target_all=?, target_tenants=?, ativo=?, expires_at=?, updated_at=datetime('now')
+        SET tipo=?, titulo=?, mensagem=?, display_mode=?, bg_color=?, text_color=?, font_family=?, cta_label=?, cta_whatsapp=?, target_all=?, target_tenants=?, ativo=?, expires_at=?, updated_at=datetime('now')
         WHERE id=?
-      `).run(data.tipo, data.titulo, data.mensagem, data.displayMode, data.bgColor, data.textColor, data.fontFamily, data.targetAll, JSON.stringify(data.targetTenants), data.ativo, data.expiresAt, id)
+      `).run(data.tipo, data.titulo, data.mensagem, data.displayMode, data.bgColor, data.textColor, data.fontFamily, data.ctaLabel, data.ctaWhatsapp, data.targetAll, JSON.stringify(data.targetTenants), data.ativo, data.expiresAt, id)
       const row = db.prepare('SELECT * FROM admin_alerts WHERE id=?').get(id)
       marcarDirty()
       _broadcastAdminAlerts(row, 'update', prev)
@@ -6054,6 +6122,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           // Marca fatura paga
           db.prepare("UPDATE faturas SET status='pago', pago_em=? WHERE id=?")
             .run(pd.date_approved || new Date().toISOString(), rowF.id)
+          _limparRoboFaturaAlert(db, sseBroadcast, rowF.tenant_id)
 
           // Renova plano: soma meses ao expires_at atual (ou hoje se já expirou/sem data)
           const hoje = new Date()
@@ -7061,9 +7130,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
       send(res, 200, {
         essencial: ia.preco_essencial !== undefined ? parseFloat(ia.preco_essencial) : 79.99,
         premium: ia.preco_premium !== undefined ? parseFloat(ia.preco_premium) : 99.90,
-        addon_voz: ia.preco_addon_voz !== undefined ? parseFloat(ia.preco_addon_voz) : 89.90
+        addon_voz: ia.preco_addon_voz !== undefined ? parseFloat(ia.preco_addon_voz) : 89.90,
+        whatsapp_robo: ia.whatsapp_robo || ''
       })
-    } catch(e) { send(res, 200, { essencial: 79.99, premium: 99.90, addon_voz: 89.90 }) }
+    } catch(e) { send(res, 200, { essencial: 79.99, premium: 99.90, addon_voz: 89.90, whatsapp_robo: '' }) }
     return true
   }
 
@@ -7071,17 +7141,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'POST' && upath === '/api/admin/planos/precos') {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
     const body = await readBody(req)
-    const { preco_essencial, preco_premium, preco_addon_voz } = body
+    const { preco_essencial, preco_premium, preco_addon_voz, whatsapp_robo } = body
     try {
       const cfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const ia = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
       if (preco_essencial !== undefined) ia.preco_essencial = parseFloat(preco_essencial)
       if (preco_premium !== undefined) ia.preco_premium = parseFloat(preco_premium)
       if (preco_addon_voz !== undefined) ia.preco_addon_voz = parseFloat(preco_addon_voz)
+      if (whatsapp_robo !== undefined) ia.whatsapp_robo = String(whatsapp_robo).replace(/\D/g, '').slice(0, 15)
       db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES ('_global',?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(JSON.stringify(ia))
       marcarDirty()
       log('⚙️', `Precos planos atualizados: Essencial=R$${ia.preco_essencial} Premium=R$${ia.preco_premium} AddonVoz=R$${ia.preco_addon_voz}`)
-      send(res, 200, { ok: true, preco_essencial: ia.preco_essencial, preco_premium: ia.preco_premium, preco_addon_voz: ia.preco_addon_voz })
+      send(res, 200, { ok: true, preco_essencial: ia.preco_essencial, preco_premium: ia.preco_premium, preco_addon_voz: ia.preco_addon_voz, whatsapp_robo: ia.whatsapp_robo })
     } catch(e) { send(res, 500, { error: e.message }) }
     return true
   }
