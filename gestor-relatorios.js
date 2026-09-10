@@ -1972,10 +1972,13 @@ async function renderMeuPlano() {
               <circle cx="8" cy="11" r=".6" fill="currentColor"/>
             </svg>
             <div>
-              <div style="font-weight:700;font-size:13px;color:var(--danger)">${vencido ? 'Plano vencido' : 'Conta inativa'}</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:1px">Entre em contato com o suporte para reativar.</div>
+              <div style="font-weight:700;font-size:13px;color:var(--danger)">${vencido ? 'Plano vencido' : 'Conta bloqueada por falta de pagamento'}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:1px">Seu acesso fica bloqueado até o pagamento ser confirmado. É automático — assim que você paga, o sistema libera sozinho.</div>
             </div>
-          </div>`;
+          </div>
+          <button type="button" onclick="_abrirPixRoboFatura(this)" id="btn-pix-meu-plano" style="width:100%;margin-top:10px;padding:13px;border:none;border-radius:12px;background:#2563eb;color:#fff;font-weight:800;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+            💳 Pagar agora com PIX e desbloquear
+          </button>`;
       } else {
         statusHtml += `
           <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;

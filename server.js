@@ -2893,6 +2893,20 @@ async function handleREST(req, res, table, params, body) {
         // cardápio online marcado como fechado. origem_pedido não é coluna
         // real da tabela, então é descartado automaticamente antes do INSERT.
         if (payload.origem_pedido === 'cardapio_publico') {
+          // Conta bloqueada por falta de pagamento (inativa ou plano vencido)
+          // — o cardápio público não pode continuar aceitando pedido novo
+          // nessa situação, mesmo que a loja esteja "aberta" no horário.
+          // PDV/garçom/mesa não passam por aqui (não mandam origem_pedido),
+          // então o gestor ainda consegue fechar pedidos que já estavam em
+          // andamento fisicamente, só o cardápio online é que para.
+          const _tenantAtivo = db.prepare('SELECT ativo, expires_at FROM tenants WHERE id=?').get(tenantId)
+          if (_tenantAtivo) {
+            const _venceu = _tenantAtivo.expires_at && new Date(_tenantAtivo.expires_at + 'T23:59:59') < new Date()
+            if (_tenantAtivo.ativo === 0 || _venceu) {
+              return send(res, 503, { error: 'Loja temporariamente indisponível. Tente novamente mais tarde.' })
+            }
+          }
+
           const _chk = isLojaAbertaServer(tenantId)
           if (!_chk.aberto) {
             // Loja fechada — mas se o cliente confirmou um pedido AGENDADO no
