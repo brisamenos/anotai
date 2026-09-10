@@ -4438,6 +4438,24 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Renovação manual (admin renova cliente sem passar pelo PIX) ─────
+  // Sem isso, o robô de "fatura vencendo" continuava aparecendo pro
+  // cliente mesmo depois do admin já ter renovado ele manualmente.
+  if (req.method === 'POST' && upath === '/api/admin/robo-fatura/limpar') {
+    const adm = validarSessaoAdmin(req)
+    if (!adm) { send(res, 401, { error: 'Sessão admin inválida' }); return true }
+    try {
+      const body = await readBody(req)
+      const tenantId = String(body.tenant_id || '')
+      if (!tenantId) { send(res, 400, { error: 'tenant_id obrigatório' }); return true }
+      db.prepare("UPDATE faturas SET status='pago', pago_em=datetime('now') WHERE tenant_id=? AND status='pendente'").run(tenantId)
+      _limparRoboFaturaAlert(db, sseBroadcast, tenantId)
+      marcarDirty()
+      send(res, 200, { ok: true })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
   // ── Sincroniza retroativamente o robô pra faturas pendentes que já
   // existiam antes dessa funcionalidade (ou que por qualquer motivo não
   // geraram o aviso na hora certa). Sem isso, só fatura NOVA (gerada depois

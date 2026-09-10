@@ -3521,6 +3521,12 @@ async function _aplicarRenovacao(id, dataISO) {
   if (error) { toast('err', 'Erro ao renovar: ' + error.message); return; }
   if (c) { c.expires_at = dataISO; c.ativo = true; }
   await auditLog('cliente.renovar', { tipo:'tenant', id, nome: c?.nome }, { de: expAntes, para: dataISO, plano: c?.plano });
+  // Renovação manual também limpa o robô de "fatura vencendo" e marca
+  // qualquer fatura pendente como paga — sem isso, o aviso continuava
+  // aparecendo pro cliente mesmo já renovado manualmente.
+  try {
+    await fetch('/api/admin/robo-fatura/limpar', { method: 'POST', headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' }, body: JSON.stringify({ tenant_id: id }) });
+  } catch(e) {}
   fecharModal('m-renovar');
   renderClientes(); renderDash();
   document.getElementById('st-ativos').textContent   = _clientes.filter(c=>c.ativo).length;
