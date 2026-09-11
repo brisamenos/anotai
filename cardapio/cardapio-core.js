@@ -105,8 +105,17 @@ function setAccentColor(cor) {
 
 async function resolveTenant() {
   const p    = new URLSearchParams(location.search);
-  const slug = p.get('slug') || p.get('t');
+  let slug = p.get('slug') || p.get('t');
   const tid  = p.get('tenant');
+  // Também aceita o slug vindo do CAMINHO da URL (/l/<slug>) — usado no
+  // link "instalável" como app. O scope de um PWA é baseado no caminho,
+  // não no parâmetro depois do "?", então precisávamos de um caminho de
+  // verdade diferente por loja pra o Android não confundir uma loja
+  // instalada com outra ao clicar num link de loja diferente.
+  if (!slug && !tid) {
+    const m = location.pathname.match(/^\/l\/([^/]+)\/?$/);
+    if (m) slug = decodeURIComponent(m[1]);
+  }
   const fetchInfo = async (qs) => {
     const r = await fetch('/api/tenant-info' + qs);
     const d = await r.json();
