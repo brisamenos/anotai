@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!--OG_FAVICON--><link rel="icon" type="image/png" href="favicon-cardapio.png"><!--/OG_FAVICON-->
+  <!--OG_FAVICON--><link rel="icon" type="image/png" href="/favicon-cardapio.png"><!--/OG_FAVICON-->
 <!--OG_MANIFEST--><!--/OG_MANIFEST-->
 
 <meta charset="UTF-8">
@@ -2873,10 +2873,15 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 <!-- SPLASH -->
 <div id="splash">
   <div class="splash-logo" id="splash-logo-wrap"><img id="splash-logo-img" src="" alt="" style="width:80px;height:80px;object-fit:contain;border-radius:16px;display:none"><span id="splash-logo-emoji">🍽️</span></div>
-  <div class="splash-dots">
+  <div class="splash-dots" id="splash-dots">
     <div class="splash-dot"></div>
     <div class="splash-dot"></div>
     <div class="splash-dot"></div>
+  </div>
+  <div id="splash-stuck" style="display:none;text-align:center;padding:0 30px;max-width:320px">
+    <div style="font-size:13.5px;color:#555;margin-bottom:4px">Está demorando mais que o normal...</div>
+    <div id="splash-stuck-detail" style="font-size:11px;color:#999;margin-bottom:14px;word-break:break-word"></div>
+    <button onclick="location.reload()" style="padding:11px 22px;border:none;border-radius:10px;background:var(--accent,#f97316);color:#fff;font-weight:800;font-size:13px;cursor:pointer">Tentar novamente</button>
   </div>
 </div>
 
@@ -3953,7 +3958,7 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 
 
 <script>
-(function(){var _cv=Date.now();['cardapio-state','cardapio-utils','cardapio-auth','cardapio-cart','cardapio-menu','cardapio-modal','cardapio-checkout','cardapio-tracking','cardapio-chat','cardapio-acougue','cardapio-burger','cardapio-core'].forEach(function(m){document.write('<script src="cardapio/'+m+'.js?v='+_cv+'"><\/script>');});})();
+(function(){var _cv=Date.now();['cardapio-state','cardapio-utils','cardapio-auth','cardapio-cart','cardapio-menu','cardapio-modal','cardapio-checkout','cardapio-tracking','cardapio-chat','cardapio-acougue','cardapio-burger','cardapio-core'].forEach(function(m){document.write('<script src="/cardapio/'+m+'.js?v='+_cv+'"><\/script>');});})();
 </script>
 <canvas id="anim-particle-canvas"></canvas>
 <button id="im-close-fab" onclick="closeItemModal()" style="position:fixed;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.65);border:none;color:#fff;display:none;align-items:center;justify-content:center;z-index:600;cursor:pointer;backdrop-filter:blur(6px);box-shadow:0 2px 12px rgba(0,0,0,.4)">
@@ -3975,6 +3980,29 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/cardapio-sw.js', { scope: location.pathname.startsWith('/l/') ? location.pathname : '/' }).catch(() => {});
   });
 }
+
+// ── Watchdog: carregamento travado ──────────────────────────────────
+// Se a splash não sumir sozinha em alguns segundos, algo travou no meio
+// do carregamento — em vez de deixar a tela presa pra sempre (sem
+// nenhuma pista do que aconteceu), mostra um aviso com botão de tentar
+// de novo, e junto qualquer erro de JS que tenha sido capturado.
+let _splashUltimoErro = '';
+window.addEventListener('error', (e) => {
+  _splashUltimoErro = e.message || String(e.error || 'Erro desconhecido');
+});
+window.addEventListener('unhandledrejection', (e) => {
+  _splashUltimoErro = 'Promise rejeitada: ' + (e.reason?.message || e.reason || 'motivo desconhecido');
+});
+setTimeout(() => {
+  const splash = document.getElementById('splash');
+  if (!splash || splash.classList.contains('out')) return; // já carregou normal, nada a fazer
+  const dots = document.getElementById('splash-dots');
+  const stuck = document.getElementById('splash-stuck');
+  const detail = document.getElementById('splash-stuck-detail');
+  if (dots) dots.style.display = 'none';
+  if (detail) detail.textContent = _splashUltimoErro ? `Detalhe técnico: ${_splashUltimoErro}` : '';
+  if (stuck) stuck.style.display = 'block';
+}, 9000);
 
 // ── Convite pra instalar o app ──────────────────────────────────────
 // O Chrome/Android, sozinho, só mostra um iconezinho discreto na barra de
