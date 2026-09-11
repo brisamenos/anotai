@@ -3474,16 +3474,23 @@ function handleUpload(req, res) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 function fillVars(tpl, vars) { let t=tpl; for(const[k,v]of Object.entries(vars))t=t.replaceAll(`{${k}}`,v??''); return t }
 
+const BUTCHERBOX_BASE_URL = (process.env.BUTCHERBOX_BASE_URL || 'https://butcherbox.evocrm.sbs').replace(/\/+$/, '')
+
 function linkCardapioTenant(tid) {
-  let slug = ''
+  let slug = '', segmento = ''
   try {
-    const row = db.prepare('SELECT slug FROM tenants WHERE id=?').get(tid)
+    const row = db.prepare('SELECT slug,segmento FROM tenants WHERE id=?').get(tid)
     slug = row?.slug || ''
+    segmento = row?.segmento || ''
   } catch {}
   const param = slug
     ? `slug=${encodeURIComponent(slug)}`
     : `tenant=${encodeURIComponent(tid || '')}`
-  return `${PUBLIC_BASE_URL}/index.html?${param}`
+  // Lojas do segmento açougue usam o domínio próprio (butcherbox), em vez
+  // do domínio genérico da plataforma — mesmo caminho/parâmetros, só muda
+  // a "casa" pra combinar com a marca que o cliente reconhece.
+  const base = segmento === 'acougue' ? BUTCHERBOX_BASE_URL : PUBLIC_BASE_URL
+  return `${base}/index.html?${param}`
 }
 
 function aplicarLinkCardapioMensagem(text, linkCardapio) {
@@ -5752,9 +5759,7 @@ async function handleIAWebhook(req, res) {
         }
       }
       // ════════════════════════════════════════════════════════════════
-      const tenantRow=db.prepare("SELECT slug FROM tenants WHERE id=?").get(tenantId)
-      const proto=req.headers['x-forwarded-proto']||'https', host=req.headers['host']||''
-      const linkCardapio=`${proto}://${host}/index.html?slug=${tenantRow?.slug||tenantId}`
+      const linkCardapio=linkCardapioTenant(tenantId)
       const agora=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'})), diasSemana=['dom','seg','ter','qua','qui','sex','sab'], diaHoje=diasSemana[agora.getDay()], horaMin=agora.getHours()*60+agora.getMinutes()
       // ── Helpers para pedido ──
       const _offsetCfg = db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
@@ -6134,6 +6139,10 @@ function getEtag(fpath) {
   if(cached&&cached.mtime===mtime) return cached.etag
   const etag='"'+crypto.createHash('md5').update(fs.readFileSync(fpath)).digest('hex')+'"'
   etagCache.set(fpath,{mtime,etag}); return etag
+}
+
+function _escHtmlAttr(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]))
 }
 
 function serveStatic(req,res,fpath,ext) {
@@ -6656,7 +6665,7 @@ const server = http.createServer(async (req,res) => {
     aplicarBaixaEstoquePedido,
     chatNormalizePhone, chatPhoneMatches, chatStatusLabel, chatOrderPublic, chatThreadPublic, chatMessagePublic,
     chatEnsureThreadFromOrder, chatEnsureThreadFromLead, chatAddMessageFromOrder, chatAddMessageToThread,
-    deliveryPausaAtiva,
+    deliveryPausaAtiva, linkCardapioTenant,
     emit }
   try {
     if (await handleRoutes(req, res, _routeCtx)) return
@@ -6827,10 +6836,53 @@ const server = http.createServer(async (req,res) => {
     if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
   }
 
+  // ── Cardápio público: favicon/preview de link com a cara da loja ──────
+  // WhatsApp, Instagram etc. leem as tags og:* e o favicon direto do HTML
+  // (não executam JS), então isso só pode ser feito aqui no servidor,
+  // antes de mandar o arquivo — trocando os placeholders por dados reais
+  // da loja (nome, descrição, logo) com base no slug/tenant do link.
+  if (req.method === 'GET' && (upath === '/' || upath === '/index.html')) {
+    const slugQ = params.get('slug') || ''
+    const tenantQ = params.get('tenant') || ''
+    let t = null
+    if (slugQ) t = db.prepare('SELECT id,nome,slug,segmento FROM tenants WHERE slug=? AND ativo=1').get(slugQ)
+    else if (tenantQ) t = db.prepare('SELECT id,nome,slug,segmento FROM tenants WHERE id=? AND ativo=1').get(tenantQ)
+    if (t) {
+      try {
+        const cfg = db.prepare('SELECT store_name,store_descricao,store_logo_url FROM store_config WHERE tenant_id=?').get(t.id)
+        const nome = _escHtmlAttr(cfg?.store_name || t.nome || 'Cardápio')
+        const descricao = _escHtmlAttr(cfg?.store_descricao || 'Confira o cardápio digital e faça seu pedido online.')
+        const baseAtual = t.segmento === 'acougue' ? BUTCHERBOX_BASE_URL : PUBLIC_BASE_URL
+        const logo = cfg?.store_logo_url ? _escHtmlAttr(cfg.store_logo_url) : `${baseAtual}/favicon-cardapio.png`
+        const pageUrl = _escHtmlAttr(linkCardapioTenant(t.id))
+        let html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf-8')
+        html = html.replace(/<!--OG_FAVICON-->[\s\S]*?<!--\/OG_FAVICON-->/, `<link rel="icon" type="image/png" href="${logo}">`)
+        html = html.replace(/<!--OG_TITLE-->[\s\S]*?<!--\/OG_TITLE-->/, `<title>${nome}</title>`)
+        html = html.replace(/<!--OG_TAGS-->[\s\S]*?<!--\/OG_TAGS-->/, [
+          `<meta property="og:type" content="website">`,
+          `<meta property="og:title" content="${nome}">`,
+          `<meta property="og:description" content="${descricao}">`,
+          `<meta property="og:image" content="${logo}">`,
+          `<meta property="og:url" content="${pageUrl}">`,
+          `<meta name="twitter:card" content="summary">`,
+          `<meta name="twitter:title" content="${nome}">`,
+          `<meta name="twitter:description" content="${descricao}">`,
+          `<meta name="twitter:image" content="${logo}">`
+        ].join('\n'))
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        res.setHeader('Cache-Control', 'no-cache')
+        res.writeHead(200)
+        res.end(html)
+        return
+      } catch (e) { log('⚠️', 'Falha ao injetar preview do cardápio:', e.message) }
+    }
+  }
+
   if(req.method==='GET'){
     const fname=upath==='/'?'index.html':upath.slice(1),fpath=path.join(__dirname,fname)
     if(fs.existsSync(fpath)&&!fname.includes('..')){serveStatic(req,res,fpath,path.extname(fpath));return}
   }
+
 
   send(res,404,{ok:false,error:`Rota não encontrada: ${req.method} ${upath}`})
 })

@@ -1405,7 +1405,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           aplicarBaixaEstoquePedido,
           chatNormalizePhone, chatPhoneMatches, chatStatusLabel, chatOrderPublic, chatThreadPublic, chatMessagePublic,
           chatEnsureThreadFromOrder, chatEnsureThreadFromLead, chatAddMessageFromOrder, chatAddMessageToThread,
-          deliveryPausaAtiva,
+          deliveryPausaAtiva, linkCardapioTenant,
           emit } = ctx
 
   const INDICADOR_SESSION_TTL = 8 * 60 * 60 * 1000
@@ -6742,9 +6742,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'estimafood.evocrm.sbs').split(',')[0].trim()
       return `${proto || 'https'}://${host || 'estimafood.evocrm.sbs'}`
     })()
-    const slugP = tid ? db.prepare('SELECT slug FROM tenants WHERE id=?').get(tid)?.slug : ''
     const linkCardapio = tid
-      ? `${baseUrl}/index.html?${slugP ? `slug=${encodeURIComponent(slugP)}` : `tenant=${encodeURIComponent(tid)}`}`
+      ? linkCardapioTenant(tid)
       : `${baseUrl}/index.html`
     let cl = db.prepare('SELECT * FROM fidelidade WHERE phone IS NOT NULL' + (tid ? ' AND tenant_id=?' : '')).all(...(tid ? [tid] : []))
     if (destino === 'com_pedido') cl = cl.filter(c => c.orders_count > 0)
