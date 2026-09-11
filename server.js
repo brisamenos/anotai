@@ -3483,13 +3483,19 @@ function linkCardapioTenant(tid) {
     slug = row?.slug || ''
     segmento = row?.segmento || ''
   } catch {}
-  const param = slug
-    ? `slug=${encodeURIComponent(slug)}`
-    : `tenant=${encodeURIComponent(tid || '')}`
   // Lojas do segmento açougue usam o domínio próprio (butcherbox), em vez
   // do domínio genérico da plataforma — mesmo caminho/parâmetros, só muda
   // a "casa" pra combinar com a marca que o cliente reconhece.
   const base = segmento === 'acougue' ? BUTCHERBOX_BASE_URL : PUBLIC_BASE_URL
+  // Link mandado pro cliente continua no formato ?slug= (mais familiar).
+  // Isso NÃO reabre o problema de apps instalados se confundindo: o que
+  // resolve aquilo é o start_url/scope de DENTRO do manifesto (que
+  // continua usando /l/<slug> só internamente) — uma vez que o cliente
+  // clica em "Instalar", o app passa a usar o endereço do manifesto, não
+  // o link original que ele recebeu.
+  const param = slug
+    ? `slug=${encodeURIComponent(slug)}`
+    : `tenant=${encodeURIComponent(tid || '')}`
   return `${base}/index.html?${param}`
 }
 
@@ -6291,6 +6297,49 @@ const server = http.createServer(async (req,res) => {
   }
 
   // ── Manifest PWA dinâmico para o garçom (por tenant) ──
+  if(req.method==='GET'&&upath==='/api/manifest-cardapio'){
+    const tid=params.get('tenant')||''
+    const slug=params.get('slug')||''
+    let t=null
+    if(slug) t=db.prepare('SELECT id,nome,slug,segmento FROM tenants WHERE slug=? AND ativo=1').get(slug)
+    else if(tid) t=db.prepare('SELECT id,nome,slug,segmento FROM tenants WHERE id=? AND ativo=1').get(tid)
+    const cfg=t?db.prepare('SELECT store_name,store_cor,store_logo_url FROM store_config WHERE tenant_id=?').get(t.id):null
+    const nome=cfg?.store_name||t?.nome||'Cardápio'
+    const cor=cfg?.store_cor||'#f97316'
+    const baseAtual = t?.segmento==='acougue' ? BUTCHERBOX_BASE_URL : PUBLIC_BASE_URL
+    // Se o logo estiver salvo como base64 no banco, usa a rota que serve
+    // como imagem de verdade — o manifest precisa de uma URL de ícone
+    // confiável (data URI funciona instável em ícone de PWA instalado).
+    const logoRaw = cfg?.store_logo_url || ''
+    const logo = logoRaw.startsWith('data:') ? logoUrlServer(t.id) : (logoRaw || `${baseAtual}/favicon-cardapio.png`)
+    // start_url/scope usam /l/<slug> — um CAMINHO de verdade, diferente
+    // por loja. Isso é o que realmente evita a colisão entre apps
+    // instalados: o Android decide se um link abre dentro de um app já
+    // instalado com base no CAMINHO da URL, não no que vem depois do "?".
+    // Com todas as lojas em /index.html?slug=X, o caminho era idêntico
+    // pra todo mundo e um app instalado "roubava" o link de outra loja.
+    const startSlug=t?.slug||slug||tid
+    const startUrl=startSlug?`/l/${encodeURIComponent(startSlug)}`:`/index.html`
+    const manifest={
+      id:startUrl,
+      name:nome,
+      short_name:nome.length>12?nome.substring(0,12):nome,
+      description:`Cardápio digital — ${nome}`,
+      start_url:startUrl,
+      scope:startUrl,
+      display:'standalone',
+      background_color:'#f8f9fb',
+      theme_color:cor,
+      orientation:'portrait-primary',
+      icons:[
+        {src:logo,sizes:'192x192',type:'image/png',purpose:'any'},
+        {src:logo,sizes:'512x512',type:'image/png',purpose:'any maskable'}
+      ]
+    }
+    res.writeHead(200,{'Content-Type':'application/manifest+json','Cache-Control':'no-cache'})
+    res.end(JSON.stringify(manifest))
+    return
+  }
   if(req.method==='GET'&&upath==='/api/manifest-garcom'){
     const tid=params.get('t')||params.get('tenant')||''
     const slug=params.get('slug')||''
@@ -6704,7 +6753,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/fidelidade/saldo','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao','/api/favoritos','/api/favoritos/toggle'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/manifest-cardapio','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/fidelidade/saldo','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao','/api/favoritos','/api/favoritos/toggle'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/')&&!upath.startsWith('/api/store-logo/'))||upath.startsWith('/rest/v1/')){
     try {
       const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
@@ -6872,8 +6921,9 @@ const server = http.createServer(async (req,res) => {
     if (_handleStoreLogo(req, res, upath)) return
   }
 
-  if (req.method === 'GET' && (upath === '/' || upath === '/index.html')) {
-    const slugQ = params.get('slug') || ''
+  const _lPathMatch = upath.match(/^\/l\/([^/]+)\/?$/)
+  if (req.method === 'GET' && (upath === '/' || upath === '/index.html' || _lPathMatch)) {
+    const slugQ = _lPathMatch ? decodeURIComponent(_lPathMatch[1]) : (params.get('slug') || '')
     const tenantQ = params.get('tenant') || ''
     let t = null
     if (slugQ) t = db.prepare('SELECT id,nome,slug,segmento FROM tenants WHERE slug=? AND ativo=1').get(slugQ)
@@ -6894,6 +6944,7 @@ const server = http.createServer(async (req,res) => {
         const pageUrl = _escHtmlAttr(linkCardapioTenant(t.id))
         let html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf-8')
         html = html.replace(/<!--OG_FAVICON-->[\s\S]*?<!--\/OG_FAVICON-->/, `<link rel="icon" type="image/png" href="${logo}">`)
+        html = html.replace(/<!--OG_MANIFEST-->[\s\S]*?<!--\/OG_MANIFEST-->/, `<link rel="manifest" href="/api/manifest-cardapio?slug=${encodeURIComponent(t.slug || t.id)}"><link rel="apple-touch-icon" href="${logo}">`)
         html = html.replace(/<!--OG_TITLE-->[\s\S]*?<!--\/OG_TITLE-->/, `<title>${nome}</title>`)
         html = html.replace(/<!--OG_TAGS-->[\s\S]*?<!--\/OG_TAGS-->/, [
           `<meta property="og:type" content="website">`,

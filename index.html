@@ -2,6 +2,7 @@
 <html lang="pt-BR">
 <head>
   <!--OG_FAVICON--><link rel="icon" type="image/png" href="favicon-cardapio.png"><!--/OG_FAVICON-->
+<!--OG_MANIFEST--><!--/OG_MANIFEST-->
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
@@ -3959,7 +3960,75 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
 </button>
 
+<script>
+// Registra o service worker do cardápio — sozinho ele não faz o navegador
+// oferecer "instalar app", mas é um dos requisitos técnicos do Chrome/
+// Android pra habilitar isso (junto com o manifest dinâmico injetado no
+// <head> pelo servidor, que já traz nome/ícone certos dessa loja).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    // Caminho absoluto (não relativo) — importante porque a página pode
+    // estar em /index.html?slug=X OU em /l/X (o formato "instalável"), e
+    // caminho relativo resolveria diferente em cada um, quebrando num
+    // dos dois. O escopo é o próprio caminho atual, então cada loja no
+    // formato /l/<slug> tem um service worker com escopo só dela.
+    navigator.serviceWorker.register('/cardapio-sw.js', { scope: location.pathname.startsWith('/l/') ? location.pathname : '/' }).catch(() => {});
+  });
+}
 
+// ── Convite pra instalar o app ──────────────────────────────────────
+// O Chrome/Android, sozinho, só mostra um iconezinho discreto na barra de
+// endereço — a maioria dos clientes nunca percebe. Capturando o evento
+// "beforeinstallprompt" a gente pode mostrar um banner de verdade
+// convidando pra instalar, e só disparar a instalação nativa quando o
+// cliente realmente clicar em "Instalar".
+let _pwaDeferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  _pwaDeferredPrompt = e;
+  if (sessionStorage.getItem('pwaInstallDismissed')) return;
+  setTimeout(_pwaMostrarBanner, 1500); // pequeno atraso, não assalta o cliente assim que a página abre
+});
+
+function _pwaMostrarBanner() {
+  if (document.getElementById('pwa-install-banner') || !_pwaDeferredPrompt) return;
+  const nome = window._storeName || 'nosso cardápio';
+  const div = document.createElement('div');
+  div.id = 'pwa-install-banner';
+  div.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:9980;background:#fff;border-radius:16px;box-shadow:0 12px 36px rgba(0,0,0,.22);padding:14px;display:flex;align-items:center;gap:12px;animation:pwaSlideUp .3s cubic-bezier(.34,1.1,.64,1);font-family:inherit';
+  div.innerHTML = `
+    <div style="width:42px;height:42px;border-radius:11px;background:var(--accent,#f97316);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
+    </div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13.5px;font-weight:800;color:#111;line-height:1.25">Instalar ${nome}</div>
+      <div style="font-size:11.5px;color:#666;margin-top:1px">Peça mais rápido, direto da tela inicial</div>
+    </div>
+    <button onclick="_pwaDispensar()" style="background:none;border:none;color:#999;font-size:20px;line-height:1;padding:4px;cursor:pointer;flex-shrink:0">×</button>
+    <button onclick="_pwaInstalar()" style="background:var(--accent,#f97316);color:#fff;border:none;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:800;cursor:pointer;flex-shrink:0;white-space:nowrap">Instalar</button>
+  `;
+  document.body.appendChild(div);
+  if (!document.getElementById('pwa-install-style')) {
+    const st = document.createElement('style');
+    st.id = 'pwa-install-style';
+    st.textContent = '@keyframes pwaSlideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}';
+    document.head.appendChild(st);
+  }
+}
+
+async function _pwaInstalar() {
+  document.getElementById('pwa-install-banner')?.remove();
+  if (!_pwaDeferredPrompt) return;
+  _pwaDeferredPrompt.prompt();
+  await _pwaDeferredPrompt.userChoice.catch(() => {});
+  _pwaDeferredPrompt = null;
+}
+
+function _pwaDispensar() {
+  document.getElementById('pwa-install-banner')?.remove();
+  sessionStorage.setItem('pwaInstallDismissed', '1');
+}
+</script>
 
 </body>
 </html>
