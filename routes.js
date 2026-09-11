@@ -4484,6 +4484,81 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Dashboard operacional de pedidos por loja (super admin) ─────────
+  // Agrega pedidos por tenant num intervalo de datas: total, ativos,
+  // cancelados, concluídos, em rota de entrega, e tempo médio até entregar.
+  // "Tempo médio" usa updated_at como aproximação do momento da entrega —
+  // o schema não guarda um timestamp dedicado por status, então assume que
+  // a última atualização de um pedido já entregue foi a própria entrega
+  // (verdade na prática, já que nada mais costuma mudar depois disso).
+  if (req.method === 'GET' && upath === '/api/admin/dashboard-pedidos') {
+    const adm = validarSessaoAdmin(req)
+    if (!adm) { send(res, 401, { error: 'Sessão admin inválida' }); return true }
+    try {
+      const dataIni = params.get('data_ini') || new Date().toISOString().slice(0, 10)
+      const dataFim = params.get('data_fim') || dataIni
+      const desde = `${dataIni} 00:00:00`
+      const ate = `${dataFim} 23:59:59`
+      const lojas = db.prepare(`
+        SELECT
+          o.tenant_id,
+          t.nome,
+          t.plano,
+          t.ativo AS tenant_ativo,
+          COUNT(*) AS total,
+          SUM(CASE WHEN o.status IN ('analise','producao','pronto','saiu','aguardando_pix','aguardando_cartao') THEN 1 ELSE 0 END) AS ativos,
+          SUM(CASE WHEN o.status = 'cancelado' THEN 1 ELSE 0 END) AS cancelados,
+          SUM(CASE WHEN o.status IN ('entregue','finalizado') THEN 1 ELSE 0 END) AS concluidos,
+          SUM(CASE WHEN o.status = 'saiu' THEN 1 ELSE 0 END) AS em_entrega,
+          SUM(o.total + COALESCE(o.taxa,0)) AS faturado,
+          AVG(CASE WHEN o.status IN ('entregue','finalizado') THEN (julianday(o.updated_at) - julianday(o.created_at)) * 1440 ELSE NULL END) AS tempo_medio_min
+        FROM orders o
+        JOIN tenants t ON t.id = o.tenant_id
+        WHERE o.created_at BETWEEN ? AND ?
+        GROUP BY o.tenant_id
+        ORDER BY total DESC
+      `).all(desde, ate)
+
+      const resumo = lojas.reduce((acc, l) => {
+        acc.total += l.total; acc.ativos += l.ativos; acc.cancelados += l.cancelados
+        acc.concluidos += l.concluidos; acc.em_entrega += l.em_entrega; acc.faturado += l.faturado || 0
+        if (l.tempo_medio_min) { acc._somaTempo += l.tempo_medio_min * l.concluidos; acc._qtdTempo += l.concluidos }
+        return acc
+      }, { total: 0, ativos: 0, cancelados: 0, concluidos: 0, em_entrega: 0, faturado: 0, _somaTempo: 0, _qtdTempo: 0 })
+      resumo.tempo_medio_min = resumo._qtdTempo > 0 ? resumo._somaTempo / resumo._qtdTempo : null
+      delete resumo._somaTempo; delete resumo._qtdTempo
+
+      // ── Série temporal (pro gráfico de linhas) ──────────────────────
+      // Período de 1 dia (hoje/ontem) → agrupa por hora (0-23h).
+      // Período maior (7d/30d/custom) → agrupa por dia.
+      // Só das top 6 lojas por volume, pra não virar um emaranhado de linhas
+      // ilegível — as outras entram somadas numa linha "Outras lojas".
+      const _diffDias = Math.round((new Date(dataFim) - new Date(dataIni)) / 86400000)
+      const porHora = _diffDias < 1
+      const brutos = db.prepare('SELECT tenant_id, created_at FROM orders WHERE created_at BETWEEN ? AND ?').all(desde, ate)
+      const topIds = lojas.slice(0, 6).map(l => l.tenant_id)
+      const nomesPorId = Object.fromEntries(lojas.map(l => [l.tenant_id, l.nome]))
+      const buckets = []
+      if (porHora) { for (let h = 0; h < 24; h++) buckets.push(String(h).padStart(2, '0') + 'h') }
+      else { for (let d = 0; d <= _diffDias; d++) { const dt = new Date(dataIni); dt.setDate(dt.getDate() + d); buckets.push(dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })) } }
+      const contagem = {} // tenant_id -> array de contagens por bucket
+      const contagemOutras = new Array(buckets.length).fill(0)
+      for (const id of topIds) contagem[id] = new Array(buckets.length).fill(0)
+      for (const o of brutos) {
+        const dt = new Date(o.created_at.replace(' ', 'T'))
+        const idx = porHora ? dt.getHours() : Math.round((new Date(dt.toISOString().slice(0,10)) - new Date(dataIni)) / 86400000)
+        if (idx < 0 || idx >= buckets.length) continue
+        if (contagem[o.tenant_id]) contagem[o.tenant_id][idx]++
+        else contagemOutras[idx]++
+      }
+      const serieLojas = topIds.map(id => ({ tenant_id: id, nome: nomesPorId[id], dados: contagem[id] }))
+      if (lojas.length > topIds.length) serieLojas.push({ tenant_id: '_outras', nome: 'Outras lojas', dados: contagemOutras })
+
+      send(res, 200, { resumo, lojas, serie: { tipo: porHora ? 'hora' : 'dia', buckets, lojas: serieLojas }, data_ini: dataIni, data_fim: dataFim })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
   // ── Fatura pendente do tenant (pro botão "Pagar agora" do robô) ─────
   // Devolve só o necessário pra mostrar o QR/copia-cola — nunca o histórico
   // inteiro, e nunca dado de outro tenant (sempre filtrado pelo header).

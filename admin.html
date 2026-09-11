@@ -26,6 +26,25 @@
   --muted:#64748b;
   --sb-w:230px;
 }
+body.theme-light{
+  --bg:#f4f6fb;
+  --s1:#ffffff;
+  --s2:#f8fafc;
+  --s3:#eef1f7;
+  --border:rgba(15,23,42,.09);
+  --border-hover:rgba(15,23,42,.16);
+  --accent:#2563eb;
+  --accent-dim:rgba(37,99,235,.09);
+  --danger:#dc2626;
+  --success:#16a34a;
+  --orange:#ea580c;
+  --purple:#7c3aed;
+  --text:#0f172a;
+  --text-2:#475569;
+  --muted:#64748b;
+}
+body.theme-light .lg-card{background:rgba(255,255,255,.97);box-shadow:0 32px 80px rgba(15,23,42,.12)}
+body.theme-light ::-webkit-scrollbar-thumb{background:#cbd5e1}
 html{scroll-behavior:smooth}
 body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 h1,h2,h3,.lg-title,.card-title,.sec-head-title,.stat-card-val{font-family:'Space Grotesk',sans-serif;letter-spacing:-.3px}
@@ -159,6 +178,62 @@ h1,h2,h3,.lg-title,.card-title,.sec-head-title,.stat-card-val{font-family:'Space
 .stat-card-val{font-family:'Space Grotesk',sans-serif;font-size:30px;font-weight:800;letter-spacing:-1.5px;line-height:1}
 .stat-card-icon{position:absolute;bottom:12px;right:14px;font-size:28px;opacity:.15}
 .stat-card-sub{font-size:11px;color:var(--muted);margin-top:6px}
+
+/* ══ OPERAÇÃO AO VIVO ══ */
+.op-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.op-toolbar-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.op-chip-group{display:flex;background:var(--s2);border:1px solid var(--border);border-radius:11px;padding:3px}
+.op-chip{background:none;border:none;color:var(--muted);font-size:12.5px;font-weight:700;padding:7px 14px;border-radius:8px;cursor:pointer;transition:all .15s;font-family:'Inter',sans-serif}
+.op-chip:hover{color:var(--text)}
+.op-chip.on{background:var(--accent);color:#fff;box-shadow:0 3px 10px rgba(59,130,246,.35)}
+.op-date-custom{display:flex;align-items:center;gap:7px}
+.op-date-custom .minput{width:132px;padding:8px 10px;font-size:12px}
+.op-toolbar-live{display:flex;align-items:center;gap:14px}
+.op-live-toggle{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--text-2);user-select:none}
+.op-live-toggle input{display:none}
+.op-live-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:all .2s}
+.op-live-toggle input:checked ~ .op-live-dot{background:var(--success);box-shadow:0 0 0 3px rgba(34,197,94,.2);animation:opPulse 1.8s ease-in-out infinite}
+@keyframes opPulse{0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,.2)}50%{box-shadow:0 0 0 6px rgba(34,197,94,.08)}}
+.op-updated{font-size:11px;color:var(--muted)}
+
+.op-stats-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:20px}
+.op-stat-card{
+  background:var(--s1);border:1px solid var(--border);border-radius:16px;
+  padding:16px 16px 14px;position:relative;overflow:hidden;
+  transition:transform .2s,border-color .2s,box-shadow .2s;
+}
+.op-stat-card:hover{transform:translateY(-2px);border-color:var(--oc);box-shadow:0 10px 28px -8px color-mix(in srgb, var(--oc) 45%, transparent)}
+.op-stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--oc),color-mix(in srgb, var(--oc) 40%, transparent))}
+.op-stat-icon{font-size:19px;margin-bottom:10px;opacity:.9}
+.op-stat-val{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:800;letter-spacing:-1px;line-height:1;color:var(--oc)}
+.op-stat-label{font-size:10.5px;color:var(--muted);margin-top:6px;font-weight:600;letter-spacing:.2px;line-height:1.3}
+
+.op-table{width:100%;border-collapse:collapse}
+.op-table thead th{
+  padding:11px 16px;text-align:left;font-size:10px;font-weight:800;letter-spacing:.7px;
+  text-transform:uppercase;color:var(--muted);background:var(--s2);
+  border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;
+  transition:color .15s;
+}
+.op-table thead th:hover{color:var(--accent)}
+.op-table tbody td{padding:14px 16px;border-bottom:1px solid var(--border);font-size:13px;white-space:nowrap}
+.op-table tbody tr{transition:background .15s}
+.op-table tbody tr:hover{background:var(--s2)}
+.op-table tbody tr:last-child td{border-bottom:none}
+.op-loja-nome{display:flex;align-items:center;gap:9px;font-weight:700}
+.op-loja-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.op-badge-num{font-family:'Space Grotesk',sans-serif;font-weight:800}
+.op-health-bar{display:flex;height:7px;width:120px;border-radius:99px;overflow:hidden;background:var(--s3)}
+.op-health-seg{height:100%;transition:width .4s}
+
+@media(max-width:1100px){
+  .op-stats-grid{grid-template-columns:repeat(4,1fr)}
+}
+@media(max-width:680px){
+  .op-stats-grid{grid-template-columns:repeat(2,1fr)}
+  .op-toolbar{flex-direction:column;align-items:stretch}
+  .op-toolbar-live{justify-content:space-between}
+}
 
 /* ══ CARDS ══ */
 .card{background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:18px}
@@ -717,6 +792,9 @@ td{padding:12px 16px;color:#dce6f7}
       <button class="sb-item on" id="nav-dash" onclick="navTo('dash')">
         <span class="sb-icon"></span> Dashboard
       </button>
+      <button class="sb-item" id="nav-operacao" onclick="navTo('operacao')">
+        <span class="sb-icon"></span> Operação ao Vivo
+      </button>
 
       <div class="sb-sec" style="margin-top:6px">Gestão</div>
       <button class="sb-item" id="nav-clientes" onclick="navTo('clientes')">
@@ -816,6 +894,9 @@ td{padding:12px 16px;color:#dce6f7}
           <input id="adm-global-q" placeholder="Buscar cliente..." oninput="adminGlobalSearch(this.value)">
         </div>
         <div class="admin-status-pill">Sistema online</div>
+        <button class="btn bg2 bsm" onclick="toggleAdminTheme()" id="btn-theme-toggle" title="Alternar tema claro/escuro">
+          <span id="theme-toggle-icon">🌙</span>
+        </button>
         <button class="btn bg2 bsm" onclick="loadAll()">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 1 1 3 5.5M2.5 2.5v3h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Atualizar
@@ -927,6 +1008,111 @@ td{padding:12px 16px;color:#dce6f7}
               </div>
             </div>
             <div id="dash-overview"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════ OPERAÇÃO AO VIVO ════ -->
+      <div id="sec-operacao" style="display:none" class="sec-page">
+        <div class="op-toolbar">
+          <div class="op-toolbar-filters">
+            <div class="op-chip-group" id="op-range-chips">
+              <button class="op-chip on" data-range="hoje" onclick="opSetRange('hoje')">Hoje</button>
+              <button class="op-chip" data-range="ontem" onclick="opSetRange('ontem')">Ontem</button>
+              <button class="op-chip" data-range="7d" onclick="opSetRange('7d')">7 dias</button>
+              <button class="op-chip" data-range="30d" onclick="opSetRange('30d')">30 dias</button>
+            </div>
+            <div class="op-date-custom">
+              <input type="date" id="op-data-ini" class="minput" onchange="opSetRangeCustom()">
+              <span style="color:var(--muted);font-size:12px">até</span>
+              <input type="date" id="op-data-fim" class="minput" onchange="opSetRangeCustom()">
+            </div>
+            <input type="text" id="op-busca-loja" class="minput" placeholder="Buscar loja..." oninput="opRenderTabela()" style="max-width:200px">
+          </div>
+          <div class="op-toolbar-live">
+            <label class="op-live-toggle">
+              <input type="checkbox" id="op-live-check" checked onchange="opToggleLive()">
+              <span class="op-live-dot" id="op-live-dot"></span>
+              <span id="op-live-label">Ao vivo</span>
+            </label>
+            <span class="op-updated" id="op-updated-label">—</span>
+          </div>
+        </div>
+
+        <div class="op-stats-grid">
+          <div class="op-stat-card" style="--oc:#3b82f6">
+            <div class="op-stat-icon">📦</div>
+            <div class="op-stat-val" id="op-st-total">—</div>
+            <div class="op-stat-label">Total de pedidos</div>
+          </div>
+          <div class="op-stat-card" style="--oc:#f59e0b">
+            <div class="op-stat-icon">⏱️</div>
+            <div class="op-stat-val" id="op-st-ativos">—</div>
+            <div class="op-stat-label">Ativos agora</div>
+          </div>
+          <div class="op-stat-card" style="--oc:#06b6d4">
+            <div class="op-stat-icon">🛵</div>
+            <div class="op-stat-val" id="op-st-entrega">—</div>
+            <div class="op-stat-label">Em rota de entrega</div>
+          </div>
+          <div class="op-stat-card" style="--oc:#22c55e">
+            <div class="op-stat-icon">✅</div>
+            <div class="op-stat-val" id="op-st-concluidos">—</div>
+            <div class="op-stat-label">Concluídos</div>
+          </div>
+          <div class="op-stat-card" style="--oc:#ef4444">
+            <div class="op-stat-icon">❌</div>
+            <div class="op-stat-val" id="op-st-cancelados">—</div>
+            <div class="op-stat-label">Cancelados</div>
+          </div>
+          <div class="op-stat-card" style="--oc:#8b5cf6">
+            <div class="op-stat-icon">⏳</div>
+            <div class="op-stat-val" id="op-st-tempo">—</div>
+            <div class="op-stat-label">Tempo médio de entrega</div>
+          </div>
+          <div class="op-stat-card" style="--oc:#14b8a6">
+            <div class="op-stat-icon">💰</div>
+            <div class="op-stat-val" id="op-st-faturado">—</div>
+            <div class="op-stat-label">Faturado no período</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Pedidos ao longo do tempo — top lojas</div>
+              <div class="card-sub" id="op-chart-sub">Comparando volume de pedidos por loja</div>
+            </div>
+          </div>
+          <div style="height:280px;position:relative"><canvas id="chart-operacao-linhas"></canvas></div>
+        </div>
+
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="card-head" style="padding:20px 22px 14px">
+            <div>
+              <div class="card-title">Pedidos por loja</div>
+              <div class="card-sub" id="op-tabela-sub">Ordenado por volume de pedidos</div>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="op-table" id="op-tabela">
+              <thead>
+                <tr>
+                  <th onclick="opOrdenarPor('nome')">Loja</th>
+                  <th onclick="opOrdenarPor('total')">Total</th>
+                  <th onclick="opOrdenarPor('ativos')">Ativos</th>
+                  <th onclick="opOrdenarPor('em_entrega')">Em entrega</th>
+                  <th onclick="opOrdenarPor('concluidos')">Concluídos</th>
+                  <th onclick="opOrdenarPor('cancelados')">Cancelados</th>
+                  <th onclick="opOrdenarPor('tempo_medio_min')">Tempo médio</th>
+                  <th onclick="opOrdenarPor('faturado')">Faturado</th>
+                  <th>Saúde</th>
+                </tr>
+              </thead>
+              <tbody id="op-tabela-body">
+                <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Carregando...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -2417,6 +2603,249 @@ function setAdminIcon(el, name, label) {
   }
 }
 
+function toggleAdminTheme() {
+  const isLight = document.body.classList.toggle('theme-light');
+  localStorage.setItem('adminTheme', isLight ? 'light' : 'dark');
+  const icon = document.getElementById('theme-toggle-icon');
+  if (icon) icon.textContent = isLight ? '☀️' : '🌙';
+}
+function _aplicarTemaAdminSalvo() {
+  const salvo = localStorage.getItem('adminTheme');
+  if (salvo === 'light') {
+    document.body.classList.add('theme-light');
+    const icon = document.getElementById('theme-toggle-icon');
+    if (icon) icon.textContent = '☀️';
+  }
+}
+_aplicarTemaAdminSalvo();
+
+// ── OPERAÇÃO AO VIVO ───────────────────────────────────
+let _opRange = 'hoje';
+let _opDataIni = '', _opDataFim = '';
+let _opResumo = {};
+let _opLojas = [];
+let _opSort = { campo: 'total', dir: 'desc' };
+let _opLiveTimer = null;
+let _opCarregando = false;
+let _chartOperacao = null;
+
+function _opIsoHoje(offsetDias = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDias);
+  return d.toISOString().slice(0, 10);
+}
+
+function opSetRange(range) {
+  _opRange = range;
+  document.querySelectorAll('#op-range-chips .op-chip').forEach(c => c.classList.toggle('on', c.dataset.range === range));
+  document.getElementById('op-data-ini').value = '';
+  document.getElementById('op-data-fim').value = '';
+  if (range === 'hoje')  { _opDataIni = _opIsoHoje(0); _opDataFim = _opIsoHoje(0); }
+  if (range === 'ontem') { _opDataIni = _opIsoHoje(-1); _opDataFim = _opIsoHoje(-1); }
+  if (range === '7d')    { _opDataIni = _opIsoHoje(-6); _opDataFim = _opIsoHoje(0); }
+  if (range === '30d')   { _opDataIni = _opIsoHoje(-29); _opDataFim = _opIsoHoje(0); }
+  opCarregarDados();
+}
+
+function opSetRangeCustom() {
+  const ini = document.getElementById('op-data-ini').value;
+  const fim = document.getElementById('op-data-fim').value;
+  if (!ini || !fim) return;
+  _opRange = 'custom';
+  document.querySelectorAll('#op-range-chips .op-chip').forEach(c => c.classList.remove('on'));
+  _opDataIni = ini; _opDataFim = fim;
+  opCarregarDados();
+}
+
+function opToggleLive() {
+  const on = document.getElementById('op-live-check').checked;
+  document.getElementById('op-live-label').textContent = on ? 'Ao vivo' : 'Pausado';
+  if (on) _opIniciarTimer(); else _opPararTimer();
+}
+
+function _opIniciarTimer() {
+  _opPararTimer();
+  _opLiveTimer = setInterval(() => { if (!_opCarregando) opCarregarDados(true); }, 10000);
+}
+function _opPararTimer() {
+  if (_opLiveTimer) { clearInterval(_opLiveTimer); _opLiveTimer = null; }
+}
+
+function iniciarOperacaoAoVivo() {
+  if (!_opDataIni) opSetRange('hoje');
+  else opCarregarDados();
+  if (document.getElementById('op-live-check')?.checked) _opIniciarTimer();
+}
+function pararOperacaoAoVivo() {
+  _opPararTimer();
+}
+
+async function opCarregarDados(silencioso) {
+  _opCarregando = true;
+  try {
+    const r = await fetch(`/api/admin/dashboard-pedidos?data_ini=${_opDataIni}&data_fim=${_opDataFim}`, { headers: adminAuthHeader() });
+    if (r.status === 401) { toast('err','Sessão expirada'); setTimeout(doLogout,1500); return; }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _opResumo = d.resumo || {};
+    _opLojas = d.lojas || [];
+    opAtualizarStats();
+    opRenderTabela();
+    opRenderChart(d.serie);
+    document.getElementById('op-updated-label').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  } catch(e) { if (!silencioso) toast('err', 'Erro ao carregar: ' + e.message); }
+  finally { _opCarregando = false; }
+}
+
+function _opFmtMin(min) {
+  if (!min && min !== 0) return '—';
+  if (min < 60) return Math.round(min) + ' min';
+  const h = Math.floor(min / 60), m = Math.round(min % 60);
+  return `${h}h${m ? ' ' + m + 'min' : ''}`;
+}
+function _opFmtMoney(v) {
+  return 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function opAtualizarStats() {
+  const r = _opResumo;
+  document.getElementById('op-st-total').textContent = r.total || 0;
+  document.getElementById('op-st-ativos').textContent = r.ativos || 0;
+  document.getElementById('op-st-entrega').textContent = r.em_entrega || 0;
+  document.getElementById('op-st-concluidos').textContent = r.concluidos || 0;
+  document.getElementById('op-st-cancelados').textContent = r.cancelados || 0;
+  document.getElementById('op-st-tempo').textContent = _opFmtMin(r.tempo_medio_min);
+  document.getElementById('op-st-faturado').textContent = _opFmtMoney(r.faturado);
+}
+
+function opOrdenarPor(campo) {
+  if (_opSort.campo === campo) _opSort.dir = _opSort.dir === 'desc' ? 'asc' : 'desc';
+  else _opSort = { campo, dir: 'desc' };
+  opRenderTabela();
+}
+
+// Cor estável por nome de loja (mesma loja sempre com a mesma cor do pontinho)
+function _opCorLoja(nome) {
+  const cores = ['#3b82f6','#f59e0b','#22c55e','#8b5cf6','#ef4444','#06b6d4','#ec4899','#14b8a6'];
+  let hash = 0;
+  for (const c of String(nome||'')) hash = (hash * 31 + c.charCodeAt(0)) % 997;
+  return cores[hash % cores.length];
+}
+
+function opRenderTabela() {
+  const busca = (document.getElementById('op-busca-loja')?.value || '').toLowerCase().trim();
+  let linhas = _opLojas.filter(l => !busca || (l.nome || '').toLowerCase().includes(busca));
+  const { campo, dir } = _opSort;
+  linhas = [...linhas].sort((a, b) => {
+    let va = a[campo], vb = b[campo];
+    if (campo === 'nome') { va = (va||'').toLowerCase(); vb = (vb||'').toLowerCase(); }
+    else { va = parseFloat(va) || 0; vb = parseFloat(vb) || 0; }
+    if (va < vb) return dir === 'asc' ? -1 : 1;
+    if (va > vb) return dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const tbody = document.getElementById('op-tabela-body');
+  if (!linhas.length) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Nenhum pedido no período selecionado.</td></tr>`;
+    document.getElementById('op-tabela-sub').textContent = 'Nenhuma loja com pedidos nesse período';
+    return;
+  }
+  document.getElementById('op-tabela-sub').textContent = `${linhas.length} loja(s) com pedidos — ordenado por ${campo}`;
+
+  tbody.innerHTML = linhas.map(l => {
+    const total = l.total || 1;
+    const pctAtivo = Math.round((l.ativos / total) * 100);
+    const pctCancel = Math.round((l.cancelados / total) * 100);
+    const pctOk = 100 - pctAtivo - pctCancel;
+    return `
+      <tr>
+        <td>
+          <div class="op-loja-nome">
+            <span class="op-loja-dot" style="background:${_opCorLoja(l.nome)}"></span>
+            ${_escHtml(l.nome || l.tenant_id)}
+            ${l.tenant_ativo === 0 ? '<span class="badge bg-red" style="margin-left:6px;font-size:9px">bloqueada</span>' : ''}
+          </div>
+        </td>
+        <td><span class="op-badge-num">${l.total}</span></td>
+        <td style="color:#f59e0b;font-weight:700">${l.ativos}</td>
+        <td style="color:#06b6d4;font-weight:700">${l.em_entrega}</td>
+        <td style="color:#22c55e;font-weight:700">${l.concluidos}</td>
+        <td style="color:#ef4444;font-weight:700">${l.cancelados}</td>
+        <td>${_opFmtMin(l.tempo_medio_min)}</td>
+        <td>${_opFmtMoney(l.faturado)}</td>
+        <td>
+          <div class="op-health-bar" title="${pctOk}% concluído, ${pctAtivo}% em andamento, ${pctCancel}% cancelado">
+            <div class="op-health-seg" style="width:${pctOk}%;background:#22c55e"></div>
+            <div class="op-health-seg" style="width:${pctAtivo}%;background:#f59e0b"></div>
+            <div class="op-health-seg" style="width:${pctCancel}%;background:#ef4444"></div>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function _escHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+// Gráfico de linhas comparando volume de pedidos por loja ao longo do
+// tempo. Em vez de destruir e recriar o gráfico a cada atualização (o que
+// faria as linhas "pularem" sem transição), atualiza os dados do gráfico
+// já existente e chama .update() — o Chart.js anima sozinho a mudança de
+// posição de cada ponto, dando o efeito de linha subindo/descendo ao vivo.
+function opRenderChart(serie) {
+  if (typeof Chart === 'undefined' || !serie || !serie.lojas) return;
+  const canvas = document.getElementById('chart-operacao-linhas');
+  if (!canvas) return;
+  document.getElementById('op-chart-sub').textContent = serie.tipo === 'hora' ? 'Pedidos por hora do dia (atualiza sozinho)' : 'Pedidos por dia (atualiza sozinho)';
+
+  const datasets = serie.lojas.map(l => {
+    const cor = l.tenant_id === '_outras' ? '#64748b' : _opCorLoja(l.nome);
+    return {
+      label: l.nome,
+      data: l.dados,
+      borderColor: cor,
+      backgroundColor: cor + '1a',
+      tension: .4,
+      borderWidth: 2.5,
+      pointRadius: 2.5,
+      pointHoverRadius: 6,
+      pointBackgroundColor: cor,
+      fill: false,
+      borderDash: l.tenant_id === '_outras' ? [5, 4] : [],
+    };
+  });
+
+  if (_chartOperacao) {
+    _chartOperacao.data.labels = serie.buckets;
+    _chartOperacao.data.datasets = datasets;
+    _chartOperacao.update();
+    return;
+  }
+
+  _chartOperacao = new Chart(canvas, {
+    type: 'line',
+    data: { labels: serie.buckets, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      animation: { duration: 700, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#8b98b3', font: { family: 'Inter', size: 11 }, boxWidth: 8, usePointStyle: true, padding: 14 } },
+        tooltip: {
+          backgroundColor: '#0f1726', borderColor: 'rgba(148,163,184,.16)', borderWidth: 1,
+          titleColor: '#f8fafc', bodyColor: '#c2cce0', padding: 10,
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#8b98b3', font: { family: 'Inter', size: 10 } } },
+        y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,.08)' }, ticks: { color: '#8b98b3', font: { family: 'Inter', size: 10 }, precision: 0 } }
+      }
+    }
+  });
+}
+
 function toggleAdminNav(force) {
   document.body.classList.toggle('admin-nav-open', typeof force === 'boolean' ? force : !document.body.classList.contains('admin-nav-open'));
 }
@@ -2544,12 +2973,12 @@ function polishAdminUI(root = document) {
 window.addEventListener('DOMContentLoaded', () => polishAdminUI());
 
 function navTo(id) {
-  ['dash','clientes','ia','backup','saques','planos','comunicados','faturamento','fiscal-uso','indicacoes','auditoria','icones'].forEach(s => {
+  ['dash','clientes','ia','backup','saques','planos','comunicados','faturamento','fiscal-uso','indicacoes','auditoria','icones','operacao'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
     if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
   });
-  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Planos & Leads', faturamento:'Faturamento', 'fiscal-uso':'Uso NFC-e', indicacoes:'Indicações', auditoria:'Auditoria', icones:'Ícones do Açougue' };
+  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Planos & Leads', faturamento:'Faturamento', 'fiscal-uso':'Uso NFC-e', indicacoes:'Indicações', auditoria:'Auditoria', icones:'Ícones do Açougue', operacao:'Operação ao Vivo' };
   titles.comunicados = 'Comunicados';
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
@@ -2562,6 +2991,7 @@ function navTo(id) {
   if (id==='indicacoes')  { carregarResumoIndicacoes(); carregarIndicadores(); }
   if (id==='auditoria')   { carregarAuditoria(); }
   if (id==='icones')      { renderIconesPadrao(); }
+  if (id==='operacao')    { iniciarOperacaoAoVivo(); } else { pararOperacaoAoVivo(); }
   toggleAdminNav(false);
   requestAnimationFrame(() => polishAdminUI());
 }
