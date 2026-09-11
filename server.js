@@ -6145,6 +6145,33 @@ function _escHtmlAttr(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]))
 }
 
+// O logo da loja é salvo como data URL (base64) direto no banco — bom pra
+// exibir dentro do próprio app (funciona liso num <img src="data:...">),
+// mas inútil pra WhatsApp/Instagram gerarem prévia de link, porque esses
+// crawlers precisam baixar a imagem de uma URL de verdade, não aceitam um
+// data URI gigante dentro da tag og:image. Essa rota "destrava" isso,
+// decodificando o base64 e servindo como um arquivo de imagem normal.
+function logoUrlServer(tenantId) {
+  return `${PUBLIC_BASE_URL}/api/store-logo/${encodeURIComponent(tenantId)}.png`
+}
+function _handleStoreLogo(req, res, upath) {
+  const m = upath.match(/^\/api\/store-logo\/([^/]+)\.(png|jpg|jpeg|webp)$/)
+  if (!m) return false
+  try {
+    const tenantId = decodeURIComponent(m[1])
+    const row = db.prepare('SELECT store_logo_url FROM store_config WHERE tenant_id=?').get(tenantId)
+    const dataUrl = row?.store_logo_url || ''
+    const match = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(dataUrl)
+    if (!match) { res.writeHead(404); res.end('Sem logo'); return true }
+    const buf = Buffer.from(match[2], 'base64')
+    res.setHeader('Content-Type', match[1])
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    res.writeHead(200)
+    res.end(buf)
+  } catch (e) { res.writeHead(500); res.end('Erro') }
+  return true
+}
+
 function serveStatic(req,res,fpath,ext) {
   try {
     const etag=getEtag(fpath), isHtml=ext==='.html', isScript=['.js','.css'].includes(ext)
@@ -6841,6 +6868,10 @@ const server = http.createServer(async (req,res) => {
   // (não executam JS), então isso só pode ser feito aqui no servidor,
   // antes de mandar o arquivo — trocando os placeholders por dados reais
   // da loja (nome, descrição, logo) com base no slug/tenant do link.
+  if (req.method === 'GET' && upath.startsWith('/api/store-logo/')) {
+    if (_handleStoreLogo(req, res, upath)) return
+  }
+
   if (req.method === 'GET' && (upath === '/' || upath === '/index.html')) {
     const slugQ = params.get('slug') || ''
     const tenantQ = params.get('tenant') || ''
@@ -6853,7 +6884,13 @@ const server = http.createServer(async (req,res) => {
         const nome = _escHtmlAttr(cfg?.store_name || t.nome || 'Cardápio')
         const descricao = _escHtmlAttr(cfg?.store_descricao || 'Confira o cardápio digital e faça seu pedido online.')
         const baseAtual = t.segmento === 'acougue' ? BUTCHERBOX_BASE_URL : PUBLIC_BASE_URL
-        const logo = cfg?.store_logo_url ? _escHtmlAttr(cfg.store_logo_url) : `${baseAtual}/favicon-cardapio.png`
+        // Se o logo foi salvo como data URL (base64), usa a rota que serve
+        // ele como arquivo de verdade — data URI não funciona em og:image.
+        // Se já for uma URL normal (http/https), usa direto.
+        const logoRaw = cfg?.store_logo_url || ''
+        const logo = logoRaw.startsWith('data:')
+          ? _escHtmlAttr(logoUrlServer(t.id))
+          : (logoRaw ? _escHtmlAttr(logoRaw) : `${baseAtual}/favicon-cardapio.png`)
         const pageUrl = _escHtmlAttr(linkCardapioTenant(t.id))
         let html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf-8')
         html = html.replace(/<!--OG_FAVICON-->[\s\S]*?<!--\/OG_FAVICON-->/, `<link rel="icon" type="image/png" href="${logo}">`)
