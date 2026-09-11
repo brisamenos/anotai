@@ -788,7 +788,7 @@
       return { type: 'single', buttons: [
         { label: 'Entrega', value: 'entrega' },
         { label: 'Retirada', value: 'retirada' },
-        { label: 'Mesa', value: 'mesa' }
+        { label: 'No local', value: 'mesa' }
       ] };
     }
 

@@ -984,20 +984,63 @@ async function init() {
         const pa = c.pickup_addresses;
         _pickupAddresses = pa ? (Array.isArray(pa) ? pa : JSON.parse(pa)) : [];
       } catch(e) { _pickupAddresses = []; }
-      // Pausa rápida de delivery — remove delivery dos tipos disponíveis
-      if (feeConfig?.delivery_pausado) {
-        _tiposEntrega = _tiposEntrega.filter(t => t !== 'delivery');
-        // Mostra aviso visível no topo do cardápio
+      // Pausa rápida de delivery/retirada — remove a(s) modalidade(s)
+      // pausada(s) dos tipos disponíveis. Considera prazo (se definido) e
+      // quais modalidades o gestor escolheu pausar.
+      const _pausaAtiva = (modalidade) => {
+        if (!feeConfig?.delivery_pausado) return false;
+        const modalidades = Array.isArray(feeConfig.delivery_pausado_modalidades) && feeConfig.delivery_pausado_modalidades.length
+          ? feeConfig.delivery_pausado_modalidades : ['delivery'];
+        if (!modalidades.includes(modalidade)) return false;
+        if (feeConfig.delivery_pausado_ate) {
+          const expira = new Date(feeConfig.delivery_pausado_ate);
+          if (!isNaN(expira) && expira <= new Date()) return false;
+        }
+        return true;
+      };
+      const _pausaDelivery = _pausaAtiva('delivery');
+      const _pausaRetirada = _pausaAtiva('retirada');
+      if (_pausaDelivery) _tiposEntrega = _tiposEntrega.filter(t => t !== 'delivery');
+      if (_pausaRetirada) _tiposEntrega = _tiposEntrega.filter(t => t !== 'retirada');
+
+      if (_pausaDelivery || _pausaRetirada) {
+        const nomesPausados = [_pausaDelivery ? 'delivery' : null, _pausaRetirada ? 'retirada' : null].filter(Boolean).join(' e ');
+        const mensagemPausa = `⏸ ${nomesPausados.charAt(0).toUpperCase() + nomesPausados.slice(1)} temporariamente pausado${_pausaDelivery && _pausaRetirada ? 's' : ''} no momento.`;
+
+        // Aviso fixo no topo (sempre visível enquanto navega o cardápio)
         try {
           const banner = document.getElementById('delivery-pausado-banner');
           if (!banner) {
             const div = document.createElement('div');
             div.id = 'delivery-pausado-banner';
             div.style.cssText = 'position:sticky;top:0;z-index:90;background:rgba(245,158,11,.95);color:#fff;text-align:center;padding:8px 12px;font-size:12.5px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.15)';
-            div.innerHTML = '⏸ Delivery temporariamente pausado — apenas retirada/mesa disponíveis';
+            div.textContent = mensagemPausa;
             document.body.insertBefore(div, document.body.firstChild);
           } else {
+            banner.textContent = mensagemPausa;
             banner.style.display = '';
+          }
+        } catch (e) {}
+
+        // Popup uma vez por visita — reforça o aviso pra quem abre o
+        // cardápio direto num item (link compartilhado), sem passar pela
+        // tela inicial onde o banner já chama atenção.
+        try {
+          const _chaveSessao = 'pausaPopupMostrado_' + (feeConfig.delivery_pausado_ate || 'indef');
+          if (!sessionStorage.getItem(_chaveSessao) && !document.getElementById('delivery-pausado-popup')) {
+            const overlay = document.createElement('div');
+            overlay.id = 'delivery-pausado-popup';
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:9990;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(15,23,42,.55);backdrop-filter:blur(3px)';
+            overlay.innerHTML = `
+              <div style="max-width:340px;width:100%;background:#fff;border-radius:18px;padding:26px 22px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+                <div style="font-size:38px;margin-bottom:10px">⏸️</div>
+                <div style="font-size:16px;font-weight:800;color:#1f2937;margin-bottom:8px">Atenção</div>
+                <div style="font-size:13.5px;color:#4b5563;line-height:1.5;margin-bottom:20px">${mensagemPausa}</div>
+                <button onclick="document.getElementById('delivery-pausado-popup')?.remove()" style="width:100%;padding:12px;border:none;border-radius:12px;background:#111827;color:#fff;font-weight:700;font-size:14px;cursor:pointer">Entendi</button>
+              </div>`;
+            document.body.appendChild(overlay);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+            sessionStorage.setItem(_chaveSessao, '1');
           }
         } catch (e) {}
       } else {

@@ -163,13 +163,18 @@ function openItemModal(id) {
       const hasInfoTab = ocasiaoGrp?.opcoes?.length || armazenGrp?.opcoes?.length || preparosGrp?.opcoes?.length;
 
       if (hasInfoTab) {
-        const _chipHtml = (lista, titulo) => {
+        const _chipHtml = (lista, titulo, resolverIcone) => {
           if (!lista?.length) return '';
           const chips = lista.map(o => {
             const nome = o.nome || o.id || '';
-            const icon = o.icon
-              ? `<img src="${o.icon}" style="width:32px;height:32px;object-fit:contain;display:block" onerror="this.style.display='none'">`
-              : `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" opacity=".5"/></svg>`;
+            let icon;
+            if (o.icon) {
+              icon = `<img src="${o.icon}" style="width:32px;height:32px;object-fit:contain;display:block" onerror="this.outerHTML=${JSON.stringify(resolverIcone ? resolverIcone(nome) : '<svg width=\'18\' height=\'18\' viewBox=\'0 0 16 16\' fill=\'none\'><circle cx=\'8\' cy=\'8\' r=\'5\' stroke=\'currentColor\' stroke-width=\'1.4\' opacity=\'.5\'/></svg>')}">`;
+            } else if (resolverIcone) {
+              icon = resolverIcone(nome);
+            } else {
+              icon = `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" opacity=".5"/></svg>`;
+            }
             return `<div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 12px;background:var(--s2,#1a1a1a);border:1.5px solid var(--border,#2a2a2a);border-radius:12px;min-width:70px;max-width:90px;text-align:center;flex-shrink:0">
               <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.04);border-radius:10px">${icon}</div>
               <span style="font-size:11px;font-weight:600;color:var(--text);line-height:1.2">${nome}</span>
@@ -184,7 +189,7 @@ function openItemModal(id) {
         const preparoContent = [
           _chipHtml(ocasiaoGrp?.opcoes,     'Tipo de ocasião'),
           _chipHtml(armazenGrp?.opcoes,     'Armazenamento'),
-          _chipHtml(preparosGrp?.opcoes,    'Forma de preparo'),
+          _chipHtml(preparosGrp?.opcoes,    'Forma de preparo', typeof _getPreparoIcon === 'function' ? _getPreparoIcon : null),
         ].join('');
 
         const tabsWrap = document.createElement('div');

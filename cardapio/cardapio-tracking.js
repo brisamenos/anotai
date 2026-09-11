@@ -152,7 +152,7 @@ function _trackPayLabel(pag) {
 function _trackDeliveryKind(addr) {
   const text = String(addr || '').trim();
   const lower = text.toLowerCase();
-  if (/^mesa\b/i.test(text)) return { label: 'Mesa', detail: text };
+  if (/^mesa\b/i.test(text)) return { label: 'No local', detail: text };
   if (/^retirada\b/i.test(text) || lower.includes('balc')) return { label: 'Retirada', detail: text || 'Retirada no balcao' };
   if (text) return { label: 'Entrega', detail: text };
   return { label: 'Retirada', detail: 'Retirada no balcao' };
