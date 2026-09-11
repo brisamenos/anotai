@@ -199,14 +199,20 @@ h1,h2,h3,.lg-title,.card-title,.sec-head-title,.stat-card-val{font-family:'Space
 .op-stats-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:20px}
 .op-stat-card{
   background:var(--s1);border:1px solid var(--border);border-radius:16px;
-  padding:16px 16px 14px;position:relative;overflow:hidden;
+  padding:16px 16px 15px;position:relative;overflow:hidden;
   transition:transform .2s,border-color .2s,box-shadow .2s;
 }
-.op-stat-card:hover{transform:translateY(-2px);border-color:var(--oc);box-shadow:0 10px 28px -8px color-mix(in srgb, var(--oc) 45%, transparent)}
-.op-stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--oc),color-mix(in srgb, var(--oc) 40%, transparent))}
-.op-stat-icon{font-size:19px;margin-bottom:10px;opacity:.9}
-.op-stat-val{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:800;letter-spacing:-1px;line-height:1;color:var(--oc)}
-.op-stat-label{font-size:10.5px;color:var(--muted);margin-top:6px;font-weight:600;letter-spacing:.2px;line-height:1.3}
+.op-stat-card:hover{transform:translateY(-2px);border-color:var(--oc);box-shadow:0 12px 30px -10px color-mix(in srgb, var(--oc) 40%, transparent)}
+.op-stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--oc),color-mix(in srgb, var(--oc) 30%, transparent))}
+.op-stat-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.op-stat-icon{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb, var(--oc) 14%, transparent);color:var(--oc)}
+.op-stat-icon .ui-ico{width:16px;height:16px;stroke-width:1.9}
+.op-stat-trend{display:flex;align-items:center;gap:2px;font-size:10.5px;font-weight:800;padding:3px 6px;border-radius:99px}
+.op-stat-trend.up{color:#16a34a;background:rgba(34,197,94,.12)}
+.op-stat-trend.down{color:#dc2626;background:rgba(239,68,68,.12)}
+.op-stat-trend .ui-ico{width:9px;height:9px;stroke-width:2.6}
+.op-stat-val{font-family:'Space Grotesk',sans-serif;font-size:25px;font-weight:800;letter-spacing:-1px;line-height:1;color:var(--text)}
+.op-stat-label{font-size:11px;color:var(--muted);margin-top:6px;font-weight:600;letter-spacing:.2px;line-height:1.3}
 
 .op-table{width:100%;border-collapse:collapse}
 .op-table thead th{
@@ -1041,50 +1047,90 @@ td{padding:12px 16px;color:#dce6f7}
 
         <div class="op-stats-grid">
           <div class="op-stat-card" style="--oc:#3b82f6">
-            <div class="op-stat-icon">📦</div>
+            <div class="op-stat-top">
+              <span class="op-stat-icon" id="op-ic-total"></span>
+              <span class="op-stat-trend" id="op-tr-total"></span>
+            </div>
             <div class="op-stat-val" id="op-st-total">—</div>
             <div class="op-stat-label">Total de pedidos</div>
           </div>
           <div class="op-stat-card" style="--oc:#f59e0b">
-            <div class="op-stat-icon">⏱️</div>
+            <div class="op-stat-top">
+              <span class="op-stat-icon" id="op-ic-ativos"></span>
+            </div>
             <div class="op-stat-val" id="op-st-ativos">—</div>
             <div class="op-stat-label">Ativos agora</div>
           </div>
           <div class="op-stat-card" style="--oc:#06b6d4">
-            <div class="op-stat-icon">🛵</div>
+            <div class="op-stat-top">
+              <span class="op-stat-icon" id="op-ic-entrega"></span>
+            </div>
             <div class="op-stat-val" id="op-st-entrega">—</div>
             <div class="op-stat-label">Em rota de entrega</div>
           </div>
           <div class="op-stat-card" style="--oc:#22c55e">
-            <div class="op-stat-icon">✅</div>
+            <div class="op-stat-top">
+              <span class="op-stat-icon" id="op-ic-concluidos"></span>
+            </div>
             <div class="op-stat-val" id="op-st-concluidos">—</div>
             <div class="op-stat-label">Concluídos</div>
           </div>
           <div class="op-stat-card" style="--oc:#ef4444">
-            <div class="op-stat-icon">❌</div>
+            <div class="op-stat-top">
+              <span class="op-stat-icon" id="op-ic-cancelados"></span>
+              <span class="op-stat-trend" id="op-tr-cancelados"></span>
+            </div>
             <div class="op-stat-val" id="op-st-cancelados">—</div>
             <div class="op-stat-label">Cancelados</div>
           </div>
           <div class="op-stat-card" style="--oc:#8b5cf6">
-            <div class="op-stat-icon">⏳</div>
+            <div class="op-stat-top">
+              <span class="op-stat-icon" id="op-ic-tempo"></span>
+            </div>
             <div class="op-stat-val" id="op-st-tempo">—</div>
             <div class="op-stat-label">Tempo médio de entrega</div>
           </div>
           <div class="op-stat-card" style="--oc:#14b8a6">
-            <div class="op-stat-icon">💰</div>
+            <div class="op-stat-top">
+              <span class="op-stat-icon" id="op-ic-faturado"></span>
+              <span class="op-stat-trend" id="op-tr-faturado"></span>
+            </div>
             <div class="op-stat-val" id="op-st-faturado">—</div>
             <div class="op-stat-label">Faturado no período</div>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-head">
-            <div>
-              <div class="card-title">Pedidos ao longo do tempo — top lojas</div>
-              <div class="card-sub" id="op-chart-sub">Comparando volume de pedidos por loja</div>
+        <div class="grid-2" style="align-items:stretch">
+          <div class="card" style="grid-column:span 2">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Pedidos ao longo do tempo — top lojas</div>
+                <div class="card-sub" id="op-chart-sub">Comparando volume de pedidos por loja</div>
+              </div>
             </div>
+            <div style="height:270px;position:relative"><canvas id="chart-operacao-linhas"></canvas></div>
           </div>
-          <div style="height:280px;position:relative"><canvas id="chart-operacao-linhas"></canvas></div>
+        </div>
+
+        <div class="grid-2" style="align-items:stretch">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Distribuição dos pedidos</div>
+                <div class="card-sub">Status de todos os pedidos no período</div>
+              </div>
+            </div>
+            <div style="height:220px;position:relative"><canvas id="chart-operacao-status"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Ranking de lojas</div>
+                <div class="card-sub">Top 8 por volume de pedidos</div>
+              </div>
+            </div>
+            <div style="height:220px;position:relative"><canvas id="chart-operacao-ranking"></canvas></div>
+          </div>
         </div>
 
         <div class="card" style="padding:0;overflow:hidden">
@@ -2587,7 +2633,16 @@ const ADMIN_ICONS = {
   calendar:'<rect x="2.5" y="3.5" width="11" height="10" rx="1.7"/><path d="M5.5 2.5v2M10.5 2.5v2M2.5 6.5h11"/>',
   close:'<path d="M4 4l8 8M12 4l-8 8"/>',
   link:'<path d="M6.8 9.2a2.6 2.6 0 0 0 3.7.2l1.8-1.8a2.6 2.6 0 0 0-3.7-3.7L7.5 5"/><path d="M9.2 6.8a2.6 2.6 0 0 0-3.7-.2L3.7 8.4a2.6 2.6 0 0 0 3.7 3.7L8.5 11"/>',
-  copy:'<rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.6"/><path d="M10.5 5.5V3.7A1.7 1.7 0 0 0 8.8 2H3.7A1.7 1.7 0 0 0 2 3.7v5.1a1.7 1.7 0 0 0 1.7 1.7h1.8"/>'
+  copy:'<rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.6"/><path d="M10.5 5.5V3.7A1.7 1.7 0 0 0 8.8 2H3.7A1.7 1.7 0 0 0 2 3.7v5.1a1.7 1.7 0 0 0 1.7 1.7h1.8"/>',
+  box:'<path d="M8 1.8L13.6 4.7V11.3L8 14.2L2.4 11.3V4.7Z"/><path d="M2.4 4.7L8 7.6L13.6 4.7M8 7.6V14.2M5.2 3.2L10.8 6.1"/>',
+  clockline:'<circle cx="8" cy="8.3" r="5.6"/><path d="M8 5.2V8.3L10.2 9.8"/>',
+  scooter:'<circle cx="4.3" cy="12.2" r="1.6"/><circle cx="11.7" cy="12.2" r="1.6"/><path d="M4.3 12.2H2.5M11.7 12.2H9.5L8 7.8H4.8M9.5 12.2L11 8.5H13.5"/><path d="M6.2 4.5H8.3L9 6.3"/>',
+  checkcircle:'<circle cx="8" cy="8" r="5.8"/><path d="M5.3 8.2L7.1 10L10.7 6.2"/>',
+  xcircle:'<circle cx="8" cy="8" r="5.8"/><path d="M6 6L10 10M10 6L6 10"/>',
+  hourglass:'<path d="M4 2.3H12M4 13.7H12M4.6 2.3C4.6 5.4 6.6 6 8 7.5C9.4 6 11.4 5.4 11.4 2.3M4.6 13.7C4.6 10.6 6.6 10 8 8.5C9.4 10 11.4 10.6 11.4 13.7"/>',
+  coin:'<circle cx="8" cy="8" r="5.8"/><path d="M8 4.7V11.3M6.2 6.3C6.2 5.3 7 4.7 8 4.7S9.8 5.3 9.8 6.1C9.8 7.9 6.2 7.1 6.2 8.9C6.2 9.7 7 10.3 8 10.3S9.8 9.9 9.8 8.9"/>',
+  arrowup:'<path d="M8 12.5V3.5M4.2 7.3L8 3.5L11.8 7.3"/>',
+  arrowdown:'<path d="M8 3.5V12.5M4.2 8.7L8 12.5L11.8 8.7"/>'
 };
 
 function adminIcon(name, cls = 'ui-ico') {
@@ -2629,10 +2684,17 @@ let _opLiveTimer = null;
 let _opCarregando = false;
 let _chartOperacao = null;
 
+// Usa o dia civil de Brasília de verdade, não o do fuso do navegador —
+// importante porque toISOString() sempre devolve data em UTC, que já é
+// "amanhã" depois das 21h no horário de Brasília (UTC-3). Funciona certo
+// não importa de qual fuso o admin esteja acessando.
 function _opIsoHoje(offsetDias = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDias);
-  return d.toISOString().slice(0, 10);
+  const agora = new Date();
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const p = fmt.formatToParts(agora).reduce((o, x) => (o[x.type] = x.value, o), {});
+  const base = new Date(Date.UTC(+p.year, +p.month - 1, +p.day));
+  base.setUTCDate(base.getUTCDate() + offsetDias);
+  return base.toISOString().slice(0, 10);
 }
 
 function opSetRange(range) {
@@ -2692,6 +2754,8 @@ async function opCarregarDados(silencioso) {
     opAtualizarStats();
     opRenderTabela();
     opRenderChart(d.serie);
+    opRenderStatusChart();
+    opRenderRankingChart();
     document.getElementById('op-updated-label').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
   } catch(e) { if (!silencioso) toast('err', 'Erro ao carregar: ' + e.message); }
   finally { _opCarregando = false; }
@@ -2707,15 +2771,49 @@ function _opFmtMoney(v) {
   return 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+let _opIconesPintados = false;
+function _opPintarIcones() {
+  if (_opIconesPintados) return;
+  setAdminIcon(document.getElementById('op-ic-total'), 'box');
+  setAdminIcon(document.getElementById('op-ic-ativos'), 'clockline');
+  setAdminIcon(document.getElementById('op-ic-entrega'), 'scooter');
+  setAdminIcon(document.getElementById('op-ic-concluidos'), 'checkcircle');
+  setAdminIcon(document.getElementById('op-ic-cancelados'), 'xcircle');
+  setAdminIcon(document.getElementById('op-ic-tempo'), 'hourglass');
+  setAdminIcon(document.getElementById('op-ic-faturado'), 'coin');
+  _opIconesPintados = true;
+}
+
+function _opNumFmt(n) { return (n || 0).toLocaleString('pt-BR'); }
+
+// Mostra a variação % vs o mesmo período imediatamente anterior (ex: hoje
+// vs ontem). Pra cancelados, inverte a lógica de cor — menos cancelamento
+// é bom, então uma queda aparece em verde, não em vermelho.
+function _opTrendHtml(atual, anterior, inverterCor) {
+  if (!anterior) return '';
+  const delta = atual - anterior;
+  const pct = anterior > 0 ? Math.round((delta / anterior) * 100) : (atual > 0 ? 100 : 0);
+  if (pct === 0) return '';
+  const subiu = pct > 0;
+  const bom = inverterCor ? !subiu : subiu;
+  const seta = subiu ? adminIcon('arrowup') : adminIcon('arrowdown');
+  return `<span class="op-stat-trend ${bom ? 'up' : 'down'}">${seta}${Math.abs(pct)}%</span>`;
+}
+
 function opAtualizarStats() {
+  _opPintarIcones();
   const r = _opResumo;
-  document.getElementById('op-st-total').textContent = r.total || 0;
-  document.getElementById('op-st-ativos').textContent = r.ativos || 0;
-  document.getElementById('op-st-entrega').textContent = r.em_entrega || 0;
-  document.getElementById('op-st-concluidos').textContent = r.concluidos || 0;
-  document.getElementById('op-st-cancelados').textContent = r.cancelados || 0;
+  const c = r.comparativo || {};
+  document.getElementById('op-st-total').textContent = _opNumFmt(r.total);
+  document.getElementById('op-st-ativos').textContent = _opNumFmt(r.ativos);
+  document.getElementById('op-st-entrega').textContent = _opNumFmt(r.em_entrega);
+  document.getElementById('op-st-concluidos').textContent = _opNumFmt(r.concluidos);
+  document.getElementById('op-st-cancelados').textContent = _opNumFmt(r.cancelados);
   document.getElementById('op-st-tempo').textContent = _opFmtMin(r.tempo_medio_min);
   document.getElementById('op-st-faturado').textContent = _opFmtMoney(r.faturado);
+  document.getElementById('op-tr-total').innerHTML = _opTrendHtml(r.total, c.total, false);
+  document.getElementById('op-tr-cancelados').innerHTML = _opTrendHtml(r.cancelados, c.cancelados, true);
+  document.getElementById('op-tr-faturado').innerHTML = _opTrendHtml(r.faturado, c.faturado, false);
 }
 
 function opOrdenarPor(campo) {
@@ -2841,6 +2939,82 @@ function opRenderChart(serie) {
       scales: {
         x: { grid: { display: false }, ticks: { color: '#8b98b3', font: { family: 'Inter', size: 10 } } },
         y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,.08)' }, ticks: { color: '#8b98b3', font: { family: 'Inter', size: 10 }, precision: 0 } }
+      }
+    }
+  });
+}
+
+let _chartOperacaoStatus = null;
+function opRenderStatusChart() {
+  if (typeof Chart === 'undefined') return;
+  const canvas = document.getElementById('chart-operacao-status');
+  if (!canvas) return;
+  const r = _opResumo;
+  const dados = [
+    { label: 'Concluídos', valor: r.concluidos || 0, cor: '#22c55e' },
+    { label: 'Em rota de entrega', valor: r.em_entrega || 0, cor: '#06b6d4' },
+    { label: 'Ativos (fila/preparo)', valor: Math.max(0, (r.ativos || 0) - (r.em_entrega || 0)), cor: '#f59e0b' },
+    { label: 'Cancelados', valor: r.cancelados || 0, cor: '#ef4444' },
+  ].filter(d => d.valor > 0);
+
+  if (_chartOperacaoStatus) { _chartOperacaoStatus.destroy(); _chartOperacaoStatus = null; }
+  if (!dados.length) return;
+  _chartOperacaoStatus = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: dados.map(d => d.label),
+      datasets: [{ data: dados.map(d => d.valor), backgroundColor: dados.map(d => d.cor), borderColor: 'var(--s1)', borderWidth: 3, hoverOffset: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '68%',
+      animation: { duration: 600 },
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#8b98b3', font: { family: 'Inter', size: 11 }, boxWidth: 8, usePointStyle: true, padding: 12 } },
+        tooltip: {
+          backgroundColor: '#0f1726', borderColor: 'rgba(148,163,184,.16)', borderWidth: 1,
+          titleColor: '#f8fafc', bodyColor: '#c2cce0', padding: 10,
+          callbacks: { label: (c) => `${c.label}: ${c.parsed} (${Math.round(c.parsed / dados.reduce((s,d)=>s+d.valor,0) * 100)}%)` }
+        }
+      }
+    }
+  });
+}
+
+let _chartOperacaoRanking = null;
+function opRenderRankingChart() {
+  if (typeof Chart === 'undefined') return;
+  const canvas = document.getElementById('chart-operacao-ranking');
+  if (!canvas) return;
+  const top = [..._opLojas].sort((a,b) => b.total - a.total).slice(0, 8).reverse();
+
+  const labels = top.map(l => l.nome);
+  const dados = top.map(l => l.total);
+  const cores = top.map(l => _opCorLoja(l.nome));
+
+  if (_chartOperacaoRanking) {
+    _chartOperacaoRanking.data.labels = labels;
+    _chartOperacaoRanking.data.datasets[0].data = dados;
+    _chartOperacaoRanking.data.datasets[0].backgroundColor = cores;
+    _chartOperacaoRanking.update();
+    return;
+  }
+  _chartOperacaoRanking = new Chart(canvas, {
+    type: 'bar',
+    data: { labels, datasets: [{ data: dados, backgroundColor: cores, borderRadius: 6, maxBarThickness: 18 }] },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0f1726', borderColor: 'rgba(148,163,184,.16)', borderWidth: 1,
+          titleColor: '#f8fafc', bodyColor: '#c2cce0', padding: 10, displayColors: false
+        }
+      },
+      scales: {
+        x: { beginAtZero: true, grid: { color: 'rgba(148,163,184,.08)' }, ticks: { color: '#8b98b3', font: { family: 'Inter', size: 10 }, precision: 0 } },
+        y: { grid: { display: false }, ticks: { color: '#8b98b3', font: { family: 'Inter', size: 11, weight: '600' } } }
       }
     }
   });

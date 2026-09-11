@@ -4497,8 +4497,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
     try {
       const dataIni = params.get('data_ini') || new Date().toISOString().slice(0, 10)
       const dataFim = params.get('data_fim') || dataIni
-      const desde = `${dataIni} 00:00:00`
-      const ate = `${dataFim} 23:59:59`
+      // dataIni/dataFim são dias civis de Brasília (o filtro do admin), mas
+      // created_at é gravado em UTC — Brasília é UTC-3, então o "dia" em
+      // Brasília começa 3h depois da meia-noite UTC e termina 3h depois da
+      // meia-noite UTC do dia seguinte. Sem isso, filtrar "hoje" perto da
+      // virada da noite pegava só um pedaço errado do dia.
+      const desde = `${dataIni} 03:00:00`
+      const _fimMaisUm = new Date(dataFim + 'T00:00:00Z'); _fimMaisUm.setUTCDate(_fimMaisUm.getUTCDate() + 1)
+      const ate = _fimMaisUm.toISOString().slice(0, 10) + ' 02:59:59'
       const lojas = db.prepare(`
         SELECT
           o.tenant_id,
@@ -4533,26 +4539,52 @@ module.exports = async function handleRoutes(req, res, ctx) {
       // Período maior (7d/30d/custom) → agrupa por dia.
       // Só das top 6 lojas por volume, pra não virar um emaranhado de linhas
       // ilegível — as outras entram somadas numa linha "Outras lojas".
-      const _diffDias = Math.round((new Date(dataFim) - new Date(dataIni)) / 86400000)
+      const _diffDias = Math.round((new Date(dataFim + 'T00:00:00Z') - new Date(dataIni + 'T00:00:00Z')) / 86400000)
       const porHora = _diffDias < 1
       const brutos = db.prepare('SELECT tenant_id, created_at FROM orders WHERE created_at BETWEEN ? AND ?').all(desde, ate)
       const topIds = lojas.slice(0, 6).map(l => l.tenant_id)
       const nomesPorId = Object.fromEntries(lojas.map(l => [l.tenant_id, l.nome]))
       const buckets = []
       if (porHora) { for (let h = 0; h < 24; h++) buckets.push(String(h).padStart(2, '0') + 'h') }
-      else { for (let d = 0; d <= _diffDias; d++) { const dt = new Date(dataIni); dt.setDate(dt.getDate() + d); buckets.push(dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })) } }
+      else { for (let d = 0; d <= _diffDias; d++) { const dt = new Date(dataIni + 'T00:00:00Z'); dt.setUTCDate(dt.getUTCDate() + d); buckets.push(dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' })) } }
       const contagem = {} // tenant_id -> array de contagens por bucket
       const contagemOutras = new Array(buckets.length).fill(0)
       for (const id of topIds) contagem[id] = new Array(buckets.length).fill(0)
+      // created_at é gravado em UTC — converte pra horário de Brasília (UTC-3)
+      // antes de decidir em qual hora/dia o pedido cai, senão a "hora" do
+      // gráfico fica 3h adiantada e o "dia" muda 3h antes da meia-noite real.
       for (const o of brutos) {
-        const dt = new Date(o.created_at.replace(' ', 'T'))
-        const idx = porHora ? dt.getHours() : Math.round((new Date(dt.toISOString().slice(0,10)) - new Date(dataIni)) / 86400000)
+        const brMs = new Date(o.created_at.replace(' ', 'T') + 'Z').getTime() - 3 * 3600 * 1000
+        const brDate = new Date(brMs)
+        const idx = porHora
+          ? brDate.getUTCHours()
+          : Math.round((new Date(brDate.toISOString().slice(0, 10) + 'T00:00:00Z') - new Date(dataIni + 'T00:00:00Z')) / 86400000)
         if (idx < 0 || idx >= buckets.length) continue
         if (contagem[o.tenant_id]) contagem[o.tenant_id][idx]++
         else contagemOutras[idx]++
       }
       const serieLojas = topIds.map(id => ({ tenant_id: id, nome: nomesPorId[id], dados: contagem[id] }))
       if (lojas.length > topIds.length) serieLojas.push({ tenant_id: '_outras', nome: 'Outras lojas', dados: contagemOutras })
+
+      // ── Comparação com o período anterior equivalente ───────────────
+      // Mesmo tamanho de período, imediatamente antes — dá pra mostrar
+      // "+12% que ontem" etc nos cards de resumo.
+      const _iniAnt = new Date(dataIni + 'T00:00:00Z'); _iniAnt.setUTCDate(_iniAnt.getUTCDate() - (_diffDias + 1))
+      const _fimAnt = new Date(dataIni + 'T00:00:00Z'); _fimAnt.setUTCDate(_fimAnt.getUTCDate() - 1)
+      const dataIniAnt = _iniAnt.toISOString().slice(0, 10)
+      const dataFimAnt = _fimAnt.toISOString().slice(0, 10)
+      const desdeAnt = `${dataIniAnt} 03:00:00`
+      const _fimAntMaisUm = new Date(dataFimAnt + 'T00:00:00Z'); _fimAntMaisUm.setUTCDate(_fimAntMaisUm.getUTCDate() + 1)
+      const ateAnt = _fimAntMaisUm.toISOString().slice(0, 10) + ' 02:59:59'
+      const anterior = db.prepare(`
+        SELECT COUNT(*) AS total, SUM(CASE WHEN status='cancelado' THEN 1 ELSE 0 END) AS cancelados, SUM(total + COALESCE(taxa,0)) AS faturado
+        FROM orders WHERE created_at BETWEEN ? AND ?
+      `).get(desdeAnt, ateAnt)
+      resumo.comparativo = {
+        total: anterior?.total || 0,
+        cancelados: anterior?.cancelados || 0,
+        faturado: anterior?.faturado || 0
+      }
 
       send(res, 200, { resumo, lojas, serie: { tipo: porHora ? 'hora' : 'dia', buckets, lojas: serieLojas }, data_ini: dataIni, data_fim: dataFim })
     } catch(e) { send(res, 500, { error: e.message }) }
