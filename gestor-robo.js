@@ -933,13 +933,12 @@ async function loadCardapioPublico() {
   if (el_m) el_m.checked = tipos.includes('mesa');
   cpTipoChange(); // atualiza bordas visuais
 
-  // Pausa de delivery — vem dentro do delivery_fee_config
+  // Pausa de delivery/retirada — vem dentro do delivery_fee_config
   const feeCfg = data.delivery_fee_config || {};
   const elPausa = document.getElementById('cp-pausa-delivery');
-  const elPausaStatus = document.getElementById('cp-pausa-delivery-status');
   if (elPausa) {
     elPausa.checked = !!feeCfg.delivery_pausado;
-    if (elPausaStatus) elPausaStatus.style.display = feeCfg.delivery_pausado ? '' : 'none';
+    _cpPausaAtualizarUI(feeCfg);
   }
 
   // Horários de funcionamento
@@ -1672,30 +1671,97 @@ function cpAddPickupAddress() {
   _cpAddPickupRow(null, '', '');
 }
 
-// Pausa rápida de delivery — salva IMEDIATAMENTE no clique
-// (preserva resto da config do delivery_fee_config)
-async function cpPausaDeliveryChange() {
-  const cb     = document.getElementById('cp-pausa-delivery');
-  const status = document.getElementById('cp-pausa-delivery-status');
-  if (!cb) return;
-  const pausado = !!cb.checked;
-  if (status) status.style.display = pausado ? '' : 'none';
+// Pausa temporária de delivery/retirada — clicar no checkbox só revela as
+// opções (modalidade + duração); a pausa de fato só é salva quando o
+// gestor clica em "Confirmar pausa", já com tudo escolhido de uma vez.
+function cpPausaDeliveryToggle() {
+  const cb = document.getElementById('cp-pausa-delivery');
+  const opcoes = document.getElementById('cp-pausa-delivery-opcoes');
+  if (!cb || !opcoes) return;
+  if (cb.checked) {
+    opcoes.style.display = '';
+  } else {
+    opcoes.style.display = 'none';
+    // Desmarcou sem confirmar nada novo — se já tinha pausa ativa salva,
+    // desmarcar aqui reativa tudo de novo (mesmo comportamento simples de
+    // antes, pra quem só quer ligar/desligar rápido sem mexer em duração).
+    cpPausaDeliveryReativar();
+  }
+}
+
+async function cpPausaDeliveryConfirmar() {
+  const modDelivery = document.getElementById('cp-pausa-mod-delivery')?.checked;
+  const modRetirada = document.getElementById('cp-pausa-mod-retirada')?.checked;
+  const duracaoMin = parseInt(document.getElementById('cp-pausa-duracao')?.value) || 0;
+  const modalidades = [modDelivery ? 'delivery' : null, modRetirada ? 'retirada' : null].filter(Boolean);
+  if (!modalidades.length) { sbToast('err', 'Escolha pelo menos uma modalidade pra pausar'); return; }
+
+  const pausadoAte = duracaoMin > 0 ? new Date(Date.now() + duracaoMin * 60000).toISOString() : null;
   try {
     const { data } = await sb.from('store_config').select('delivery_fee_config').single();
     const cfg = (data && typeof data.delivery_fee_config === 'object') ? data.delivery_fee_config : {};
-    cfg.delivery_pausado = pausado;
-    const { error } = await sb.from('store_config').upsert({
-      tenant_id: _sessao?.tenant_id,
-      delivery_fee_config: cfg
-    });
+    cfg.delivery_pausado = true;
+    cfg.delivery_pausado_modalidades = modalidades;
+    cfg.delivery_pausado_ate = pausadoAte;
+    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, delivery_fee_config: cfg });
     if (error) throw error;
-    sbToast('ok', pausado ? '⏸ Delivery pausado para clientes' : '✅ Delivery reativado');
+    _cpPausaAtualizarUI(cfg);
+    sbToast('ok', '⏸ Pausa ativada pros clientes');
   } catch (e) {
     sbToast('err', 'Erro ao salvar: ' + (e.message || JSON.stringify(e)));
-    // Reverte UI em caso de erro
-    cb.checked = !pausado;
-    if (status) status.style.display = !pausado ? '' : 'none';
   }
+}
+
+async function cpPausaDeliveryReativar() {
+  try {
+    const { data } = await sb.from('store_config').select('delivery_fee_config').single();
+    const cfg = (data && typeof data.delivery_fee_config === 'object') ? data.delivery_fee_config : {};
+    cfg.delivery_pausado = false;
+    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, delivery_fee_config: cfg });
+    if (error) throw error;
+    _cpPausaAtualizarUI(cfg);
+    sbToast('ok', '✅ Reativado — tudo funcionando normal pros clientes');
+  } catch (e) {
+    sbToast('err', 'Erro ao reativar: ' + (e.message || JSON.stringify(e)));
+  }
+}
+
+let _cpPausaCountdownTimer = null;
+function _cpPausaAtualizarUI(cfg) {
+  const cb = document.getElementById('cp-pausa-delivery');
+  const opcoes = document.getElementById('cp-pausa-delivery-opcoes');
+  const status = document.getElementById('cp-pausa-delivery-status');
+  const statusTxt = document.getElementById('cp-pausa-delivery-status-txt');
+  if (_cpPausaCountdownTimer) { clearInterval(_cpPausaCountdownTimer); _cpPausaCountdownTimer = null; }
+
+  const ativo = !!cfg?.delivery_pausado;
+  if (cb) cb.checked = ativo;
+  if (opcoes) opcoes.style.display = 'none';
+  if (!status) return;
+  if (!ativo) { status.style.display = 'none'; return; }
+
+  status.style.display = '';
+  const modalidades = Array.isArray(cfg.delivery_pausado_modalidades) && cfg.delivery_pausado_modalidades.length ? cfg.delivery_pausado_modalidades : ['delivery'];
+  const nomes = { delivery: 'Delivery', retirada: 'Retirada' };
+  const nomesTxt = modalidades.map(m => nomes[m] || m).join(' e ');
+
+  const _render = () => {
+    if (!cfg.delivery_pausado_ate) {
+      statusTxt.textContent = `⚠ ${nomesTxt} pausado até você reativar`;
+      return;
+    }
+    const restanteMs = new Date(cfg.delivery_pausado_ate) - new Date();
+    if (restanteMs <= 0) {
+      statusTxt.textContent = `✅ Pausa expirou — ${nomesTxt} já reativado automaticamente`;
+      if (cb) cb.checked = false;
+      if (_cpPausaCountdownTimer) { clearInterval(_cpPausaCountdownTimer); _cpPausaCountdownTimer = null; }
+      return;
+    }
+    const min = Math.floor(restanteMs / 60000), seg = Math.floor((restanteMs % 60000) / 1000);
+    statusTxt.textContent = `⚠ ${nomesTxt} pausado — reativa sozinho em ${min}min ${seg}s`;
+  };
+  _render();
+  _cpPausaCountdownTimer = setInterval(_render, 1000);
 }
 
 function cpGetStoreLoc() {

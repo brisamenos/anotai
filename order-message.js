@@ -63,7 +63,7 @@ function deliveryKind(addr) {
   const text = cleanText(addr)
   const lower = text.toLowerCase()
   if (!text) return { kind: 'retirada', title: '🏠 Retirada', detail: 'Retirada no balcao' }
-  if (/^mesa\b/i.test(text)) return { kind: 'mesa', title: '🪑 Mesa', detail: text }
+  if (/^mesa\b/i.test(text)) return { kind: 'mesa', title: '🍽️ No local', detail: text }
   if (/^retirada\b/i.test(text) || lower.includes('balcao')) return { kind: 'retirada', title: '🏠 Retirada', detail: text }
   return { kind: 'delivery', title: '🛵 Entrega', detail: text }
 }

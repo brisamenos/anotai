@@ -1087,7 +1087,7 @@ async function renderRelatorios() {
     // ─── Origem (plataforma) ─────────────────────────────
     const originMap = {};
     mesValidos.forEach(o=>{
-      const ori = o.mesa_num || (o.addr||'').startsWith('Mesa') ? 'Mesa (Garçom)'
+      const ori = o.mesa_num || (o.addr||'').startsWith('Mesa') ? 'Consumo no local (Garçom)'
                 : (o.addr||'').toLowerCase().includes('balc')   ? 'Balcão / Retirada'
                 :                                                  'Delivery';
       if(!originMap[ori]) originMap[ori]={count:0,fat:0};
@@ -1129,7 +1129,7 @@ async function renderRelatorios() {
     const tipoVendaMap = {};
     mesValidos.forEach(o => {
       let tipo;
-      if (o.mesa_num || (o.addr||'').startsWith('Mesa')) tipo = 'Mesa';
+      if (o.mesa_num || (o.addr||'').startsWith('Mesa')) tipo = 'Consumo no local';
       else if ((o.addr||'').toLowerCase().includes('balc'))  tipo = 'Balcão';
       else tipo = 'Delivery';
       if (!tipoVendaMap[tipo]) tipoVendaMap[tipo] = { count: 0, fat: 0 };
@@ -1141,16 +1141,16 @@ async function renderRelatorios() {
       const isAcougue = window._segmento === 'acougue';
       // Filter out Mesa for açougue
       const tvEntries = Object.entries(tipoVendaMap)
-        .filter(([k]) => !(isAcougue && k === 'Mesa'))
+        .filter(([k]) => !(isAcougue && k === 'Consumo no local'))
         .sort((a,b) => b[1].count - a[1].count);
       const totalTV = tvEntries.reduce((s,[,v]) => s + v.count, 0) || 1;
 
       if (!tvEntries.length) {
         tvEl.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:20px;text-align:center;width:100%">Sem vendas no período</div>';
       } else {
-        const tvColors = { Mesa:'#22c55e', Delivery:'#3b82f6', 'Balcão':'#f59e0b' };
+        const tvColors = { 'Consumo no local':'#22c55e', Delivery:'#3b82f6', 'Balcão':'#f59e0b' };
         const tvIcons  = {
-          Mesa: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+          'Consumo no local': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>`,
           Delivery: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>`,
           'Balcão': `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 7l6-5 6 5v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7z" stroke="currentColor" stroke-width="1.4"/><path d="M6 14V9h4v5" stroke="currentColor" stroke-width="1.4"/></svg>`
         };

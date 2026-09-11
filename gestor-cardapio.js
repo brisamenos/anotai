@@ -64,12 +64,12 @@ const _AC_PREPAROS_CATALOG = [
 
 // Catálogo de tipo de ocasião
 const _AC_OCASIAO_CATALOG = [
-  { id:'churrasco',       nome:'Churrasco',        icon:'/cardapio/img/tags/churrasco.png' },
-  { id:'dia_a_dia',       nome:'Dia a dia',         icon:'/cardapio/img/tags/dia_a_dia.png' },
-  { id:'final_semana',    nome:'Final de semana',   icon:null },
-  { id:'festas',          nome:'Festas',            icon:null },
-  { id:'especial',        nome:'Ocasião especial',  icon:null },
-  { id:'semana',          nome:'Semana',            icon:null },
+  { id:'churrasco',       nome:'Churrasco',        icon:'/cardapio/img/ocasiao/churrasco.png' },
+  { id:'dia_a_dia',       nome:'Dia a dia',         icon:'/cardapio/img/ocasiao/dia_a_dia.png' },
+  { id:'final_semana',    nome:'Final de semana',   icon:'/cardapio/img/ocasiao/final_semana.png' },
+  { id:'festas',          nome:'Festas',            icon:'/cardapio/img/ocasiao/festas.png' },
+  { id:'especial',        nome:'Ocasião especial',  icon:'/cardapio/img/ocasiao/especial.png' },
+  { id:'semana',          nome:'Semana',            icon:'/cardapio/img/ocasiao/semana.png' },
 ];
 
 // Catálogo de armazenamento

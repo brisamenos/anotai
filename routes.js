@@ -1405,6 +1405,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           aplicarBaixaEstoquePedido,
           chatNormalizePhone, chatPhoneMatches, chatStatusLabel, chatOrderPublic, chatThreadPublic, chatMessagePublic,
           chatEnsureThreadFromOrder, chatEnsureThreadFromLead, chatAddMessageFromOrder, chatAddMessageToThread,
+          deliveryPausaAtiva,
           emit } = ctx
 
   const INDICADOR_SESSION_TTL = 8 * 60 * 60 * 1000
@@ -2431,7 +2432,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       raw = `${draft.meta.pending_addr_raw}, Bairro: ${raw}`.slice(0, 260)
       draft.meta.pending_addr_raw = null
     }
-    if (cfg?.delivery_pausado) return { ok: false, ask: 'Delivery esta temporariamente pausado pela loja. Posso seguir como retirada ou mesa?' }
+    if (deliveryPausaAtiva(cfg, 'delivery')) return { ok: false, ask: 'Delivery esta temporariamente pausado pela loja. Posso seguir como retirada ou mesa?' }
 
     const bloqueados = Array.isArray(cfg?.bairros_bloqueados) ? cfg.bairros_bloqueados : []
     const rawNorm = _chatNorm(raw)
@@ -2486,7 +2487,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     try {
       if (draft?.meta?.delivery_taxa != null) return parseFloat(draft.meta.delivery_taxa || 0) || 0
       const cfg = _chatDeliveryCfg(tid)
-      if (cfg?.delivery_pausado) return null
+      if (deliveryPausaAtiva(cfg, 'delivery')) return null
       if (cfg?.tipo === 'fixo') return parseFloat(cfg.valor || 0) || 0
       if (cfg?.tipo === 'por_bairro' && Array.isArray(cfg.bairros)) {
         const found = _chatMatchBairro(addr, cfg.bairros)

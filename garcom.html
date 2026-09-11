@@ -1154,7 +1154,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     <!-- Filtro por mesa -->
     <div id="mesa-filter-bar" style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:10px;margin-bottom:4px"></div>
     <div id="pedidos-list">
-      <div class="empty"><div class="empty-icon">📋</div>Nenhum pedido lançado ainda</div>
+      <div class="empty"><div class="empty-icon"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></div>Nenhum pedido lançado ainda</div>
     </div>
   </div>
 
@@ -1284,7 +1284,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     <!-- Sub-page: Carrinho -->
     <div id="stab-page-cart" class="sheet-body" style="display:none">
       <div id="cart-items-sheet">
-        <div class="empty"><div class="empty-icon" style="font-size:36px">🛒</div>Nenhum item adicionado</div>
+        <div class="empty"><div class="empty-icon"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></div>Nenhum item adicionado</div>
       </div>
       <div id="cart-totals" style="margin-top:12px"></div>
     </div>
@@ -1314,7 +1314,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 
 <!-- ══ SUCESSO ═══════════════════════════ -->
 <div class="success-overlay" id="success-overlay">
-  <div class="success-icon">✅</div>
+  <div class="success-icon" style="color:var(--green,#22c55e)"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg></div>
   <div class="success-title">Pedido enviado!</div>
   <div class="success-sub">Pedido encaminhado para<br>a cozinha com sucesso.</div>
   <div class="success-num" id="success-num">Mesa ?</div>
@@ -1458,13 +1458,13 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   <div style="background:var(--surface);border-radius:20px;width:calc(100% - 40px);max-width:360px;padding:0 0 20px;animation:slideUp .3s cubic-bezier(.34,1.56,.64,1)">
     <div style="width:36px;height:4px;background:var(--surface3);border-radius:99px;margin:12px auto 0"></div>
     <div style="padding:18px 20px 4px;text-align:center">
-      <div style="font-size:32px;margin-bottom:8px">🖨️</div>
+      <div style="margin-bottom:8px;color:var(--amber)"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto;display:block"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></div>
       <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;margin-bottom:6px">Imprimir comanda?</div>
       <div style="font-size:13px;color:var(--muted);margin-bottom:0">Mesa <span id="print-comanda-mesa-num" style="color:var(--amber);font-weight:700"></span> finalizada com sucesso.</div>
     </div>
     <!-- Seletor de impressora (visível apenas no Electron) -->
     <div id="print-comanda-printer-row" style="display:none;padding:12px 16px 0">
-      <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px">🖨️ Impressora</label>
+      <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px;margin-right:3px"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Impressora</label>
       <select id="print-comanda-printer-select" style="width:100%;height:40px;border-radius:10px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:13px;font-weight:600;padding:0 10px;cursor:pointer;outline:none">
         <option value="">Carregando impressoras...</option>
       </select>
@@ -1500,7 +1500,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     </div>
     <!-- Seletor de impressora (visível apenas no Electron) -->
     <div id="print-conta-printer-row" style="display:none;padding:12px 16px 0">
-      <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px">🖨️ Impressora</label>
+      <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px;margin-right:3px"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Impressora</label>
       <select id="print-conta-printer-select" style="width:100%;height:40px;border-radius:10px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:13px;font-weight:600;padding:0 10px;cursor:pointer;outline:none">
         <option value="">Carregando...</option>
       </select>
@@ -1580,7 +1580,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
       <textarea class="im-obs" id="im-obs" rows="2" placeholder="Observações (opcional): sem cebola, bem passado…"></textarea>
 
       <button class="im-add-btn" id="im-add-btn" onclick="imConfirmGarcom()">
-        🛒 Adicionar ao pedido
+        <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg> Adicionar ao pedido
       </button>
     </div>
   </div>
@@ -1660,7 +1660,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 <!-- ══ MODAL CONFIRMAR GENÉRICO ══════════════ -->
 <div id="gc-confirm-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9500;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)">
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:26px 22px;max-width:320px;width:100%;text-align:center;animation:fadeUp .25s ease">
-    <div style="font-size:36px;margin-bottom:12px" id="gc-confirm-icon">⚠️</div>
+    <div style="margin-bottom:12px;color:var(--red)" id="gc-confirm-icon"></div>
     <div style="font-size:16px;font-weight:800;margin-bottom:8px;font-family:'Plus Jakarta Sans',sans-serif" id="gc-confirm-title">Confirmar</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.6" id="gc-confirm-msg"></div>
     <div style="display:flex;gap:10px">
@@ -1710,7 +1710,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
       </div>
       <div style="display:flex;gap:10px">
         <button onclick="closeSplit()" style="flex:1;padding:14px;border-radius:12px;border:none;background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer">Fechar</button>
-        <button onclick="imprimirDivisao()" style="flex:2;padding:14px;border-radius:12px;border:none;background:var(--amber);color:#000;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:800;cursor:pointer">🖨️ Imprimir divisão</button>
+        <button onclick="imprimirDivisao()" style="flex:2;padding:14px;border-radius:12px;border:none;background:var(--amber);color:#000;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Imprimir divisão</button>
       </div>
     </div>
   </div>
@@ -1972,10 +1972,10 @@ function playProntoSound() {
 }
 
 // ── MODAL CONFIRMAR GENÉRICO (substitui confirm()) ──
-function garcomConfirm({ icon = '⚠️', title, msg, okLabel = 'Confirmar', cancelLabel = 'Cancelar', okColor = 'var(--red)', okTextColor = '#fff' } = {}) {
+function garcomConfirm({ icon = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>', title, msg, okLabel = 'Confirmar', cancelLabel = 'Cancelar', okColor = 'var(--red)', okTextColor = '#fff' } = {}) {
   return new Promise(resolve => {
     const bg = document.getElementById('gc-confirm-bg');
-    document.getElementById('gc-confirm-icon').textContent  = icon;
+    document.getElementById('gc-confirm-icon').innerHTML  = icon;
     document.getElementById('gc-confirm-title').textContent = title || 'Confirmar';
     document.getElementById('gc-confirm-msg').textContent   = msg   || '';
     const okBtn = document.getElementById('gc-confirm-ok');
@@ -3166,7 +3166,7 @@ function closeMesaDetail() {
 }
 
 async function garcomCancelarPedido(orderId, mesaNum) {
-  if (!await garcomConfirm({ icon:'🗑️', title:'Cancelar pedido?', msg:'Este pedido será removido.', okLabel:'Sim, cancelar' })) return;
+  if (!await garcomConfirm({ icon:'<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>', title:'Cancelar pedido?', msg:'Este pedido será removido.', okLabel:'Sim, cancelar' })) return;
   try {
     const res = await fetch('/api/order-status', {
       method: 'POST',
@@ -3372,7 +3372,7 @@ async function cancelarOcupacaoMesa(num) {
   const msg = temPedidos
     ? 'Todos os pedidos lançados nesta mesa serão CANCELADOS e a mesa voltará para o status livre. Esta ação não pode ser desfeita.'
     : 'A mesa voltará para o status livre.';
-  if (!await garcomConfirm({ icon:'🪑', title:`Cancelar Mesa ${num}?`, msg, okLabel: temPedidos ? 'Sim, cancelar mesa' : 'Liberar mesa', okColor: temPedidos ? 'var(--red)' : 'var(--muted)' })) return;
+  if (!await garcomConfirm({ icon:'<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>', title:`Cancelar Mesa ${num}?`, msg, okLabel: temPedidos ? 'Sim, cancelar mesa' : 'Liberar mesa', okColor: temPedidos ? 'var(--red)' : 'var(--muted)' })) return;
   try {
     // Cancela todos os pedidos ativos da mesa (se houver), para não deixar
     // comanda "órfã" nem valor pendente de cobrança depois de liberada.
@@ -3903,7 +3903,7 @@ function _updateImAddBtn() {
   if (isPizzaI && _halfItem) price = (parseFloat(i.price) + parseFloat(_halfItem.price)) / 2 + _calcGruposExtra(i);
   const btn = document.getElementById('im-add-btn');
   btn.disabled = false;
-  btn.innerHTML = `🛒 Adicionar · R$ ${fmtMoney(price * _imQty)}`;
+  btn.innerHTML = `<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg> Adicionar · R$ ${fmtMoney(price * _imQty)}`;
   // atualiza preço exibido
   document.getElementById('im-price').textContent = 'R$ ' + fmtMoney(isPizzaI && _halfItem
     ? (parseFloat(i.price) + parseFloat(_halfItem.price)) / 2 + _calcGruposExtra(i)
@@ -4023,7 +4023,7 @@ function renderCartSheet() {
   const el = document.getElementById('cart-items-sheet');
   if (!cart.length) {
     _cartObsEditingIdx = null;
-    el.innerHTML = '<div class="empty"><div class="empty-icon" style="font-size:36px">🛒</div>Nenhum item adicionado</div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></div>Nenhum item adicionado</div>';
     document.getElementById('cart-totals').innerHTML = '';
     return;
   }
@@ -4648,7 +4648,7 @@ function renderMyOrders() {
 
   const el = document.getElementById('pedidos-list');
   if (!filtered.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>Nenhum pedido' + (activeMesaFilter!=='todas'?` na Mesa ${activeMesaFilter}`:'') + '</div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></div>Nenhum pedido' + (activeMesaFilter!=='todas'?` na Mesa ${activeMesaFilter}`:'') + '</div>';
     return;
   }
 
@@ -4724,8 +4724,8 @@ function renderMyOrders() {
 
     const finalizarBtn = !isWaiting
       ? `<div style="display:flex;gap:8px;margin-top:4px">
-          <button onclick="imprimirContaMesa(${num})" style="flex:1;padding:10px;border-radius:9px;border:1.5px solid rgba(196,149,106,.4);background:transparent;color:var(--amber);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">
-            🖨️ Imprimir conta
+          <button onclick="imprimirContaMesa(${num})" style="flex:1;padding:10px;border-radius:9px;border:1.5px solid rgba(196,149,106,.4);background:transparent;color:var(--amber);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Imprimir conta
           </button>
           <button onclick="abrirFinalizarMesa(${num})" style="flex:2;padding:10px;border-radius:9px;border:none;background:var(--amber);color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
             ✓ Finalizar Mesa ${num}
@@ -6438,7 +6438,7 @@ async function radioTogglePanel() {
 
   // Gestor sempre aparece
   let html = `<button class="radio-dest radio-dest-gestor" onclick="radioSelectDest('gestor','Gestor')">
-    <div class="radio-dest-icon">📋</div>
+    <div class="radio-dest-icon"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></div>
     <span>Gestor / Caixa</span>
   </button>`;
 

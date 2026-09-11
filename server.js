@@ -2278,6 +2278,27 @@ function _horarioAbertoNoMinutoServer(cfg, minutoAtual, usandoDiaAnterior) {
 }
 // Retorna { aberto, motivo } — motivo só preenchido quando aberto=false, pra
 // devolver uma mensagem clara no erro 503.
+// Decide se uma modalidade ('delivery' ou 'retirada') está pausada agora,
+// considerando: (a) se a pausa foi configurada pra incluir essa modalidade
+// (padrão: só delivery, pra manter compatível com configs antigas que só
+// tinham o campo delivery_pausado sem escolher modalidade), e (b) se ainda
+// não passou do prazo, quando um prazo foi definido — sem prazo, fica
+// pausado até o gestor desmarcar manualmente.
+// Não escreve nada de volta no banco quando expira: é sempre calculado na
+// hora, então nunca fica "preso" pausado por engano.
+function deliveryPausaAtiva(feeConfig, modalidade) {
+  if (!feeConfig?.delivery_pausado) return false
+  const modalidades = Array.isArray(feeConfig.delivery_pausado_modalidades) && feeConfig.delivery_pausado_modalidades.length
+    ? feeConfig.delivery_pausado_modalidades
+    : ['delivery']
+  if (!modalidades.includes(modalidade)) return false
+  if (feeConfig.delivery_pausado_ate) {
+    const expira = new Date(feeConfig.delivery_pausado_ate)
+    if (!isNaN(expira) && expira <= new Date()) return false
+  }
+  return true
+}
+
 function isLojaAbertaServer(tenantId) {
   try {
     const cfg = db.prepare('SELECT store_open, horarios_config FROM store_config WHERE tenant_id=?').get(tenantId)
@@ -2962,13 +2983,23 @@ async function handleREST(req, res, table, params, body) {
         if (!isDelivery) {
           // Mesa ou retirada: nunca cobra taxa de entrega
           payload.taxa = 0
+          if (isRetirada) {
+            try {
+              const scR = db.prepare('SELECT delivery_fee_config FROM store_config WHERE tenant_id=?').get(tenantId)
+              const cfgR = scR?.delivery_fee_config ? jsonParse(scR.delivery_fee_config) : {}
+              if (deliveryPausaAtiva(cfgR, 'retirada')) {
+                return send(res, 503, { error: 'Retirada temporariamente pausada pela loja. Tente delivery ou aguarde alguns minutos.' })
+              }
+            } catch (e) { log('⚠️', 'checagem de pausa de retirada falhou:', e.message) }
+          }
         } else {
           try {
             const sc = db.prepare('SELECT delivery_fee_config FROM store_config WHERE tenant_id=?').get(tenantId)
             const cfg = sc?.delivery_fee_config ? jsonParse(sc.delivery_fee_config) : {}
 
-            // Pausa de delivery: rejeita pedidos novos
-            if (cfg.delivery_pausado) {
+            // Pausa de delivery: rejeita pedidos novos (considera prazo e
+            // se essa modalidade específica realmente está na pausa)
+            if (deliveryPausaAtiva(cfg, 'delivery')) {
               return send(res, 503, { error: 'Delivery temporariamente pausado pela loja. Tente retirada ou mesa, ou aguarde alguns minutos.' })
             }
 
@@ -4865,7 +4896,8 @@ function _vozTiposEntregaDisponiveis(tenantId) {
   // loja não quer aceitar naquele momento.
   try {
     const feeConfig = sc?.delivery_fee_config ? JSON.parse(sc.delivery_fee_config) : {}
-    if (feeConfig?.delivery_pausado) tipos = tipos.filter(t => t !== 'delivery')
+    if (deliveryPausaAtiva(feeConfig, 'delivery')) tipos = tipos.filter(t => t !== 'delivery')
+    if (deliveryPausaAtiva(feeConfig, 'retirada')) tipos = tipos.filter(t => t !== 'retirada')
   } catch {}
   return tipos
 }
@@ -6624,6 +6656,7 @@ const server = http.createServer(async (req,res) => {
     aplicarBaixaEstoquePedido,
     chatNormalizePhone, chatPhoneMatches, chatStatusLabel, chatOrderPublic, chatThreadPublic, chatMessagePublic,
     chatEnsureThreadFromOrder, chatEnsureThreadFromLead, chatAddMessageFromOrder, chatAddMessageToThread,
+    deliveryPausaAtiva,
     emit }
   try {
     if (await handleRoutes(req, res, _routeCtx)) return

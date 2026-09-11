@@ -260,7 +260,7 @@ function renderKanban() {
         const isRetirada = _tipo === 'balcao';
         const isDelivery = _tipo === 'delivery';
         const _tipoBadge = isMesa
-          ? `<span class="oc-tipo-badge oc-tipo-mesa"><svg width='11' height='11' viewBox='0 0 16 16' fill='none'><rect x='2' y='5' width='12' height='2' rx='1' fill='currentColor'/><line x1='4' y1='7' x2='4' y2='13' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/><line x1='12' y1='7' x2='12' y2='13' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg> Mesa ${o.mesa_num || ''}</span>`
+          ? `<span class="oc-tipo-badge oc-tipo-mesa"><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg> ${o.mesa_num ? 'Mesa ' + o.mesa_num : 'Consumo no local'}</span>`
           : isRetirada
             ? `<span class="oc-tipo-badge oc-tipo-retirada"><svg width='11' height='11' viewBox='0 0 16 16' fill='none'><rect x='2' y='6' width='12' height='8' rx='1' stroke='currentColor' stroke-width='1.4'/><path d='M5 6V4a3 3 0 0 1 6 0v2' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg> Retirada</span>`
             : `<span class="oc-tipo-badge oc-tipo-delivery"><svg width='11' height='11' viewBox='0 0 16 16' fill='none'><circle cx='4' cy='12' r='2' stroke='currentColor' stroke-width='1.3'/><circle cx='13' cy='12' r='2' stroke='currentColor' stroke-width='1.3'/><path d='M2 12V9l3-4h5l2 3h2v3' stroke='currentColor' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/></svg> Delivery</span>`;
@@ -930,7 +930,7 @@ function openOrderDetail(id) {
   const isMesa = _tipoDet === 'mesa';
   const isBalcao = _tipoDet === 'balcao';
   const isDelivery = _tipoDet === 'delivery';
-  const tipoLabel = isMesa ? 'Mesa ' + (o.mesa_num || '') : isBalcao ? 'Balcão / Retirada' : '🛵 Delivery';
+  const tipoLabel = isMesa ? (o.mesa_num ? 'Mesa ' + o.mesa_num : 'Consumo no local') : isBalcao ? 'Balcão / Retirada' : '🛵 Delivery';
   setEl('od-tipo', tipoLabel);
   setEl('od-addr', isMesa && o.garcom_nome ? 'Garçom: ' + o.garcom_nome : '');
 
