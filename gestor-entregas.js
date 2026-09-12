@@ -443,12 +443,10 @@ function entPromptModal({ titulo, label, valorInicial = '', tipo = 'text', place
 
 async function entConcluirEntrega(entregaId, orderId, valorReceber) {
   if (!confirm('Marcar esta entrega como concluida?')) return;
-  let recebido = parseFloat(valorReceber || 0) || 0;
-  if (recebido > 0) {
-    const raw = await entPromptModal({ titulo: 'Valor recebido', label: 'Valor recebido pelo entregador (R$)', valorInicial: recebido.toFixed(2).replace('.', ','), tipo: 'number' });
-    if (raw === null) return;
-    recebido = parseFloat(String(raw).replace(',', '.')) || 0;
-  }
+  // Não pergunta mais "quanto foi recebido" — a forma de pagamento já
+  // está registrada no pedido, então o valor a receber já vem calculado
+  // certinho sozinho (0 se foi pago online, o valor total se é na entrega).
+  const recebido = parseFloat(valorReceber || 0) || 0;
   try {
     if (typeof sbLoading === 'function') sbLoading(true);
     await entFinalizarPedidoFallback(orderId);
