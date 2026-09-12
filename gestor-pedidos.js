@@ -1821,15 +1821,39 @@ let _noDescontoAtivo = false;
 // Adiciona um item "avulso" ao carrinho — sem vínculo com produto do
 // cardápio (id: null), pra casos tipo "taxa de embalagem", "acréscimo",
 // ou qualquer cobrança que não tem um produto correspondente cadastrado.
+// Usa um modal próprio (não prompt()) porque o app roda dentro do
+// Electron também, e o Electron não implementa window.prompt() — clicar
+// não fazia nada, sem erro nenhum aparecer.
 function noAbrirValorAvulso() {
-  const nome = prompt('Nome do item (ex: Taxa de embalagem, Acréscimo, etc.)');
-  if (nome === null) return;
-  const nomeFinal = nome.trim() || 'Valor avulso';
-  const valorTxt = prompt('Valor (R$):', '0,00');
-  if (valorTxt === null) return;
-  const valor = parseFloat(String(valorTxt).replace(',', '.'));
-  if (isNaN(valor) || valor <= 0) { sbToast('err', 'Valor inválido'); return; }
+  if (document.getElementById('no-valor-avulso-modal')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'no-valor-avulso-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:10097;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.6);backdrop-filter:blur(4px)';
+  overlay.innerHTML = `
+    <div style="width:min(360px,94vw);background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 24px 70px rgba(2,6,23,.4);padding:20px">
+      <div style="font-size:15px;font-weight:800;margin-bottom:14px">Adicionar valor avulso</div>
+      <label class="form-label">Nome do item</label>
+      <input type="text" id="no-avulso-nome" class="form-input" placeholder="Ex: Taxa de embalagem" style="margin-bottom:12px">
+      <label class="form-label">Valor (R$)</label>
+      <input type="number" id="no-avulso-valor" class="form-input" placeholder="0,00" step="0.01" min="0" style="margin-bottom:16px">
+      <div style="display:flex;gap:8px">
+        <button type="button" onclick="document.getElementById('no-valor-avulso-modal')?.remove()" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-weight:700;font-size:13px;cursor:pointer">Cancelar</button>
+        <button type="button" onclick="noConfirmarValorAvulso()" style="flex:1;padding:11px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:13px;cursor:pointer">Adicionar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  setTimeout(() => document.getElementById('no-avulso-nome')?.focus(), 50);
+}
+
+function noConfirmarValorAvulso() {
+  const nomeEl = document.getElementById('no-avulso-nome');
+  const valorEl = document.getElementById('no-avulso-valor');
+  const nomeFinal = (nomeEl?.value || '').trim() || 'Valor avulso';
+  const valor = parseFloat(valorEl?.value);
+  if (isNaN(valor) || valor <= 0) { sbToast('err', 'Informe um valor válido'); valorEl?.focus(); return; }
   _noCart.push({ id: null, name: nomeFinal, qty: 1, price: valor, emoji: '💲', cat: '', cat_key: '' });
+  document.getElementById('no-valor-avulso-modal')?.remove();
   noRenderCart();
   sbToast('ok', `"${nomeFinal}" adicionado`);
 }

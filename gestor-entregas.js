@@ -188,23 +188,21 @@ function entRenderFila() {
     const driverSelect = `ent-driver-${id}`;
     const address = o.addr || '';
     return `
-      <div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface2);display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
-        <input type="checkbox" ${checked} onchange="entSelecionarPedido(${id}, this.checked)" style="width:17px;height:17px;accent-color:var(--accent);cursor:pointer">
-        <div style="min-width:0;flex:1 1 260px">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <strong style="font-size:14px">#${entEsc(entOrderNum(o))}</strong>
-            <span style="font-size:12px;color:var(--muted)">${entEsc(o.client || 'Cliente')}</span>
-            <span class="chip" style="font-size:11px">${entMoney(entOrderTotal(o))}</span>
-            ${o.valor_receber_calc || o.valor_receber ? `<span class="chip chip-green" style="font-size:11px">Receber ${entMoney(o.valor_receber_calc || o.valor_receber)}</span>` : ''}
+      <div class="ent-card" style="display:flex;gap:12px;align-items:flex-start">
+        <input type="checkbox" ${checked} onchange="entSelecionarPedido(${id}, this.checked)" style="width:17px;height:17px;accent-color:var(--accent);cursor:pointer;margin-top:2px;flex-shrink:0">
+        <div style="flex:1;min-width:0">
+          <div class="ent-title">#${entEsc(entOrderNum(o))} <span style="font-weight:600;color:var(--muted);font-size:12.5px">${entEsc(o.client || 'Cliente')}</span></div>
+          <div class="ent-sub">${entEsc(address)}${o.bairro ? ` · <span style="color:var(--accent3);font-weight:600">${entEsc(o.bairro)}</span>` : ''}</div>
+          <div class="ent-chips">
+            <span class="ent-chip">${entMoney(entOrderTotal(o))}</span>
+            ${o.valor_receber_calc || o.valor_receber ? `<span class="ent-chip green">Receber ${entMoney(o.valor_receber_calc || o.valor_receber)}</span>` : ''}
           </div>
-          <div style="font-size:12px;color:var(--muted);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${entEsc(address)}</div>
-          ${o.bairro ? `<div style="font-size:11px;color:var(--accent3);margin-top:3px">${entEsc(o.bairro)}</div>` : ''}
-        </div>
-        <select class="form-input" id="${driverSelect}" style="width:220px;max-width:100%">${entDriverOptions(o.entregador_id, 'Entregador')}</select>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto">
-          <button class="btn bg" style="font-size:12px;padding:7px 10px" onclick="entAtribuir(${id}, false)">Atribuir</button>
-          <button class="btn bp" style="font-size:12px;padding:7px 10px" onclick="entAtribuir(${id}, true)">Sair</button>
-          <a class="btn bg" style="font-size:12px;padding:7px 10px;text-decoration:none" href="${entMapUrl(address)}" target="_blank" rel="noopener">Mapa</a>
+          <div class="ent-actions">
+            <select class="form-input" id="${driverSelect}" style="width:200px;max-width:100%;font-size:12.5px;padding:7px 10px">${entDriverOptions(o.entregador_id, 'Entregador')}</select>
+            <button class="btn bg" onclick="entAtribuir(${id}, false)">Atribuir</button>
+            <button class="btn bp" onclick="entAtribuir(${id}, true)">Sair p/ entrega</button>
+            <a class="btn bg" style="text-decoration:none" href="${entMapUrl(address)}" target="_blank" rel="noopener">📍 Mapa</a>
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -222,37 +220,41 @@ function entRenderDrivers() {
     const comissao = String(d.comissao_tipo || 'fixa') === 'percent'
       ? `${parseFloat(d.comissao_valor || 0)}%`
       : entMoney(d.comissao_valor || 0);
+    const inicial = (d.nome || '?').trim().charAt(0).toUpperCase();
     return `
-      <div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface2)">
-        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
-          <div style="min-width:0">
-            <div style="font-weight:800;font-size:13.5px">${entEsc(d.nome)}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:3px">${entEsc(d.telefone || 'Sem telefone')}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:5px">Comissao: ${entEsc(comissao)}</div>
+      <div class="ent-card">
+        <div class="ent-row-top">
+          <div style="display:flex;gap:10px;align-items:center;min-width:0">
+            <div class="ent-avatar">${entEsc(inicial)}</div>
+            <div style="min-width:0">
+              <div class="ent-title" style="font-size:13.5px">${entEsc(d.nome)}</div>
+              <div class="ent-sub" style="margin-top:2px">${entEsc(d.telefone || 'Sem telefone')} · Comissão ${entEsc(comissao)}</div>
+            </div>
           </div>
-          <span class="chip ${ativo ? 'chip-green' : ''}" style="font-size:11px">${ativo ? 'Ativo' : 'Pausado'}</span>
+          <span class="ent-chip ${ativo ? 'green' : ''}" style="flex-shrink:0">${ativo ? 'Ativo' : 'Pausado'}</span>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;margin-top:9px">
-          <span style="font-size:11px;font-weight:800;color:var(--accent);background:rgba(var(--accent-rgb,249,115,22),.12);padding:3px 9px;border-radius:99px">Hoje: ${d.entregas_hoje || 0} entrega${d.entregas_hoje === 1 ? '' : 's'}</span>
-        </div>
-        <div style="display:flex;gap:14px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+        <div class="ent-driver-stats">
           <div>
-            <div style="font-size:15px;font-weight:800">${d.total_entregas || 0}</div>
-            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">Entregas</div>
-          </div>
-          <div>
-            <div style="font-size:15px;font-weight:800;color:var(--success)">${entMoney(d.total_valor || 0)}</div>
-            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">Total movimentado</div>
+            <div class="ent-driver-stat-val" style="color:var(--accent)">${d.entregas_hoje || 0}</div>
+            <div class="ent-driver-stat-lbl">Hoje</div>
           </div>
           <div>
-            <div style="font-size:15px;font-weight:800;color:var(--accent)">${entMoney(d.total_comissao || 0)}</div>
-            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">Comissão total</div>
+            <div class="ent-driver-stat-val">${d.total_entregas || 0}</div>
+            <div class="ent-driver-stat-lbl">Entregas (total)</div>
+          </div>
+          <div>
+            <div class="ent-driver-stat-val" style="color:#16a34a">${entMoney(d.total_valor || 0)}</div>
+            <div class="ent-driver-stat-lbl">Movimentado</div>
+          </div>
+          <div>
+            <div class="ent-driver-stat-val" style="color:var(--accent3)">${entMoney(d.total_comissao || 0)}</div>
+            <div class="ent-driver-stat-lbl">Comissão total</div>
           </div>
         </div>
-        <div style="display:flex;gap:6px;margin-top:10px">
-          <button class="btn bg" style="font-size:12px;padding:7px 10px" onclick="openEntregadorModal(${d.id})">Editar</button>
-          <button class="btn bg" style="font-size:12px;padding:7px 10px" onclick="entAbrirAppEntregador()">App</button>
-          <button class="btn ${ativo ? 'bd' : 'bp'}" style="font-size:12px;padding:7px 10px" onclick="toggleEntregador(${d.id}, ${ativo ? 0 : 1})">${ativo ? 'Pausar' : 'Ativar'}</button>
+        <div class="ent-actions">
+          <button class="btn bg" onclick="openEntregadorModal(${d.id})">Editar</button>
+          <button class="btn bg" onclick="entAbrirAppEntregador()">App</button>
+          <button class="btn ${ativo ? 'bd' : 'bp'}" onclick="toggleEntregador(${d.id}, ${ativo ? 0 : 1})">${ativo ? 'Pausar' : 'Ativar'}</button>
         </div>
       </div>`;
   }).join('');
@@ -270,28 +272,28 @@ function entRenderAtivas() {
     const orderId = Number(o.id);
     const status = o.entrega_status || 'atribuida';
     return `
-      <div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface2);display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;justify-content:space-between;gap:10px">
+      <div class="ent-card">
+        <div class="ent-row-top">
           <div>
-            <div style="font-weight:800;font-size:14px">#${entEsc(entOrderNum(o))} - ${entEsc(o.client || 'Cliente')}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:4px">${entEsc(o.entregador_nome || 'Sem entregador')}</div>
+            <div class="ent-title">#${entEsc(entOrderNum(o))} <span style="font-weight:600;color:var(--muted);font-size:12.5px">${entEsc(o.client || 'Cliente')}</span></div>
+            <div class="ent-sub">${entEsc(o.entregador_nome || 'Sem entregador')}</div>
           </div>
-          <span class="chip ${status === 'em_rota' ? 'chip-green' : ''}" style="align-self:flex-start">${entStatusLabel(status)}</span>
+          <span class="ent-chip ${status === 'em_rota' ? 'green' : 'blue'}">${entStatusLabel(status)}</span>
         </div>
-        <div style="font-size:12px;color:var(--muted);line-height:1.45">${entEsc(o.addr || '')}</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--muted)">
-          <span>Total ${entMoney(entOrderTotal(o))}</span>
-          <span>Receber ${entMoney(o.valor_receber || 0)}</span>
-          <span>Comissao ${entMoney(o.comissao || 0)}</span>
-          ${o.saiu_at ? `<span>Saiu ${entWhen(o.saiu_at)}</span>` : ''}
+        <div class="ent-sub">${entEsc(o.addr || '')}</div>
+        <div class="ent-chips">
+          <span class="ent-chip">${entMoney(entOrderTotal(o))}</span>
+          <span class="ent-chip green">Receber ${entMoney(o.valor_receber || 0)}</span>
+          <span class="ent-chip">Comissão ${entMoney(o.comissao || 0)}</span>
+          ${o.saiu_at ? `<span class="ent-chip">Saiu ${entWhen(o.saiu_at)}</span>` : ''}
         </div>
-        ${o.problema ? `<div style="font-size:12px;color:var(--danger);font-weight:700">${entEsc(o.problema)}</div>` : ''}
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${status !== 'em_rota' ? `<button class="btn bp" style="font-size:12px;padding:7px 10px" onclick="entAtualizarStatus(${entregaId}, 'em_rota')">Iniciar</button>` : ''}
-          <button class="btn bg" style="font-size:12px;padding:7px 10px" onclick="entConcluirEntrega(${entregaId}, ${orderId}, ${parseFloat(o.valor_receber || 0) || 0})">Entregue</button>
-          <button class="btn bd" style="font-size:12px;padding:7px 10px" onclick="entMarcarProblema(${entregaId})">Problema</button>
-          <a class="btn bg" style="font-size:12px;padding:7px 10px;text-decoration:none" href="${entMapUrl(o.addr)}" target="_blank" rel="noopener">Mapa</a>
-          ${entDriverLocationUrl(o) ? `<a class="btn bg" style="font-size:12px;padding:7px 10px;text-decoration:none" href="${entDriverLocationUrl(o)}" target="_blank" rel="noopener">GPS entregador</a>` : ''}
+        ${o.problema ? `<div style="font-size:12px;color:var(--danger);font-weight:700;margin-top:8px">⚠ ${entEsc(o.problema)}</div>` : ''}
+        <div class="ent-actions">
+          ${status !== 'em_rota' ? `<button class="btn bp" onclick="entAtualizarStatus(${entregaId}, 'em_rota')">Iniciar</button>` : ''}
+          <button class="btn bg" onclick="entConcluirEntrega(${entregaId}, ${orderId}, ${parseFloat(o.valor_receber || 0) || 0})">✓ Entregue</button>
+          <button class="btn bd" onclick="entMarcarProblema(${entregaId})">Problema</button>
+          <a class="btn bg" style="text-decoration:none" href="${entMapUrl(o.addr)}" target="_blank" rel="noopener">📍 Mapa</a>
+          ${entDriverLocationUrl(o) ? `<a class="btn bg" style="text-decoration:none" href="${entDriverLocationUrl(o)}" target="_blank" rel="noopener">GPS</a>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -305,13 +307,13 @@ function entRenderRotas() {
     return;
   }
   wrap.innerHTML = entregasState.rotas.map(r => `
-    <div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface2);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div class="ent-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
       <div>
-        <div style="font-weight:800;font-size:13.5px">Rota #${r.id} - ${entEsc(r.entregador_nome || 'Entregador')}</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:4px">${r.pedidos_count || 0} pedidos - ${entMoney(r.total_pedidos || 0)} - receber ${entMoney(r.dinheiro_previsto || 0)}</div>
+        <div class="ent-title">Rota #${r.id} <span style="font-weight:600;color:var(--muted);font-size:12.5px">${entEsc(r.entregador_nome || 'Entregador')}</span></div>
+        <div class="ent-sub">${r.pedidos_count || 0} pedidos · ${entMoney(r.total_pedidos || 0)} · receber ${entMoney(r.dinheiro_previsto || 0)}</div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <span class="chip ${r.status === 'em_rota' ? 'chip-green' : ''}">${entStatusLabel(r.status)}</span>
+        <span class="ent-chip ${r.status === 'em_rota' ? 'green' : ''}">${entStatusLabel(r.status)}</span>
         ${r.status === 'aberta' ? `<button class="btn bp" style="font-size:12px;padding:7px 10px" onclick="entAtualizarRota(${r.id}, 'em_rota')">Iniciar rota</button>` : ''}
         <button class="btn bg" style="font-size:12px;padding:7px 10px" onclick="entAtualizarRota(${r.id}, 'finalizada')">Finalizar</button>
         ${r.status === 'aberta' ? `<button class="btn bd" style="font-size:12px;padding:7px 10px" onclick="entAtualizarRota(${r.id}, 'cancelada')">Cancelar</button>` : ''}
@@ -409,11 +411,41 @@ async function entAtualizarStatus(entregaId, status, extra = {}) {
   }
 }
 
+// Modal simples de "digite um valor", no lugar de prompt() — o app roda
+// também dentro do Electron, que não implementa window.prompt() (só
+// confirm()). Isso fazia o fluxo de concluir entrega parar silenciosamente
+// no meio (raw === null sempre), sem nenhum erro aparecer: parecia que
+// "não conclui", mas na verdade nunca passava dessa etapa.
+function entPromptModal({ titulo, label, valorInicial = '', tipo = 'text', placeholder = '' }) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10098;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.6);backdrop-filter:blur(4px)';
+    overlay.innerHTML = `
+      <div style="width:min(360px,94vw);background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 24px 70px rgba(2,6,23,.4);padding:20px">
+        <div style="font-size:15px;font-weight:800;margin-bottom:14px">${entEsc(titulo)}</div>
+        <label class="form-label">${entEsc(label)}</label>
+        <input type="${tipo}" id="ent-prompt-input" class="form-input" value="${entEsc(valorInicial)}" placeholder="${entEsc(placeholder)}" step="0.01" style="margin-bottom:16px">
+        <div style="display:flex;gap:8px">
+          <button type="button" id="ent-prompt-cancel" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-weight:700;font-size:13px;cursor:pointer">Cancelar</button>
+          <button type="button" id="ent-prompt-ok" style="flex:1;padding:11px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:13px;cursor:pointer">Confirmar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector('#ent-prompt-input');
+    const finalizar = (valor) => { overlay.remove(); resolve(valor); };
+    overlay.querySelector('#ent-prompt-ok').onclick = () => finalizar(input.value);
+    overlay.querySelector('#ent-prompt-cancel').onclick = () => finalizar(null);
+    overlay.addEventListener('click', e => { if (e.target === overlay) finalizar(null); });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') finalizar(input.value); });
+    setTimeout(() => { input.focus(); input.select(); }, 50);
+  });
+}
+
 async function entConcluirEntrega(entregaId, orderId, valorReceber) {
   if (!confirm('Marcar esta entrega como concluida?')) return;
   let recebido = parseFloat(valorReceber || 0) || 0;
   if (recebido > 0) {
-    const raw = prompt('Valor recebido pelo entregador (R$)', recebido.toFixed(2).replace('.', ','));
+    const raw = await entPromptModal({ titulo: 'Valor recebido', label: 'Valor recebido pelo entregador (R$)', valorInicial: recebido.toFixed(2).replace('.', ','), tipo: 'number' });
     if (raw === null) return;
     recebido = parseFloat(String(raw).replace(',', '.')) || 0;
   }
@@ -435,39 +467,30 @@ async function entConcluirEntrega(entregaId, orderId, valorReceber) {
   }
 }
 
+// Finaliza o PEDIDO usando a mesma função que o kanban normal usa
+// (finishOrderById) — antes essa tela tinha sua própria cópia dessa
+// lógica, que foi ficando pra trás e não dava pontos de fidelidade nem
+// as outras coisas que finishOrderById ganhou com o tempo. Uma função só,
+// usada nos dois lugares, evita esse tipo de divergência silenciosa.
 async function entFinalizarPedidoFallback(orderId) {
-  const { data: order } = await sb.from('orders').select('*').eq('id', orderId).single();
-  const alreadyDone = ['finalizado','entregue'].includes(String(order?.status || ''));
+  if (typeof finishOrderById === 'function') {
+    await finishOrderById(orderId);
+    return;
+  }
+  // Fallback só pro caso (não deveria acontecer) de finishOrderById não
+  // estar carregada ainda nesse contexto.
   const res = await fetch('/api/order-status', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-tenant-id': entTenantId() },
-    body: JSON.stringify({
-      order_id: orderId,
-      new_status: 'finalizado',
-      tenant_id: entTenantId(),
-      origem: 'entregas',
-      note: 'Entrega concluida'
-    })
+    body: JSON.stringify({ order_id: orderId, new_status: 'finalizado', tenant_id: entTenantId() })
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Erro ao finalizar pedido');
-  if (order && entTenantId() && !alreadyDone) {
-    const total = entOrderTotal(order);
-    const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    await sb.from('movimentos').insert({
-      tenant_id: entTenantId(),
-      description: `Pedido #${entOrderNum(order)} - ${order.client || 'Cliente'}`,
-      tipo: 'entrada',
-      val: total,
-      pag: order.pag || 'PIX',
-      time
-    });
-  }
   if (Array.isArray(ordersKanban)) ordersKanban = ordersKanban.filter(o => Number(o.id) !== Number(orderId));
 }
 
 async function entMarcarProblema(entregaId) {
-  const problema = prompt('Descreva o problema da entrega');
+  const problema = await entPromptModal({ titulo: 'Reportar problema', label: 'Descreva o problema da entrega', placeholder: 'Ex: Cliente não atendeu' });
   if (problema === null) return;
   if (!String(problema).trim()) { sbToast('err', 'Informe o problema'); return; }
   await entAtualizarStatus(entregaId, 'problema', { problema });
