@@ -3082,6 +3082,23 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
   const _deliveryDashboard = (tid) => {
     const entregadores = db.prepare('SELECT * FROM entregadores WHERE tenant_id=? ORDER BY ativo DESC, nome ASC').all(tid)
+    // Total histórico de cada entregador — quantas entregas já concluiu, e
+    // quanto isso somou em valor de pedido / comissão dele. É acumulado
+    // pra sempre (não é "do dia"), então dá pra ver o desempenho geral.
+    const totaisPorEntregador = Object.fromEntries(
+      db.prepare(`
+        SELECT entregador_id, COUNT(*) AS total_entregas,
+               SUM(valor_receber) AS total_valor, SUM(comissao) AS total_comissao
+        FROM entregas WHERE tenant_id=? AND status='entregue'
+        GROUP BY entregador_id
+      `).all(tid).map(r => [r.entregador_id, r])
+    )
+    for (const d of entregadores) {
+      const t = totaisPorEntregador[d.id]
+      d.total_entregas = t?.total_entregas || 0
+      d.total_valor = t?.total_valor || 0
+      d.total_comissao = t?.total_comissao || 0
+    }
     const pedidosRows = db.prepare(`
       SELECT o.*,
              e.id as entrega_id, e.status as entrega_status, e.entregador_id, e.rota_id,
@@ -4526,6 +4543,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
         ORDER BY total DESC
       `).all(desde, ate)
 
+      // Apps instalados é uma métrica acumulada (não "do período") — uma
+      // vez instalado, continua contando pra sempre, então não teria
+      // sentido zerar isso ao trocar o filtro de data pra "hoje".
+      const instalacoesPorLoja = Object.fromEntries(
+        db.prepare('SELECT tenant_id, COUNT(*) AS n FROM pwa_installs GROUP BY tenant_id').all()
+          .map(r => [r.tenant_id, r.n])
+      )
+      for (const l of lojas) l.apps_instalados = instalacoesPorLoja[l.tenant_id] || 0
+      const totalAppsInstalados = db.prepare('SELECT COUNT(*) AS n FROM pwa_installs').get()?.n || 0
+
       const resumo = lojas.reduce((acc, l) => {
         acc.total += l.total; acc.ativos += l.ativos; acc.cancelados += l.cancelados
         acc.concluidos += l.concluidos; acc.em_entrega += l.em_entrega; acc.faturado += l.faturado || 0
@@ -4534,6 +4561,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       }, { total: 0, ativos: 0, cancelados: 0, concluidos: 0, em_entrega: 0, faturado: 0, _somaTempo: 0, _qtdTempo: 0 })
       resumo.tempo_medio_min = resumo._qtdTempo > 0 ? resumo._somaTempo / resumo._qtdTempo : null
       delete resumo._somaTempo; delete resumo._qtdTempo
+      resumo.apps_instalados = totalAppsInstalados
 
       // ── Série temporal (pro gráfico de linhas) ──────────────────────
       // Período de 1 dia (hoje/ontem) → agrupa por hora (0-23h).

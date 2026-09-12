@@ -3832,9 +3832,12 @@ Use no seu próximo pedido.</textarea>
             <span>Adicionar produtos</span>
             <span style="font-size:10px;font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0">Clique para adicionar</span>
           </label>
-          <div class="sbox" style="max-width:100%;margin-top:4px;margin-bottom:10px">
-            <svg viewBox="0 0 16 16" fill="none" width="14" height="14" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-            <input type="text" id="no-search" placeholder="Buscar produto por nome..." oninput="noFilterItems(this.value)" style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);width:100%">
+          <div style="display:flex;gap:8px;margin-top:4px;margin-bottom:10px">
+            <div class="sbox" style="max-width:100%;flex:1;margin:0">
+              <svg viewBox="0 0 16 16" fill="none" width="14" height="14" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              <input type="text" id="no-search" placeholder="Buscar produto por nome..." oninput="noFilterItems(this.value)" style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);width:100%">
+            </div>
+            <button type="button" class="btn bg" style="padding:0 14px;font-size:12px;white-space:nowrap;flex-shrink:0" onclick="noAbrirValorAvulso()" title="Adicionar um valor sem escolher produto do cardápio">+ Valor avulso</button>
           </div>
           <!-- Chips de categoria — preenchidos por noRenderCategoriasChips() -->
           <div id="no-cats-chips" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;scrollbar-width:thin"></div>
@@ -3869,6 +3872,21 @@ Use no seu próximo pedido.</textarea>
           <div id="no-taxa-line" style="display:none;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-bottom:4px">
             <span>Taxa de entrega</span>
             <span id="no-taxa-display">R$ 0,00</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:8px 0 4px">
+            <button type="button" onclick="noToggleDesconto()" id="no-desconto-toggle-btn" style="background:none;border:none;color:var(--accent);font-size:11.5px;font-weight:700;cursor:pointer;padding:0;display:flex;align-items:center;gap:4px">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              Aplicar desconto
+            </button>
+            <span id="no-desconto-display" style="display:none;font-size:12.5px;color:#ef4444;font-weight:600"></span>
+          </div>
+          <div id="no-desconto-wrap" style="display:none;gap:6px;margin-bottom:8px;align-items:center">
+            <select id="no-desconto-tipo" class="form-input" style="flex:0 0 70px;padding:6px 4px;font-size:12px" onchange="noRenderCart()">
+              <option value="pct">%</option>
+              <option value="valor">R$</option>
+            </select>
+            <input type="number" id="no-desconto-val" class="form-input" placeholder="0" min="0" step="0.01" style="flex:1;padding:6px 8px;font-size:12px" oninput="noRenderCart()">
+            <button type="button" onclick="noRemoverDesconto()" title="Remover desconto" style="width:26px;height:26px;flex-shrink:0;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;margin-top:6px;padding-top:8px;border-top:1px dashed var(--border)">
             <span>Total</span>

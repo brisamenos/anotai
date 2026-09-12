@@ -232,6 +232,20 @@ function entRenderDrivers() {
           </div>
           <span class="chip ${ativo ? 'chip-green' : ''}" style="font-size:11px">${ativo ? 'Ativo' : 'Pausado'}</span>
         </div>
+        <div style="display:flex;gap:14px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+          <div>
+            <div style="font-size:15px;font-weight:800">${d.total_entregas || 0}</div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">Entregas</div>
+          </div>
+          <div>
+            <div style="font-size:15px;font-weight:800;color:var(--success)">${entMoney(d.total_valor || 0)}</div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">Total movimentado</div>
+          </div>
+          <div>
+            <div style="font-size:15px;font-weight:800;color:var(--accent)">${entMoney(d.total_comissao || 0)}</div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">Comissão total</div>
+          </div>
+        </div>
         <div style="display:flex;gap:6px;margin-top:10px">
           <button class="btn bg" style="font-size:12px;padding:7px 10px" onclick="openEntregadorModal(${d.id})">Editar</button>
           <button class="btn bg" style="font-size:12px;padding:7px 10px" onclick="entAbrirAppEntregador()">App</button>

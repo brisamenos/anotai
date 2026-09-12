@@ -2967,6 +2967,40 @@ if (typeof window !== 'undefined') window._detectOrderType = _detectOrderType;
 // Guard contra cliques duplos: impede que o mesmo pedido seja avançado 2x antes do servidor responder.
 const _advancingIds = new Set();
 
+// Mostra um seletor de entregador antes de marcar o pedido como "saiu pra
+// entrega" — só aparece se existir pelo menos 1 entregador ativo cadastrado;
+// sem isso, o fluxo de avançar continua exatamente como sempre foi.
+// Resolve com o id do entregador escolhido, ou null se o gestor preferir
+// não atribuir ninguém agora (pode atribuir depois pela tela de Entregas).
+function _kanbanEscolherEntregador(entregadores) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10096;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.6);backdrop-filter:blur(5px)';
+    overlay.innerHTML = `
+      <div style="width:min(360px,94vw);background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:0 28px 80px rgba(2,6,23,.45);overflow:hidden">
+        <div style="padding:18px 20px 4px">
+          <div style="font-size:15px;font-weight:800">Quem vai entregar?</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Escolha o entregador, ou avance sem atribuir agora</div>
+        </div>
+        <div id="kb-ent-list" style="padding:12px 14px;display:flex;flex-direction:column;gap:7px;max-height:280px;overflow-y:auto"></div>
+        <div style="padding:10px 14px 16px;display:flex;flex-direction:column;gap:8px">
+          <button id="kb-ent-sem" style="width:100%;padding:11px;border:1px solid var(--border);border-radius:11px;background:none;color:var(--text);font-weight:700;font-size:13px;cursor:pointer">Avançar sem atribuir</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const list = overlay.querySelector('#kb-ent-list');
+    entregadores.forEach(d => {
+      const btn = document.createElement('button');
+      btn.style.cssText = 'width:100%;text-align:left;padding:11px 13px;border:1.5px solid var(--border);border-radius:11px;background:var(--surface2);color:var(--text);font-weight:700;font-size:13.5px;cursor:pointer;display:flex;align-items:center;gap:10px';
+      btn.innerHTML = `<span style="width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;flex-shrink:0">${(d.nome||'?').trim().charAt(0).toUpperCase()}</span><span>${d.nome || 'Entregador'}</span>`;
+      btn.onclick = () => { overlay.remove(); resolve(d.id); };
+      list.appendChild(btn);
+    });
+    overlay.querySelector('#kb-ent-sem').onclick = () => { overlay.remove(); resolve(null); };
+    overlay.addEventListener('click', e => { if (e.target === overlay) { overlay.remove(); resolve(null); } });
+  });
+}
+
 async function advanceOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   if (!o) return;
@@ -2987,7 +3021,20 @@ async function advanceOrderById(id) {
     // Fluxo unificado (restaurante e açougue):
     //   delivery: pronto → saiu (saiu para entrega, dispara WA "a caminho")
     //   mesa/balcão: pronto → usa finishOrderById via botão no kanban (não passa por aqui)
-    if (tipo === 'delivery') newStatus = 'saiu';
+    if (tipo === 'delivery') {
+      newStatus = 'saiu'
+      // Se tiver entregador ativo cadastrado, oferece escolher quem vai
+      // entregar antes de seguir. Sem entregador nenhum cadastrado, nem
+      // pergunta — segue o fluxo de sempre, sem travar quem não usa isso.
+      let entregadorEscolhidoId = null
+      try {
+        const rDash = await fetch(`/api/entregas/dashboard`, { headers: { 'x-tenant-id': _sessao?.tenant_id } })
+        const dDash = rDash.ok ? await rDash.json() : null
+        const ativos = (dDash?.entregadores || []).filter(d => Number(d.ativo) !== 0)
+        if (ativos.length) entregadorEscolhidoId = await _kanbanEscolherEntregador(ativos)
+      } catch(e) { /* falha ao buscar entregadores não deve travar o avanço do pedido */ }
+      o._entregadorEscolhidoId = entregadorEscolhidoId
+    }
     else {
       // Balcão e mesa são finalizados via finishOrderById (botão dedicado no kanban).
       // Se advanceOrderById for chamado, delega para finishOrderById.
@@ -3018,6 +3065,19 @@ async function advanceOrderById(id) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro');
+    // Se o gestor escolheu um entregador na hora de avançar, registra a
+    // atribuição — já entra direto como "em rota" (o pedido já está saindo
+    // fisicamente, não faz sentido ficar num estado intermediário "atribuída").
+    if (o._entregadorEscolhidoId) {
+      try {
+        await fetch('/api/entregas/atribuir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id },
+          body: JSON.stringify({ order_id: id, entregador_id: o._entregadorEscolhidoId, iniciar_rota: true })
+        });
+      } catch(e) { /* não desfaz o avanço do pedido por causa disso */ }
+      delete o._entregadorEscolhidoId;
+    }
   } catch(e) {
     // Reverte se falhou
     o.status = oldStatus;

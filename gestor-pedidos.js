@@ -1816,6 +1816,50 @@ function cancelarPedidoDetalhe() {
 // ─────────────────────────────────────────
 // ── Novo Pedido Manual — estado do modal ──────────────
 let _noCart = [];   // [{id, name, qty, price, emoji}]
+let _noDescontoAtivo = false;
+
+// Adiciona um item "avulso" ao carrinho — sem vínculo com produto do
+// cardápio (id: null), pra casos tipo "taxa de embalagem", "acréscimo",
+// ou qualquer cobrança que não tem um produto correspondente cadastrado.
+function noAbrirValorAvulso() {
+  const nome = prompt('Nome do item (ex: Taxa de embalagem, Acréscimo, etc.)');
+  if (nome === null) return;
+  const nomeFinal = nome.trim() || 'Valor avulso';
+  const valorTxt = prompt('Valor (R$):', '0,00');
+  if (valorTxt === null) return;
+  const valor = parseFloat(String(valorTxt).replace(',', '.'));
+  if (isNaN(valor) || valor <= 0) { sbToast('err', 'Valor inválido'); return; }
+  _noCart.push({ id: null, name: nomeFinal, qty: 1, price: valor, emoji: '💲', cat: '', cat_key: '' });
+  noRenderCart();
+  sbToast('ok', `"${nomeFinal}" adicionado`);
+}
+
+function noToggleDesconto() {
+  _noDescontoAtivo = !_noDescontoAtivo;
+  const wrap = document.getElementById('no-desconto-wrap');
+  if (wrap) wrap.style.display = _noDescontoAtivo ? 'flex' : 'none';
+  if (!_noDescontoAtivo) { document.getElementById('no-desconto-val').value = ''; }
+  noRenderCart();
+}
+
+function noRemoverDesconto() {
+  _noDescontoAtivo = false;
+  document.getElementById('no-desconto-val').value = '';
+  document.getElementById('no-desconto-wrap').style.display = 'none';
+  noRenderCart();
+}
+
+// Calcula o valor do desconto em reais, dado o subtotal+taxa antes de
+// aplicar. Nunca deixa o total ficar negativo (trava em 0).
+function _noCalcularDesconto(baseAntes) {
+  if (!_noDescontoAtivo) return 0;
+  const tipo = document.getElementById('no-desconto-tipo')?.value || 'pct';
+  const val = parseFloat(document.getElementById('no-desconto-val')?.value) || 0;
+  if (val <= 0) return 0;
+  const bruto = tipo === 'pct' ? baseAntes * (val / 100) : val;
+  return Math.min(bruto, baseAntes); // nunca desconta mais que o total
+}
+
 let _noDelivery = 'delivery';
 
 function noSetDelivery(tipo) {
@@ -2704,11 +2748,19 @@ function noRenderCart() {
   const subtotal = _noCart.reduce((s, c) => s + c.price * c.qty, 0);
   // Taxa só conta para delivery
   const taxa = (_noDelivery === 'delivery') ? (parseFloat(document.getElementById('no-taxa-val')?.value) || 0) : 0;
-  const total = subtotal + taxa;
+  // Desconto incide só sobre os itens (não sobre a taxa de entrega) — mesma
+  // convenção que cupom/cashback já usam no resto do sistema.
+  const desconto = _noCalcularDesconto(subtotal);
+  const total = subtotal - desconto + taxa;
 
   if (subEl)   subEl.textContent   = 'R$ ' + subtotal.toFixed(2).replace('.', ',');
   if (taxaLine) taxaLine.style.display = (_noDelivery === 'delivery' && taxa > 0) ? 'flex' : 'none';
   if (taxaEl)  taxaEl.textContent  = 'R$ ' + taxa.toFixed(2).replace('.', ',');
+  const descDisplay = document.getElementById('no-desconto-display');
+  if (descDisplay) {
+    if (desconto > 0.009) { descDisplay.style.display = ''; descDisplay.textContent = '− R$ ' + desconto.toFixed(2).replace('.', ','); }
+    else { descDisplay.style.display = 'none'; }
+  }
   if (totalEl) totalEl.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
   if (footEl)  footEl.textContent  = 'R$ ' + total.toFixed(2).replace('.', ',');
   if (btn)     btn.disabled = false;
@@ -2939,6 +2991,11 @@ async function noOpenModal() {
   _noCart = [];
   _noDelivery = 'delivery';
   _noTaxaManualOverride = false;
+  _noDescontoAtivo = false;
+  const _descWrap = document.getElementById('no-desconto-wrap');
+  if (_descWrap) _descWrap.style.display = 'none';
+  const _descVal = document.getElementById('no-desconto-val');
+  if (_descVal) _descVal.value = '';
   // Reseta os 5 campos novos + outros
   ['order-client', 'order-phone', 'order-obs',
    'no-f-rua', 'no-f-num', 'no-f-bairro', 'no-f-compl', 'no-f-referencia',
@@ -3263,7 +3320,9 @@ async function createOrder() {
     const last = itemsArr[itemsArr.length - 1];
     last.obs = last.obs ? `${last.obs} · ${obs}` : obs;
   }
-  const tot = _noCart.reduce((s, c) => s + c.price * c.qty, 0);
+  const subtotalItens = _noCart.reduce((s, c) => s + c.price * c.qty, 0);
+  const descontoAplicado = _noCalcularDesconto(subtotalItens);
+  const tot = subtotalItens - descontoAplicado;
 
   try {
     sbLoading(true);
