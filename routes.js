@@ -3126,10 +3126,15 @@ module.exports = async function handleRoutes(req, res, ctx) {
       FROM entregas e
       LEFT JOIN orders o ON o.id=e.order_id
       LEFT JOIN entregadores d ON d.id=e.entregador_id
-      WHERE e.tenant_id=? AND e.status='entregue' AND date(e.entregue_at)=date('now')
+      WHERE e.tenant_id=? AND e.status='entregue' AND date(e.entregue_at, '-3 hours')=date('now', '-3 hours')
       ORDER BY e.entregue_at DESC
       LIMIT 80
     `).all(tid).map(r => ({ ...r, bairro: _bairroEntrega(r.addr), total_pedido: _orderTotalDelivery(r) }))
+    // Quantas entregas cada entregador concluiu HOJE (dia civil de
+    // Brasília) — complementa o total histórico já calculado acima.
+    const hojePorEntregador = {}
+    for (const c of concluidasHoje) hojePorEntregador[c.entregador_id] = (hojePorEntregador[c.entregador_id] || 0) + 1
+    for (const d of entregadores) d.entregas_hoje = hojePorEntregador[d.id] || 0
     const rotas = db.prepare(`
       SELECT r.*, d.nome as entregador_nome
       FROM rotas_entrega r

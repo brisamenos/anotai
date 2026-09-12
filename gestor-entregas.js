@@ -232,6 +232,9 @@ function entRenderDrivers() {
           </div>
           <span class="chip ${ativo ? 'chip-green' : ''}" style="font-size:11px">${ativo ? 'Ativo' : 'Pausado'}</span>
         </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:9px">
+          <span style="font-size:11px;font-weight:800;color:var(--accent);background:rgba(var(--accent-rgb,249,115,22),.12);padding:3px 9px;border-radius:99px">Hoje: ${d.entregas_hoje || 0} entrega${d.entregas_hoje === 1 ? '' : 's'}</span>
+        </div>
         <div style="display:flex;gap:14px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
           <div>
             <div style="font-size:15px;font-weight:800">${d.total_entregas || 0}</div>
