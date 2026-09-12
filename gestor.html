@@ -2077,6 +2077,13 @@ Use no seu próximo pedido.</textarea>
 
 <!-- ENTREGAS -->
 <style>
+.ent-stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
+.ent-stat-card{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:14px 16px;position:relative;overflow:hidden;transition:transform .15s,border-color .15s}
+.ent-stat-card:hover{transform:translateY(-2px);border-color:var(--sc)}
+.ent-stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--sc)}
+.ent-stat-val{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:800;letter-spacing:-.5px;color:var(--text)}
+.ent-stat-lbl{font-size:10.5px;color:var(--muted);margin-top:4px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+
 .ent-card{border:1px solid var(--border);border-radius:14px;background:var(--surface2);padding:14px;transition:border-color .15s}
 .ent-card:hover{border-color:var(--border-hover,var(--border))}
 .ent-row-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
@@ -2089,10 +2096,25 @@ Use no seu próximo pedido.</textarea>
 .ent-chip.red{color:#dc2626;background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.25)}
 .ent-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)}
 .ent-actions .btn{font-size:12px;padding:7px 12px}
-.ent-avatar{width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0}
-.ent-driver-stats{display:flex;gap:18px;margin-top:11px;padding-top:11px;border-top:1px dashed var(--border)}
-.ent-driver-stat-val{font-size:16px;font-weight:800;line-height:1}
-.ent-driver-stat-lbl{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+
+/* Lista de entregadores — linhas compactas, não cards grandes */
+.ent-driver-list{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.ent-driver-row{display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border);background:var(--surface2)}
+.ent-driver-row:last-child{border-bottom:none}
+.ent-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13.5px;font-weight:800;flex-shrink:0}
+.ent-driver-name{font-size:13px;font-weight:800;display:flex;align-items:center;gap:7px}
+.ent-driver-phone{font-size:11px;color:var(--muted);margin-top:1px}
+.ent-driver-metrics{display:flex;gap:16px;flex-shrink:0}
+.ent-driver-metric{text-align:center;min-width:44px}
+.ent-driver-metric-val{font-family:'Space Grotesk',sans-serif;font-size:14.5px;font-weight:800;line-height:1}
+.ent-driver-metric-lbl{font-size:8.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+.ent-driver-actions{display:flex;gap:5px;flex-shrink:0}
+.ent-driver-actions .btn{font-size:11px;padding:6px 9px}
+@media(max-width:720px){
+  .ent-stats-grid{grid-template-columns:repeat(2,1fr)}
+  .ent-driver-row{flex-wrap:wrap}
+  .ent-driver-metrics{order:3;width:100%;justify-content:space-between;padding-top:8px;border-top:1px dashed var(--border);margin-top:2px}
+}
 </style>
 <div class="page" id="page-entregas">
   <div class="ph">
@@ -2116,46 +2138,46 @@ Use no seu próximo pedido.</textarea>
     </div>
   </div>
 
-  <div class="sg" style="margin-bottom:18px">
-    <div class="sc" style="--ca:var(--accent)"><div class="sl">Prontos</div><div class="sv" id="ent-stat-prontos">0</div></div>
-    <div class="sc" style="--ca:var(--orange)"><div class="sl">Em rota</div><div class="sv" id="ent-stat-rota">0</div></div>
-    <div class="sc" style="--ca:var(--accent3)"><div class="sl">Atribuidos</div><div class="sv" id="ent-stat-atribuidas">0</div></div>
-    <div class="sc" style="--ca:var(--success)"><div class="sl">Entregues hoje</div><div class="sv" id="ent-stat-hoje">0</div></div>
-    <div class="sc" style="--ca:var(--danger)"><div class="sl">Dinheiro na rua</div><div class="sv" id="ent-stat-dinheiro">R$ 0,00</div></div>
+  <div class="ent-stats-grid">
+    <div class="ent-stat-card" style="--sc:#3b82f6"><div class="ent-stat-val" id="ent-stat-prontos">0</div><div class="ent-stat-lbl">Prontos</div></div>
+    <div class="ent-stat-card" style="--sc:#f59e0b"><div class="ent-stat-val" id="ent-stat-rota">0</div><div class="ent-stat-lbl">Em rota</div></div>
+    <div class="ent-stat-card" style="--sc:#8b5cf6"><div class="ent-stat-val" id="ent-stat-atribuidas">0</div><div class="ent-stat-lbl">Atribuídos</div></div>
+    <div class="ent-stat-card" style="--sc:#22c55e"><div class="ent-stat-val" id="ent-stat-hoje">0</div><div class="ent-stat-lbl">Entregues hoje</div></div>
+    <div class="ent-stat-card" style="--sc:#ef4444"><div class="ent-stat-val" id="ent-stat-dinheiro">R$ 0,00</div><div class="ent-stat-lbl">Dinheiro na rua</div></div>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px;align-items:start" class="ent-main-grid">
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-        <div class="card-title" style="margin-bottom:0">Fila de entrega</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <select class="form-input" id="ent-rota-entregador" style="width:190px"></select>
-          <button class="btn bg" onclick="entCriarRotaSelecionados(false)">Criar rota</button>
-          <button class="btn bp" onclick="entCriarRotaSelecionados(true)">Criar e iniciar</button>
-        </div>
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="card-title" style="margin-bottom:0">Fila de entrega</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select class="form-input" id="ent-rota-entregador" style="width:190px"></select>
+        <button class="btn bg" onclick="entCriarRotaSelecionados(false)">Criar rota</button>
+        <button class="btn bp" onclick="entCriarRotaSelecionados(true)">Criar e iniciar</button>
       </div>
-      <div id="ent-fila-list" style="display:flex;flex-direction:column;gap:10px"></div>
     </div>
-
-    <div class="card">
-      <div class="card-title" style="margin-bottom:12px">Entregadores</div>
-      <div id="ent-entregadores-list" style="display:flex;flex-direction:column;gap:10px"></div>
-    </div>
+    <div id="ent-fila-list" style="display:flex;flex-direction:column;gap:10px"></div>
   </div>
 
-  <div class="card" style="margin-top:16px">
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title" style="margin-bottom:12px">Entregadores</div>
+    <div id="ent-entregadores-list" class="ent-driver-list"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
     <div class="card-title" style="margin-bottom:12px">Na rua agora</div>
     <div id="ent-ativas-list" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:10px"></div>
   </div>
 
-  <div class="card" style="margin-top:16px">
-    <div class="card-title" style="margin-bottom:12px">Rotas abertas</div>
-    <div id="ent-rotas-list" style="display:flex;flex-direction:column;gap:10px"></div>
-  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:12px">Rotas abertas</div>
+      <div id="ent-rotas-list" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
 
-  <div class="card" style="margin-top:16px">
-    <div class="card-title" style="margin-bottom:12px">Entregas concluidas hoje</div>
-    <div id="ent-concluidas-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:12px">Entregas concluidas hoje</div>
+      <div id="ent-concluidas-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
   </div>
 </div>
 

@@ -222,38 +222,33 @@ function entRenderDrivers() {
       : entMoney(d.comissao_valor || 0);
     const inicial = (d.nome || '?').trim().charAt(0).toUpperCase();
     return `
-      <div class="ent-card">
-        <div class="ent-row-top">
-          <div style="display:flex;gap:10px;align-items:center;min-width:0">
-            <div class="ent-avatar">${entEsc(inicial)}</div>
-            <div style="min-width:0">
-              <div class="ent-title" style="font-size:13.5px">${entEsc(d.nome)}</div>
-              <div class="ent-sub" style="margin-top:2px">${entEsc(d.telefone || 'Sem telefone')} · Comissão ${entEsc(comissao)}</div>
-            </div>
-          </div>
-          <span class="ent-chip ${ativo ? 'green' : ''}" style="flex-shrink:0">${ativo ? 'Ativo' : 'Pausado'}</span>
+      <div class="ent-driver-row">
+        <div class="ent-avatar" style="${ativo ? '' : 'background:var(--muted)'}">${entEsc(inicial)}</div>
+        <div style="flex:1;min-width:120px">
+          <div class="ent-driver-name">${entEsc(d.nome)} <span class="ent-chip ${ativo ? 'green' : ''}" style="font-size:9.5px;padding:2px 7px">${ativo ? 'Ativo' : 'Pausado'}</span></div>
+          <div class="ent-driver-phone">${entEsc(d.telefone || 'Sem telefone')} · Comissão ${entEsc(comissao)}</div>
         </div>
-        <div class="ent-driver-stats">
-          <div>
-            <div class="ent-driver-stat-val" style="color:var(--accent)">${d.entregas_hoje || 0}</div>
-            <div class="ent-driver-stat-lbl">Hoje</div>
+        <div class="ent-driver-metrics">
+          <div class="ent-driver-metric">
+            <div class="ent-driver-metric-val" style="color:var(--accent)">${d.entregas_hoje || 0}</div>
+            <div class="ent-driver-metric-lbl">Hoje</div>
           </div>
-          <div>
-            <div class="ent-driver-stat-val">${d.total_entregas || 0}</div>
-            <div class="ent-driver-stat-lbl">Entregas (total)</div>
+          <div class="ent-driver-metric">
+            <div class="ent-driver-metric-val">${d.total_entregas || 0}</div>
+            <div class="ent-driver-metric-lbl">Total</div>
           </div>
-          <div>
-            <div class="ent-driver-stat-val" style="color:#16a34a">${entMoney(d.total_valor || 0)}</div>
-            <div class="ent-driver-stat-lbl">Movimentado</div>
+          <div class="ent-driver-metric">
+            <div class="ent-driver-metric-val" style="color:#16a34a">${entMoney(d.total_valor || 0)}</div>
+            <div class="ent-driver-metric-lbl">Movim.</div>
           </div>
-          <div>
-            <div class="ent-driver-stat-val" style="color:var(--accent3)">${entMoney(d.total_comissao || 0)}</div>
-            <div class="ent-driver-stat-lbl">Comissão total</div>
+          <div class="ent-driver-metric">
+            <div class="ent-driver-metric-val" style="color:var(--accent3)">${entMoney(d.total_comissao || 0)}</div>
+            <div class="ent-driver-metric-lbl">Comissão</div>
           </div>
         </div>
-        <div class="ent-actions">
-          <button class="btn bg" onclick="openEntregadorModal(${d.id})">Editar</button>
-          <button class="btn bg" onclick="entAbrirAppEntregador()">App</button>
+        <div class="ent-driver-actions">
+          <button class="btn bg" onclick="openEntregadorModal(${d.id})" title="Editar">✏️</button>
+          <button class="btn bg" onclick="entAbrirAppEntregador()" title="App do entregador">📱</button>
           <button class="btn ${ativo ? 'bd' : 'bp'}" onclick="toggleEntregador(${d.id}, ${ativo ? 0 : 1})">${ativo ? 'Pausar' : 'Ativar'}</button>
         </div>
       </div>`;
