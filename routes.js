@@ -4551,12 +4551,26 @@ module.exports = async function handleRoutes(req, res, ctx) {
       // Apps instalados é uma métrica acumulada (não "do período") — uma
       // vez instalado, continua contando pra sempre, então não teria
       // sentido zerar isso ao trocar o filtro de data pra "hoje".
-      const instalacoesPorLoja = Object.fromEntries(
-        db.prepare('SELECT tenant_id, COUNT(*) AS n FROM pwa_installs GROUP BY tenant_id').all()
-          .map(r => [r.tenant_id, r.n])
-      )
-      for (const l of lojas) l.apps_instalados = instalacoesPorLoja[l.tenant_id] || 0
-      const totalAppsInstalados = db.prepare('SELECT COUNT(*) AS n FROM pwa_installs').get()?.n || 0
+      // Protegido com try/catch de propósito: mesmo que essa tabela tenha
+      // algum problema (ex: não foi criada por algum motivo), o resto do
+      // dashboard continua funcionando normalmente — só esse número fica
+      // zerado em vez de travar a tela inteira.
+      let totalAppsInstalados = 0
+      try {
+        const instalacoesPorLoja = Object.fromEntries(
+          db.prepare('SELECT tenant_id, COUNT(*) AS n FROM pwa_installs GROUP BY tenant_id').all()
+            .map(r => [r.tenant_id, r.n])
+        )
+        for (const l of lojas) l.apps_instalados = instalacoesPorLoja[l.tenant_id] || 0
+        totalAppsInstalados = db.prepare('SELECT COUNT(*) AS n FROM pwa_installs').get()?.n || 0
+      } catch(e) {
+        log('⚠️', 'pwa_installs indisponível, tentando criar agora:', e.message)
+        // Se o motivo foi a tabela não existir, cria na hora — assim da
+        // próxima vez que essa tela for aberta, já funciona sozinho, sem
+        // precisar reiniciar nada.
+        try { db.exec(`CREATE TABLE IF NOT EXISTS pwa_installs (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, device_id TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')), UNIQUE(tenant_id, device_id))`) } catch(e2) {}
+        for (const l of lojas) l.apps_instalados = 0
+      }
 
       const resumo = lojas.reduce((acc, l) => {
         acc.total += l.total; acc.ativos += l.ativos; acc.cancelados += l.cancelados

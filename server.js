@@ -404,6 +404,26 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_customers_phone   ON customers(tenant_id, phone);
 `)
 
+// Criação isolada, com seu próprio try/catch — de propósito FORA do bloco
+// gigante de cima. Se qualquer outra coisa naquele bloco falhar (banco já
+// existente com alguma particularidade, por exemplo), essa tabela ainda
+// assim é criada, porque não depende de mais nada ter dado certo antes
+// dela. E se por algum motivo essa criação em si falhar, o log mostra
+// exatamente o erro, em vez de travar o servidor inteiro escondido lá no
+// meio de centenas de outras linhas.
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pwa_installs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, device_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_pwa_installs_tenant ON pwa_installs(tenant_id);
+  `)
+} catch(e) { console.error('⚠️ Falha ao criar tabela pwa_installs:', e.message) }
+
 // ════════════════════════════════════════════════════════
 // MIGRATIONS
 // ════════════════════════════════════════════════════════
@@ -6297,6 +6317,26 @@ const server = http.createServer(async (req,res) => {
   }
 
   // ── Manifest PWA dinâmico para o garçom (por tenant) ──
+  if(req.method==='POST'&&upath==='/api/pwa-install'){
+    try {
+      const body = await readBody(req)
+      const slug = String(body.slug || '').trim()
+      const deviceId = String(body.device_id || '').trim().slice(0, 64)
+      if (!slug || !deviceId) { send(res, 400, { error: 'Dados incompletos' }); return true }
+      const t = db.prepare('SELECT id FROM tenants WHERE slug=? AND ativo=1').get(slug)
+      if (!t) { send(res, 404, { error: 'Loja não encontrada' }); return true }
+      // Garante a tabela também aqui (camada extra) — se por qualquer
+      // motivo ela não tiver sido criada na inicialização, cria agora em
+      // vez de falhar. CREATE TABLE IF NOT EXISTS é seguro de rodar toda
+      // vez, não recria nem apaga nada se já existir.
+      db.exec(`CREATE TABLE IF NOT EXISTS pwa_installs (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, device_id TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')), UNIQUE(tenant_id, device_id))`)
+      // UNIQUE(tenant_id,device_id) evita contar o mesmo aparelho 2x se o
+      // evento de instalação disparar mais de uma vez por qualquer motivo.
+      db.prepare('INSERT OR IGNORE INTO pwa_installs (tenant_id, device_id) VALUES (?,?)').run(t.id, deviceId)
+      send(res, 200, { ok: true })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
   if(req.method==='GET'&&upath==='/api/manifest-cardapio'){
     const tid=params.get('tenant')||''
     const slug=params.get('slug')||''
@@ -6753,7 +6793,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/manifest-cardapio','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/fidelidade/saldo','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao','/api/favoritos','/api/favoritos/toggle'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/manifest-cardapio','/api/pwa-install','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/fidelidade/saldo','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao','/api/favoritos','/api/favoritos/toggle'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/')&&!upath.startsWith('/api/store-logo/'))||upath.startsWith('/rest/v1/')){
     try {
       const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
