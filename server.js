@@ -3416,6 +3416,13 @@ function handleTenantInfo(params) {
     : db.prepare('SELECT id,nome,slug FROM tenants WHERE ativo=1 ORDER BY id ASC LIMIT 1').get()
   if (!t) return { error: 'Restaurante não encontrado' }
   const cfg = db.prepare('SELECT store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_cor_texto,store_tema,cats_carrossel,store_tempo_entrega,store_tempo_retirada,store_avaliacao,store_whatsapp,promo_banner_ativo,promo_banners,tablet_splash_bg_url FROM store_config WHERE tenant_id=?').get(t.id)
+  // Troca o logo salvo como base64 (texto gigante embutido) por uma URL de
+  // verdade, só nessa resposta pro cardápio público — assim o navegador do
+  // cliente consegue guardar a imagem em cache entre visitas, em vez de
+  // baixar aquele texto gigante de novo toda hora. Não mexe em nada da
+  // tela do gestor (que usa outro caminho e precisa do base64 de verdade
+  // pra edição).
+  if (cfg?.store_logo_url?.startsWith?.('data:')) cfg.store_logo_url = logoUrlServer(t.id)
   return { ...t, branding: cfg || {} }
 }
 
