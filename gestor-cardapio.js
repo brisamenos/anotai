@@ -2292,6 +2292,7 @@ async function deleteItem() {
   items = items.filter(i => i.id !== editingId);
   closeModal('modal-edit-item');
   renderTable(); renderGestor(); renderPDV();
+  if (typeof renderImagens === 'function') renderImagens();
   sbToast('ok', `"${name}" removido do cardápio!`);
 }
 

@@ -1567,6 +1567,7 @@ function subscribeOrders() {
         if (typeof renderTable === 'function') renderTable();
         if (typeof renderGestor === 'function') renderGestor();
         if (typeof renderPDV === 'function') renderPDV();
+        if (typeof renderImagens === 'function') renderImagens();
         if (typeof noRenderCategoriasChips === 'function') noRenderCategoriasChips();
         if (typeof noFilterItems === 'function') noFilterItems(document.getElementById('no-search')?.value || '');
         if (typeof populateCatSelects === 'function') populateCatSelects();

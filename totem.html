@@ -4131,7 +4131,12 @@ body{
 
 
 <script>
-(function(){var _cv=Date.now();['cardapio-state','cardapio-utils','cardapio-auth','cardapio-cart','cardapio-menu','cardapio-modal','cardapio-checkout','cardapio-tracking','cardapio-chat','cardapio-acougue','cardapio-burger','cardapio-core'].forEach(function(m){document.write('<script src="cardapio/'+m+'.js?v='+_cv+'"><\/script>');});})();
+// Mesma correção aplicada no cardápio do cliente (index.html): versão
+// fixa em vez de horário exato (permite cache entre visitas), e um
+// arquivo único combinado em vez de 12 requisições separadas. Ver os
+// comentários em cardapio-bundle.js pra mais detalhes de como regenerar
+// esse arquivo depois de editar algum dos 12 módulos-fonte.
+document.write('<script src="/cardapio/cardapio-bundle.js?v=v3"><\/script>');
 </script>
 <canvas id="anim-particle-canvas"></canvas>
 <button id="im-close-fab" onclick="closeItemModal()" style="position:fixed;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.65);border:none;color:#fff;display:none;align-items:center;justify-content:center;z-index:600;cursor:pointer;backdrop-filter:blur(6px);box-shadow:0 2px 12px rgba(0,0,0,.4)">

@@ -505,8 +505,8 @@ function temaToggleRapido() {
 
 <!-- PEDIDOS MESA -->
 <div class="page" id="page-pedidos-mesa">
-  <div class="ph">
-    <div><div class="pt">Pedidos Mesa</div><div class="ps">Pedidos separados por mesa</div></div>
+  <div class="gz-page-head">
+    <div><div class="gz-page-title">Pedidos Mesa</div><div class="gz-page-sub">Pedidos separados por mesa</div></div>
     <div style="display:flex;gap:8px;align-items:center">
       <label style="display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;flex-shrink:0">
         <div class="toggle" id="mesa-auto-accept" onclick="toggleMesaAutoAccept(this)"></div>
@@ -524,18 +524,18 @@ function temaToggleRapido() {
   </div>
 
   <!-- Stats -->
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-align:center">
-      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:800;color:var(--success)" id="pm-stat-livres">0</div>
-      <div style="font-size:11px;color:var(--muted)">Livres</div>
+  <div class="gz-stats-grid" style="grid-template-columns:repeat(3,1fr)">
+    <div class="gz-stat-card" style="--sc:#22c55e">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div class="gz-stat-val" id="pm-stat-livres" style="color:#22c55e">0</div><div class="gz-stat-lbl">Livres</div>
     </div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-align:center">
-      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:800;color:var(--danger)" id="pm-stat-ocupadas">0</div>
-      <div style="font-size:11px;color:var(--muted)">Ocupadas</div>
+    <div class="gz-stat-card" style="--sc:#ef4444">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+      <div class="gz-stat-val" id="pm-stat-ocupadas" style="color:#ef4444">0</div><div class="gz-stat-lbl">Ocupadas</div>
     </div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-align:center">
-      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:800;color:var(--accent3)" id="pm-stat-aguardando">0</div>
-      <div style="font-size:11px;color:var(--muted)">Aguard. pag.</div>
+    <div class="gz-stat-card" style="--sc:#8b5cf6">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></div>
+      <div class="gz-stat-val" id="pm-stat-aguardando" style="color:#8b5cf6">0</div><div class="gz-stat-lbl">Aguard. pagamento</div>
     </div>
   </div>
 
@@ -1146,8 +1146,8 @@ function temaToggleRapido() {
     <!-- ══ TAB: WHATSAPP / CONEXÃO ══ -->
     <div id="robo-section-wp">
 
-      <div class="ph" style="margin-bottom:20px">
-        <div><div class="pt">Conexão WhatsApp</div><div class="ps">Conecte seu número via Evolution API para envio de mensagens automáticas</div></div>
+      <div class="gz-page-head" style="margin-bottom:20px">
+        <div><div class="gz-page-title" style="font-size:18px">Conexão WhatsApp</div><div class="gz-page-sub">Conecte seu número via Evolution API para envio de mensagens automáticas</div></div>
         <div style="display:flex;gap:8px;align-items:center">
           <div id="evo-status-badge" style="display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);font-size:12px;font-weight:600;color:var(--muted)">
             <div id="evo-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--muted)"></div>
@@ -1722,21 +1722,110 @@ Aguardamos o pagamento. Obrigado pela visita!</textarea>
 
 <!-- QR CODE -->
 <div class="page" id="page-qrcode">
-  <div class="ph"><div><div class="pt">Mesas</div><div class="ps">Clientes pedem e pagam diretamente da mesa</div></div><button class="btn bp" onclick="addTable()"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Nova Mesa</button></div>
-  <div class="sg">
-    <div class="sc" style="--ca:var(--success)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" fill="var(--success)" opacity=".9"/></svg></div><div class="sl">Mesas livres</div><div class="sv" id="qr-free-cnt">5</div></div>
-    <div class="sc" style="--ca:var(--danger)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" fill="var(--danger)" opacity=".9"/></svg></div><div class="sl">Mesas ocupadas</div><div class="sv" id="qr-busy-cnt">3</div></div>
-    <div class="sc" style="--ca:var(--accent3)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M4 2h8v3l-4 3 4 3v3H4v-3l4-3-4-3V2z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Aguardando</div><div class="sv" id="qr-wait-cnt">1</div></div>
-    <div class="sc" style="--ca:var(--accent)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 12V7M6 12V3M10 12V8M14 12V5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Total mesas</div><div class="sv" id="qr-total-cnt">9</div></div>
+  <div class="gz-page-head">
+    <div><div class="gz-page-title">Mesas</div><div class="gz-page-sub">Clientes pedem e pagam diretamente da mesa</div></div>
+    <button class="btn bp" onclick="addTable()"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Nova Mesa</button>
+  </div>
+  <div class="gz-stats-grid">
+    <div class="gz-stat-card" style="--sc:#22c55e">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div class="gz-stat-val" id="qr-free-cnt" style="color:#22c55e">5</div><div class="gz-stat-lbl">Mesas livres</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#ef4444">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+      <div class="gz-stat-val" id="qr-busy-cnt" style="color:#ef4444">3</div><div class="gz-stat-lbl">Mesas ocupadas</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#8b5cf6">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+      <div class="gz-stat-val" id="qr-wait-cnt" style="color:#8b5cf6">1</div><div class="gz-stat-lbl">Aguardando</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#3b82f6">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div>
+      <div class="gz-stat-val" id="qr-total-cnt">9</div><div class="gz-stat-lbl">Total mesas</div>
+    </div>
   </div>
   <div class="qr-wrap" id="qr-grid"></div>
 </div>
 
 <div class="page" id="page-cupom">
-  <div class="ph"><div><div class="pt">Cupons de Desconto</div><div class="ps">Crie e gerencie cupons para seus clientes</div></div><button class="btn bp" onclick="openModal('modal-add-cupom')">+ Criar cupom</button></div>
-  <div class="sg">
-    <div class="sc" style="--ca:var(--accent)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 6a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1a2 2 0 0 0 0 4v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1a2 2 0 0 0 0-4V6z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 4v2M10 10v2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Cupons ativos</div><div class="sv" id="cupom-count">0</div></div>
+  <div class="gz-page-head">
+    <div>
+      <div class="gz-page-title">Cupons de Desconto</div>
+      <div class="gz-page-sub">Crie e gerencie cupons para seus clientes</div>
+    </div>
+    <button class="btn bp" onclick="openModal('modal-add-cupom')">+ Criar cupom</button>
   </div>
+  <div class="gz-stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+    <div class="gz-stat-card" style="--sc:#f97316">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m20.59 13.41-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><circle cx="7" cy="7" r="1"/></svg></div>
+      <div class="gz-stat-val" id="cupom-count">0</div><div class="gz-stat-lbl">Cupons ativos</div>
+    </div>
+  </div>
+
+  <!-- ══ PROMOÇÃO AUTOMÁTICA (desconto pra todo mundo, sem código) ══ -->
+  <div class="card" style="margin-bottom:20px;border:1.5px solid rgba(249,115,22,.25);background:rgba(249,115,22,.03)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:34px;height:34px;border-radius:10px;background:rgba(249,115,22,.14);color:#f97316;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:800">Promoção automática</div>
+          <div style="font-size:11.5px;color:var(--muted)">Desconto pra TODOS os pedidos, sem o cliente precisar digitar código nenhum</div>
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex-shrink:0">
+        <div class="toggle" id="promo-auto-toggle" onclick="promoAutoToggleAtivo(this)"></div>
+      </label>
+    </div>
+    <div id="promo-auto-config" style="display:none;margin-top:14px;padding-top:14px;border-top:1px dashed rgba(249,115,22,.25)">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <label class="form-label">Tipo</label>
+          <select class="form-input" id="promo-auto-tipo">
+            <option value="percent">Percentual (%)</option>
+            <option value="valor">Valor fixo (R$)</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Valor do desconto</label>
+          <input type="number" class="form-input" id="promo-auto-valor" placeholder="Ex: 10" min="0" step="0.01">
+        </div>
+        <div>
+          <label class="form-label">Pedido mínimo (opcional)</label>
+          <input type="number" class="form-input" id="promo-auto-minimo" placeholder="R$ 0,00" min="0" step="0.01">
+        </div>
+      </div>
+
+      <label class="form-label">Onde aplicar</label>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button type="button" class="promo-escopo-btn on" id="promo-escopo-tudo" onclick="promoAutoEscopoMudar('tudo')">🛍️ Cardápio inteiro</button>
+        <button type="button" class="promo-escopo-btn" id="promo-escopo-categorias" onclick="promoAutoEscopoMudar('categorias')">📂 Categorias específicas</button>
+        <button type="button" class="promo-escopo-btn" id="promo-escopo-produtos" onclick="promoAutoEscopoMudar('produtos')">🍽️ Produtos específicos</button>
+      </div>
+
+      <div id="promo-escopo-categorias-wrap" style="display:none;margin-bottom:12px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Marque as categorias em promoção:</div>
+        <div id="promo-cat-checklist" style="display:flex;flex-wrap:wrap;gap:7px;max-height:160px;overflow-y:auto;padding:10px;background:var(--surface);border-radius:10px;border:1px solid var(--border)"></div>
+      </div>
+
+      <div id="promo-escopo-produtos-wrap" style="display:none;margin-bottom:12px">
+        <input type="text" class="form-input" placeholder="🔎 Buscar produto..." id="promo-produto-busca" oninput="promoRenderProdutoChecklist(this.value)" style="margin-bottom:8px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px"><span id="promo-produtos-count">0</span> produto(s) selecionado(s)</div>
+        <div id="promo-produto-checklist" style="display:flex;flex-direction:column;gap:4px;max-height:220px;overflow-y:auto;padding:10px;background:var(--surface);border-radius:10px;border:1px solid var(--border)"></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end">
+        <div>
+          <label class="form-label">Expira em (opcional)</label>
+          <input type="date" class="form-input" id="promo-auto-expira">
+        </div>
+        <button class="btn bp" onclick="promoAutoSalvar()">Salvar promoção</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">Os itens em promoção ganham um selo no cardápio do cliente, mostrando o desconto antes mesmo dele adicionar ao carrinho. Se não tiver cupom melhor aplicado, esse desconto entra sozinho. Nunca soma com cupom — vale sempre o que for melhor pro cliente entre os dois.</div>
+    </div>
+  </div>
+
   <div id="cupom-list"></div>
 
   <!-- ══ CASHBACK ══ -->
@@ -1969,9 +2058,12 @@ Use no seu próximo pedido.</textarea>
 
 <!-- FIDELIDADE -->
 <div class="page" id="page-fidelidade">
-  <div class="ph">
-    <div><div class="pt">Programa de Fidelidade</div><div class="ps">Pontos reais por pedido — recompense clientes fiéis</div></div>
-    <div style="display:flex;gap:8px">
+  <div class="gz-page-head">
+    <div>
+      <div class="gz-page-title">Programa de Fidelidade</div>
+      <div class="gz-page-sub">Pontos reais por pedido — recompense clientes fiéis</div>
+    </div>
+    <div class="gz-head-actions">
       <button class="btn bg" onclick="openFidConfigModal()">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M4 4l1 1M11 11l1 1M4 12l1-1M11 5l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         Configurar
@@ -1984,11 +2076,23 @@ Use no seu próximo pedido.</textarea>
   </div>
 
   <!-- Stats -->
-  <div class="sg" style="margin-bottom:18px">
-    <div class="sc" style="--ca:var(--accent3)"><div class="sl">No programa</div><div class="sv" id="fid-stat-total">0</div></div>
-    <div class="sc" style="--ca:var(--accent)"><div class="sl">Pontos ativos</div><div class="sv" id="fid-stat-pts">0</div></div>
-    <div class="sc" style="--ca:var(--success)"><div class="sl">Recompensas usadas</div><div class="sv" id="fid-stat-resgatados">0</div></div>
-    <div class="sc" style="--ca:var(--purple)"><div class="sl">Perto da meta</div><div class="sv" id="fid-stat-perto">0</div></div>
+  <div class="gz-stats-grid">
+    <div class="gz-stat-card" style="--sc:#8b5cf6">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+      <div class="gz-stat-val" id="fid-stat-total">0</div><div class="gz-stat-lbl">No programa</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#3b82f6">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></svg></div>
+      <div class="gz-stat-val" id="fid-stat-pts">0</div><div class="gz-stat-lbl">Pontos ativos</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#22c55e">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div class="gz-stat-val" id="fid-stat-resgatados">0</div><div class="gz-stat-lbl">Recompensas usadas</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#ec4899">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="9"/></svg></div>
+      <div class="gz-stat-val" id="fid-stat-perto">0</div><div class="gz-stat-lbl">Perto da meta</div>
+    </div>
   </div>
 
   <!-- Busca -->
@@ -2077,12 +2181,37 @@ Use no seu próximo pedido.</textarea>
 
 <!-- ENTREGAS -->
 <style>
-.ent-stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
-.ent-stat-card{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:14px 16px;position:relative;overflow:hidden;transition:transform .15s,border-color .15s}
-.ent-stat-card:hover{transform:translateY(-2px);border-color:var(--sc)}
-.ent-stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--sc)}
-.ent-stat-val{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:800;letter-spacing:-.5px;color:var(--text)}
-.ent-stat-lbl{font-size:10.5px;color:var(--muted);margin-top:4px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+/* ── Cabeçalho ─────────────────────────────────────────── */
+.ent-page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.ent-page-title{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:800;letter-spacing:-.4px;color:var(--text)}
+.ent-page-sub{font-size:12.5px;color:var(--muted);margin-top:3px}
+.ent-head-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ── Cards de estatística ──────────────────────────────── */
+.ent-stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px}
+.ent-stat-card{background:var(--surface2);border:1px solid var(--border);border-radius:16px;padding:16px 18px;position:relative;overflow:hidden;transition:transform .18s cubic-bezier(.2,.8,.3,1),box-shadow .18s}
+.ent-stat-card:hover{transform:translateY(-3px);box-shadow:0 10px 28px -10px color-mix(in srgb, var(--sc) 55%, transparent)}
+.ent-stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--sc),color-mix(in srgb, var(--sc) 35%, transparent))}
+.ent-stat-icon{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb, var(--sc) 14%, transparent);color:var(--sc);margin-bottom:12px}
+.ent-stat-icon svg{width:16px;height:16px}
+.ent-stat-val{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:800;letter-spacing:-.6px;color:var(--text);line-height:1}
+.ent-stat-lbl{font-size:11px;color:var(--muted);margin-top:6px;font-weight:600}
+
+/* ── Abas internas ─────────────────────────────────────── */
+.ent-tabs{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:4px;margin-bottom:18px;overflow-x:auto}
+.ent-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 14px;border-radius:10px;border:none;background:none;color:var(--muted);font-family:'Outfit',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s}
+.ent-tab:hover{color:var(--text)}
+.ent-tab.on{background:var(--surface);color:var(--accent);box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.ent-tab-badge{background:var(--border);color:var(--muted);font-size:10.5px;font-weight:800;padding:1px 7px;border-radius:99px;min-width:18px;text-align:center}
+.ent-tab.on .ent-tab-badge{background:var(--accent);color:#fff}
+.ent-tabpanel{display:none;animation:entFadeIn .2s ease}
+.ent-tabpanel.on{display:block}
+@keyframes entFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* ── Cards genéricos de conteúdo ───────────────────────── */
+.ent-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.ent-panel-title{font-size:15px;font-weight:800;color:var(--text)}
+.ent-panel-sub{font-size:12px;color:var(--muted);margin-top:2px}
 
 .ent-card{border:1px solid var(--border);border-radius:14px;background:var(--surface2);padding:14px;transition:border-color .15s}
 .ent-card:hover{border-color:var(--border-hover,var(--border))}
@@ -2096,33 +2225,38 @@ Use no seu próximo pedido.</textarea>
 .ent-chip.red{color:#dc2626;background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.25)}
 .ent-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)}
 .ent-actions .btn{font-size:12px;padding:7px 12px}
+.ent-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px}
 
-/* Lista de entregadores — linhas compactas, não cards grandes */
+/* ── Lista de entregadores — linhas compactas ──────────── */
 .ent-driver-list{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:14px;overflow:hidden}
-.ent-driver-row{display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border);background:var(--surface2)}
+.ent-driver-row{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--border);background:var(--surface2);transition:background .15s}
+.ent-driver-row:hover{background:var(--surface)}
 .ent-driver-row:last-child{border-bottom:none}
-.ent-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13.5px;font-weight:800;flex-shrink:0}
-.ent-driver-name{font-size:13px;font-weight:800;display:flex;align-items:center;gap:7px}
-.ent-driver-phone{font-size:11px;color:var(--muted);margin-top:1px}
-.ent-driver-metrics{display:flex;gap:16px;flex-shrink:0}
-.ent-driver-metric{text-align:center;min-width:44px}
-.ent-driver-metric-val{font-family:'Space Grotesk',sans-serif;font-size:14.5px;font-weight:800;line-height:1}
-.ent-driver-metric-lbl{font-size:8.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+.ent-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 60%, #000));color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0}
+.ent-driver-name{font-size:13.5px;font-weight:800;display:flex;align-items:center;gap:7px}
+.ent-driver-phone{font-size:11.5px;color:var(--muted);margin-top:2px}
+.ent-driver-metrics{display:flex;gap:18px;flex-shrink:0}
+.ent-driver-metric{text-align:center;min-width:46px}
+.ent-driver-metric-val{font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:800;line-height:1}
+.ent-driver-metric-lbl{font-size:8.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-top:3px}
 .ent-driver-actions{display:flex;gap:5px;flex-shrink:0}
 .ent-driver-actions .btn{font-size:11px;padding:6px 9px}
+
 @media(max-width:720px){
   .ent-stats-grid{grid-template-columns:repeat(2,1fr)}
+  .ent-tabs{overflow-x:auto}
+  .ent-tab{flex:0 0 auto}
   .ent-driver-row{flex-wrap:wrap}
   .ent-driver-metrics{order:3;width:100%;justify-content:space-between;padding-top:8px;border-top:1px dashed var(--border);margin-top:2px}
 }
 </style>
 <div class="page" id="page-entregas">
-  <div class="ph">
+  <div class="ent-page-head">
     <div>
-      <div class="pt">Entregas</div>
-      <div class="ps">Rotas, entregadores e pedidos prontos para sair</div>
+      <div class="ent-page-title">Entregas</div>
+      <div class="ent-page-sub">Fila, entregadores, rotas e histórico — tudo num só lugar</div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="ent-head-actions">
       <button class="btn bg" onclick="entAbrirAppEntregador()">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="4" y="1.8" width="8" height="12.4" rx="1.6" stroke="currentColor" stroke-width="1.4"/><path d="M7 12h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         App entregador
@@ -2139,16 +2273,41 @@ Use no seu próximo pedido.</textarea>
   </div>
 
   <div class="ent-stats-grid">
-    <div class="ent-stat-card" style="--sc:#3b82f6"><div class="ent-stat-val" id="ent-stat-prontos">0</div><div class="ent-stat-lbl">Prontos</div></div>
-    <div class="ent-stat-card" style="--sc:#f59e0b"><div class="ent-stat-val" id="ent-stat-rota">0</div><div class="ent-stat-lbl">Em rota</div></div>
-    <div class="ent-stat-card" style="--sc:#8b5cf6"><div class="ent-stat-val" id="ent-stat-atribuidas">0</div><div class="ent-stat-lbl">Atribuídos</div></div>
-    <div class="ent-stat-card" style="--sc:#22c55e"><div class="ent-stat-val" id="ent-stat-hoje">0</div><div class="ent-stat-lbl">Entregues hoje</div></div>
-    <div class="ent-stat-card" style="--sc:#ef4444"><div class="ent-stat-val" id="ent-stat-dinheiro">R$ 0,00</div><div class="ent-stat-lbl">Dinheiro na rua</div></div>
+    <div class="ent-stat-card" style="--sc:#3b82f6">
+      <div class="ent-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.91 8.84 8.56 21.19a4 4 0 0 1-5.66 0l-.5-.5a4 4 0 0 1 0-5.66L14.75 2.68"/><path d="m15 5 3.5 3.5"/></svg></div>
+      <div class="ent-stat-val" id="ent-stat-prontos">0</div><div class="ent-stat-lbl">Prontos</div>
+    </div>
+    <div class="ent-stat-card" style="--sc:#f59e0b">
+      <div class="ent-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg></div>
+      <div class="ent-stat-val" id="ent-stat-rota">0</div><div class="ent-stat-lbl">Em rota</div>
+    </div>
+    <div class="ent-stat-card" style="--sc:#8b5cf6">
+      <div class="ent-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+      <div class="ent-stat-val" id="ent-stat-atribuidas">0</div><div class="ent-stat-lbl">Atribuídos</div>
+    </div>
+    <div class="ent-stat-card" style="--sc:#22c55e">
+      <div class="ent-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg></div>
+      <div class="ent-stat-val" id="ent-stat-hoje">0</div><div class="ent-stat-lbl">Entregues hoje</div>
+    </div>
+    <div class="ent-stat-card" style="--sc:#ef4444">
+      <div class="ent-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></div>
+      <div class="ent-stat-val" id="ent-stat-dinheiro">R$ 0,00</div><div class="ent-stat-lbl">Dinheiro na rua</div>
+    </div>
   </div>
 
-  <div class="card" style="margin-bottom:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <div class="card-title" style="margin-bottom:0">Fila de entrega</div>
+  <div class="ent-tabs">
+    <button class="ent-tab on" id="ent-tab-fila" onclick="entShowTab('fila')">📋 Fila de entrega <span class="ent-tab-badge" id="ent-badge-fila">0</span></button>
+    <button class="ent-tab" id="ent-tab-entregadores" onclick="entShowTab('entregadores')">🧑‍🚀 Entregadores <span class="ent-tab-badge" id="ent-badge-entregadores">0</span></button>
+    <button class="ent-tab" id="ent-tab-ativas" onclick="entShowTab('ativas')">🛵 Na rua agora <span class="ent-tab-badge" id="ent-badge-ativas">0</span></button>
+    <button class="ent-tab" id="ent-tab-rotas" onclick="entShowTab('rotas')">🗺️ Rotas & Histórico</button>
+  </div>
+
+  <div class="ent-tabpanel on" id="ent-panel-fila">
+    <div class="ent-panel-head">
+      <div>
+        <div class="ent-panel-title">Fila de entrega</div>
+        <div class="ent-panel-sub">Pedidos prontos aguardando saída</div>
+      </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select class="form-input" id="ent-rota-entregador" style="width:190px"></select>
         <button class="btn bg" onclick="entCriarRotaSelecionados(false)">Criar rota</button>
@@ -2158,25 +2317,36 @@ Use no seu próximo pedido.</textarea>
     <div id="ent-fila-list" style="display:flex;flex-direction:column;gap:10px"></div>
   </div>
 
-  <div class="card" style="margin-bottom:14px">
-    <div class="card-title" style="margin-bottom:12px">Entregadores</div>
+  <div class="ent-tabpanel" id="ent-panel-entregadores">
+    <div class="ent-panel-head">
+      <div>
+        <div class="ent-panel-title">Entregadores</div>
+        <div class="ent-panel-sub">Cadastro, comissão e desempenho de cada um</div>
+      </div>
+    </div>
     <div id="ent-entregadores-list" class="ent-driver-list"></div>
   </div>
 
-  <div class="card" style="margin-bottom:14px">
-    <div class="card-title" style="margin-bottom:12px">Na rua agora</div>
+  <div class="ent-tabpanel" id="ent-panel-ativas">
+    <div class="ent-panel-head">
+      <div>
+        <div class="ent-panel-title">Na rua agora</div>
+        <div class="ent-panel-sub">Entregas em andamento neste momento</div>
+      </div>
+    </div>
     <div id="ent-ativas-list" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:10px"></div>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px">
-    <div class="card">
-      <div class="card-title" style="margin-bottom:12px">Rotas abertas</div>
-      <div id="ent-rotas-list" style="display:flex;flex-direction:column;gap:10px"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title" style="margin-bottom:12px">Entregas concluidas hoje</div>
-      <div id="ent-concluidas-list" style="display:flex;flex-direction:column;gap:8px"></div>
+  <div class="ent-tabpanel" id="ent-panel-rotas">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px">
+      <div>
+        <div class="ent-panel-head"><div><div class="ent-panel-title">Rotas abertas</div></div></div>
+        <div id="ent-rotas-list" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+      <div>
+        <div class="ent-panel-head"><div><div class="ent-panel-title">Entregas concluídas hoje</div></div></div>
+        <div id="ent-concluidas-list" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -2224,9 +2394,12 @@ Use no seu próximo pedido.</textarea>
 
 <!-- CONTROLE DE ESTOQUE -->
 <div class="page" id="page-estoque">
-  <div class="ph">
-    <div><div class="pt">Controle de Estoque</div><div class="ps">Ingredientes e movimentações em tempo real</div></div>
-    <div style="display:flex;gap:8px">
+  <div class="gz-page-head">
+    <div>
+      <div class="gz-page-title">Controle de Estoque</div>
+      <div class="gz-page-sub">Ingredientes e movimentações em tempo real</div>
+    </div>
+    <div class="gz-head-actions">
       <button class="btn bg" onclick="openModal('modal-add-ingrediente')">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         Novo ingrediente
@@ -2243,11 +2416,23 @@ Use no seu próximo pedido.</textarea>
   </div>
 
   <!-- Stats -->
-  <div class="sg" style="margin-bottom:18px">
-    <div class="sc" style="--ca:var(--accent)"><div class="sl">Ingredientes</div><div class="sv" id="est-stat-total">0</div></div>
-    <div class="sc" style="--ca:var(--danger)"><div class="sl">Estoque baixo</div><div class="sv" id="est-stat-baixo" style="color:var(--danger)">0</div></div>
-    <div class="sc" style="--ca:var(--success)"><div class="sl">Valor em estoque</div><div class="sv" id="est-stat-valor">R$0</div></div>
-    <div class="sc" style="--ca:var(--accent3)"><div class="sl">Mov. hoje</div><div class="sv" id="est-stat-entradas">0</div></div>
+  <div class="gz-stats-grid">
+    <div class="gz-stat-card" style="--sc:#3b82f6">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v1m18 0v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8m18 0H3m5 4h8"/></svg></div>
+      <div class="gz-stat-val" id="est-stat-total">0</div><div class="gz-stat-lbl">Ingredientes</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#ef4444">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg></div>
+      <div class="gz-stat-val" id="est-stat-baixo" style="color:#ef4444">0</div><div class="gz-stat-lbl">Estoque baixo</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#22c55e">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></div>
+      <div class="gz-stat-val" id="est-stat-valor">R$0</div><div class="gz-stat-lbl">Valor em estoque</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#8b5cf6">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div>
+      <div class="gz-stat-val" id="est-stat-entradas">0</div><div class="gz-stat-lbl">Mov. hoje</div>
+    </div>
   </div>
 
   <!-- Busca -->
@@ -2322,10 +2507,10 @@ Use no seu próximo pedido.</textarea>
 <div class="page" id="page-relatorios">
 
   <!-- Header -->
-  <div class="ph" style="flex-wrap:wrap;gap:12px">
+  <div class="gz-page-head" style="margin-bottom:16px">
     <div>
-      <div class="pt">Relatórios</div>
-      <div class="ps">Dashboard completo do seu negócio</div>
+      <div class="gz-page-title">Relatórios</div>
+      <div class="gz-page-sub">Dashboard completo do seu negócio</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:3px;align-items:center">
@@ -2670,10 +2855,10 @@ Use no seu próximo pedido.</textarea>
 
 <!-- MEU PLANO -->
 <div class="page" id="page-meu-plano">
-  <div class="ph">
+  <div class="gz-page-head">
     <div>
-      <div class="pt">Meu Plano</div>
-      <div class="ps">Informações sobre sua assinatura e recursos disponíveis</div>
+      <div class="gz-page-title">Meu Plano</div>
+      <div class="gz-page-sub">Informações sobre sua assinatura e recursos disponíveis</div>
     </div>
   </div>
 
@@ -3036,25 +3221,76 @@ Use no seu próximo pedido.</textarea>
 </div>
 
 <!-- CLIENTES -->
+<style>
+/* ══ Estilo "premium" compartilhado — usado em várias telas do gestor ══
+   Cards de estatística com ícone, abas em formato pílula, e cabeçalho de
+   página consistente. Nomeado com prefixo "gz-" pra não conflitar com
+   nada que já existia (.sc/.sg antigos continuam intactos onde ainda
+   são usados, pra não arriscar quebrar telas que não mexi ainda). */
+.gz-page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.gz-page-title{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:800;letter-spacing:-.4px;color:var(--text)}
+.gz-page-sub{font-size:12.5px;color:var(--muted);margin-top:3px}
+.gz-head-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+.gz-stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.gz-stat-card{background:var(--surface2);border:1px solid var(--border);border-radius:16px;padding:16px 18px;position:relative;overflow:hidden;transition:transform .18s cubic-bezier(.2,.8,.3,1),box-shadow .18s}
+.gz-stat-card:hover{transform:translateY(-3px);box-shadow:0 10px 28px -10px color-mix(in srgb, var(--sc) 55%, transparent)}
+.gz-stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--sc),color-mix(in srgb, var(--sc) 35%, transparent))}
+.gz-stat-icon{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb, var(--sc) 14%, transparent);color:var(--sc);margin-bottom:12px}
+.gz-stat-icon svg{width:16px;height:16px}
+.gz-stat-val{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:800;letter-spacing:-.6px;color:var(--text);line-height:1}
+.gz-stat-lbl{font-size:11px;color:var(--muted);margin-top:6px;font-weight:600}
+
+.gz-tabs{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:4px;margin-bottom:18px;overflow-x:auto}
+.gz-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 14px;border-radius:10px;border:none;background:none;color:var(--muted);font-family:'Outfit',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s}
+.gz-tab:hover{color:var(--text)}
+.gz-tab.on{background:var(--surface);color:var(--accent);box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.gz-tab-badge{background:var(--border);color:var(--muted);font-size:10.5px;font-weight:800;padding:1px 7px;border-radius:99px;min-width:18px;text-align:center}
+.gz-tab.on .gz-tab-badge{background:var(--accent);color:#fff}
+.promo-escopo-btn{padding:8px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s}
+.promo-escopo-btn:hover{color:var(--text)}
+.promo-escopo-btn.on{background:rgba(249,115,22,.12);border-color:#f97316;color:#f97316}
+.promo-item-check{display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:7px;cursor:pointer;font-size:12.5px}
+.promo-item-check:hover{background:var(--surface2)}
+
+@media(max-width:720px){
+  .gz-stats-grid{grid-template-columns:repeat(2,1fr)}
+  .gz-tabs{overflow-x:auto}
+  .gz-tab{flex:0 0 auto}
+}
+</style>
 <div class="page" id="page-clientes">
-  <div class="ph" style="flex-wrap:wrap;gap:12px">
+  <div class="gz-page-head">
     <div>
-      <div class="pt">Clientes</div>
-      <div class="ps">Base de clientes cadastrados no cardápio digital</div>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn bg" id="btn-cli-tab-todos" onclick="cliTab('todos')" style="background:var(--accent);color:#fff;border-color:var(--accent)">Todos</button>
-      <button class="btn bg" id="btn-cli-tab-aniversario" onclick="cliTab('aniversario')">Aniversariantes</button>
-      <button class="btn bg" id="btn-cli-tab-inativos" onclick="cliTab('inativos')">Inativos 30 dias</button>
+      <div class="gz-page-title">Clientes</div>
+      <div class="gz-page-sub">Base de clientes cadastrados no cardápio digital</div>
     </div>
   </div>
 
+  <div class="gz-tabs">
+    <button class="gz-tab on" id="btn-cli-tab-todos" onclick="cliTab('todos')">Todos</button>
+    <button class="gz-tab" id="btn-cli-tab-aniversario" onclick="cliTab('aniversario')">🎂 Aniversariantes</button>
+    <button class="gz-tab" id="btn-cli-tab-inativos" onclick="cliTab('inativos')">💤 Inativos 30 dias</button>
+  </div>
+
   <!-- Stats -->
-  <div class="sg" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-    <div class="sc" style="--ca:var(--accent)"><div class="si2"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 13c0-2.76 2.24-5 5-5h4c2.76 0 5 2.24 5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div><div class="sl">Total cadastrados</div><div class="sv" id="cli-st-total">0</div></div>
-    <div class="sc" style="--ca:var(--success)"><div class="si2"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 8h10v6H3z" stroke="currentColor" stroke-width="1.4"/><path d="M5 8V6M8 8V6M11 8V6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M5 6q0-1.5 1-1.5T7 6M8 6q0-1.5 1-1.5T10 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div><div class="sl">Aniv. hoje</div><div class="sv" id="cli-st-aniv-hoje" style="color:var(--success)">0</div></div>
-    <div class="sc" style="--ca:var(--accent3)"><div class="si2"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.4"/><path d="M5 2v2M11 2v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div><div class="sl">Aniv. este mês</div><div class="sv" id="cli-st-aniv-mes" style="color:var(--accent3)">0</div></div>
-    <div class="sc" style="--ca:var(--purple)"><div class="si2"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.4"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div><div class="sl">Com pedidos</div><div class="sv" id="cli-st-com-pedido" style="color:var(--purple)">0</div></div>
+  <div class="gz-stats-grid">
+    <div class="gz-stat-card" style="--sc:#3b82f6">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+      <div class="gz-stat-val" id="cli-st-total">0</div><div class="gz-stat-lbl">Total cadastrados</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#22c55e">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7a2.5 2.5 0 1 1 2.5-2.5c0 1.4-2.5 2.5-2.5 2.5ZM12 7a2.5 2.5 0 1 0-2.5-2.5C9.5 5.9 12 7 12 7Z"/></svg></div>
+      <div class="gz-stat-val" id="cli-st-aniv-hoje" style="color:#22c55e">0</div><div class="gz-stat-lbl">Aniv. hoje</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#8b5cf6">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+      <div class="gz-stat-val" id="cli-st-aniv-mes" style="color:#8b5cf6">0</div><div class="gz-stat-lbl">Aniv. este mês</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#ec4899">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div>
+      <div class="gz-stat-val" id="cli-st-com-pedido" style="color:#ec4899">0</div><div class="gz-stat-lbl">Com pedidos</div>
+    </div>
   </div>
 
   <!-- Busca + Ordenação -->
@@ -3160,11 +3396,11 @@ Use no seu próximo pedido.</textarea>
 
 <!-- IMPRESSÃO -->
 <div class="page" id="page-impressao">
-  <div class="ph">
-    <div><div class="pt">Impressão</div><div class="ps">Configure impressoras e modelos de impressão</div></div>
-    <div style="display:flex;gap:8px">
-      <button class="btn bp" onclick="testPrint()">🖨️ Testar impressão</button>
-      <button class="btn bg" onclick="salvarConfigImpressao()" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#4ade80">💾 Salvar tudo</button>
+  <div class="gz-page-head">
+    <div><div class="gz-page-title">Impressão</div><div class="gz-page-sub">Configure impressoras e modelos de impressão</div></div>
+    <div class="gz-head-actions">
+      <button class="btn bp" onclick="testPrint()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Testar impressão</button>
+      <button class="btn bg" onclick="salvarConfigImpressao()" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#4ade80"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg> Salvar tudo</button>
     </div>
   </div>
 
@@ -3700,10 +3936,12 @@ Use no seu próximo pedido.</textarea>
 <!-- CAIXA -->
 <div class="page" id="page-caixa">
   <!-- Tela: Caixa Fechado -->
-  <div id="cx-tela-fechado" style="display:none;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;text-align:center">
-    <div style="font-size:56px;margin-bottom:16px">&#128274;</div>
-    <div style="font-size:20px;font-weight:700;margin-bottom:8px">Caixa Fechado</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:28px">Abra o caixa para registrar movimentos e visualizar o saldo do dia.</div>
+  <div id="cx-tela-fechado" style="display:none;flex-direction:column;align-items:center;justify-content:center;padding:90px 20px;text-align:center">
+    <div style="width:64px;height:64px;border-radius:18px;background:color-mix(in srgb, var(--accent) 12%, transparent);color:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:18px">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    </div>
+    <div class="gz-page-title" style="font-size:19px">Caixa Fechado</div>
+    <div style="font-size:13px;color:var(--muted);margin:8px 0 26px;max-width:340px">Abra o caixa para registrar movimentos e visualizar o saldo do dia.</div>
     <button class="btn bp" style="padding:12px 32px;font-size:14px" onclick="abrirCaixa()">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8.5" r="2.5" stroke="currentColor" stroke-width="1.4"/></svg>
       Abrir Caixa
@@ -3711,17 +3949,33 @@ Use no seu próximo pedido.</textarea>
   </div>
   <!-- Tela: Caixa Aberto -->
   <div id="cx-tela-aberto">
-  <div class="ph"><div><div class="pt">Controle de Caixa</div><div class="ps">Entradas, saídas e saldo do dia</div></div>
-    <div style="display:flex;gap:7px">
+  <div class="gz-page-head">
+    <div>
+      <div class="gz-page-title">Controle de Caixa</div>
+      <div class="gz-page-sub">Entradas, saídas e saldo do dia</div>
+    </div>
+    <div class="gz-head-actions">
       <button class="btn bg" onclick="openModal('modal-mov')">+ Registrar movimento</button>
       <button class="btn bd" onclick="fecharCaixa()"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="8" width="10" height="7" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8V5.5a3 3 0 0 1 6 0V8" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Fechar Caixa</button>
     </div>
   </div>
-  <div class="sg">
-    <div class="sc" style="--ca:var(--success)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 6.5h.5M11.5 6.5H12M4 10.5h.5M11.5 10.5H12" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Saldo atual</div><div class="sv" id="cx-saldo" style="color:var(--success)">R$0</div></div>
-    <div class="sc" style="--ca:var(--accent)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 13V3M3 8l5-5 5 5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Total entradas</div><div class="sv" id="cx-entradas">R$0</div></div>
-    <div class="sc" style="--ca:var(--danger)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v10M3 8l5 5 5-5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Total saídas</div><div class="sv" id="cx-saidas">R$0</div></div>
-    <div class="sc" style="--ca:var(--accent3)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M4 6h8M4 10h8M6 3v10M10 3v10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Movimentos</div><div class="sv" id="cx-movs">0</div></div>
+  <div class="gz-stats-grid">
+    <div class="gz-stat-card" style="--sc:#22c55e">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></div>
+      <div class="gz-stat-val" id="cx-saldo" style="color:#22c55e">R$0</div><div class="gz-stat-lbl">Saldo atual</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#3b82f6">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+      <div class="gz-stat-val" id="cx-entradas">R$0</div><div class="gz-stat-lbl">Total entradas</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#ef4444">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg></div>
+      <div class="gz-stat-val" id="cx-saidas">R$0</div><div class="gz-stat-lbl">Total saídas</div>
+    </div>
+    <div class="gz-stat-card" style="--sc:#8b5cf6">
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div>
+      <div class="gz-stat-val" id="cx-movs">0</div><div class="gz-stat-lbl">Movimentos</div>
+    </div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 320px;gap:16px">
     <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="10" height="12" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 3V2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8h6M5 11h4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Movimentações de hoje</div><div id="cx-list" style="display:flex;flex-direction:column;gap:7px;margin-top:4px"></div></div>
@@ -5218,8 +5472,11 @@ Use no seu próximo pedido.</textarea>
 
 <!-- CARTEIRA & SAQUES -->
 <div class="page" id="page-saques">
-  <div class="ph">
-    <div><div class="pt">Carteira & Saques</div><div class="ps">Seus recebimentos via PIX e solicitações de saque</div></div>
+  <div class="gz-page-head">
+    <div>
+      <div class="gz-page-title">Carteira & Saques</div>
+      <div class="gz-page-sub">Seus recebimentos via PIX e solicitações de saque</div>
+    </div>
     <button class="btn bg" onclick="carregarCarteira()"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M13 8A5 5 0 1 1 8 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 1v4h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Atualizar</button>
   </div>
 
@@ -5333,21 +5590,29 @@ Use no seu próximo pedido.</textarea>
 
   <!-- Cards de saldo -->
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px">
-    <div class="card" style="padding:18px;border-color:rgba(34,197,94,.2);background:rgba(34,197,94,.04)">
+    <div class="card" style="padding:18px;border-color:rgba(34,197,94,.2);background:rgba(34,197,94,.04);position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#22c55e"></div>
+      <div style="width:30px;height:30px;border-radius:9px;background:rgba(34,197,94,.14);color:#22c55e;display:flex;align-items:center;justify-content:center;margin-bottom:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></div>
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Saldo disponível</div>
       <div style="font-size:26px;font-weight:800;color:var(--success);font-family:'Playfair Display',serif" id="crt-saldo">R$ —</div>
       <div style="font-size:11px;color:var(--muted);margin-top:4px">PIX + Cartão online</div>
     </div>
-    <div class="card" style="padding:18px">
+    <div class="card" style="padding:18px;position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#3b82f6"></div>
+      <div style="width:30px;height:30px;border-radius:9px;background:rgba(59,130,246,.14);color:#3b82f6;display:flex;align-items:center;justify-content:center;margin-bottom:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Total recebido</div>
       <div style="font-size:22px;font-weight:800;font-family:'Playfair Display',serif" id="crt-total">R$ —</div>
       <div style="font-size:11px;color:var(--muted);margin-top:4px">Já descontadas as taxas</div>
     </div>
-    <div class="card" style="padding:18px">
+    <div class="card" style="padding:18px;position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#8b5cf6"></div>
+      <div style="width:30px;height:30px;border-radius:9px;background:rgba(139,92,246,.14);color:#8b5cf6;display:flex;align-items:center;justify-content:center;margin-bottom:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.91 8.84 8.56 21.19a4 4 0 0 1-5.66 0l-.5-.5a4 4 0 0 1 0-5.66L14.75 2.68"/><path d="m15 5 3.5 3.5"/></svg></div>
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Total sacado</div>
       <div style="font-size:22px;font-weight:800;font-family:'Playfair Display',serif" id="crt-sacado">R$ —</div>
     </div>
-    <div class="card" style="padding:18px">
+    <div class="card" style="padding:18px;position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#f59e0b"></div>
+      <div style="width:30px;height:30px;border-radius:9px;background:rgba(245,158,11,.14);color:#f59e0b;display:flex;align-items:center;justify-content:center;margin-bottom:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg></div>
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Pagamentos online</div>
       <div style="font-size:22px;font-weight:800;font-family:'Playfair Display',serif" id="crt-npag">—</div>
       <div style="font-size:11px;color:var(--muted);margin-top:4px">
@@ -5430,13 +5695,12 @@ Use no seu próximo pedido.</textarea>
 
 <!-- CONFIGURAÇÕES -->
 <div class="page" id="page-configuracoes">
-  <div class="ph">
+  <div class="gz-page-head">
     <div>
-      <div class="pt">Configurações</div>
-      <div class="ps">Opções gerais do sistema</div>
+      <div class="gz-page-title">Configurações</div>
+      <div class="gz-page-sub">Opções gerais do sistema</div>
     </div>
   </div>
-
 
   <!-- Som de notificação -->
   <div class="card" style="padding:20px;margin-bottom:16px">
@@ -5588,10 +5852,10 @@ Use no seu próximo pedido.</textarea>
 <!-- ══ PÁGINA: CARDÁPIO PÚBLICO ══════════════════════════ -->
 <div class="page" id="page-cardapio-publico" style="display:none;padding:0;height:100%;flex-direction:column">
 <div style="padding:24px 28px 0;flex-shrink:0">
-<div class="ph">
+<div class="gz-page-head">
   <div>
-    <div class="pt">Cardápio Público</div>
-    <div class="ps">Personalize como seus clientes veem o seu cardápio online</div>
+    <div class="gz-page-title">Cardápio Público</div>
+    <div class="gz-page-sub">Personalize como seus clientes veem o seu cardápio online</div>
   </div>
   <button class="btn bp" onclick="salvarCardapioPublico()"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4"/><path d="M5 2v5h6V2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><rect x="5" y="9" width="6" height="5" stroke="currentColor" stroke-width="1.4"/></svg> Salvar alterações</button>
 </div>
@@ -6277,10 +6541,10 @@ Use no seu próximo pedido.</textarea>
 <div class="page" id="page-tema" style="display:none;padding:0;height:100%;flex-direction:column">
 
 <div style="padding:24px 28px 0;flex-shrink:0">
-  <div class="ph">
+  <div class="gz-page-head">
     <div>
-      <div class="pt">Aparência</div>
-      <div class="ps">Escolha o tema perfeito para seu painel de gestão</div>
+      <div class="gz-page-title">Aparência</div>
+      <div class="gz-page-sub">Escolha o tema perfeito para seu painel de gestão</div>
     </div>
   </div>
 </div>

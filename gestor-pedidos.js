@@ -46,7 +46,7 @@ function nav(id) {
     initChat();
   }
   if (id === 'qrcode') renderQR();
-  if (id === 'cupom') { renderCupons(); loadCashbackConfig(); loadStampConfig(); }
+  if (id === 'cupom') { renderCupons(); loadCashbackConfig(); loadStampConfig(); loadPromoAutoConfig(); }
   if (id === 'fidelidade') renderFidelidade();
   if (id === 'garcom') { renderGarcom(); loadGarcons(); }
   if (id === 'estoque') renderEstoque();
@@ -1824,6 +1824,124 @@ let _noDescontoAtivo = false;
 // Usa um modal próprio (não prompt()) porque o app roda dentro do
 // Electron também, e o Electron não implementa window.prompt() — clicar
 // não fazia nada, sem erro nenhum aparecer.
+// ── Promoção automática — desconto pra todo mundo, sem código ─────────
+// Fica guardada dentro do store_config, no mesmo padrão já usado pra taxa
+// de entrega e outras configurações simples da loja (não precisa de
+// tabela/endpoint próprio).
+let _promoEscopoAtual = 'tudo';
+let _promoCategoriasSelecionadas = new Set();
+let _promoProdutosSelecionados = new Set();
+
+async function loadPromoAutoConfig() {
+  try {
+    const { data } = await sb.from('store_config').select('promo_automatica').single();
+    const cfg = data?.promo_automatica || {};
+    const toggle = document.getElementById('promo-auto-toggle');
+    if (toggle) toggle.classList.toggle('on', !!cfg.ativo);
+    const wrap = document.getElementById('promo-auto-config');
+    if (wrap) wrap.style.display = cfg.ativo ? 'block' : 'none';
+    const tipoEl = document.getElementById('promo-auto-tipo');
+    const valorEl = document.getElementById('promo-auto-valor');
+    const minimoEl = document.getElementById('promo-auto-minimo');
+    const expiraEl = document.getElementById('promo-auto-expira');
+    if (tipoEl) tipoEl.value = cfg.tipo || 'percent';
+    if (valorEl) valorEl.value = cfg.valor || '';
+    if (minimoEl) minimoEl.value = cfg.valor_minimo || '';
+    if (expiraEl) expiraEl.value = cfg.expira_em || '';
+    _promoCategoriasSelecionadas = new Set(cfg.categorias || []);
+    _promoProdutosSelecionados = new Set(cfg.produtos || []);
+    promoAutoEscopoMudar(cfg.escopo || 'tudo');
+  } catch (e) { console.error('[PromoAuto] loadPromoAutoConfig:', e); }
+}
+
+function promoAutoEscopoMudar(escopo) {
+  _promoEscopoAtual = escopo;
+  ['tudo', 'categorias', 'produtos'].forEach(e => {
+    document.getElementById('promo-escopo-' + e)?.classList.toggle('on', e === escopo);
+  });
+  const catWrap = document.getElementById('promo-escopo-categorias-wrap');
+  const prodWrap = document.getElementById('promo-escopo-produtos-wrap');
+  if (catWrap) catWrap.style.display = escopo === 'categorias' ? 'block' : 'none';
+  if (prodWrap) prodWrap.style.display = escopo === 'produtos' ? 'block' : 'none';
+  if (escopo === 'categorias') promoRenderCategoriaChecklist();
+  if (escopo === 'produtos') promoRenderProdutoChecklist('');
+}
+
+function promoRenderCategoriaChecklist() {
+  const wrap = document.getElementById('promo-cat-checklist');
+  if (!wrap) return;
+  if (!categories.length) { wrap.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:6px">Nenhuma categoria cadastrada ainda.</div>'; return; }
+  wrap.innerHTML = categories.map(cat => {
+    const checked = _promoCategoriasSelecionadas.has(cat.name) ? ' checked' : '';
+    return `<label class="promo-item-check" style="background:var(--surface2);border:1px solid var(--border)">
+      <input type="checkbox"${checked} onchange="promoToggleCategoria('${cat.name.replace(/'/g, "\\'")}', this.checked)">
+      ${cat.name}
+    </label>`;
+  }).join('');
+}
+
+function promoToggleCategoria(nome, marcado) {
+  if (marcado) _promoCategoriasSelecionadas.add(nome);
+  else _promoCategoriasSelecionadas.delete(nome);
+}
+
+function promoRenderProdutoChecklist(busca) {
+  const wrap = document.getElementById('promo-produto-checklist');
+  const countEl = document.getElementById('promo-produtos-count');
+  if (countEl) countEl.textContent = String(_promoProdutosSelecionados.size);
+  if (!wrap) return;
+  const q = (busca || '').toLowerCase().trim();
+  const filtrados = items.filter(i => !q || (i.name || '').toLowerCase().includes(q));
+  if (!filtrados.length) { wrap.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:6px">Nenhum produto encontrado.</div>'; return; }
+  wrap.innerHTML = filtrados.map(i => {
+    const checked = _promoProdutosSelecionados.has(i.id) ? ' checked' : '';
+    return `<label class="promo-item-check">
+      <input type="checkbox"${checked} onchange="promoToggleProduto(${i.id}, this.checked)">
+      <span>${i.name}</span><span style="margin-left:auto;color:var(--muted);font-size:11px">${i.cat || ''}</span>
+    </label>`;
+  }).join('');
+}
+
+function promoToggleProduto(id, marcado) {
+  if (marcado) _promoProdutosSelecionados.add(id);
+  else _promoProdutosSelecionados.delete(id);
+  const countEl = document.getElementById('promo-produtos-count');
+  if (countEl) countEl.textContent = String(_promoProdutosSelecionados.size);
+}
+
+function promoAutoToggleAtivo(el) {
+  const ativo = el.classList.toggle('on');
+  const wrap = document.getElementById('promo-auto-config');
+  if (wrap) wrap.style.display = ativo ? 'block' : 'none';
+  // Desativar já salva na hora (não precisa clicar em "Salvar" só pra
+  // desligar) — ativar exige preencher os campos e clicar em Salvar.
+  if (!ativo) promoAutoSalvar(true);
+}
+
+async function promoAutoSalvar(desativando = false) {
+  const ativo = document.getElementById('promo-auto-toggle')?.classList.contains('on');
+  const tipo = document.getElementById('promo-auto-tipo')?.value || 'percent';
+  const valor = parseFloat(document.getElementById('promo-auto-valor')?.value) || 0;
+  const valorMinimo = parseFloat(document.getElementById('promo-auto-minimo')?.value) || 0;
+  const expiraEm = document.getElementById('promo-auto-expira')?.value || '';
+  if (ativo && valor <= 0) { sbToast('err', 'Informe o valor do desconto'); return; }
+  if (ativo && _promoEscopoAtual === 'categorias' && !_promoCategoriasSelecionadas.size) { sbToast('err', 'Marque pelo menos uma categoria'); return; }
+  if (ativo && _promoEscopoAtual === 'produtos' && !_promoProdutosSelecionados.size) { sbToast('err', 'Marque pelo menos um produto'); return; }
+  const cfg = {
+    ativo: !!ativo, tipo, valor, valor_minimo: valorMinimo, expira_em: expiraEm,
+    escopo: _promoEscopoAtual,
+    categorias: Array.from(_promoCategoriasSelecionadas),
+    produtos: Array.from(_promoProdutosSelecionados)
+  };
+  try {
+    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, promo_automatica: cfg });
+    if (error) throw error;
+    if (!desativando) sbToast('ok', ativo ? '🎉 Promoção automática ativada!' : 'Promoção desativada');
+  } catch (e) {
+    sbToast('err', 'Erro ao salvar: ' + (e.message || JSON.stringify(e)));
+  }
+}
+
 function noAbrirValorAvulso() {
   if (document.getElementById('no-valor-avulso-modal')) return;
   const overlay = document.createElement('div');
