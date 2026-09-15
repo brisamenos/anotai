@@ -194,20 +194,60 @@ function changeQty(id, obs, d) {
 
 function cartSubtotal() { return cart.reduce((s,i) => s + i.price * i.qty, 0); }
 
+// Promoção automática (configurada pelo gestor, sem precisar de código) —
+// se estiver ativa, dentro da validade, e o subtotal bater o mínimo
+// exigido, calcula o valor do desconto dela. Respeita o escopo escolhido
+// pelo gestor: cardápio inteiro, só certas categorias, ou só certos
+// produtos — só os itens elegíveis entram na conta do desconto.
+function _promoItemElegivel(item) {
+  const escopo = promoAutomatica.escopo || 'tudo';
+  if (escopo === 'tudo') return true;
+  if (escopo === 'categorias') {
+    const cats = promoAutomatica.categorias || [];
+    return cats.includes(item.cat_key) || cats.includes(item.cat);
+  }
+  if (escopo === 'produtos') {
+    return (promoAutomatica.produtos || []).includes(item.id);
+  }
+  return false;
+}
+
+function getDescontoPromoAutomatica() {
+  if (!promoAutomatica?.ativo) return 0;
+  if (promoAutomatica.expira_em) {
+    const exp = new Date(promoAutomatica.expira_em + 'T23:59:59');
+    if (!isNaN(exp) && exp < new Date()) return 0;
+  }
+  // Pedido mínimo avalia sempre sobre o carrinho inteiro (ex: "mínimo
+  // R$50" significa R$50 de compra no total, não só dos itens elegíveis).
+  const sub = cartSubtotal();
+  const minOrder = parseFloat(promoAutomatica.valor_minimo || 0);
+  if (minOrder > 0 && sub < minOrder) return 0;
+  const val = parseFloat(promoAutomatica.valor || 0);
+  if (val <= 0) return 0;
+  // Soma só o valor dos itens elegíveis pro cálculo do desconto em si
+  const baseElegivel = cart.reduce((s, i) => s + (_promoItemElegivel(i) ? i.price * i.qty : 0), 0);
+  if (baseElegivel <= 0) return 0;
+  return promoAutomatica.tipo === 'valor' ? Math.min(val, baseElegivel) : baseElegivel * val / 100;
+}
+
 function getDiscount() {
-  if (!appliedCupom) return 0;
+  const descPromo = getDescontoPromoAutomatica();
+  if (!appliedCupom) return descPromo;
   const sub  = cartSubtotal();
   // Pedido mínimo do cupom: revalida a cada cálculo, pois o carrinho pode
   // mudar (itens removidos) depois que o cupom foi aplicado. Sem isso, o
   // desconto continuava valendo mesmo com o subtotal abaixo do mínimo exigido.
   const minOrder = parseFloat(appliedCupom.min_order ?? appliedCupom.minimo ?? 0);
-  if (minOrder > 0 && sub < minOrder) return 0;
+  if (minOrder > 0 && sub < minOrder) return descPromo;
   const tipo = appliedCupom.type || appliedCupom.tipo || '';
   const val  = parseFloat(appliedCupom.value ?? appliedCupom.val ?? 0);
-  if (tipo === 'percent' || tipo === '%') return sub * val / 100;
+  // Não empilha promoção automática com cupom — usa o que for melhor pro
+  // cliente, pra loja nunca dar os dois descontos juntos sem querer.
+  if (tipo === 'percent' || tipo === '%') return Math.max(sub * val / 100, descPromo);
   // Cupom de frete: zera a taxa (via lógica em getTaxa). Aqui retorna 0 pra evitar dupla contagem.
-  if (tipo === 'frete') return 0;
-  return Math.min(val, sub);
+  if (tipo === 'frete') return descPromo;
+  return Math.max(Math.min(val, sub), descPromo);
 }
 
 function getTaxa() {
@@ -707,6 +747,11 @@ function renderTotals() {
   const minimoFalta = _pedidoMinimo > 0 && deliveryType === 'delivery' && sub < _pedidoMinimo ? _pedidoMinimo - sub : 0;
   // Label da taxa: se cupom de frete aplicado, mostra "Grátis (cupom)" para feedback ao cliente
   const taxaTxt = isCupomFrete ? 'Grátis (cupom)' : (taxa > 0 ? 'R$ ' + fmt(taxa) : 'Grátis');
+  // O desconto pode vir de um cupom digitado OU da promoção automática da
+  // loja (sem código) — mostra o rótulo certo conforme qual das duas é
+  // realmente a fonte do valor aplicado agora.
+  const descPromoAuto = getDescontoPromoAutomatica();
+  const discLabel = (appliedCupom && disc > descPromoAuto) ? `Desconto (${appliedCupom.code})` : '🎉 Desconto promocional';
   document.getElementById('totals-wrap').innerHTML = `
     ${minimoFalta > 0 ? `<div style="padding:8px 12px;margin-bottom:8px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:7px">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3M8 10v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -714,7 +759,7 @@ function renderTotals() {
     </div>` : ''}
     <div class="total-row"><span>Subtotal</span><span>R$ ${fmt(sub)}</span></div>
     ${deliveryType === 'delivery' ? `<div class="total-row ${isCupomFrete?'total-disc':''}"><span>${taxaLabel}</span><span>${taxaTxt}</span></div>` : ''}
-    ${disc > 0 ? `<div class="total-row total-disc"><span>Desconto (${appliedCupom.code})</span><span>− R$ ${fmt(disc)}</span></div>` : ''}
+    ${disc > 0 ? `<div class="total-row total-disc"><span>${discLabel}</span><span>− R$ ${fmt(disc)}</span></div>` : ''}
     ${cbDesc > 0 ? `<div class="total-row total-disc"><span>Cashback usado</span><span>− R$ ${fmt(cbDesc)}</span></div>` : ''}
     <div class="total-row big"><span>Total</span><span>R$ ${fmt(tot)}</span></div>`;
 }

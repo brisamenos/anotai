@@ -729,7 +729,7 @@ function itemCard(i) {
         ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
         : (i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`)}
       ${i.video_url ? `<span class="item-video-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></span>` : ''}
-      ${i.promo||i.price_old ? '<span class="item-promo-badge">PROMO</span>' : ''}
+      ${i.promo||i.price_old ? '<span class="item-promo-badge">PROMO</span>' : (typeof promoAutomatica !== 'undefined' && promoAutomatica?.ativo && typeof _promoItemElegivel === 'function' && _promoItemElegivel(i) ? `<span class="item-promo-badge">${promoAutomatica.tipo === 'valor' ? '-R$ ' + fmt(promoAutomatica.valor) : '-' + promoAutomatica.valor + '% OFF'}</span>` : '')}
       ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}
       <button class="item-fav-btn${isFavorito(i.id)?' on':''}" onclick="event.stopPropagation();toggleFavorito(${i.id})" aria-label="Favoritar">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="${isFavorito(i.id)?'currentColor':'none'}"><path d="M12 20.5s-7.5-4.6-10-9.3C.5 7.8 2.3 4 6 4c2.1 0 3.7 1.2 6 3.5C14.3 5.2 15.9 4 18 4c3.7 0 5.5 3.8 4 7.2-2.5 4.7-10 9.3-10 9.3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>

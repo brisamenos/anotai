@@ -28,6 +28,7 @@ let _cbUsar        = false; // cliente optou por usar cashback
 
 // ── Taxas / entrega ──
 let feeConfig     = {};
+let promoAutomatica = {};
 let selectedFaixa = 0;
 let _pedidoMinimo = 0;
 let _storeAddress = '';
