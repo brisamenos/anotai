@@ -2471,7 +2471,7 @@ const JSON_FIELDS = {
   orders:       new Set(['items']),
   mesas:        new Set(['clientes_json','pagamentos_json']),
   menu_items:   new Set(['days','ingredients','custom_groups']),
-  store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega','stamp_config']),
+  store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega','stamp_config','promo_automatica']),
   admin_audit_log: new Set(['detalhes']),
   admin_alerts: new Set(['target_tenants']),
 }
