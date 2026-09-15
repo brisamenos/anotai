@@ -5051,6 +5051,11 @@ function salvarImpressora() {
   if (_editImpIdx >= 0) _impressoras[_editImpIdx] = { ..._impressoras[_editImpIdx], ...obj };
   else _impressoras.push(obj);
   _saveImpressoras();
+  // Sincroniza com o servidor — sem isso, a impressora fica só no
+  // localStorage deste navegador/computador e não aparece em outra
+  // máquina (ex: cozinha x balcão) nem sobrevive a um recarregamento
+  // de página, que puxa a lista "oficial" do servidor e sobrescreve.
+  if (typeof _syncPrintConfigServer === 'function') _syncPrintConfigServer();
 
   // Sincroniza formato do papel globalmente
   const pw = largura <= 32 ? 58 : 80;
@@ -5075,6 +5080,7 @@ function deletarImpressora() {
   _impressoras.splice(_editImpIdx, 1);
   _modelos.forEach(m => { if (m.impressora_idx >= _impressoras.length) m.impressora_idx = 0; });
   _saveImpressoras(); _saveModelos();
+  if (typeof _syncPrintConfigServer === 'function') _syncPrintConfigServer();
   closeModal('modal-impressora');
   _loadImpressoras(); _loadModelos();
   sbToast('ok', 'Impressora removida');
@@ -5085,6 +5091,7 @@ function deletarImpressoraDir(idx) {
   _impressoras.splice(idx, 1);
   _modelos.forEach(m => { if (m.impressora_idx >= _impressoras.length) m.impressora_idx = 0; });
   _saveImpressoras(); _saveModelos();
+  if (typeof _syncPrintConfigServer === 'function') _syncPrintConfigServer();
   _loadImpressoras(); _loadModelos();
   sbToast('ok', 'Impressora removida');
 }
