@@ -1035,7 +1035,16 @@ function renderCupons() {
     </div>`).join('');
 }
 
-function toggleCupom(i) { cupons[i].ativo = !cupons[i].ativo; renderCupons(); sbToast('ok', `Cupom ${cupons[i].code} ${cupons[i].ativo ? 'ativado' : 'pausado'}!`); }
+async function toggleCupom(i) {
+  const c = cupons[i];
+  if (!c) return;
+  const novoAtivo = !c.ativo;
+  const { error } = await sb.from('cupons').update({ ativo: novoAtivo }).eq('id', c.id);
+  if (error) { sbToast('err', 'Erro ao ' + (novoAtivo ? 'ativar' : 'pausar') + ' cupom'); return; }
+  c.ativo = novoAtivo;
+  renderCupons();
+  sbToast('ok', `Cupom ${c.code} ${c.ativo ? 'ativado' : 'pausado'}!`);
+}
 async function deleteCupom(idx) {
   const c = cupons[idx];
   if (!c) return;
