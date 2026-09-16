@@ -2838,7 +2838,17 @@ function _loadSetoresCategorias(extraPrinters) {
 
   const routes = _getPrintSetoresCategoria();
   list.innerHTML = cats.map(cat => {
-    const current = routes[cat.key] || '';
+    // cat.key já vem como "id:<id>" pra categorias reais (ver
+    // _printGetRoutingCategories). Pra loja que nunca teve colisão de
+    // nome, o registro antigo (por nome) ainda existe — busca ele como
+    // fallback antes de assumir "sem impressora".
+    const catObj = (typeof categories !== 'undefined' && Array.isArray(categories))
+      ? categories.find(c => cat.key === 'id:' + c.id)
+      : null;
+    const current = routes[cat.key]
+      || (catObj?.name && routes[catObj.name])
+      || (catObj?.label && routes[catObj.label])
+      || (routes[cat.label] || '');
     return `<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,240px);gap:8px;align-items:center;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
       <div style="min-width:0">
         <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_printHtmlEscape(cat.label)}</div>

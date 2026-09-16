@@ -1001,6 +1001,18 @@ function _catPrinterOptionsHtml(current) {
   return opts.join('');
 }
 
+function _catPrinterRouteKeyWithFallback(cat) {
+  // Preferência: ID (novo, único de verdade). Se essa loja nunca teve o
+  // problema de colisão de nome, o registro antigo por nome ainda existe
+  // e continua sendo respeitado aqui — ninguém perde configuração.
+  const routes = _catPrinterRoutes();
+  const idKey = 'id:' + cat.id;
+  if (routes[idKey]) return idKey;
+  if (cat.name && routes[cat.name]) return cat.name;
+  if (cat.label && routes[cat.label]) return cat.label;
+  return idKey; // nada salvo ainda — próxima gravação já vai pro formato novo
+}
+
 function _populateCatPrinterSelect(selectId, catKey) {
   const sel = document.getElementById(selectId);
   if (!sel) return;
@@ -1193,7 +1205,7 @@ function handleCatAction(id, action, selectEl) {
     document.getElementById('edit-cat-type').value = cat.type || 'Itens principais';
     const _promoChk = document.getElementById('edit-cat-promo');
     if (_promoChk) _promoChk.checked = !!cat.promo;
-    _populateCatPrinterSelect('edit-cat-printer', 'id:' + cat.id);
+    _populateCatPrinterSelect('edit-cat-printer', _catPrinterRouteKeyWithFallback(cat));
     _editCatImageFile = null;
     _editCatImageRemove = false;
     const thumb = document.getElementById('edit-cat-img-thumb');
