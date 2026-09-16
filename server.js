@@ -1279,6 +1279,33 @@ function runMigrations() {
 }
 runMigrations()
 
+// Corrige categorias que ficaram com o mesmo "nome interno" (slug) por
+// causa de um bug antigo na checagem de duplicidade ao criar categoria —
+// isso fazia duas categorias diferentes compartilharem a mesma
+// configuração de impressora/roteamento, já que essas configs são
+// guardadas por nome interno. Roda uma vez a cada boot; depois da
+// primeira execução não encontra mais nada pra corrigir (idempotente).
+function corrigirCategoriasComNomeInternoDuplicado() {
+  try {
+    const dups = db.prepare(`
+      SELECT tenant_id, name FROM categories
+      GROUP BY tenant_id, name HAVING COUNT(*) > 1
+    `).all()
+    if (!dups.length) return
+    let total = 0
+    for (const d of dups) {
+      const rows = db.prepare('SELECT id FROM categories WHERE tenant_id=? AND name=? ORDER BY id ASC').all(d.tenant_id, d.name)
+      // Mantém a mais antiga com o nome original; renomeia as demais pra um nome único.
+      for (let i = 1; i < rows.length; i++) {
+        db.prepare('UPDATE categories SET name=? WHERE id=?').run(`${d.name}_${rows[i].id}`, rows[i].id)
+        total++
+      }
+    }
+    log('✅', `Corrigidas ${total} categoria(s) com nome interno duplicado (config de impressora agora é independente por categoria)`)
+  } catch(e) { log('⚠️', 'corrigirCategoriasComNomeInternoDuplicado falhou:', e.message) }
+}
+corrigirCategoriasComNomeInternoDuplicado()
+
 function garantirColuna(table, column, definition, afterAddSql = null) {
   try {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name)

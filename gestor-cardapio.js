@@ -1423,11 +1423,12 @@ async function addCategory() {
 
   if (!name) { sbToast('err', 'Informe o nome da categoria'); return; }
 
-  const duplicada = categories.find(c => c.name.toLowerCase() === name.toLowerCase());
-  if (duplicada) { sbToast('err', `Já existe uma categoria chamada "${name}"`); return; }
+  const novoSlug = name.toLowerCase().replace(/\s+/g, '_');
+  const duplicada = categories.find(c => c.name.toLowerCase() === novoSlug || c.label.toLowerCase() === name.toLowerCase());
+  if (duplicada) { sbToast('err', `Já existe uma categoria chamada "${name}" (ou com nome interno igual) — escolha um nome diferente`); return; }
 
   const payload = {
-    name:       name.toLowerCase().replace(/\s+/g, '_'),
+    name:       novoSlug,
     label:      name,
     type:       type || 'Itens principais',
     promo:      false,
