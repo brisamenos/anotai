@@ -2743,10 +2743,16 @@ function _printAvailablePrinters(extraPrinters) {
   };
 
   (Array.isArray(extraPrinters) ? extraPrinters : []).forEach(p => add(p, p));
+  // Toda impressora cadastrada aparece na lista, mesmo que duas tenham o
+  // mesmo nome de dispositivo no Windows (ex: dois POS-80 com o driver
+  // genérico) — nesse caso o valor roteado é igual, mas o usuário ainda
+  // precisa enxergar e escolher entre os apelidos que cadastrou.
   (Array.isArray(_impressoras) ? _impressoras : []).forEach(imp => {
-    const value = imp.printerName || imp.apelido || '';
+    const value = String(imp.printerName || imp.apelido || '').trim();
+    if (!value) return;
     const label = imp.apelido ? `${imp.apelido} (${imp.printerName || imp.tipo || 'impressora'})` : value;
-    add(value, label);
+    seen.add(value);
+    out.push({ value, label });
   });
   add(_printPrinter, _printPrinter);
   add(_printPrinterCozinha, _printPrinterCozinha);
@@ -5148,7 +5154,9 @@ function _loadModelos() {
 
 function toggleModelo(idx) {
   _modelos[idx].ativo = !_modelos[idx].ativo;
-  _saveModelos(); _loadModelos(); _loadImpressoras();
+  _saveModelos();
+  if (typeof _syncPrintConfigServer === 'function') _syncPrintConfigServer();
+  _loadModelos(); _loadImpressoras();
 }
 
 function editarModelo(idx) {
@@ -5213,6 +5221,7 @@ function salvarModelo() {
   _printFontSize = m.fontSize;
   _printFormat = m.largura <= 32 ? '58mm' : '80mm'; localStorage.setItem('printFormat', _printFormat);
   _saveModelos();
+  if (typeof _syncPrintConfigServer === 'function') _syncPrintConfigServer();
   closeModal('modal-modelo');
   _loadModelos(); _loadImpressoras();
   sbToast('ok', 'Modelo salvo!');
