@@ -2777,7 +2777,7 @@ function _printGetRoutingCategories() {
   };
 
   if (typeof categories !== 'undefined' && Array.isArray(categories)) {
-    categories.forEach(c => add(c.name || c.label, c.label || c.name));
+    categories.forEach(c => add('id:' + c.id, c.label || c.name));
   }
   if (typeof items !== 'undefined' && Array.isArray(items)) {
     items.forEach(i => add(i.catKey || i.cat_key || i.cat, i.cat || i.catKey || i.cat_key));
@@ -2793,6 +2793,7 @@ function _printItemCategoryKeys(item) {
       if (normSet.has(_printNormKey(c.name)) || normSet.has(_printNormKey(c.label))) {
         if (c.name) keys.push(c.name);
         if (c.label) keys.push(c.label);
+        if (c.id !== undefined && c.id !== null) keys.push('id:' + c.id);
       }
     });
   }

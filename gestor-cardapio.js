@@ -1193,7 +1193,7 @@ function handleCatAction(id, action, selectEl) {
     document.getElementById('edit-cat-type').value = cat.type || 'Itens principais';
     const _promoChk = document.getElementById('edit-cat-promo');
     if (_promoChk) _promoChk.checked = !!cat.promo;
-    _populateCatPrinterSelect('edit-cat-printer', cat.name);
+    _populateCatPrinterSelect('edit-cat-printer', 'id:' + cat.id);
     _editCatImageFile = null;
     _editCatImageRemove = false;
     const thumb = document.getElementById('edit-cat-img-thumb');
@@ -1365,7 +1365,7 @@ async function saveEditCategory() {
   if (error) { sbLoading(false); sbToast('err','Erro ao salvar'); return; }
   const cat = categories.find(c => c.id === id);
   if (cat) { cat.label = name; cat.type = type; cat.promo = promo; }
-  if (cat) _saveCatPrinterRoute(cat.name, printer);
+  if (cat) _saveCatPrinterRoute('id:' + cat.id, printer);
 
   // Imagem: nova imagem selecionada, remoção pedida, ou nada muda
   if (_editCatImageFile) {
@@ -1403,7 +1403,7 @@ async function deleteCatById(id) {
     sbToast('err', 'Erro ao excluir: ' + detalhe);
     return;
   }
-  if (cat) _saveCatPrinterRoute(cat.name, '');
+  if (cat) _saveCatPrinterRoute('id:' + cat.id, '');
   categories = categories.filter(c => c.id !== catId);
   closeModal('modal-edit-cat');
   renderGestor();
@@ -1459,7 +1459,7 @@ async function addCategory() {
     open:  false
   };
   categories.push(novaCategoria);
-  if (printer) _saveCatPrinterRoute(data.name, printer);
+  if (printer) _saveCatPrinterRoute('id:' + data.id, printer);
 
   // Se uma imagem foi escolhida, faz o upload agora que já existe um ID real
   if (_newCatImageFile) {
