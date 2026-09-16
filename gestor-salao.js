@@ -1166,6 +1166,8 @@ async function stampCarregarProgresso() {
       .limit(50);
     if (error) throw new Error(error.message);
     const rows = (data || []);
+    const statTopo = document.getElementById('cupom-stat-fid-progresso');
+    if (statTopo) statTopo.textContent = rows.length;
     if (!rows.length) {
       tbody.innerHTML = '';
       if (vazio) vazio.style.display = '';
@@ -1241,6 +1243,10 @@ async function cbCarregarLista() {
 
     const total = _cbTodosClientes.reduce((s, c) => s + parseFloat(c.cashback_saldo || 0), 0);
     if (stat) stat.textContent = `${_cbTodosClientes.length} cliente${_cbTodosClientes.length !== 1 ? 's' : ''} • Total em carteira: R$ ${total.toFixed(2).replace('.', ',')}`;
+    const statTopo = document.getElementById('cupom-stat-cb-clientes');
+    if (statTopo) statTopo.textContent = _cbTodosClientes.length;
+    const statResumo = document.getElementById('cupom-cb-resumo-clientes');
+    if (statResumo) statResumo.textContent = _cbTodosClientes.length;
   } catch (e) {
     console.error('[Cashback] cbCarregarLista:', e);
     tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--danger)">Erro ao carregar clientes</td></tr>`;
