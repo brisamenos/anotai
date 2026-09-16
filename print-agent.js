@@ -239,9 +239,16 @@ function findSumatra() {
 async function processPendingJobs() {
   let res;
   try {
-    // Se --tipo foi passado, filtra jobs apenas desse tipo
-    const tipoQuery = TIPO ? `?tipo=${TIPO}` : '';
-    res = await request('GET', '/api/print-queue/pending' + tipoQuery);
+    // Se --tipo foi passado, filtra jobs apenas desse tipo.
+    // Se --printer foi passado, filtra jobs que pertencem à impressora
+    // deste agente (setor por categoria) — evita que dois agentes
+    // (dois computadores) disputem o mesmo job e um deles tente
+    // imprimir numa impressora que não existe fisicamente ali.
+    const qparts = [];
+    if (TIPO)    qparts.push(`tipo=${encodeURIComponent(TIPO)}`);
+    if (PRINTER) qparts.push(`printer=${encodeURIComponent(PRINTER)}`);
+    const query = qparts.length ? `?${qparts.join('&')}` : '';
+    res = await request('GET', '/api/print-queue/pending' + query);
   } catch (e) {
     log('❌  Erro ao buscar fila:', e.message);
     return;

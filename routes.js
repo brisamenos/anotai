@@ -8195,8 +8195,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
     // Filtro opcional por tipo (caixa, cozinha) via query string ?tipo=caixa
+    // e por impressora via ?printer=NomeDaImpressora — usado quando há mais
+    // de um computador/agente e cada um só pode imprimir nas impressoras
+    // fisicamente ligadas nele (ex: setor "Espetos" no computador 2,
+    // "Petiscos" no computador 1).
     const parsedUrl = new URL(req.url, 'http://localhost')
     const tipoFilter = parsedUrl.searchParams.get('tipo') || null
+    const printerFilter = parsedUrl.searchParams.get('printer') || null
     try {
       db.exec(`CREATE TABLE IF NOT EXISTS print_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -8210,7 +8215,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
       // Recupera jobs travados em 'processing' há mais de 2 minutos — agente pode ter caído
       try { db.exec(`UPDATE print_jobs SET status='pending' WHERE status='processing' AND created_at < datetime('now','-2 minutes')`) } catch (_) {}
       let jobs
-      if (tipoFilter) {
+      if (tipoFilter && printerFilter) {
+        // Agente com impressora definida: só pega jobs desse tipo que
+        // foram roteados pra essa impressora específica, ou jobs sem
+        // impressora definida (fallback antigo, sem setor configurado).
+        jobs = db.prepare(
+          `SELECT id, html, format, printer, tipo FROM print_jobs WHERE tenant_id=? AND status='pending' AND tipo=? AND (printer=? OR printer IS NULL OR printer='') ORDER BY id ASC LIMIT 5`
+        ).all(tid, tipoFilter, printerFilter)
+      } else if (tipoFilter) {
         jobs = db.prepare(
           `SELECT id, html, format, printer, tipo FROM print_jobs WHERE tenant_id=? AND status='pending' AND tipo=? ORDER BY id ASC LIMIT 5`
         ).all(tid, tipoFilter)
