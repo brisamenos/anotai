@@ -2794,15 +2794,30 @@ function _printGetRoutingCategories() {
     out.push({ key, label: label || key, ghost: !!ghost });
   };
 
+  // Nome/label de cada categoria REAL, normalizado — pra reconhecer um item
+  // como pertencente a ela mesmo o item guardando só o nome em texto (ex:
+  // "Bebidas"), não o "id:949". BUG CORRIGIDO: a versão anterior comparava
+  // essas duas formas direto, então TODA categoria real também aparecia
+  // como "fantasma" duplicada (item nunca bate com "id:X" em texto puro) —
+  // isso fez usuários apagarem itens de categorias reais achando que eram
+  // órfãos. Nunca marcar como fantasma sem essa checagem de novo.
+  const catNormSet = new Set();
   if (typeof categories !== 'undefined' && Array.isArray(categories)) {
-    categories.forEach(c => add('id:' + c.id, c.label || c.name, false));
+    categories.forEach(c => {
+      add('id:' + c.id, c.label || c.name, false);
+      if (c.name) catNormSet.add(_printNormKey(c.name));
+      if (c.label) catNormSet.add(_printNormKey(c.label));
+    });
   }
   if (typeof items !== 'undefined' && Array.isArray(items)) {
-    // Item cuja categoria (cat_key) nao bate com nenhuma categoria real
-    // cadastrada hoje: sao itens orfaos (sobraram de uma categoria excluida,
-    // ou de um backup de outro estabelecimento). Aparecem aqui como uma
-    // categoria "fantasma", sem id — sinalizados pra poder ser limpos.
-    items.forEach(i => add(i.catKey || i.cat_key || i.cat, i.cat || i.catKey || i.cat_key, true));
+    items.forEach(i => {
+      const rawKey = i.catKey || i.cat_key || i.cat;
+      if (!rawKey) return;
+      // Bate com uma categoria real (por nome, normalizado)? Então já está
+      // representado pela linha "id:X" acima — não duplica, e não é órfão.
+      if (catNormSet.has(_printNormKey(rawKey))) return;
+      add(rawKey, i.cat || i.catKey || i.cat_key, true);
+    });
   }
   return out;
 }
@@ -2897,6 +2912,22 @@ window._loadSetoresCategorias = _loadSetoresCategorias;
 // limpa a rota de impressao configurada pra ela, se existir.
 async function _excluirItensOrfaos(catKey) {
   if (typeof items === 'undefined' || !Array.isArray(items)) return;
+
+  // Trava de segurança independente: mesmo que quem chamou já tenha
+  // filtrado certo, confere de novo aqui — nunca deixa apagar se o nome
+  // bater com alguma categoria REAL ainda existente. Uma exclusão em massa
+  // e irreversível não pode depender de uma checagem só.
+  if (typeof categories !== 'undefined' && Array.isArray(categories)) {
+    const bateComCategoriaReal = categories.some(c =>
+      _printNormKey(c.name) === _printNormKey(catKey) || _printNormKey(c.label) === _printNormKey(catKey)
+    );
+    if (bateComCategoriaReal) {
+      sbToast('err', 'Essa categoria ainda existe no cardapio — nao e possivel excluir por aqui.');
+      if (typeof _loadSetoresCategorias === 'function') _loadSetoresCategorias();
+      return;
+    }
+  }
+
   const orfaos = items.filter(i => (i.catKey || i.cat_key || i.cat) === catKey);
   if (!orfaos.length) { if (typeof _loadSetoresCategorias === 'function') _loadSetoresCategorias(); return; }
 
