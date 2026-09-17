@@ -35,6 +35,35 @@
   };
 })();
 
+// Configurações de impressão (impressora, nome do estabelecimento, rodapé,
+// setores por categoria, exceções por item, etc.) ficam salvas no
+// localStorage do NAVEGADOR, não do login. Se o mesmo computador/navegador
+// for usado por mais de uma loja (ex: quem cria as contas testando cada
+// login novo, ou um notebook compartilhado), essas configurações da loja
+// anterior continuavam aparecendo já preenchidas pra loja nova — inclusive
+// puxando impressora e nome de comprovante que não são dela.
+// Roda AQUI, o mais cedo possível (antes até do "printMode" logo abaixo ser
+// pré-lido) — lendo o tenant_id direto da sessão, porque _verificarSessao()
+// só roda no fim do arquivo e a essa altura o printMode abaixo já teria
+// pego o valor antigo do navegador.
+(function _limparConfigImpressaoSeTrocouDeLoja() {
+  try {
+    const raw = sessionStorage.getItem('sys_session');
+    const tenantId = raw ? (JSON.parse(raw).tenant_id || '') : '';
+    if (!tenantId) return;
+    const ultimoTenant = localStorage.getItem('printConfigTenantId');
+    if (ultimoTenant && ultimoTenant !== tenantId) {
+      [
+        'printPrinter', 'printPrinterCozinha', 'printViaMode', 'printMode', 'printTarget',
+        'printSetoresCategoria', 'printOverridesItem', 'printNome', 'printSub', 'printRodape',
+        'printFormat', 'printFontSize', 'printMarginV', 'printMarginH', 'printBebidaSolo',
+        'printTempoEntrega', 'printTempoRetirada'
+      ].forEach(k => localStorage.removeItem(k));
+    }
+    localStorage.setItem('printConfigTenantId', tenantId);
+  } catch (e) { console.warn('[gestor-core] limpar config impressao:', e?.message || e); }
+})();
+
 // ── Pré-inicialização de window._printMode ─────────────────
 // gestor-relatorios.js declara `let _printMode` que lê de window._printMode.
 // Como a ordem de carregamento dos <script> não é estritamente garantida em
@@ -236,37 +265,11 @@ async function _carregarPlano() {
   } catch(e) { console.warn('[gestor-core] silent error:', e?.message || e); }
 }
 
-// Configurações de impressão (impressora, nome do estabelecimento, rodapé,
-// setores por categoria, exceções por item, etc.) ficam salvas no
-// localStorage do NAVEGADOR, não do login. Se o mesmo computador/navegador
-// for usado por mais de uma loja (ex: quem cria as contas testando cada
-// login novo, ou um notebook compartilhado), essas configurações da loja
-// anterior continuavam aparecendo já preenchidas pra loja nova — inclusive
-// puxando impressora e nome de comprovante que não são dela.
-// Aqui a gente guarda qual foi o último tenant_id que usou este navegador;
-// se mudou, limpa tudo isso antes de qualquer tela ler esses valores.
-function _limparConfigImpressaoSeTrocouDeLoja(tenantId) {
-  if (!tenantId) return;
-  try {
-    const ultimoTenant = localStorage.getItem('printConfigTenantId');
-    if (ultimoTenant && ultimoTenant !== tenantId) {
-      [
-        'printPrinter', 'printPrinterCozinha', 'printViaMode', 'printMode', 'printTarget',
-        'printSetoresCategoria', 'printOverridesItem', 'printNome', 'printSub', 'printRodape',
-        'printFormat', 'printFontSize', 'printMarginV', 'printMarginH', 'printBebidaSolo',
-        'printTempoEntrega', 'printTempoRetirada'
-      ].forEach(k => localStorage.removeItem(k));
-    }
-    localStorage.setItem('printConfigTenantId', tenantId);
-  } catch (e) { console.warn('[gestor-core] limpar config impressao:', e?.message || e); }
-}
-
 function _verificarSessao() {
   try {
     const raw = sessionStorage.getItem('sys_session');
     if (!raw) { window.location.href = 'login.html'; return false; }
     _sessao = JSON.parse(raw);
-    _limparConfigImpressaoSeTrocouDeLoja(_sessao.tenant_id);
     _billingLocked = !!_sessao.billing_locked;
     // Sessão não expira mais sozinha no navegador (antes forçava logout
     // depois de 30 dias contados do login original, mesmo que o gestor

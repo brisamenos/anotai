@@ -2787,18 +2787,22 @@ function _printPrinterDisplayName(value, extraPrinters) {
 function _printGetRoutingCategories() {
   const out = [];
   const seen = new Set();
-  const add = (key, label) => {
+  const add = (key, label, ghost) => {
     key = String(key || '').trim();
     if (!key || seen.has(key)) return;
     seen.add(key);
-    out.push({ key, label: label || key });
+    out.push({ key, label: label || key, ghost: !!ghost });
   };
 
   if (typeof categories !== 'undefined' && Array.isArray(categories)) {
-    categories.forEach(c => add('id:' + c.id, c.label || c.name));
+    categories.forEach(c => add('id:' + c.id, c.label || c.name, false));
   }
   if (typeof items !== 'undefined' && Array.isArray(items)) {
-    items.forEach(i => add(i.catKey || i.cat_key || i.cat, i.cat || i.catKey || i.cat_key));
+    // Item cuja categoria (cat_key) nao bate com nenhuma categoria real
+    // cadastrada hoje: sao itens orfaos (sobraram de uma categoria excluida,
+    // ou de um backup de outro estabelecimento). Aparecem aqui como uma
+    // categoria "fantasma", sem id — sinalizados pra poder ser limpos.
+    items.forEach(i => add(i.catKey || i.cat_key || i.cat, i.cat || i.catKey || i.cat_key, true));
   }
   return out;
 }
@@ -2868,10 +2872,16 @@ function _loadSetoresCategorias(extraPrinters) {
       || (catObj?.name && routes[catObj.name])
       || (catObj?.label && routes[catObj.label])
       || (routes[cat.label] || '');
+    const avisoFantasma = cat.ghost
+      ? `<div style="font-size:9px;color:var(--warn,#c99b3a);margin-top:2px">Sem categoria cadastrada — item(ns) orfao(s)
+          <button type="button" onclick="_excluirItensOrfaos('${_printHtmlEscape(cat.key).replace(/'/g, "\\'")}')" style="border:none;background:none;color:var(--warn,#c99b3a);text-decoration:underline;cursor:pointer;font-size:9px;padding:0;margin-left:4px">excluir</button>
+        </div>`
+      : '';
     return `<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,240px);gap:8px;align-items:center;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
       <div style="min-width:0">
         <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_printHtmlEscape(cat.label)}</div>
         <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_printHtmlEscape(cat.key)}</div>
+        ${avisoFantasma}
       </div>
       <select class="form-input" data-cat="${_printHtmlEscape(cat.key)}" onchange="setPrintSetorCategoria(this.dataset.cat,this.value)" style="height:34px;font-size:11px;padding:0 9px">
         ${_printPrinterOptionsHtml(current, extraPrinters)}
@@ -2881,6 +2891,45 @@ function _loadSetoresCategorias(extraPrinters) {
   if (typeof _loadOverridesItem === 'function') _loadOverridesItem();
 }
 window._loadSetoresCategorias = _loadSetoresCategorias;
+
+// Exclui todos os itens orfaos de uma categoria-fantasma (que sobraram de
+// uma categoria ja excluida, ou de um backup de outro estabelecimento) e
+// limpa a rota de impressao configurada pra ela, se existir.
+async function _excluirItensOrfaos(catKey) {
+  if (typeof items === 'undefined' || !Array.isArray(items)) return;
+  const orfaos = items.filter(i => (i.catKey || i.cat_key || i.cat) === catKey);
+  if (!orfaos.length) { if (typeof _loadSetoresCategorias === 'function') _loadSetoresCategorias(); return; }
+
+  if (!await showConfirmDialog(
+    'Excluir itens orfaos?',
+    `Isso vai apagar permanentemente ${orfaos.length} item(ns) sem categoria (nome: "${catKey}"). Essa acao nao pode ser desfeita.`
+  )) return;
+
+  sbLoading(true);
+  const { error } = await sb.from('menu_items').delete().in('id', orfaos.map(i => i.id));
+  sbLoading(false);
+  if (error) {
+    console.error('[_excluirItensOrfaos]', error);
+    sbToast('err', 'Erro ao excluir: ' + (error.message || 'servidor indisponivel'));
+    return;
+  }
+
+  items = items.filter(i => !orfaos.some(o => o.id === i.id));
+  // Limpa tambem qualquer rota de impressao configurada pra essa categoria
+  // fantasma e exceções por item que apontavam pra esses ids.
+  if (typeof setPrintSetorCategoria === 'function') setPrintSetorCategoria(catKey, '');
+  orfaos.forEach(it => {
+    const key = typeof _printItemKey === 'function' ? _printItemKey(it) : '';
+    if (key && typeof setPrintOverrideItem === 'function') setPrintOverrideItem(key, '');
+  });
+
+  if (typeof renderTable === 'function') renderTable();
+  if (typeof renderGestor === 'function') renderGestor();
+  if (typeof renderPDV === 'function') renderPDV();
+  if (typeof _loadSetoresCategorias === 'function') _loadSetoresCategorias();
+  sbToast('ok', `${orfaos.length} item(ns) orfao(s) excluido(s)!`);
+}
+window._excluirItensOrfaos = _excluirItensOrfaos;
 
 function _buildSetorHtml(order, cfg, titulo, lista) {
   const fontSize = cfg?.fontSize || _printFontSize || 13;
