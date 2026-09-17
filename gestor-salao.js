@@ -2404,10 +2404,16 @@ async function gestorImprimirContaMesa() {
     if (tid) {
       const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r=>r.json());
       if (st.active) {
+        // CRÍTICO: manda o nome da impressora do caixa configurada. Sem
+        // isso, o job ia pra fila só com tipo:'caixa' e sem impressora
+        // definida — em loja com mais de um computador/impressora, isso
+        // deixava QUALQUER computador ativo (não necessariamente o que
+        // tem a impressora do caixa) puxar a conta pra si.
+        const printerCaixa = localStorage.getItem('printPrinter') || '';
         await fetch('/api/print-queue/job', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-          body: JSON.stringify({ html, format: fmt, tipo: 'caixa' }),
+          body: JSON.stringify({ html, format: fmt, tipo: 'caixa', printer: printerCaixa || undefined }),
         });
         sbToast('ok', '🖨️ Conta enviada para impressora!');
         return;

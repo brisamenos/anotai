@@ -3485,7 +3485,7 @@ Use no seu próximo pedido.</textarea>
           <div>
             <label class="form-label">Modo das vias</label>
             <select class="form-input" id="print-via-mode-select"
-              onchange="_printViaMode=this.value;localStorage.setItem('printViaMode',this.value);var cw=document.getElementById('print-cozinha-wrap');if(cw)cw.style.display=this.value==='separado'?'':'none';var sw=document.getElementById('print-setores-wrap');if(sw)sw.style.display=this.value==='separado'?'':'none';if(typeof _loadSetoresCategorias==='function')_loadSetoresCategorias();_syncPrintConfigServer();renderPrintPreview()">
+              onchange="_printViaMode=this.value;localStorage.setItem('printViaMode',this.value);var cw=document.getElementById('print-cozinha-wrap');if(cw)cw.style.display=this.value==='separado'?'':'none';if(typeof _loadSetoresCategorias==='function')_loadSetoresCategorias();_syncPrintConfigServer();renderPrintPreview()">
               <option value="combinado">Via única — pedido + cozinha na mesma folha</option>
               <option value="separado">Duas vias — caixa e cozinha em impressoras diferentes</option>
               <option value="somente_principal">Somente caixa — sem via de cozinha</option>
@@ -3509,6 +3509,12 @@ Use no seu próximo pedido.</textarea>
             <label class="form-label">Setores por categoria</label>
             <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Use quando uma parte da cozinha tiver impressora propria. Categoria sem impressora propria vai para a cozinha padrao.</div>
             <div id="print-setores-list" style="display:flex;flex-direction:column;gap:8px"></div>
+          </div>
+          <div id="print-overrides-item-wrap">
+            <label class="form-label">Excecoes por produto</label>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Mais especifico que categoria: escolha a impressora de um produto especifico, ou bloqueie pra ele nunca sair em via de producao (continua aparecendo na conta normalmente).</div>
+            <input class="form-input" id="print-overrides-item-search" placeholder="Buscar produto pelo nome..." oninput="if(typeof _loadOverridesItem==='function')_loadOverridesItem()" style="height:34px;font-size:12px;margin-bottom:8px">
+            <div id="print-overrides-item-list" style="display:flex;flex-direction:column;gap:8px"></div>
           </div>
           <div style="padding:10px 12px;background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.15);border-radius:8px;font-size:11px;color:var(--muted)">
             <strong style="color:#10b981">Como funciona:</strong> Por padrão, bebidas <strong>industrializadas</strong> (água, refrigerante, cerveja, energético) não vão pra cozinha/kanban — só pra via do caixa. Sucos, vitaminas e drinks preparados sempre vão pra cozinha normalmente porque precisam ser feitos. Use o botão abaixo se seu restaurante quiser que as bebidas prontas também apareçam no kanban.

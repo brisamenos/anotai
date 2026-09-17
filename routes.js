@@ -6879,7 +6879,22 @@ module.exports = async function handleRoutes(req, res, ctx) {
     try {
       const r    = await fetch(`${EVO_URL}${evoPath}`, { method: req.method, headers: { 'Content-Type': 'application/json', apikey: EVO_KEY }, body: req.method !== 'GET' ? JSON.stringify(body) : undefined })
       const data = await r.json().catch(() => ({}))
-      if (evoPath.startsWith('/instance/create') && r.ok && body.instanceName) db.prepare('UPDATE store_config SET evo_instance=? WHERE tenant_id=?').run(body.instanceName, tenantId)
+      if (evoPath.startsWith('/instance/create') && r.ok && body.instanceName) {
+        // Trava crítica: nunca vincular esse tenant a um nome de instância
+        // que já pertence a OUTRO tenant — foi isso que causou lojas
+        // diferentes recebendo/respondendo mensagens pelo mesmo número de
+        // WhatsApp (ex: "Prime Açaí" respondendo como "King's Burgues").
+        const _donoAtual = db.prepare(
+          `SELECT tenant_id FROM store_config WHERE evo_instance=? AND tenant_id!=? LIMIT 1`
+        ).get(body.instanceName, tenantId)
+        if (_donoAtual) {
+          send(res, 409, {
+            error: `O nome de instância "${body.instanceName}" já está em uso por outra loja. Escolha um nome exclusivo (ex: o slug da sua loja) e crie a instância de novo.`
+          })
+          return true
+        }
+        db.prepare('UPDATE store_config SET evo_instance=? WHERE tenant_id=?').run(body.instanceName, tenantId)
+      }
       send(res, r.status, data)
     } catch (e) { send(res, 500, { error: e.message }) }
     return true

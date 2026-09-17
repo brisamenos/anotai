@@ -2465,6 +2465,19 @@ function _loadPrintSetoresCategoria() {
   }
 }
 let _printSetoresCategoria = _loadPrintSetoresCategoria();
+// Roteamento por item individual (produto) — mais específico que categoria.
+// Valor especial '__bloqueado__' significa "não imprimir esse item em via nenhuma de produção".
+const PRINT_ITEM_BLOQUEADO = '__bloqueado__';
+function _loadPrintOverridesItem() {
+  try {
+    const raw = localStorage.getItem('printOverridesItem') || '{}';
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+let _printOverridesItem = _loadPrintOverridesItem();
 let _printFormat   = localStorage.getItem('printFormat')   || '80mm';  // padrão 80mm
 let _printMarginH  = parseInt(localStorage.getItem('printMarginH')  || '5');  // margem lateral em mm
 let _printMarginV  = parseInt(localStorage.getItem('printMarginV')  || '2');  // margem vertical em mm
@@ -2537,6 +2550,7 @@ async function _syncPrintConfigServer() {
       printFormat:          localStorage.getItem('printFormat')         || '80mm',
       printViaMode:         viaMode,
       printSetoresCategoria:_getPrintSetoresCategoria(),
+      printOverridesItem:   _getPrintOverridesItem(),
       printFontSize:        (typeof _printFontSize !== 'undefined' ? _printFontSize : null) || parseInt(localStorage.getItem('printFontSize')||'13'),
       printBebidaSolo:      localStorage.getItem('printBebidaSolo') !== '0',
       bebidaProntaKanban:   localStorage.getItem('bebidaProntaKanban') === '1',
@@ -2577,6 +2591,10 @@ async function loadPrintConfigServer() {
     if (cfg.printSetoresCategoria && typeof cfg.printSetoresCategoria === 'object' && !Array.isArray(cfg.printSetoresCategoria)) {
       _printSetoresCategoria = cfg.printSetoresCategoria;
       _savePrintSetoresCategoria(false);
+    }
+    if (cfg.printOverridesItem && typeof cfg.printOverridesItem === 'object' && !Array.isArray(cfg.printOverridesItem)) {
+      _printOverridesItem = cfg.printOverridesItem;
+      _savePrintOverridesItem(false);
     }
     if (cfg.printNome)   {
       _printNome = cfg.printNome; localStorage.setItem('printNome', cfg.printNome);
@@ -2826,13 +2844,14 @@ function _printPrinterOptionsHtml(currentVal, extraPrinters) {
 
 function _loadSetoresCategorias(extraPrinters) {
   const wrap = document.getElementById('print-setores-wrap');
-  if (wrap) wrap.style.display = _normalizePrintViaMode(_printViaMode) === 'separado' ? '' : 'none';
+  if (wrap) wrap.style.display = ''; // sempre visível — roteamento por categoria/item é independente do "modo das vias"
   const list = document.getElementById('print-setores-list');
   if (!list) return;
 
   const cats = _printGetRoutingCategories();
   if (!cats.length) {
     list.innerHTML = '<div style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--muted)">Nenhuma categoria encontrada no cardapio.</div>';
+    if (typeof _loadOverridesItem === 'function') _loadOverridesItem();
     return;
   }
 
@@ -2859,6 +2878,7 @@ function _loadSetoresCategorias(extraPrinters) {
       </select>
     </div>`;
   }).join('');
+  if (typeof _loadOverridesItem === 'function') _loadOverridesItem();
 }
 window._loadSetoresCategorias = _loadSetoresCategorias;
 
@@ -2933,6 +2953,135 @@ function _buildSetorPrintJobsForItems(order, cfg, lista, opts = {}) {
   }));
 }
 window._buildSetorPrintJobsForItems = _buildSetorPrintJobsForItems;
+
+// ── Roteamento por ITEM individual (produto) ─────────────────────────
+// Mais específico que "setor por categoria": permite escolher a impressora
+// item a item, e até bloquear um item pra ele nunca sair em via de produção
+// (continua aparecendo normalmente na conta/recibo do caixa).
+function _printItemKey(item) {
+  const id = item?.id ?? item?.item_id_produto ?? null;
+  if (id !== null && id !== undefined && id !== '') return 'item:' + id;
+  // Sem id de catálogo (item avulso/legado): usa o nome como chave, é o
+  // melhor identificador estável disponível nesse caso.
+  return item?.name ? 'name:' + _printNormKey(item.name) : '';
+}
+
+function _getPrintOverridesItem() {
+  if (!_printOverridesItem || typeof _printOverridesItem !== 'object' || Array.isArray(_printOverridesItem)) {
+    _printOverridesItem = _loadPrintOverridesItem();
+  }
+  return _printOverridesItem;
+}
+window._getPrintOverridesItem = _getPrintOverridesItem;
+
+function _savePrintOverridesItem(syncServer) {
+  const clean = {};
+  Object.entries(_getPrintOverridesItem()).forEach(([k, v]) => {
+    if (k && v) clean[k] = v;
+  });
+  _printOverridesItem = clean;
+  localStorage.setItem('printOverridesItem', JSON.stringify(clean));
+  if (syncServer && typeof _syncPrintConfigServer === 'function') _syncPrintConfigServer();
+}
+
+function setPrintOverrideItem(itemKey, value) {
+  if (!itemKey) return;
+  const overrides = _getPrintOverridesItem();
+  if (value) overrides[itemKey] = value;
+  else delete overrides[itemKey];
+  _savePrintOverridesItem(true);
+  if (typeof _loadOverridesItem === 'function') _loadOverridesItem();
+}
+window.setPrintOverrideItem = setPrintOverrideItem;
+
+function _printHasItemOverridesConfigured() {
+  try {
+    return Object.values(_getPrintOverridesItem() || {}).some(Boolean);
+  } catch (_) {
+    return false;
+  }
+}
+
+// Verdadeiro assim que a loja configurou QUALQUER exceção manual (categoria
+// ou item) — a partir daí o roteamento manual assume o controle total dos
+// jobs de produção, independente do "Modo das vias" escolhido.
+function _printHasAnyOverrideConfigured() {
+  return _printHasSetorRoutesConfigured() || _printHasItemOverridesConfigured();
+}
+
+// Resolve o destino de UM item: item individual > categoria > sem override.
+// Retorna { blocked:true } se o item foi marcado pra não imprimir em via
+// de produção nenhuma, ou { printer:'nome' } (printer pode ser '' quando
+// não há override nenhum pra esse item).
+function _printResolveItemDestino(item) {
+  const key = _printItemKey(item);
+  const overrides = _getPrintOverridesItem();
+  const own = key ? overrides[key] : '';
+  if (own === PRINT_ITEM_BLOQUEADO) return { blocked: true, printer: '' };
+  if (own) return { blocked: false, printer: own };
+  const catPrinter = _printResolveCategoryPrinter(item);
+  return { blocked: false, printer: catPrinter || '' };
+}
+
+function _printItemOptionsHtml(currentVal, extraPrinters) {
+  const opts = ['<option value="">Sem excecao (segue a categoria)</option>'];
+  _printAvailablePrinters(extraPrinters).forEach(p => {
+    const sel = p.value === currentVal ? ' selected' : '';
+    opts.push(`<option value="${_printHtmlEscape(p.value)}"${sel}>${_printHtmlEscape(p.label)}</option>`);
+  });
+  const blockedSel = currentVal === PRINT_ITEM_BLOQUEADO ? ' selected' : '';
+  opts.push(`<option value="${PRINT_ITEM_BLOQUEADO}"${blockedSel}>Nao imprimir (bloquear)</option>`);
+  return opts.join('');
+}
+
+// Lista de produtos do cardápio disponíveis pra exceção manual — reaproveita
+// o array global "items" (catálogo completo), igual testPrint() já faz.
+function _printGetRoutingItems() {
+  if (typeof items === 'undefined' || !Array.isArray(items)) return [];
+  return items
+    .filter(i => i && i.name)
+    .map(i => ({ key: _printItemKey(i), label: i.name, cat: i.cat || i.cat_key || '' }))
+    .filter(i => i.key);
+}
+
+function _loadOverridesItem() {
+  const list = document.getElementById('print-overrides-item-list');
+  if (!list) return;
+  const its = _printGetRoutingItems();
+  if (!its.length) {
+    list.innerHTML = '<div style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--muted)">Nenhum produto encontrado no cardapio.</div>';
+    return;
+  }
+  const overrides = _getPrintOverridesItem();
+  // Só mostra o produto no seletor rápido de busca — a lista abaixo mostra
+  // só quem já tem exceção configurada, pra não virar uma lista gigante de
+  // centenas de produtos sem nenhuma exceção.
+  const filtro = (document.getElementById('print-overrides-item-search')?.value || '').trim().toLowerCase();
+  const comExcecao = its.filter(i => overrides[i.key]);
+  const encontrados = filtro ? its.filter(i => i.label.toLowerCase().includes(filtro)) : [];
+
+  const renderRow = (it) => {
+    const current = overrides[it.key] || '';
+    return `<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,240px);gap:8px;align-items:center;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+      <div style="min-width:0">
+        <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_printHtmlEscape(it.label)}</div>
+        <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_printHtmlEscape(it.cat)}</div>
+      </div>
+      <select class="form-input" data-item="${_printHtmlEscape(it.key)}" onchange="setPrintOverrideItem(this.dataset.item,this.value)" style="height:34px;font-size:11px;padding:0 9px">
+        ${_printItemOptionsHtml(current)}
+      </select>
+    </div>`;
+  };
+
+  const secaoExcecoes = comExcecao.length
+    ? comExcecao.map(renderRow).join('')
+    : '<div style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--muted)">Nenhuma excecao por item configurada ainda. Busque um produto acima pra adicionar.</div>';
+  const secaoBusca = encontrados.length ? encontrados.map(renderRow).join('') : '';
+
+  list.innerHTML = (filtro ? secaoBusca + '<div style="height:4px"></div>' : '') + secaoExcecoes;
+}
+window._loadOverridesItem = _loadOverridesItem;
+
 
 // ══════════════════════════════════════════════════════════════
 // Parser de observações de itens (cupom/comanda)
@@ -4269,6 +4418,69 @@ function _printHasSetorRoutesConfigured() {
   }
 }
 
+// Agrupa uma lista de itens por impressora de destino (item > categoria >
+// padrão de sempre) e monta um job por impressora. forcePrinter, quando
+// preenchido, ignora a resolução normal e manda tudo pra essa impressora
+// (usado só quando o usuário escolhe "forçar" na reimpressão manual).
+function _printBuildJobsForSelection(order, ticket, cfg, selectedItems, includeReceipt, forcePrinter) {
+  const jobs = [];
+  if (includeReceipt && ticket.principal) {
+    jobs.push({ html: ticket.principal, printer: _printPrinter || '', tipo: 'caixa' });
+  }
+
+  const cozinhaSigs = new Set((ticket.cozinhaItems || []).map(_printItemSignature));
+  const buckets = new Map(); // printer -> { printer, title, items }
+
+  (selectedItems || []).forEach(item => {
+    let printer = '';
+    let blocked = false;
+    if (forcePrinter) {
+      printer = forcePrinter;
+    } else {
+      const destino = _printResolveItemDestino(item);
+      blocked = destino.blocked;
+      printer = destino.printer;
+      if (!blocked && !printer) {
+        // Sem exceção configurada pra esse item: só vira via de produção
+        // se ele já era classificado como "precisa de preparo" (mesmo
+        // critério de sempre — bebida industrializada não gera via extra).
+        if (!cozinhaSigs.has(_printItemSignature(item))) return;
+        printer = _printPrinterCozinha || '';
+      }
+    }
+    if (blocked) return;
+
+    const title = printer ? _printPrinterDisplayName(printer) : 'Cozinha';
+    if (!buckets.has(printer)) buckets.set(printer, { printer, title, items: [] });
+    buckets.get(printer).items.push(item);
+  });
+
+  buckets.forEach(bucket => {
+    jobs.push({
+      html: _buildSetorHtml(order, cfg, bucket.title, bucket.items),
+      printer: bucket.printer || '',
+      tipo: bucket.printer && bucket.printer === _printPrinter ? 'caixa' : 'cozinha'
+    });
+  });
+
+  return jobs;
+}
+
+function _printItemSignature(item) {
+  return `${item?.id ?? ''}|${item?.name ?? ''}|${item?.qty ?? ''}|${item?.obs ?? ''}`;
+}
+
+// Quando a loja configurou qualquer exceção manual (por categoria ou por
+// item), esse roteamento manda em TUDO que é via de produção — ignora
+// "Modo das vias" (combinado/separado/somente_principal) pra decidir o que
+// imprime onde. O recibo do caixa (ticket.principal, com valores e forma de
+// pagamento) continua sempre saindo normalmente, isso nunca muda.
+function _printBuildJobsForOrderManual(order, ticket, cfg) {
+  const todosItens = (Array.isArray(order.items) ? order.items : [])
+    .filter(i => (i?.item_status || 'active') !== 'cancelado');
+  return _printBuildJobsForSelection(order, ticket, cfg, todosItens, true, '');
+}
+
 function _printBuildJobsForOrder(order, ticket, cfg, opts = {}) {
   const jobs = [];
   const viaMode = _normalizePrintViaMode(opts.viaMode || _printViaMode);
@@ -4302,6 +4514,9 @@ function _printBuildJobsForOrder(order, ticket, cfg, opts = {}) {
     jobs.push({ html: ticket.singleSheet, printer, tipo });
   };
 
+  // Reimpressão manual (escolha explícita de via/impressora no modal) sempre
+  // tem prioridade máxima — inclusive sobre o roteamento manual por
+  // categoria/item configurado nos ajustes.
   if (viaOverride) {
     if (viaOverride === 'caixa') addCaixa();
     else if (viaOverride === 'cozinha') addCozinha();
@@ -4310,6 +4525,15 @@ function _printBuildJobsForOrder(order, ticket, cfg, opts = {}) {
       addCozinha();
     }
     return jobs;
+  }
+
+  // A partir do momento em que a loja configurou QUALQUER exceção manual
+  // (por categoria ou por item), esse roteamento assume o controle total
+  // dos jobs de produção — funciona em qualquer "Modo das vias", inclusive
+  // "Via única", porque a ideia dessa configuração é justamente dar
+  // liberdade total de escolha, sem depender desse outro campo.
+  if (_printHasAnyOverrideConfigured()) {
+    return _printBuildJobsForOrderManual(order, ticket, cfg);
   }
 
   if (viaMode === 'separado' && (ticket.cozinha || _printHasSetorRoutesConfigured() || _printPrinterCozinha)) {
@@ -4354,8 +4578,11 @@ async function _printKnownPrinters() {
   return out;
 }
 
-async function _printAskReprintChoice(ticket) {
+async function _printAskReprintItemChoice(order, ticket) {
   const printers = await _printKnownPrinters();
+  const itensPedido = (Array.isArray(order.items) ? order.items : [])
+    .filter(i => (i?.item_status || 'active') !== 'cancelado');
+
   return new Promise(resolve => {
     const existing = document.getElementById('modal-print-reprint-choice');
     if (existing) existing.remove();
@@ -4364,25 +4591,41 @@ async function _printAskReprintChoice(ticket) {
     bg.id = 'modal-print-reprint-choice';
     bg.className = 'modal-bg';
     bg.style.display = 'flex';
+
+    const itemsHtml = itensPedido.length
+      ? itensPedido.map((it, idx) => `
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 2px;border-bottom:1px solid var(--border)">
+          <input type="checkbox" class="print-choice-item" data-idx="${idx}" checked style="width:16px;height:16px;flex-shrink:0">
+          <span style="word-break:break-word">${_printHtmlEscape((it.qty || 1) + 'x ' + (it.name || ''))}</span>
+        </label>`).join('')
+      : '<div style="font-size:11px;color:var(--muted);padding:8px 0">Sem itens neste pedido.</div>';
+
     bg.innerHTML = `
-      <div class="modal" style="max-width:360px">
+      <div class="modal" style="max-width:380px">
         <button class="modal-close" id="print-choice-close"></button>
         <div class="modal-header">
           <h2>Imprimir de novo</h2>
-          <p>Escolha qual via e qual impressora deve receber essa reimpressao.</p>
+          <p>Escolha o que reimprimir. Cada item sai na impressora que já está configurada pra ele.</p>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px">
-          <label style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Via</label>
-          <select class="form-input" id="print-choice-via">
-            <option value="cozinha" ${ticket.cozinha ? '' : 'disabled'}>Cozinha</option>
-            <option value="caixa">Caixa / cliente</option>
-            <option value="ambas" ${ticket.cozinha ? '' : 'disabled'}>Cozinha + cliente</option>
-          </select>
-          <label style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Impressora</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700">
+            <input type="checkbox" id="print-choice-receipt" style="width:16px;height:16px;flex-shrink:0">
+            Recibo do caixa (valores / pagamento)
+          </label>
+          <div style="border-top:1px solid var(--border);margin:2px 0"></div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800">
+            <input type="checkbox" id="print-choice-all" checked style="width:16px;height:16px;flex-shrink:0">
+            Selecionar todos os itens
+          </label>
+          <div id="print-choice-items" style="display:flex;flex-direction:column;max-height:240px;overflow-y:auto">
+            ${itemsHtml}
+          </div>
+          <label style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:4px">Forçar impressora (opcional)</label>
           <select class="form-input" id="print-choice-printer">
-            <option value="">Usar impressora configurada da via</option>
+            <option value="">Usar a impressora configurada de cada item</option>
             ${printers.map(p => `<option value="${_printHtmlEscape(p.value)}">${_printHtmlEscape(p.label)}</option>`).join('')}
           </select>
+          <div style="font-size:10px;color:var(--muted)">Só use isso se uma impressora estiver com problema e você quiser mandar tudo pra outra temporariamente.</div>
           <div style="display:flex;gap:10px;margin-top:6px">
             <button class="btn bg" id="print-choice-cancel" style="flex:1;justify-content:center">Cancelar</button>
             <button class="btn bp" id="print-choice-ok" style="flex:1.4;justify-content:center">Imprimir</button>
@@ -4395,15 +4638,32 @@ async function _printAskReprintChoice(ticket) {
       try { bg.remove(); } catch (_) {}
       resolve(value);
     };
+
+    const allBox = bg.querySelector('#print-choice-all');
+    const itemBoxes = () => Array.from(bg.querySelectorAll('.print-choice-item'));
+    const syncAllBox = () => {
+      const boxes = itemBoxes();
+      if (allBox) allBox.checked = boxes.length > 0 && boxes.every(b => b.checked);
+    };
+    allBox?.addEventListener('change', () => {
+      itemBoxes().forEach(b => { b.checked = allBox.checked; });
+    });
+    bg.querySelector('#print-choice-items')?.addEventListener('change', e => {
+      if (e.target.classList.contains('print-choice-item')) syncAllBox();
+    });
+
     bg.addEventListener('click', e => { if (e.target === bg) finish(null); });
     bg.querySelector('#print-choice-close')?.addEventListener('click', () => finish(null));
     bg.querySelector('#print-choice-cancel')?.addEventListener('click', () => finish(null));
-    const viaSel = bg.querySelector('#print-choice-via');
-    if (viaSel && !ticket.cozinha) viaSel.value = 'caixa';
-    bg.querySelector('#print-choice-ok')?.addEventListener('click', () => finish({
-      viaOverride: viaSel?.value || 'caixa',
-      printerOverride: bg.querySelector('#print-choice-printer')?.value || ''
-    }));
+    bg.querySelector('#print-choice-ok')?.addEventListener('click', () => {
+      const selectedIdx = new Set(itemBoxes().filter(b => b.checked).map(b => parseInt(b.dataset.idx, 10)));
+      const selectedItems = itensPedido.filter((_, idx) => selectedIdx.has(idx));
+      finish({
+        selectedItems,
+        includeReceipt: !!bg.querySelector('#print-choice-receipt')?.checked,
+        forcePrinter: bg.querySelector('#print-choice-printer')?.value || ''
+      });
+    });
   });
 }
 
@@ -4442,17 +4702,23 @@ async function printOrder(order, opts = {}) {
 
   let jobs = [];
   const viaMode = _normalizePrintViaMode(_printViaMode);
-  const hasSeparateKitchen = viaMode === 'separado' && (ticket.cozinha || _printPrinterCozinha || _printHasSetorRoutesConfigured());
-  if (opts.manualChoice && hasSeparateKitchen) {
-    const choice = await _printAskReprintChoice(ticket);
+  // O checklist de itens só faz sentido pra quem tem mais de um destino de
+  // impressão configurado (categoria/item roteados, ou via cozinha separada
+  // da via caixa) — é aí que faz diferença escolher o que reimprimir e pra
+  // onde. Loja com impressora única continua com um clique só, sem tela
+  // extra nenhuma, exatamente como sempre foi.
+  const temMaisDeUmDestino = _printHasAnyOverrideConfigured() ||
+    (viaMode === 'separado' && (ticket.cozinha || _printPrinterCozinha || _printHasSetorRoutesConfigured()));
+  if (opts.manualChoice && temMaisDeUmDestino) {
+    const choice = await _printAskReprintItemChoice(order, ticket);
     if (!choice) return;
-    jobs = _printBuildJobsForOrder(order, ticket, cfg, choice);
+    jobs = _printBuildJobsForSelection(order, ticket, cfg, choice.selectedItems, choice.includeReceipt, choice.forcePrinter);
   } else {
     jobs = _printBuildJobsForOrder(order, ticket, cfg);
   }
 
   if (!jobs.length) {
-    if (opts.manualChoice) sbToast('warn', 'Nenhuma via disponivel para imprimir.');
+    if (opts.manualChoice) sbToast('warn', 'Nenhum item selecionado pra imprimir.');
     else console.log('[PRINT] Modo separado: sem itens de cozinha; caixa nao imprime producao.');
     return;
   }
@@ -4673,8 +4939,6 @@ function _loadRoteamento() {
   if (viaSel) viaSel.value = _printViaMode || 'combinado';
   const cozWrap = document.getElementById('print-cozinha-wrap');
   if (cozWrap) cozWrap.style.display = _printViaMode === 'separado' ? '' : 'none';
-  const setorWrap = document.getElementById('print-setores-wrap');
-  if (setorWrap) setorWrap.style.display = _printViaMode === 'separado' ? '' : 'none';
 
   const _fillSelect = (selId, currentVal) => {
     const sel = document.getElementById(selId);

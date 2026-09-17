@@ -3165,6 +3165,20 @@ async function handleREST(req, res, table, params, body) {
         const scTid = tenantId || payload.tenant_id
         if (!scTid) return send(res, 400, { error: 'tenant_id obrigatório' })
         payload.tenant_id = scTid
+        // Trava crítica: mesmo motivo do proxy /api/evo/instance/create —
+        // nunca deixar dois tenants apontarem pro mesmo evo_instance,
+        // senão o webhook de um sobrescreve o do outro e mensagens de
+        // uma loja passam a ser respondidas com a marca de outra.
+        if (Object.prototype.hasOwnProperty.call(payload, 'evo_instance') && payload.evo_instance) {
+          const _donoAtual = db.prepare(
+            `SELECT tenant_id FROM store_config WHERE evo_instance=? AND tenant_id!=? LIMIT 1`
+          ).get(payload.evo_instance, scTid)
+          if (_donoAtual) {
+            return send(res, 409, {
+              error: `O nome de instância "${payload.evo_instance}" já está em uso por outra loja. Escolha um nome exclusivo.`
+            })
+          }
+        }
         const keys = Object.keys(payload).filter(k=>cols.includes(k))
         const setClause = keys.filter(k=>k!=='tenant_id').map(k=>`"${k}"=excluded."${k}"`).join(', ')
         db.prepare(`INSERT INTO store_config (${keys.map(k=>`"${k}"`).join(',')}) VALUES (${keys.map(()=>'?').join(',')}) ON CONFLICT(tenant_id) DO UPDATE SET ${setClause}`).run(...keys.map(k=>sanitize(payload[k])))
