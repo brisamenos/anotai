@@ -1405,8 +1405,42 @@ async function saveEditCategory() {
 async function deleteCatById(id) {
   const catId = id || parseInt(document.getElementById('edit-cat-id').value);
   const cat = categories.find(c => c.id === catId);
-  if (!await showConfirmDialog('Excluir categoria?', 'Os itens desta categoria não serão apagados.')) return;
+  if (!cat) return;
+
+  // Itens ficam ligados à categoria pelo NOME (cat_key/cat), não por um id
+  // fixo — então se a categoria for excluída e os itens não, eles continuam
+  // existindo soltos com esse nome antigo, e qualquer tela que remonta a
+  // lista de categorias a partir dos itens (Novo Pedido, Setores por
+  // Categoria) faz essa categoria "reaparecer" como fantasma.
+  const catItems = items.filter(i => i.catKey === cat.name || i.cat === cat.name);
+
+  let apagarItensTambem = false;
+  if (catItems.length) {
+    if (!await showConfirmDialog(
+      'Excluir categoria?',
+      `Esta categoria tem ${catItems.length} item(ns) cadastrado(s).`
+    )) return;
+    apagarItensTambem = await showConfirmDialog(
+      'Excluir os itens junto?',
+      `Se sim, os ${catItems.length} item(ns) desta categoria serao apagados permanentemente (sem volta). Se nao, eles continuam no cardapio soltos, sem categoria — e podem reaparecer em telas como "Novo pedido" e "Setores por categoria" ate serem excluidos manualmente.`
+    );
+  } else {
+    if (!await showConfirmDialog('Excluir categoria?', 'Esta categoria nao tem itens.')) return;
+  }
+
   sbLoading(true);
+
+  if (apagarItensTambem && catItems.length) {
+    const { error: itemsErr } = await sb.from('menu_items').delete().in('id', catItems.map(i => i.id));
+    if (itemsErr) {
+      sbLoading(false);
+      console.error('[deleteCatById] itens', itemsErr);
+      sbToast('err', 'Erro ao excluir itens: ' + (itemsErr.message || 'servidor indisponivel'));
+      return;
+    }
+    items = items.filter(i => !catItems.some(ci => ci.id === i.id));
+  }
+
   const { error } = await sb.from('categories').delete().eq('id', catId);
   sbLoading(false);
   if (error) {
@@ -1420,7 +1454,7 @@ async function deleteCatById(id) {
   closeModal('modal-edit-cat');
   renderGestor();
   populateCatSelects();
-  sbToast('ok', 'Categoria excluída!');
+  sbToast('ok', apagarItensTambem ? 'Categoria e itens excluidos!' : 'Categoria excluida!');
 }
 
 async function addCategory() {
