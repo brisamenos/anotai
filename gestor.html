@@ -3516,20 +3516,26 @@ Use no seu próximo pedido.</textarea>
             <input class="form-input" id="print-overrides-item-search" placeholder="Buscar produto pelo nome..." oninput="if(typeof _loadOverridesItem==='function')_loadOverridesItem()" style="height:34px;font-size:12px;margin-bottom:8px">
             <div id="print-overrides-item-list" style="display:flex;flex-direction:column;gap:8px"></div>
           </div>
+          <div id="print-industrializados-wrap">
+            <label class="form-label">Produtos industrializados</label>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Por padrao, so bebidas prontas (refri, cerveja, agua) sao reconhecidas como industrializadas. Marque aqui qualquer outro produto pronto, sem preparo (salgadinho, chocolate, sorvete industrializado etc) pra ele seguir a mesma regra.</div>
+            <input class="form-input" id="print-industrializados-search" placeholder="Buscar produto pelo nome..." oninput="if(typeof _loadItensIndustrializados==='function')_loadItensIndustrializados()" style="height:34px;font-size:12px;margin-bottom:8px">
+            <div id="print-industrializados-list" style="display:flex;flex-direction:column;gap:8px"></div>
+          </div>
           <div style="padding:10px 12px;background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.15);border-radius:8px;font-size:11px;color:var(--muted)">
-            <strong style="color:#10b981">Como funciona:</strong> Por padrão, bebidas <strong>industrializadas</strong> (água, refrigerante, cerveja, energético) não vão pra cozinha/kanban — só pra via do caixa. Sucos, vitaminas e drinks preparados sempre vão pra cozinha normalmente porque precisam ser feitos. Use o botão abaixo se seu restaurante quiser que as bebidas prontas também apareçam no kanban.
+            <strong style="color:#10b981">Como funciona:</strong> Produtos <strong>industrializados</strong> (bebidas prontas por padrao, mais os que voce marcar acima) nao vao pra cozinha/kanban — so pra via do caixa. Sucos, vitaminas e itens preparados sempre vao pra cozinha normalmente porque precisam ser feitos. Use o botao abaixo se seu restaurante quiser que esses produtos prontos tambem aparecam no kanban.
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px">
             <div>
-              <div style="font-size:12px;font-weight:600">Bebida pronta também aparece no kanban</div>
-              <div style="font-size:10px;color:var(--muted)">Desligado (padrão): bebida industrializada (Coca-Cola, água de coco, etc.) não entra no kanban — só é cobrada. Ligado: ela entra no kanban normalmente, como qualquer outro item.</div>
+              <div style="font-size:12px;font-weight:600">Produto industrializado tambem aparece no kanban</div>
+              <div style="font-size:10px;color:var(--muted)">Desligado (padrao): produto industrializado (Coca-Cola, salgadinho, etc.) nao entra no kanban — so e cobrado. Ligado: ele entra no kanban normalmente, como qualquer outro item.</div>
             </div>
             <div class="toggle" id="toggle-bebida-kanban" onclick="this.classList.toggle('on');localStorage.setItem('bebidaProntaKanban',this.classList.contains('on')?'1':'0');_syncPrintConfigServer()"></div>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px">
             <div>
-              <div style="font-size:12px;font-weight:600">Imprimir pedido só de bebida industrializada</div>
-              <div style="font-size:10px;color:var(--muted)">Vale só quando a opção acima está desligada (bebida fora do kanban). Ligado: imprime cerveja/refri sozinhos no caixa. Desligado: pedido só com bebida industrializada não imprime (cliente pega direto). Sucos e drinks preparados sempre imprimem.</div>
+              <div style="font-size:12px;font-weight:600">Imprimir pedido só de produto industrializado</div>
+              <div style="font-size:10px;color:var(--muted)">Vale só quando a opção acima está desligada (fora do kanban). Ligado: imprime mesmo que o pedido tenha só produto(s) industrializado(s) — sozinho(s) — no caixa. Desligado: pedido só com industrializado não imprime (cliente pega direto). Itens preparados sempre imprimem.</div>
             </div>
             <div class="toggle on" id="toggle-print-bebida" onclick="this.classList.toggle('on');localStorage.setItem('printBebidaSolo',this.classList.contains('on')?'1':'0');_syncPrintConfigServer()"></div>
           </div>

@@ -2551,6 +2551,7 @@ async function _syncPrintConfigServer() {
       printViaMode:         viaMode,
       printSetoresCategoria:_getPrintSetoresCategoria(),
       printOverridesItem:   _getPrintOverridesItem(),
+      printItensIndustrializados: _getPrintItensIndustrializados(),
       printFontSize:        (typeof _printFontSize !== 'undefined' ? _printFontSize : null) || parseInt(localStorage.getItem('printFontSize')||'13'),
       printBebidaSolo:      localStorage.getItem('printBebidaSolo') !== '0',
       bebidaProntaKanban:   localStorage.getItem('bebidaProntaKanban') === '1',
@@ -2595,6 +2596,10 @@ async function loadPrintConfigServer() {
     if (cfg.printOverridesItem && typeof cfg.printOverridesItem === 'object' && !Array.isArray(cfg.printOverridesItem)) {
       _printOverridesItem = cfg.printOverridesItem;
       _savePrintOverridesItem(false);
+    }
+    if (cfg.printItensIndustrializados && typeof cfg.printItensIndustrializados === 'object' && !Array.isArray(cfg.printItensIndustrializados)) {
+      _printItensIndustrializados = cfg.printItensIndustrializados;
+      _savePrintItensIndustrializados(false);
     }
     if (cfg.printNome)   {
       _printNome = cfg.printNome; localStorage.setItem('printNome', cfg.printNome);
@@ -2904,6 +2909,7 @@ function _loadSetoresCategorias(extraPrinters) {
     </div>`;
   }).join('');
   if (typeof _loadOverridesItem === 'function') _loadOverridesItem();
+  if (typeof _loadItensIndustrializados === 'function') _loadItensIndustrializados();
 }
 window._loadSetoresCategorias = _loadSetoresCategorias;
 
@@ -3162,6 +3168,102 @@ function _loadOverridesItem() {
 }
 window._loadOverridesItem = _loadOverridesItem;
 
+// ── Produtos marcados manualmente como "industrializado" (prontos, não
+// precisam de preparo) — além da lista fixa de bebidas (refri, cerveja,
+// água), o gestor pode marcar qualquer produto (batata chips, chocolate,
+// sorvete industrializado, etc). Mesmo padrão de _printOverridesItem.
+function _loadPrintItensIndustrializados() {
+  try {
+    var raw = localStorage.getItem('printItensIndustrializados') || '{}';
+    var parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+var _printItensIndustrializados = _loadPrintItensIndustrializados();
+
+function _getPrintItensIndustrializados() {
+  if (!_printItensIndustrializados || typeof _printItensIndustrializados !== 'object' || Array.isArray(_printItensIndustrializados)) {
+    _printItensIndustrializados = _loadPrintItensIndustrializados();
+  }
+  return _printItensIndustrializados;
+}
+window._getPrintItensIndustrializados = _getPrintItensIndustrializados;
+
+function _savePrintItensIndustrializados(syncServer) {
+  var clean = {};
+  var atual = _getPrintItensIndustrializados();
+  Object.keys(atual).forEach(function(k) { if (k && atual[k]) clean[k] = true; });
+  _printItensIndustrializados = clean;
+  localStorage.setItem('printItensIndustrializados', JSON.stringify(clean));
+  if (syncServer && typeof _syncPrintConfigServer === 'function') _syncPrintConfigServer();
+}
+
+function setPrintItemIndustrializado(itemKey, marcado) {
+  if (!itemKey) return;
+  var marc = _getPrintItensIndustrializados();
+  if (marcado) marc[itemKey] = true;
+  else delete marc[itemKey];
+  _savePrintItensIndustrializados(true);
+  if (typeof _loadItensIndustrializados === 'function') _loadItensIndustrializados();
+}
+window.setPrintItemIndustrializado = setPrintItemIndustrializado;
+
+// Ponto único de verdade: um item é "industrializado" se foi marcado
+// manualmente OU bate com a lista fixa de bebidas prontas (mantida por
+// compatibilidade — quem nunca marcou nada continua com o comportamento
+// de sempre, só bebida). Usado tanto pra via de cozinha quanto pro toggle
+// "imprimir pedido só de industrializado".
+function _printItemEhIndustrializado(item) {
+  var key = typeof _printItemKey === 'function' ? _printItemKey(item) : '';
+  if (key && _getPrintItensIndustrializados()[key]) return true;
+  var c = (item.cat || item.cat_key || '').toLowerCase();
+  var n = (item.name || '').toLowerCase();
+  var re = /refrigerante|coca[\s-]?cola|pepsi|guaran[aá]|fanta|sprite|soda|schweppes|t[oô]nica|[aá]gua\b|mineral|cerveja|chopp|brahma|skol|heineken|budweiser|corona|stella|amstel|itaipava|eisenbahn|vinho|wine|espumante|prosecco|champagne|sake|long[\s.]?neck|energ[eé]tico|red[\s.]?bull|monster|gatorade|powerade|isot[oô]nico|ice[\s.]?tea|nescau/i;
+  return re.test(n) || re.test(c);
+}
+window._printItemEhIndustrializado = _printItemEhIndustrializado;
+
+function _loadItensIndustrializados() {
+  var list = document.getElementById('print-industrializados-list');
+  if (!list) return;
+  var its = typeof _printGetRoutingItems === 'function' ? _printGetRoutingItems() : [];
+  if (!its.length) {
+    list.innerHTML = '<div style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--muted)">Nenhum produto encontrado no cardapio.</div>';
+    return;
+  }
+  var marcados = _getPrintItensIndustrializados();
+  var filtroEl = document.getElementById('print-industrializados-search');
+  var filtro = (filtroEl && filtroEl.value || '').trim().toLowerCase();
+  var comMarca = its.filter(function(i) { return marcados[i.key]; });
+  var encontrados = filtro ? its.filter(function(i) { return i.label.toLowerCase().indexOf(filtro) !== -1; }) : [];
+
+  function renderRow(it) {
+    var ligado = !!marcados[it.key];
+    var keyEsc = _printHtmlEscape(it.key).split("'").join("\\'");
+    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">' +
+      '<div style="min-width:0">' +
+        '<div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _printHtmlEscape(it.label) + '</div>' +
+        '<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _printHtmlEscape(it.cat) + '</div>' +
+      '</div>' +
+      '<label style="position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0">' +
+        '<input type="checkbox" ' + (ligado ? 'checked' : '') + ' onchange="setPrintItemIndustrializado(\'' + keyEsc + '\', this.checked)" style="opacity:0;width:0;height:0">' +
+        '<span style="position:absolute;inset:0;background:' + (ligado ? 'var(--accent, #10b981)' : 'var(--border)') + ';border-radius:22px;transition:.15s"></span>' +
+        '<span style="position:absolute;top:3px;left:' + (ligado ? '19px' : '3px') + ';width:16px;height:16px;background:#fff;border-radius:50%;transition:.15s"></span>' +
+      '</label>' +
+    '</div>';
+  }
+
+  var secaoMarcados = comMarca.length
+    ? comMarca.map(renderRow).join('')
+    : '<div style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--muted)">Nenhum produto marcado como industrializado ainda (alem das bebidas padrao). Busque um produto acima pra marcar.</div>';
+  var secaoBusca = encontrados.length ? encontrados.map(renderRow).join('') : '';
+
+  list.innerHTML = (filtro ? secaoBusca + '<div style="height:4px"></div>' : '') + secaoMarcados;
+}
+window._loadItensIndustrializados = _loadItensIndustrializados;
+
 
 // ══════════════════════════════════════════════════════════════
 // Parser de observações de itens (cupom/comanda)
@@ -3412,13 +3514,7 @@ function _buildTicketHtml(order, cfg) {
   // Usado pra (a) decidir se vão pra via cozinha (não vão), (b) aplicar o
   // toggle "Imprimir pedido só de bebida". Sucos, vitaminas, drinks da casa
   // NÃO entram aqui — esses precisam ser preparados pela cozinha/copa.
-  const _ehIndustrializada = (item) => {
-    const c = (item.cat || item.cat_key || '').toLowerCase();
-    const n = (item.name || '').toLowerCase();
-    // Lista de bebidas prontas. Sucos/vitaminas/cafés ficam DE FORA.
-    const re = /refrigerante|coca[\s-]?cola|pepsi|guaran[aá]|fanta|sprite|soda|schweppes|t[oô]nica|[aá]gua\b|mineral|cerveja|chopp|brahma|skol|heineken|budweiser|corona|stella|amstel|itaipava|eisenbahn|vinho|wine|espumante|prosecco|champagne|sake|long[\s.]?neck|energ[eé]tico|red[\s.]?bull|monster|gatorade|powerade|isot[oô]nico|ice[\s.]?tea|nescau/i;
-    return re.test(n) || re.test(c);
-  };
+  const _ehIndustrializada = (item) => _printItemEhIndustrializado(item);
 
   // ── Filtra itens que vão pra via cozinha ────────────────
   // Cozinha = tudo que precisa preparo. Industrializadas (cerveja, refri,
@@ -4761,12 +4857,7 @@ async function printOrder(order, opts = {}) {
   // Toggle OFF           → pedido só de cerveja/refri NÃO imprime (cliente
   //                        pega direto no balcão). Mas se tiver suco junto,
   //                        imprime — porque suco precisa ser feito.
-  const _ehIndustrializadaTop = (item) => {
-    const cat  = (item.cat || item.cat_key || '').toLowerCase();
-    const name = (item.name || '').toLowerCase();
-    const re = /refrigerante|coca[\s-]?cola|pepsi|guaran[aá]|fanta|sprite|soda|schweppes|t[oô]nica|[aá]gua\b|mineral|cerveja|chopp|brahma|skol|heineken|budweiser|corona|stella|amstel|itaipava|eisenbahn|vinho|wine|espumante|prosecco|champagne|sake|long[\s.]?neck|energ[eé]tico|red[\s.]?bull|monster|gatorade|powerade|isot[oô]nico|ice[\s.]?tea|nescau/i;
-    return re.test(name) || re.test(cat);
-  };
+  const _ehIndustrializadaTop = (item) => _printItemEhIndustrializado(item);
   // Considera apenas itens não cancelados
   const items = (Array.isArray(order.items) ? order.items : [])
     .filter(i => (i?.item_status || 'active') !== 'cancelado');
