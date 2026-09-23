@@ -1291,6 +1291,9 @@ async function _gestorImprimirJobCaixa(job) {
     let impresso = false;
 
     if (window.ElectronPrint?.printHtml) {
+      // Multi-computador: só o PC que tem a impressora do caixa imprime.
+      if (typeof window._printPrinterEhDesteComputador === 'function' &&
+          !(await window._printPrinterEhDesteComputador(printer))) return;
       const r = await window.ElectronPrint.printHtml(job.html, {
         printer,
         paperWidth: pw,

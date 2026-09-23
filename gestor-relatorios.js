@@ -4899,6 +4899,60 @@ async function printOrder(order, opts = {}) {
   }
 }
 
+// ── Multi-computador: cada PC só imprime nas impressoras ligadas nele ──
+// Com o app desktop (Electron) aberto em mais de um computador, TODOS
+// recebem o mesmo pedido e montam os mesmos jobs (um por setor). Antes,
+// cada PC mandava todos os jobs pra impressão local — e quando a
+// impressora do job não existia ali, o Windows jogava na impressora
+// padrão. Resultado: categoria A e B saindo nas duas impressoras.
+// Agora o job só é impresso no computador que tem aquela impressora.
+let _printLocalPrintersCache = { list: null, ts: 0 };
+async function _printGetLocalPrinters() {
+  if (!window.ElectronPrint) return null;
+  if (_printLocalPrintersCache.list && (Date.now() - _printLocalPrintersCache.ts) < 60000) {
+    return _printLocalPrintersCache.list;
+  }
+  let raw = null;
+  try {
+    if (window.ElectronPrint.getPrinters) raw = await window.ElectronPrint.getPrinters();
+    else if (window.ElectronPrint.getConfig) raw = (await window.ElectronPrint.getConfig())?.printers;
+  } catch (_) { raw = null; }
+  if (!Array.isArray(raw)) return null;
+  const list = raw
+    .map(p => String((p && typeof p === 'object') ? (p.name || p.displayName || '') : (p || '')).trim())
+    .filter(Boolean);
+  if (!list.length) return null;
+  _printLocalPrintersCache = { list, ts: Date.now() };
+  return list;
+}
+
+// Converte apelido cadastrado -> nome real da impressora no Windows
+function _printResolveDeviceName(value) {
+  const v = String(value || '').trim();
+  if (!v) return '';
+  try {
+    const imp = (Array.isArray(_impressoras) ? _impressoras : [])
+      .find(i => i && (i.printerName === v || i.apelido === v));
+    if (imp && imp.printerName) return String(imp.printerName).trim();
+  } catch (_) {}
+  return v;
+}
+
+// true  = este computador deve imprimir o job
+// false = a impressora do job está em outro computador (ele imprime lá)
+async function _printPrinterEhDesteComputador(printerName) {
+  const local = await _printGetLocalPrinters();
+  if (!local) return true; // não conseguiu listar → mantém comportamento antigo
+  const localNorm = local.map(_printNormKey);
+  const alvo = _printNormKey(_printResolveDeviceName(printerName));
+  if (alvo) return localNorm.includes(alvo);
+  // Job sem impressora definida: fica com o computador do caixa.
+  const caixa = _printNormKey(_printResolveDeviceName(_printPrinter));
+  if (!caixa) return true; // loja sem impressora de caixa configurada
+  return localNorm.includes(caixa);
+}
+window._printPrinterEhDesteComputador = _printPrinterEhDesteComputador;
+
 // ── Cascata de impressão silenciosa (1 job) ──────────────
 async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
   let compatibleAgentActive = false;
@@ -4917,6 +4971,10 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
         const sel = await window.ElectronPrint.showPrinterDialog(targetPrinter);
         if (sel.cancelled) return;
         targetPrinter = sel.printer;
+      } else if (!(await _printPrinterEhDesteComputador(targetPrinter))) {
+        // Impressora do setor está em outro computador — ele imprime lá.
+        console.info('[PRINT] Job de "' + targetPrinter + '" ignorado aqui: impressora não está neste computador.');
+        return;
       }
 
       if (window.ElectronPrint.printHtml) {
