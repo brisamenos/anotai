@@ -2527,6 +2527,8 @@ async function savePrintConfigServer(cfg) {
   try {
     const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null
     if (!tid) return
+    // Flag da loja "impressão por computador" vai junto em qualquer salvamento
+    cfg = { ...(cfg || {}), printModoPC: localStorage.getItem('printModoPC') === '1' }
     await window.AppAPI.from('store_config').update({ print_config: JSON.stringify(cfg) }).eq('tenant_id', tid)
   } catch {}
 }
@@ -2576,6 +2578,7 @@ async function loadPrintConfigServer() {
     if (!data?.print_config) return
     const cfg = JSON.parse(data.print_config)
     if (cfg.printMode)    { _printMode = cfg.printMode; window._printMode = cfg.printMode; localStorage.setItem('printMode', cfg.printMode) }
+    if (cfg.printModoPC !== undefined) localStorage.setItem('printModoPC', cfg.printModoPC ? '1' : '0')
     if (cfg.printFormat)  { _printFormat = cfg.printFormat; localStorage.setItem('printFormat', cfg.printFormat) }
     if (cfg.printFontSize){ _printFontSize = cfg.printFontSize }
     if (cfg.printViaMode) {
@@ -2910,6 +2913,7 @@ function _loadSetoresCategorias(extraPrinters) {
   }).join('');
   if (typeof _loadOverridesItem === 'function') _loadOverridesItem();
   if (typeof _loadItensIndustrializados === 'function') _loadItensIndustrializados();
+  if (typeof _renderPrintPorComputador === 'function') _renderPrintPorComputador();
 }
 window._loadSetoresCategorias = _loadSetoresCategorias;
 
@@ -4873,6 +4877,14 @@ async function printOrder(order, opts = {}) {
 
   const ticket = _buildTicketHtml(order, cfg);
 
+  // Impressão por computador: cada PC imprime só as categorias marcadas nele,
+  // na impressora dele. Celular/navegador sem o app desktop não imprime
+  // automático nesse modo (só reimpressão manual, pelo fluxo normal).
+  if (_printModoPCAtivo() && (window.ElectronPrint || !opts.manualChoice)) {
+    await _printPorComputador(order, ticket, cfg, fmt, opts);
+    return;
+  }
+
   let jobs = [];
   const viaMode = _normalizePrintViaMode(_printViaMode);
   // O checklist de itens só faz sentido pra quem tem mais de um destino de
@@ -5905,3 +5917,307 @@ async function carregarCalibracao() {
     iniciar();
   }
 })();
+
+
+// ═════════════════════════════════════════════════════════════════════
+// IMPRESSÃO POR COMPUTADOR
+// ─────────────────────────────────────────────────────────────────────
+// Liga na loja inteira (flag printModoPC no print_config). Cada computador
+// com o EstimaFood Print guarda NELE MESMO: nome, impressora local,
+// categorias que imprime e se imprime o recibo do caixa. Todo computador
+// recebe o pedido em tempo real e imprime só a parte dele — não depende de
+// nome de impressora igual entre máquinas nem da fila do servidor.
+// ═════════════════════════════════════════════════════════════════════
+function _printModoPCAtivo() {
+  return localStorage.getItem('printModoPC') === '1';
+}
+window._printModoPCAtivo = _printModoPCAtivo;
+
+function _printPCId() {
+  let id = localStorage.getItem('printPcId');
+  if (!id) {
+    id = 'pc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem('printPcId', id);
+  }
+  return id;
+}
+
+function _printPCGetConfig() {
+  try {
+    const c = JSON.parse(localStorage.getItem('printPCConfig') || '{}');
+    return {
+      nome: c.nome || '',
+      printer: c.printer || '',
+      categorias: Array.isArray(c.categorias) ? c.categorias : [],
+      recibo: !!c.recibo
+    };
+  } catch (_) {
+    return { nome: '', printer: '', categorias: [], recibo: false };
+  }
+}
+window._printPCGetConfig = _printPCGetConfig;
+
+function _printPCTenantId() {
+  return (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId ||
+    (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+}
+
+function _printPCSaveConfig(pc) {
+  localStorage.setItem('printPCConfig', JSON.stringify(pc));
+  const tid = _printPCTenantId();
+  if (!tid) return Promise.resolve();
+  return fetch('/api/print-pcs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+    body: JSON.stringify({ pc_id: _printPCId(), ...pc })
+  }).catch(() => {});
+}
+
+// Itens já impressos NESTE computador (por item_id) — o mesmo item pode
+// chegar por mais de um caminho (tempo real, lançamento local, update da
+// comanda); aqui garante que sai uma vez só por computador.
+function _printPCImpressosLoad() {
+  try {
+    const o = JSON.parse(localStorage.getItem('printPCImpressos') || '{}');
+    return o && typeof o === 'object' ? o : {};
+  } catch (_) { return {}; }
+}
+function _printPCImpressosSave(o) {
+  const limite = Date.now() - 24 * 3600 * 1000;
+  const limpo = {};
+  Object.entries(o).forEach(([k, ts]) => { if (ts > limite) limpo[k] = ts; });
+  try { localStorage.setItem('printPCImpressos', JSON.stringify(limpo)); } catch (_) {}
+}
+
+function _printPCItemEhMeu(item, pc) {
+  const sel = new Set(pc.categorias || []);
+  if (!sel.size) return false;
+  const selNorm = new Set([...sel].map(_printNormKey));
+  return _printItemCategoryKeys(item).some(k => sel.has(k) || selNorm.has(_printNormKey(k)));
+}
+
+async function _printPorComputador(order, ticket, cfg, fmt, opts = {}) {
+  if (!window.ElectronPrint?.printHtml) return;
+  const pc = _printPCGetConfig();
+  const itens = (Array.isArray(order.items) ? order.items : [])
+    .filter(i => (i?.item_status || 'active') !== 'cancelado');
+
+  let meus = [];
+  let incluirRecibo = false;
+  let impressora = pc.printer || '';
+
+  if (opts.manualChoice) {
+    // Reimpressão manual: o usuário escolhe os itens, sai na impressora
+    // deste computador (ou na que ele forçar no modal).
+    const choice = await _printAskReprintItemChoice(order, ticket);
+    if (!choice) return;
+    meus = choice.selectedItems || [];
+    incluirRecibo = !!choice.includeReceipt;
+    if (choice.forcePrinter) impressora = choice.forcePrinter;
+  } else {
+    // Automático: só os itens das categorias deste computador. Marca como
+    // impresso ANTES de qualquer await pra não sair duas vezes se o mesmo
+    // item chegar por dois caminhos ao mesmo tempo.
+    const impressos = _printPCImpressosLoad();
+    meus = itens.filter(it => {
+      if (_printResolveItemDestino(it).blocked) return false;
+      if (!_printPCItemEhMeu(it, pc)) return false;
+      if (it.item_id && impressos[it.item_id]) return false;
+      return true;
+    });
+    meus.forEach(it => { if (it.item_id) impressos[it.item_id] = Date.now(); });
+    if (meus.length) _printPCImpressosSave(impressos);
+    // Recibo com valores: pedidos delivery/balcão. Mesa tem a conta no fechamento.
+    incluirRecibo = pc.recibo && !order.mesa_num;
+  }
+
+  if (!meus.length && !incluirRecibo) return;
+
+  const pw = fmt === '58mm' ? 48 : 72;
+  const imprimir = async (html) => {
+    const r = await window.ElectronPrint.printHtml(_wrapTicketHtml(html, cfg ? cfg.fontSize : 13), {
+      printer: impressora, paperWidth: pw, landscape: false, scaleFactor: 100,
+      marginH: _printMarginH, marginV: _printMarginV
+    }).catch(e => ({ ok: false, error: e?.message || String(e) }));
+    if (!r || r.ok === false) {
+      sbToast('err', '❌ Impressora ' + (impressora || 'padrão') + ': ' + (r?.error || 'falhou'));
+      return false;
+    }
+    return true;
+  };
+
+  let ok = false;
+  if (incluirRecibo && ticket.principal) ok = (await imprimir(ticket.principal)) || ok;
+  if (meus.length) ok = (await imprimir(_buildSetorHtml(order, cfg, pc.nome || 'Producao', meus))) || ok;
+  if (ok) sbToast('ok', '🖨️ Impresso' + (impressora ? ' → ' + impressora : ''));
+}
+
+// ── Tela de configuração ─────────────────────────────────────────────
+let _printPCOutros = [];
+
+async function _printPCCarregarOutros() {
+  const tid = _printPCTenantId();
+  if (!tid) return [];
+  try {
+    const r = await fetch('/api/print-pcs', { headers: { 'x-tenant-id': tid } });
+    const d = await r.json();
+    return Array.isArray(d.pcs) ? d.pcs : [];
+  } catch (_) { return []; }
+}
+
+function _printPCToggleLoja(ligar) {
+  localStorage.setItem('printModoPC', ligar ? '1' : '0');
+  if (typeof _syncPrintConfigServer === 'function') _syncPrintConfigServer();
+  _renderPrintPorComputador();
+}
+window._printPCToggleLoja = _printPCToggleLoja;
+
+function _printPCSetCampo(campo, valor) {
+  const pc = _printPCGetConfig();
+  pc[campo] = valor;
+  _printPCSaveConfig(pc).then(() => _renderPrintPorComputador());
+}
+window._printPCSetCampo = _printPCSetCampo;
+
+function _printPCToggleCategoria(key, marcado) {
+  const pc = _printPCGetConfig();
+  const set = new Set(pc.categorias);
+  if (marcado) set.add(key); else set.delete(key);
+  pc.categorias = [...set];
+  _printPCSaveConfig(pc).then(() => _renderPrintPorComputador());
+}
+window._printPCToggleCategoria = _printPCToggleCategoria;
+
+async function _printPCTeste() {
+  const pc = _printPCGetConfig();
+  if (!window.ElectronPrint?.printHtml) { sbToast('err', 'Abra no EstimaFood Print para testar.'); return; }
+  const html = `<div class="print-ticket" style="font-family:'Courier New',monospace;font-size:13px;text-align:center">
+    <div style="font-size:1.2em;font-weight:bold">TESTE</div>
+    <div>${_printHtmlEscape(pc.nome || 'Este computador')}</div>
+    <div>${_printHtmlEscape(pc.printer || 'impressora padrão')}</div>
+    <div>${new Date().toLocaleString('pt-BR')}</div></div>`;
+  const r = await window.ElectronPrint.printHtml(_wrapTicketHtml(html, 13), { printer: pc.printer || '', paperWidth: 72, landscape: false, scaleFactor: 100 })
+    .catch(e => ({ ok: false, error: e?.message }));
+  sbToast(r?.ok === false ? 'err' : 'ok', r?.ok === false ? ('❌ ' + (r.error || 'falhou')) : '🖨️ Teste enviado');
+}
+window._printPCTeste = _printPCTeste;
+
+let _printPCRenderSeq = 0;
+async function _renderPrintPorComputador() {
+  let wrap = document.getElementById('print-pc-wrap');
+  if (!wrap) {
+    // Cria o bloco no topo da seção de roteamento (antes do "Modo das vias")
+    const ref = document.getElementById('print-via-mode-select');
+    const host = ref ? ref.closest('div')?.parentElement : null;
+    if (!host) return;
+    wrap = document.createElement('div');
+    wrap.id = 'print-pc-wrap';
+    host.insertBefore(wrap, host.firstChild);
+  }
+  const seq = ++_printPCRenderSeq;
+  const ativo = _printModoPCAtivo();
+  const esc = _printHtmlEscape;
+
+  const toggleHtml = `
+    <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;cursor:pointer">
+      <input type="checkbox" ${ativo ? 'checked' : ''} onchange="_printPCToggleLoja(this.checked)" style="width:18px;height:18px;flex-shrink:0;margin-top:1px">
+      <span>
+        <span style="display:block;font-size:13px;font-weight:800">Impressão por computador</span>
+        <span style="display:block;font-size:11px;color:var(--muted);margin-top:2px">Cada computador imprime só as categorias marcadas nele, na impressora ligada nele. Ideal pra loja com mais de um computador.</span>
+      </span>
+    </label>`;
+
+  if (!ativo) { wrap.innerHTML = toggleHtml; return; }
+
+  if (!window.ElectronPrint) {
+    wrap.innerHTML = toggleHtml + `
+      <div style="margin-top:8px;padding:10px 12px;border-radius:8px;background:rgba(234,179,8,.1);border:1px solid rgba(234,179,8,.35);font-size:11px">
+        Modo ligado. A configuração de cada computador é feita dentro do <b>EstimaFood Print</b> naquele computador. Este aparelho não imprime automático nesse modo.
+      </div>`;
+    return;
+  }
+
+  const [printersRaw, outros] = await Promise.all([
+    window.ElectronPrint.getPrinters ? window.ElectronPrint.getPrinters().catch(() => []) : Promise.resolve([]),
+    _printPCCarregarOutros()
+  ]);
+  if (seq !== _printPCRenderSeq) return; // render mais novo já começou
+  _printPCOutros = outros;
+
+  const pc = _printPCGetConfig();
+  const meuId = _printPCId();
+  const printers = (Array.isArray(printersRaw) ? printersRaw : [])
+    .map(p => String((p && typeof p === 'object') ? (p.name || '') : (p || '')).trim()).filter(Boolean);
+  if (pc.printer && !printers.includes(pc.printer)) printers.unshift(pc.printer);
+
+  const outrosPCs = outros.filter(o => o.pc_id !== meuId);
+  const donosDe = (key) => outrosPCs.filter(o => (o.categorias || []).some(k => k === key || _printNormKey(k) === _printNormKey(key))).map(o => o.nome || 'Outro PC');
+
+  const cats = _printGetRoutingCategories().filter(c => !c.ghost);
+  const semDono = [];
+  const catsHtml = cats.map(c => {
+    const marcado = pc.categorias.includes(c.key);
+    const outrosDonos = donosDe(c.key);
+    if (!marcado && !outrosDonos.length) semDono.push(c.label);
+    const tag = outrosDonos.length
+      ? `<span style="font-size:10px;color:var(--muted);margin-left:auto;white-space:nowrap">também: ${esc(outrosDonos.join(', '))}</span>`
+      : '';
+    return `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px;cursor:pointer">
+      <input type="checkbox" ${marcado ? 'checked' : ''} data-cat="${esc(c.key)}" onchange="_printPCToggleCategoria(this.dataset.cat,this.checked)" style="width:16px;height:16px;flex-shrink:0">
+      <span style="font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.label)}</span>
+      ${tag}
+    </label>`;
+  }).join('');
+
+  const reciboOutros = outrosPCs.filter(o => o.recibo).map(o => o.nome || 'Outro PC');
+  const avisoSemDono = semDono.length
+    ? `<div style="padding:10px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.35);font-size:11px">
+        ⚠️ <b>Sem computador:</b> ${esc(semDono.join(', '))}. Itens dessas categorias não vão imprimir em lugar nenhum.
+      </div>` : '';
+  const outrosHtml = outrosPCs.length
+    ? `<div style="font-size:11px;color:var(--muted)">Outros computadores: ${outrosPCs.map(o => `<b>${esc(o.nome || 'Sem nome')}</b> (${esc(o.printer || 'padrão')}, ${(o.categorias || []).length} categoria(s)${o.recibo ? ', recibo' : ''})`).join(' · ')}</div>`
+    : `<div style="font-size:11px;color:var(--muted)">Nenhum outro computador configurado ainda. Configure também no outro computador, dentro do EstimaFood Print dele.</div>`;
+
+  wrap.innerHTML = toggleHtml + `
+    <div style="margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:10px;display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:12px;font-weight:800">Este computador</div>
+      <div>
+        <label class="form-label">Nome deste computador</label>
+        <input class="form-input" value="${esc(pc.nome)}" placeholder="Ex: Cozinha, Baixo, Caixa" maxlength="30"
+          onchange="_printPCSetCampo('nome', this.value.trim())">
+      </div>
+      <div>
+        <label class="form-label">Impressora deste computador</label>
+        <div style="display:flex;gap:8px">
+          <select class="form-input" onchange="_printPCSetCampo('printer', this.value)" style="flex:1">
+            <option value="">Padrão do Windows</option>
+            ${printers.map(p => `<option value="${esc(p)}" ${p === pc.printer ? 'selected' : ''}>${esc(p)}</option>`).join('')}
+          </select>
+          <button type="button" class="btn bg" onclick="_printPCTeste()" style="white-space:nowrap">Testar</button>
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
+        <input type="checkbox" ${pc.recibo ? 'checked' : ''} onchange="_printPCSetCampo('recibo', this.checked)" style="width:16px;height:16px">
+        <span><b>Imprimir recibo do caixa aqui</b> <span style="color:var(--muted)">(pedido completo com valores — delivery/balcão)</span></span>
+      </label>
+      ${!pc.recibo && !reciboOutros.length ? `<div style="font-size:10px;color:var(--warn,#c99b3a)">Nenhum computador está imprimindo o recibo do caixa.</div>` : ''}
+      <div>
+        <label class="form-label">Categorias que este computador imprime</label>
+        <div style="border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto">
+          ${catsHtml || '<div style="padding:10px;font-size:11px;color:var(--muted)">Nenhuma categoria no cardápio.</div>'}
+        </div>
+      </div>
+      ${avisoSemDono}
+      ${outrosHtml}
+      <div style="font-size:10px;color:var(--muted)">Com esse modo ligado, "Modo das vias", "Setores por categoria" e as impressoras de caixa/cozinha abaixo não são usados pra impressão automática. O app do garçom só lança o pedido; quem imprime são os computadores.</div>
+    </div>`;
+}
+window._renderPrintPorComputador = _renderPrintPorComputador;
+
+// Mantém o registro deste computador em dia no servidor (nome/categorias),
+// pra aparecer pros outros computadores mesmo se ninguém mexer na tela.
+setTimeout(() => {
+  if (_printModoPCAtivo() && window.ElectronPrint && localStorage.getItem('printPCConfig')) {
+    _printPCSaveConfig(_printPCGetConfig());
+  }
+}, 8000);

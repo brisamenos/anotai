@@ -3497,6 +3497,11 @@ async function createOrder() {
     if (Number(orderData.id) > (_maxKnownOrderId || 0)) _maxKnownOrderId = Number(orderData.id);
     if (!ordersKanban.find(x => x.id === orderData.id)) ordersKanban.unshift(mapOrder(orderData));
     renderKanban();
+    // Impressão por computador: quem lançou imprime a parte dele; os outros
+    // computadores imprimem a deles pelo tempo real.
+    if (window._printModoPCAtivo?.() && (window._printMode || _printMode) === 'auto' && typeof printOrder === 'function') {
+      printOrder(mapOrder(orderData));
+    }
 
     sbLoading(false);
 

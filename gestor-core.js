@@ -1171,7 +1171,8 @@ async function _printComandaMesa(mesaNum, mesaData) {
   const fontSize = parseInt(cfg.fontSize) || 13;
   const rodape   = cfg.rodape || 'Obrigado pela preferência!';
   const fmt      = localStorage.getItem('printFormat') || cfg.format || '80mm';
-  const printer  = cfg.printer_caixa || cfg.printer || localStorage.getItem('printPrinter') || '';
+  const _pcPrinter = (window._printModoPCAtivo?.() && window.ElectronPrint) ? (window._printPCGetConfig?.().printer || '') : '';
+  const printer  = _pcPrinter || cfg.printer_caixa || cfg.printer || localStorage.getItem('printPrinter') || '';
   const pagForma = mesaData.pag_forma || '';
   const total    = parseFloat(mesaData.total || 0);
   const now      = new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
@@ -1347,6 +1348,12 @@ function subscribeOrders() {
         const hasFoodItems = Array.isArray(p.new.items) && p.new.items.some(i => i.item_status === 'producao');
         _patchOrderInCache(p.new);
         _renderMesaPageFromCache();
+        // Impressão por computador: comida E bebida entram (cada PC filtra
+        // pelas categorias dele; item já impresso aqui não repete)
+        if (window._printModoPCAtivo?.() && (window._printMode || _printMode) === 'auto') {
+          const _novosPC = _parseItems(p.new.items).filter(i => i.item_status === 'producao' || i.item_status === 'pronto');
+          if (_novosPC.length) printOrder(Object.assign({}, mapOrder(p.new), { items: _novosPC }));
+        }
         if (hasFoodItems) {
           playOrderSound();
           const foodList = p.new.items.filter(i => i.item_status === 'producao').map(i => i.qty + 'x ' + i.name).join(', ');
@@ -1355,7 +1362,7 @@ function subscribeOrders() {
           const nc = document.getElementById('notif-count');
           if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
           // Auto-impressão para pedidos de mesa — só imprime itens NOVOS (producao)
-          if ((window._printMode || _printMode) === "auto") {
+          if ((window._printMode || _printMode) === "auto" && !window._printModoPCAtivo?.()) {
             const _mapped = mapOrder(p.new);
             const _onlyNew = (Array.isArray(p.new.items) ? p.new.items : []).filter(i => i.item_status === 'producao');
             if (_onlyNew.length) { const _clone = Object.assign({}, _mapped, { items: _onlyNew }); printOrder(_clone); }
@@ -1486,6 +1493,15 @@ function subscribeOrders() {
         // Detecta novos itens de cozinha adicionados ao UPDATE da comanda
         if (p.new.status === 'mesa_aberta') {
           const _pNewItems = _parseItems(p.new.items);
+          // Impressão por computador: itens lançados nos últimos 10 min
+          // (comida e bebida); o controle por item_id evita repetir.
+          if (window._printModoPCAtivo?.() && (window._printMode || _printMode) === 'auto') {
+            const _limPC = Date.now() - 10 * 60 * 1000;
+            const _novosPC = _pNewItems.filter(i =>
+              (i.item_status === 'producao' || i.item_status === 'pronto') && i.item_id &&
+              new Date(i.added_at || 0).getTime() >= _limPC);
+            if (_novosPC.length) printOrder(Object.assign({}, mapOrder(p.new), { items: _novosPC }));
+          }
           const prev = mesaOrdersCache.find(o => o.id === p.new.id);
           const prevProducao = prev ? _parseItems(prev.items).filter(i => i.item_status === 'producao').length : 0;
           const newProducao  = _pNewItems.filter(i => i.item_status === 'producao').length;
@@ -1496,7 +1512,7 @@ function subscribeOrders() {
             showToast('\uD83C\uDF74', 'Mesa ' + p.new.mesa_num + ' — ' + newFoods);
             sendBrowserNotif('\uD83C\uDF74 Mesa ' + p.new.mesa_num, newFoods);
             // Auto-impressão — só os itens NOVOS desta rodada
-            if ((window._printMode || _printMode) === "auto" && _newFoodItems.length) {
+            if ((window._printMode || _printMode) === "auto" && _newFoodItems.length && !window._printModoPCAtivo?.()) {
               const _clone = Object.assign({}, mapOrder(p.new), { items: _newFoodItems });
               printOrder(_clone);
             }

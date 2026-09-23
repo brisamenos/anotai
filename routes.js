@@ -8283,6 +8283,48 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Impressão por computador: registro de cada PC ─────
+  // Cada computador guarda localmente o que imprime; aqui só fica um espelho
+  // pra o gestor mostrar quem imprime o quê e avisar categoria sem dono.
+  if (upath === '/api/print-pcs' && (req.method === 'GET' || req.method === 'POST')) {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS print_pcs (
+        tenant_id TEXT NOT NULL, pc_id TEXT NOT NULL,
+        nome TEXT, printer TEXT, categorias TEXT, recibo INTEGER DEFAULT 0,
+        updated_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (tenant_id, pc_id)
+      )`)
+      if (req.method === 'POST') {
+        const body = await readBody(req)
+        const pcId = String(body.pc_id || '').slice(0, 64)
+        if (!pcId) { send(res, 400, { error: 'pc_id obrigatório' }); return true }
+        if (body.remover) {
+          db.prepare(`DELETE FROM print_pcs WHERE tenant_id=? AND pc_id=?`).run(tid, pcId)
+        } else {
+          const cats = Array.isArray(body.categorias) ? body.categorias.map(String).slice(0, 300) : []
+          db.prepare(`INSERT INTO print_pcs (tenant_id, pc_id, nome, printer, categorias, recibo, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(tenant_id, pc_id) DO UPDATE SET nome=excluded.nome, printer=excluded.printer,
+              categorias=excluded.categorias, recibo=excluded.recibo, updated_at=excluded.updated_at`
+          ).run(tid, pcId, String(body.nome || '').slice(0, 60), String(body.printer || '').slice(0, 200), JSON.stringify(cats), body.recibo ? 1 : 0)
+        }
+        send(res, 200, { ok: true })
+        return true
+      }
+      const rows = db.prepare(
+        `SELECT pc_id, nome, printer, categorias, recibo, updated_at FROM print_pcs WHERE tenant_id=? AND updated_at > datetime('now','-30 days') ORDER BY nome`
+      ).all(tid).map(r => {
+        let categorias = []
+        try { categorias = JSON.parse(r.categorias || '[]') } catch (_) {}
+        return { ...r, categorias, recibo: !!r.recibo }
+      })
+      send(res, 200, { pcs: rows })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
   // ── Diagnóstico: últimos jobs da fila (sem o HTML) ─────
   if (req.method === 'GET' && upath === '/api/print-queue/recent') {
     const tid = req.headers['x-tenant-id']

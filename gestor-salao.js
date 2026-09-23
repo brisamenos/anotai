@@ -1978,7 +1978,13 @@ async function submitGarcomOrder() {
         }
       };
 
-      if (_autoPrintOn) {
+      if (_autoPrintOn && window._printModoPCAtivo?.()) {
+        // Impressão por computador: este PC imprime a parte dele agora; os
+        // outros computadores recebem pelo tempo real e imprimem a deles.
+        if (typeof printOrder === 'function' && savedOrder?.id) {
+          await printOrder(Object.assign({}, mapOrder(savedOrder), { items: newItems }));
+        }
+      } else if (_autoPrintOn) {
         const _htmlCozinha = _renderViaHtml('VIA DA COZINHA', itensCozinha);
         if (_htmlCozinha) await _printJob(_htmlCozinha, 'cozinha');
 

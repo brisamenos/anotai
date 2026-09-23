@@ -2398,6 +2398,12 @@ function _garcomDedupeKey(orderId, printer, items) {
 async function garcomPrint(order, newItems) {
   try {
     const cfg      = _garcomPrintCfg || {};
+    // Impressão por computador: quem imprime são os computadores da loja
+    // (cada um a sua parte). O garçom só lança o pedido.
+    if (cfg.printModoPC === true) {
+      console.log('[GARCOM PRINT] Impressão por computador ativa — computadores imprimem.');
+      return;
+    }
     const nome     = (_garcomNomeLoja || cfg.nome || 'RESTAURANTE').toUpperCase();
     const fontSize = parseInt(cfg.fontSize) || 12;
     const rodape   = cfg.rodape || 'Bom apetite!';
