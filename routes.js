@@ -8187,9 +8187,22 @@ module.exports = async function handleRoutes(req, res, ctx) {
       )`)
       // Migration: adiciona coluna tipo se não existir (para DBs já criados)
       try { db.exec(`ALTER TABLE print_jobs ADD COLUMN tipo TEXT DEFAULT NULL`) } catch (_) {}
+      try { db.exec(`ALTER TABLE print_jobs ADD COLUMN dedupe_key TEXT DEFAULT NULL`) } catch (_) {}
+      // Anti-duplicidade entre computadores: mesmo job do mesmo pedido
+      // enviado pelos dois gestores — só o primeiro vale.
+      const dedupeKey = body.dedupe_key ? String(body.dedupe_key).slice(0, 300) : null
+      if (dedupeKey) {
+        const existe = db.prepare(
+          `SELECT id FROM print_jobs WHERE tenant_id=? AND dedupe_key=? AND created_at > datetime('now','-3 minutes') LIMIT 1`
+        ).get(tid, dedupeKey)
+        if (existe) { send(res, 200, { ok: true, dup: true, id: existe.id }); return true }
+      }
+      // status 'done' = computador já imprimiu localmente, só registra a chave
+      const jobStatus = body.status === 'done' ? 'done' : 'pending'
       const info = db.prepare(
-        `INSERT INTO print_jobs (tenant_id, html, format, printer, tipo) VALUES (?, ?, ?, ?, ?)`
-      ).run(tid, body.html, body.format || 'A4', body.printer || null, body.tipo || null)
+        `INSERT INTO print_jobs (tenant_id, html, format, printer, tipo, dedupe_key, status) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).run(tid, body.html, body.format || 'A4', body.printer || null, body.tipo || null, dedupeKey, jobStatus)
+      if (jobStatus === 'done') { send(res, 201, { ok: true, id: info.lastInsertRowid }); return true }
       const job = {
         id: info.lastInsertRowid,
         tenant_id: tid,

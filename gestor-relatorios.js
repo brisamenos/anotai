@@ -3035,7 +3035,8 @@ function _buildSetorPrintJobsForItems(order, cfg, lista, opts = {}) {
   return Array.from(buckets.values()).map(bucket => ({
     html: _buildSetorHtml(order, cfg, bucket.title, bucket.items),
     printer: bucket.printer || '',
-    tipo: 'cozinha'
+    tipo: 'cozinha',
+    items: bucket.items
   }));
 }
 window._buildSetorPrintJobsForItems = _buildSetorPrintJobsForItems;
@@ -4635,7 +4636,8 @@ function _printBuildJobsForSelection(order, ticket, cfg, selectedItems, includeR
     jobs.push({
       html: _buildSetorHtml(order, cfg, bucket.title, bucket.items),
       printer: bucket.printer || '',
-      tipo: bucket.printer && bucket.printer === _printPrinter ? 'caixa' : 'cozinha'
+      tipo: bucket.printer && bucket.printer === _printPrinter ? 'caixa' : 'cozinha',
+      items: bucket.items
     });
   });
 
@@ -4895,17 +4897,18 @@ async function printOrder(order, opts = {}) {
   }
 
   for (const job of jobs) {
-    await _printJobCascade(job.html, fmt, job.printer, order, cfg, job.tipo);
+    await _printJobCascade(job.html, fmt, job.printer, order, cfg, job.tipo, { dedupe: !opts.manualChoice, items: job.items });
   }
 }
 
 // ── Multi-computador: cada PC só imprime nas impressoras ligadas nele ──
 // Com o app desktop (Electron) aberto em mais de um computador, TODOS
 // recebem o mesmo pedido e montam os mesmos jobs (um por setor). Antes,
-// cada PC mandava todos os jobs pra impressão local — e quando a
-// impressora do job não existia ali, o Windows jogava na impressora
-// padrão. Resultado: categoria A e B saindo nas duas impressoras.
-// Agora o job só é impresso no computador que tem aquela impressora.
+// cada PC tentava imprimir todos os jobs; o que falhava (impressora de
+// outro PC) caía na fila do servidor e era impresso de novo pelo outro
+// computador — cada via saía em duplicidade.
+// Agora: impressora local → imprime aqui; de outro PC → vai pra fila.
+// O servidor descarta o job repetido (dedupe_key), então sai uma vez só.
 let _printLocalPrintersCache = { list: null, ts: 0 };
 async function _printGetLocalPrinters() {
   if (!window.ElectronPrint) return null;
@@ -4953,8 +4956,38 @@ async function _printPrinterEhDesteComputador(printerName) {
 }
 window._printPrinterEhDesteComputador = _printPrinterEhDesteComputador;
 
+// Chave anti-duplicidade: os dois computadores montam o mesmo job pro mesmo
+// pedido; o servidor aceita só o primeiro. Ignora data/hora do ticket, que
+// pode variar 1 minuto entre um PC e outro.
+function _printHashStr(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+// Formato IGUAL ao do garcom.html (_garcomDedupeKey): pedido + impressora +
+// item_id dos itens da via. Assim o job que o app do garçom manda e o job
+// que os gestores montam pro mesmo pedido são reconhecidos como o mesmo.
+function _printDedupeKey(order, printer, tipo, html, items) {
+  if (!order || order.id === undefined || order.id === null || order.id === '') return '';
+  const ids = (Array.isArray(items) ? items : []).map(i => i && i.item_id).filter(Boolean).map(String).sort();
+  if (ids.length) return `${order.id}|${printer || ''}|i:${_printHashStr(ids.join(','))}`;
+  const semData = String(html || '').replace(/\d{2}\/\d{2}\/\d{4},?\s*\d{2}:\d{2}(:\d{2})?/g, '');
+  return `${order.id}|${printer || ''}|${tipo || ''}|h:${_printHashStr(semData)}`;
+}
+async function _printQueuePost(payload) {
+  const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+  if (!tid) throw new Error('sem tenant');
+  const r = await fetch('/api/print-queue/job', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json().catch(() => ({}));
+}
+
 // ── Cascata de impressão silenciosa (1 job) ──────────────
-async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
+async function _printJobCascade(html, fmt, printer, order, cfg, tipo, cascadeOpts = {}) {
   let compatibleAgentActive = false;
   // 1️⃣ Electron — usa printHtml para enviar HTML + impressora específica do job
   if (window.ElectronPrint) {
@@ -4971,10 +5004,26 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
         const sel = await window.ElectronPrint.showPrinterDialog(targetPrinter);
         if (sel.cancelled) return;
         targetPrinter = sel.printer;
-      } else if (!(await _printPrinterEhDesteComputador(targetPrinter))) {
-        // Impressora do setor está em outro computador — ele imprime lá.
-        console.info('[PRINT] Job de "' + targetPrinter + '" ignorado aqui: impressora não está neste computador.');
-        return;
+      } else {
+        const dKey = cascadeOpts.dedupe ? _printDedupeKey(order, printer || '', tipo, html, cascadeOpts.items) : '';
+        if (!(await _printPrinterEhDesteComputador(targetPrinter))) {
+          // Impressora do setor está em outro computador: manda pra fila do
+          // servidor, o EstimaFood Print de lá pega e imprime.
+          try {
+            const d = await _printQueuePost({ html, format: fmt, printer: targetPrinter || undefined, tipo: tipo || undefined, dedupe_key: dKey || undefined, marginH: _printMarginH, marginV: _printMarginV });
+            if (!d?.dup) sbToast('ok', '🖨️ Enviado → ' + (targetPrinter || 'caixa'));
+          } catch (e) { console.warn('[PRINT] Falha ao enviar pra fila:', e.message); }
+          return;
+        }
+        // Impressora é deste computador: registra o job como já impresso
+        // aqui. Se o outro computador já mandou esse mesmo job pra fila,
+        // não imprime de novo (a fila entrega pra este PC).
+        if (dKey) {
+          try {
+            const d = await _printQueuePost({ html, format: fmt, printer: targetPrinter || undefined, tipo: tipo || undefined, dedupe_key: dKey, status: 'done' });
+            if (d?.dup) return;
+          } catch (_) { /* servidor fora: imprime mesmo assim */ }
+        }
       }
 
       if (window.ElectronPrint.printHtml) {

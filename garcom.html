@@ -2374,8 +2374,22 @@ function _garcomBuildSetorJobs(order, cfg, lista, defaultPrinter) {
   return Array.from(buckets.values()).map(bucket => ({
     html: _garcomBuildSetorHtml(order, cfg, bucket.title, bucket.items),
     printer: bucket.printer || '',
-    tipo: 'cozinha'
+    tipo: 'cozinha',
+    dedupe_key: _garcomDedupeKey(order && order.id, bucket.printer || '', bucket.items)
   }));
+}
+
+// Mesma chave que o gestor monta (_printDedupeKey em gestor-relatorios.js):
+// se o gestor também imprimir essa rodada, o servidor aceita só uma.
+function _garcomHashStr(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+function _garcomDedupeKey(orderId, printer, items) {
+  const ids = (Array.isArray(items) ? items : []).map(i => i && i.item_id).filter(Boolean).map(String).sort();
+  if (orderId === undefined || orderId === null || orderId === '' || !ids.length) return undefined;
+  return `${orderId}|${printer || ''}|i:${_garcomHashStr(ids.join(','))}`;
 }
 
 // ── Impressão automática do garçom ─────────────────────
@@ -2395,7 +2409,10 @@ async function garcomPrint(order, newItems) {
     const printerCozinha = cfg.printer_cozinha || cfg.printPrinterCozinha || localStorage.getItem('printPrinterCozinha') || '';
     const viaMode = cfg.printViaMode || localStorage.getItem('printViaMode') || 'combinado';
     const setoresAtivos = _garcomHasSectorRoutes();
-    const doisImpressoras = viaMode === 'separado' && (printerCozinha || setoresAtivos);
+    // Impressora por categoria configurada manda em tudo (igual ao gestor),
+    // em qualquer modo de vias — antes só valia no modo "separado" e o
+    // garçom jogava a comanda inteira numa impressora só.
+    const doisImpressoras = setoresAtivos || (viaMode === 'separado' && printerCozinha);
     console.log('[GARCOM PRINT] modo vias:', viaMode, '| caixa:', printerCaixa || '(padrão)', '| cozinha:', printerCozinha || '(nenhuma)', '| dois:', doisImpressoras);
     const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
     const orderNum = order.mesa_num ? `Mesa ${order.mesa_num}` : (order.id ? `#${_garcomOrderNum(order.id, order.order_num)}` : '?');
@@ -2483,7 +2500,7 @@ async function garcomPrint(order, newItems) {
       try {
         const jobs = [];
         if (setorJobs.length) {
-          setorJobs.forEach(job => jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: job.html, format: fmt, printer: job.printer || undefined, tipo: job.tipo || 'cozinha' }) })));
+          setorJobs.forEach(job => jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: job.html, format: fmt, printer: job.printer || undefined, tipo: job.tipo || 'cozinha', dedupe_key: job.dedupe_key }) })));
         } else if (htmlCozinha) {
           jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: htmlCozinha, format: fmt, printer: printerCozinha, tipo: 'cozinha' }) }));
         }
