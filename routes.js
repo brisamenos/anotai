@@ -8217,6 +8217,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const parsedUrl = new URL(req.url, 'http://localhost')
     const tipoFilter = parsedUrl.searchParams.get('tipo') || null
     const printerFilter = parsedUrl.searchParams.get('printer') || null
+    // App desktop (EstimaFood Print) manda ?printers=A,B com TODAS as
+    // impressoras que aquele computador enxerga. Antes esse parâmetro era
+    // ignorado e qualquer computador pegava qualquer job.
+    const printersList = String(parsedUrl.searchParams.get('printers') || '')
+      .split(',').map(p => p.trim()).filter(Boolean)
     try {
       db.exec(`CREATE TABLE IF NOT EXISTS print_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -8230,7 +8235,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
       // Recupera jobs travados em 'processing' há mais de 2 minutos — agente pode ter caído
       try { db.exec(`UPDATE print_jobs SET status='pending' WHERE status='processing' AND created_at < datetime('now','-2 minutes')`) } catch (_) {}
       let jobs
-      if (tipoFilter && printerFilter) {
+      if (printersList.length && !tipoFilter && !printerFilter) {
+        // Só jobs das impressoras deste computador, ou sem impressora definida
+        const ph = printersList.map(() => '?').join(',')
+        jobs = db.prepare(
+          `SELECT id, html, format, printer, tipo FROM print_jobs WHERE tenant_id=? AND status='pending' AND (printer IN (${ph}) OR printer IS NULL OR printer='') ORDER BY id ASC LIMIT 5`
+        ).all(tid, ...printersList)
+      } else if (tipoFilter && printerFilter) {
         // Agente com impressora definida: só pega jobs desse tipo que
         // foram roteados pra essa impressora específica, ou jobs sem
         // impressora definida (fallback antigo, sem setor configurado).
