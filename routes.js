@@ -8280,6 +8280,21 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Diagnóstico: últimos jobs da fila (sem o HTML) ─────
+  if (req.method === 'GET' && upath === '/api/print-queue/recent') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    try {
+      try { db.exec(`ALTER TABLE print_jobs ADD COLUMN dedupe_key TEXT DEFAULT NULL`) } catch (_) {}
+      const rows = db.prepare(
+        `SELECT id, printer, tipo, status, error, dedupe_key, created_at, done_at FROM print_jobs WHERE tenant_id=? ORDER BY id DESC LIMIT 20`
+      ).all(tid)
+      const agents = _activePrintAgents(tid).map(a => ({ printers: a.printer || '', tipo: a.tipo || '' }))
+      send(res, 200, { agents, jobs: rows })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
   // ── Agente marca job como concluído ou erro ───────────
   if (req.method === 'PATCH' && upath.startsWith('/api/print-queue/job/') && upath.endsWith('/done')) {
     const tid   = req.headers['x-tenant-id']

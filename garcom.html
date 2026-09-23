@@ -2457,7 +2457,9 @@ async function garcomPrint(order, newItems) {
     // "Via única" e imprimia os itens de cozinha do mesmo jeito. Nesse modo,
     // o envio do pedido pra cozinha não deve imprimir nada — só a impressão
     // da conta (imprimirContaMesa), no fechamento, continua funcionando.
-    if (viaMode === 'somente_principal') {
+    // Com impressora por categoria configurada, o roteamento por setor manda
+    // (igual ao gestor) — esse modo só vale pra loja sem setores.
+    if (viaMode === 'somente_principal' && !setoresAtivos) {
       console.log('[GARCOM PRINT] Modo "somente caixa" — não imprime via de cozinha ao enviar pedido.');
       return;
     }
