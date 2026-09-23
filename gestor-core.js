@@ -283,6 +283,12 @@ function _verificarSessao() {
     const role = _sessao.role || 'gestor';
     // Salva sessão no Electron para auto-login na próxima abertura
     if (window.ElectronPrint?.saveSession) window.ElectronPrint.saveSession(_sessao).catch(()=>{});
+    // Informa a loja ao EstimaFood Print — sem isso a fila de impressão do
+    // app desktop nunca rodava (não sabia de qual loja buscar os jobs), e as
+    // vias de impressora de outro computador ficavam paradas no servidor.
+    if (window.ElectronPrint?.setTenantId && _sessao?.tenant_id) {
+      window.ElectronPrint.setTenantId(String(_sessao.tenant_id)).catch(()=>{});
+    }
     const el_av   = document.getElementById('sidebar-av');
     const el_nome = document.getElementById('sidebar-nome');
     const el_role = document.getElementById('sidebar-role');

@@ -8247,6 +8247,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
       try { db.exec(`ALTER TABLE print_jobs ADD COLUMN tipo TEXT DEFAULT NULL`) } catch (_) {}
       // Recupera jobs travados em 'processing' há mais de 2 minutos — agente pode ter caído
       try { db.exec(`UPDATE print_jobs SET status='pending' WHERE status='processing' AND created_at < datetime('now','-2 minutes')`) } catch (_) {}
+      // Job pendente há mais de 10 min não imprime mais (evita a cozinha
+      // receber de uma vez comandas velhas que ficaram paradas na fila)
+      try { db.exec(`UPDATE print_jobs SET status='expirado' WHERE status='pending' AND created_at < datetime('now','-10 minutes')`) } catch (_) {}
       let jobs
       if (printersList.length && !tipoFilter && !printerFilter) {
         // Só jobs das impressoras deste computador, ou sem impressora definida
