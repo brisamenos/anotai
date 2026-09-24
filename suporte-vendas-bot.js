@@ -106,7 +106,12 @@ async function sendText(phone, text, delayMs) {
       return { ok: true, data: { id } }
     } catch (e) {
       D.log?.('⚠️', `WuzAPI sendText falhou (${phone}): ${e.message}`)
-      return { ok: false, error: e.message, data: { message: e.message } }
+      // Reserva: se existe instancia Evolution dedicada a cobrancas, tenta por ela
+      if (cfg().cobranca_wa_instance) {
+        const r = await D.sendWA(phone, text, cfg().cobranca_wa_instance, delayMs).catch(() => null)
+        if (r?.ok) return r
+      }
+      return { ok: false, error: `WuzAPI: ${e.message}`, data: { message: `WuzAPI: ${e.message}` } }
     }
   }
   return D.sendWA(phone, text, D.getInstanciaCobranca(), delayMs)

@@ -853,6 +853,87 @@ function _limparRoboFaturaAlert(db, sseBroadcast, tenantId) {
   } catch(e) {}
 }
 
+// Registra na fatura se a mensagem de cobranca foi realmente entregue ao WhatsApp.
+// Antes o painel mostrava "Enviada" so porque existia fatura pendente, mesmo com o envio falhando.
+function _registrarEnvioFatura(db, faturaId, ok, erro) {
+  try {
+    if (ok) {
+      db.prepare(`UPDATE faturas SET wa_enviado_em=datetime('now'), wa_erro=NULL, wa_tentativas=COALESCE(wa_tentativas,0)+1 WHERE id=?`).run(faturaId)
+    } else {
+      db.prepare(`UPDATE faturas SET wa_erro=?, wa_tentativas=COALESCE(wa_tentativas,0)+1 WHERE id=?`).run(String(erro || 'falha no envio').slice(0, 300), faturaId)
+    }
+  } catch {}
+}
+
+// Telefone de cobranca do tenant: telefone_cobranca do super admin; senao, o WhatsApp da loja
+function _telefoneCobrancaTenant(db, t) {
+  let telefone = t.telefone_cobranca ? String(t.telefone_cobranca).replace(/\D/g, '') : null
+  if (!telefone) {
+    try {
+      const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(t.id)
+      if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
+    } catch {}
+  }
+  if (telefone && (telefone.length === 11 || telefone.length === 10)) telefone = '55' + telefone
+  return telefone || null
+}
+
+// Mensagem de lembrete + codigo Pix + QR. Retorna { ok, erro }.
+async function _enviarLembreteFatura(db, t, fatura) {
+  const telefone = _telefoneCobrancaTenant(db, t)
+  if (!telefone) return { ok: false, erro: 'Cliente sem telefone de cobrança nem WhatsApp da loja cadastrado' }
+  const valorTxt = parseFloat(fatura.valor).toFixed(2).replace('.', ',')
+  const venceEmTxt = fatura.vence_em ? new Date(fatura.vence_em + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
+  const msg = [
+    `🧾 *Lembrete: sua mensalidade vence em breve*`,
+    ``,
+    `Olá, *${t.nome}*! Seu plano *${_planoSaasLabel(fatura.plano)}* do ${_brandNome(t.segmento)} vence em *${venceEmTxt}*.`,
+    ``,
+    `💰 *Valor:* R$ ${valorTxt}`,
+    `⏰ *Pague até:* ${venceEmTxt}`,
+    ``,
+    `💸 *Pague agora via PIX* — escaneie o QR Code que vou te enviar ou use o código Copia e Cola abaixo:`,
+    ``,
+    `_O pagamento renova seu acesso automaticamente._ ✅`,
+    ``,
+    `⚠️ *Atenção:* se o pagamento não for feito até ${venceEmTxt}, o acesso ao sistema será suspenso.`
+  ].join('\n')
+  const r = await _svBot.sendText(telefone, msg)
+  if (!r?.ok) return { ok: false, erro: r?.error || r?.data?.message || 'O WhatsApp recusou o envio' }
+  if (fatura.qr_code) {
+    await new Promise(res => setTimeout(res, 1000))
+    await _svBot.sendText(telefone, fatura.qr_code)
+  }
+  if (fatura.qr_code_base64) await _svBot.sendImage(telefone, fatura.qr_code_base64, `📱 QR Code PIX — R$ ${valorTxt}`)
+  return { ok: true }
+}
+
+// Faturas automaticas cuja mensagem nao chegou: tenta de novo (ate 4 vezes, em horario comercial)
+async function _retentarLembretesNaoEntregues(ctx) {
+  const { db, log } = ctx
+  const pendentes = db.prepare(`
+    SELECT f.* FROM faturas f
+    WHERE f.status='pendente'
+      AND f.wa_enviado_em IS NULL
+      AND COALESCE(f.wa_tentativas,0) < 4
+      AND f.created_at > datetime('now','-7 days')
+      AND (f.vence_em IS NULL OR date(f.vence_em) >= date('now','-1 day'))
+      AND f.obs LIKE 'Gerada automaticamente%'
+  `).all()
+  for (const f of pendentes) {
+    const t = db.prepare('SELECT * FROM tenants WHERE id=?').get(f.tenant_id)
+    if (!t || !t.ativo) continue
+    try {
+      const r = await _enviarLembreteFatura(db, t, f)
+      _registrarEnvioFatura(db, f.id, r.ok, r.erro)
+      log(r.ok ? '📨' : '⚠️', `Lembrete de fatura ${r.ok ? 'entregue' : 'falhou de novo'}: ${t.nome} (fatura ${f.id})${r.ok ? '' : ' — ' + r.erro}`)
+    } catch (e) {
+      _registrarEnvioFatura(db, f.id, false, e.message)
+    }
+    await new Promise(res => setTimeout(res, 3000))
+  }
+}
+
 function _iniciarAutoCobrancaJob(ctx) {
   _svBotInit(ctx)
   if (_autoCobrancaJobIniciado) return
@@ -869,6 +950,10 @@ function _iniciarAutoCobrancaJob(ctx) {
       // pendente (mais abaixo) evita mandar a mensagem mais de uma vez no
       // mesmo dia mesmo rodando várias vezes dentro da mesma hora.
       const horaBrasilia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getHours()
+      // Lembretes que falharam: nova tentativa a cada 30 min, das 9h as 19h
+      if (horaBrasilia >= 9 && horaBrasilia < 19) {
+        await _retentarLembretesNaoEntregues(ctx).catch(e => log('⚠️', 'Nova tentativa de lembretes erro:', e.message))
+      }
       if (horaBrasilia !== 9) return
 
       // Reverte preços promocionais/personalizados vencidos para o valor geral
@@ -1000,47 +1085,16 @@ function _iniciarAutoCobrancaJob(ctx) {
             venceEmTxt: new Date(venceEm + 'T00:00:00').toLocaleDateString('pt-BR')
           })
 
-          // Manda WA — prioriza o telefone de cobrança cadastrado no super admin;
-          // se não houver, cai pro WhatsApp da loja (store_config)
+          // Manda WA (telefone de cobranca do super admin; senao, WhatsApp da loja) e registra se chegou
           try {
-            let telefone = t.telefone_cobranca ? String(t.telefone_cobranca).replace(/\D/g, '') : null
-            if (!telefone) {
-              const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(t.id)
-              if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
-            }
-            if (telefone && (telefone.length === 11 || telefone.length === 10)) telefone = '55' + telefone
-            if (telefone) {
-              const valorTxt = parseFloat(valor).toFixed(2).replace('.', ',')
-              const planoNome = _planoSaasLabel(plano)
-              // venceEm (linha acima) já é o vencimento real do plano — usa
-              // direto, com o mesmo truque de T00:00:00 pra não deslocar
-              // o dia por causa do fuso horário do servidor.
-              const venceEmTxt = new Date(venceEm + 'T00:00:00').toLocaleDateString('pt-BR')
-              const msg = [
-                `🧾 *Lembrete: sua mensalidade vence em breve*`,
-                ``,
-                `Olá, *${t.nome}*! Seu plano *${planoNome}* do ${_brandNome(t.segmento)} vence em *2 dias*.`,
-                ``,
-                `💰 *Valor:* R$ ${valorTxt}`,
-                `⏰ *Pague até:* ${venceEmTxt}`,
-                ``,
-                `💸 *Pague agora via PIX* — escaneie o QR Code que vou te enviar ou use o código Copia e Cola abaixo:`,
-                ``,
-                `_O pagamento renova seu acesso automaticamente._ ✅`,
-                ``,
-                `⚠️ *Atenção:* se o pagamento não for feito até ${venceEmTxt}, o acesso ao sistema será suspenso.`
-              ].join('\n')
-              const instCob = _getInstanciaCobranca(db, EVO_INST)
-              await _svBot.sendText(telefone, msg)
-              if (qr) {
-                await new Promise(r => setTimeout(r, 1000))
-                await _svBot.sendText(telefone, qr) // mensagem separada — facilita copiar o código
-              }
-              if (qrB64) {
-                await _svBot.sendImage(telefone, qrB64, `📱 QR Code PIX — R$ ${valorTxt}`)
-              }
-            }
-          } catch (eWa) { log('⚠️', `Auto-cobrança WA falhou tenant=${t.nome}: ${eWa.message}`) }
+            const r = await _enviarLembreteFatura(db, t, fatura)
+            _registrarEnvioFatura(db, fatura.id, r.ok, r.erro)
+            if (r.ok) log('📨', `Auto-cobrança WA entregue: ${t.nome} (fatura ${fatura.id})`)
+            else log('⚠️', `Auto-cobrança WA NÃO entregue: ${t.nome} (fatura ${fatura.id}) — ${r.erro}. Nova tentativa em 30 min.`)
+          } catch (eWa) {
+            _registrarEnvioFatura(db, fatura.id, false, eWa.message)
+            log('⚠️', `Auto-cobrança WA falhou tenant=${t.nome}: ${eWa.message}`)
+          }
 
           geradas++
         } catch (e) {
@@ -8668,6 +8722,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       }
       if (!telefone) {
         log('⚠️', `Cobrança WA: tenant ${tenant.nome} sem telefone — link gerado mas não enviado`)
+        _registrarEnvioFatura(db, fatura.id, false, 'Cliente sem telefone de cobrança nem WhatsApp da loja cadastrado')
         return { enviado: false, motivo: 'telefone_nao_configurado' }
       }
       // Garante DDI 55
@@ -8705,10 +8760,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const r = await _svBot.sendText(telefone, msg)
       if (!r.ok) {
         const motivo = r.data?.message || r.data?.error || r.error || 'Evolution API recusou o envio'
-        log('⚠️', `Cobrança WA FALHOU: tenant=${tenant.nome} fatura=${fatura.id} tel=${telefone} (instância: ${instCob}) — ${motivo}`)
+        log('⚠️', `Cobrança WA FALHOU: tenant=${tenant.nome} fatura=${fatura.id} tel=${telefone} (canal: ${_svBot.provider()}) — ${motivo}`)
+        _registrarEnvioFatura(db, fatura.id, false, motivo)
         return { enviado: false, telefone, instance: instCob, motivo }
       }
-      log('📨', `Cobrança WA enviada: tenant=${tenant.nome} fatura=${fatura.id} tel=${telefone} (instância: ${instCob})`)
+      log('📨', `Cobrança WA enviada: tenant=${tenant.nome} fatura=${fatura.id} tel=${telefone} (canal: ${_svBot.provider()})`)
+      _registrarEnvioFatura(db, fatura.id, true)
       return { enviado: true, telefone, instance: instCob }
     } catch (e) {
       log('⚠️', 'Cobrança WA erro:', e.message)

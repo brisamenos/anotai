@@ -1255,6 +1255,11 @@ const MIGRATIONS = [
       PRIMARY KEY (tenant_id, phone)
     )`
   },
+  { version:86, description:'registra se a mensagem de cobranca foi realmente entregue no WhatsApp (antes a fatura pendente aparecia como "Enviada" mesmo quando o envio falhava)', up:[
+    `ALTER TABLE faturas ADD COLUMN wa_enviado_em TEXT`,
+    `ALTER TABLE faturas ADD COLUMN wa_erro TEXT`,
+    `ALTER TABLE faturas ADD COLUMN wa_tentativas INTEGER DEFAULT 0`
+  ]},
 ]
 
 function runMigrations() {
@@ -2463,7 +2468,7 @@ const TABLE_COLS = {
   order_status_history: ['id','tenant_id','order_id','old_status','new_status','actor_type','actor_id','actor_name','origem','note','created_at'],
   fornecedores: ['id','tenant_id','nome','contato','telefone','email','cnpj','endereco','obs','ativo','created_at'],
   contas_pagar: ['id','tenant_id','descricao','valor','vencimento','categoria','fornecedor_id','recorrente','recorrencia','status','pago_em','obs','created_at'],
-  faturas:      ['id','tenant_id','plano','valor','meses','metodo','status','link_pagamento','mp_payment_id','mp_external_ref','qr_code','qr_code_base64','vence_em','pago_em','cancelado_em','obs','created_at'],
+  faturas:      ['id','tenant_id','plano','valor','meses','metodo','status','link_pagamento','mp_payment_id','mp_external_ref','qr_code','qr_code_base64','vence_em','pago_em','cancelado_em','obs','created_at','wa_enviado_em','wa_erro','wa_tentativas'],
   plano_assinaturas: ['id','tenant_id','plano','valor','status','mp_preapproval_id','mp_external_ref','payer_email','payment_method_id','last_authorized_payment_id','last_payment_id','last_payment_status','next_payment_at','started_at','canceled_at','updated_at','created_at'],
   admin_audit_log: ['id','admin_id','admin_nome','admin_email','acao','alvo_tipo','alvo_id','alvo_nome','detalhes','ip','user_agent','created_at'],
   admin_alerts: ['id','tipo','titulo','mensagem','display_mode','bg_color','text_color','font_family','cta_label','cta_whatsapp','target_all','target_tenants','ativo','created_by','created_at','updated_at','expires_at'],

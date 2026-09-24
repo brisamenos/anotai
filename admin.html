@@ -3746,7 +3746,11 @@ function renderDash() {
               </div>
               ${faturaPendente
                 ? `<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-                     <span class="badge bg-green">Enviada</span>
+                     ${faturaPendente.wa_enviado_em
+                        ? `<span class="badge bg-green" title="Entregue em ${escapeHtml(faturaPendente.wa_enviado_em)}">Enviada</span>`
+                        : faturaPendente.wa_erro
+                          ? `<span class="badge" style="background:rgba(239,68,68,.15);color:var(--danger)" title="${escapeHtml(faturaPendente.wa_erro)}">Falhou</span>`
+                          : `<span class="badge" style="background:rgba(245,158,11,.15);color:var(--orange)" title="Fatura gerada, mensagem ainda não confirmada">Não enviada</span>`}
                      <button class="btn bg2 bsm" style="font-size:11px;padding:5px 8px" onclick="reenviarCobranca('${faturaPendente.id}')">Reenviar</button>
                    </div>`
                 : `<button class="btn bp bsm" style="font-size:11px;padding:5px 10px;flex-shrink:0" onclick="cobrarClienteRapido('${c.id}','${escapeHtml(c.nome).replace(/'/g,"\\'")}',this)">Cobrar</button>`
@@ -4819,6 +4823,8 @@ async function reenviarCobranca(id) {
     if (d.wa && d.wa.enviado === false) throw new Error(d.wa.motivo || 'WhatsApp não confirmou o envio');
     toast('ok','Reenviada por WhatsApp');
   } catch(e) { toast('err','Erro: '+e.message); }
+  // Atualiza o selo Enviada / Falhou do dashboard com o resultado real
+  try { await carregarFaturamento(); if (typeof renderDash === 'function') renderDash(); } catch(_) {}
 }
 async function cancelarCobranca(id) {
   if (!confirm('Cancelar esta cobrança?')) return;
