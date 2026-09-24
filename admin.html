@@ -1706,6 +1706,58 @@ td{padding:12px 16px;color:#dce6f7}
           </div>
         </div>
 
+        <!-- WhatsApp de Suporte e Vendas (WuzAPI) -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-head">
+            <div>
+              <div class="card-title">📲 WhatsApp de Suporte e Vendas <span style="font-size:11px;padding:2px 8px;border-radius:99px;background:rgba(37,211,102,.15);color:#25d366;margin-left:6px">WuzAPI</span></div>
+              <div class="card-sub">Robô com menu em lista e botões: 🚀 Vendas · 🛠️ Suporte · 💳 Financeiro. Também envia os lembretes de mensalidade e as confirmações de pagamento.</div>
+            </div>
+          </div>
+
+          <div id="sv-status-badge" style="margin-bottom:14px;font-size:12.5px;color:var(--muted)">Carregando...</div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+            <button class="btn bp bsm" onclick="svConectar()">Conectar WhatsApp</button>
+            <button class="btn bg2 bsm" onclick="svCarregar()">Atualizar status</button>
+            <button class="btn bg2 bsm" onclick="svDesconectar()">Desconectar</button>
+          </div>
+
+          <div id="sv-qr-area" style="text-align:center;padding:4px 0 10px"></div>
+
+          <div class="form-group" style="margin-bottom:14px">
+            <label class="form-label">Canal que responde e envia as cobranças</label>
+            <select class="minput" id="sv-provider">
+              <option value="wuzapi">WuzAPI — com listas e botões (recomendado)</option>
+              <option value="evolution">Evolution API — só texto (instância do card abaixo)</option>
+            </select>
+            <div class="form-hint">Só um canal fica ativo por vez, para o cliente não receber resposta duplicada.</div>
+          </div>
+
+          <div class="form-group" style="margin-bottom:14px">
+            <label class="form-label">WhatsApp do atendente <span style="color:var(--muted);font-weight:400">(recebe chamados, leads e comprovantes)</span></label>
+            <input class="minput" id="sv-atendente" type="text" placeholder="Ex: 85991234567" oninput="this.value=this.value.replace(/\D/g,'').slice(0,11)">
+          </div>
+
+          <div class="form-group" style="margin-bottom:14px">
+            <label class="form-label">Link de demonstração <span style="color:var(--muted);font-weight:400">(opcional)</span></label>
+            <input class="minput" id="sv-demo" type="text" placeholder="https://... (cardápio de exemplo ou vídeo)">
+            <div class="form-hint">Se preenchido, aparece a opção "🎥 Ver demonstração" no menu de Vendas.</div>
+          </div>
+
+          <button class="btn bp bsm" onclick="svSalvar()">Salvar</button>
+
+          <details style="margin-top:14px">
+            <summary style="cursor:pointer;font-size:12.5px;color:var(--muted)">Ver o menu que o cliente recebe</summary>
+            <div style="font-size:12.5px;line-height:1.7;margin-top:8px;color:var(--muted)">
+              <b>🚀 Vendas:</b> 🍽️ Conhecer o sistema · 💰 Plano e preço · 🎥 Demonstração · ✅ Quero assinar / Renovar (gera Pix)<br>
+              <b>🛠️ Suporte:</b> 🆘 Abrir chamado (lista de assuntos + print) · 💬 Falar com atendente<br>
+              <b>💳 Financeiro:</b> 🧾 Pagar fatura (QR + Copia e Cola) · 📅 Meu plano · 📎 Enviar comprovante<br>
+              Cliente cadastrado é reconhecido pelo número e chamado pelo nome da loja. Se você responder pelo celular, o robô pausa 30 min naquela conversa.
+            </div>
+          </details>
+        </div>
+
         <!-- Config WhatsApp para cobranças -->
         <div class="card" style="margin-bottom:20px">
           <div class="card-head">
@@ -3169,7 +3221,7 @@ function navTo(id) {
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
   if (id==='backup')      { renderBackupList(); telegramBackupCarregar(); }
-  if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); carregarCobrancaWA(); conectarAdminSSE(); }
+  if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); carregarCobrancaWA(); svCarregar(); conectarAdminSSE(); }
   if (id==='planos')      { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
   if (id==='comunicados') { renderComunicadoTargetsAdmin(); carregarComunicadosAdmin(); }
   if (id==='faturamento') { carregarFaturamento(); }
@@ -5396,6 +5448,89 @@ async function salvarMpConfig() {
     toast('ok', 'Configuração MP salva!');
     carregarMpConfig();
   } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+// ── 📲 WhatsApp de Suporte e Vendas (WuzAPI) ──────
+let _svQrTimer = null;
+function _svBadge(st, extra) {
+  const el = document.getElementById('sv-status-badge');
+  if (!el) return;
+  const map = {
+    connected:   ['var(--success)', '🟢 Conectado'],
+    connecting:  ['var(--orange)',  '🟡 Aguardando leitura do QR Code'],
+    disconnected:['var(--danger)',  '🔴 Desconectado']
+  };
+  const [cor, txt] = map[st] || ['var(--muted)', String(st || '—')];
+  el.innerHTML = `<span style="color:${cor};font-weight:600">${txt}</span>${extra ? ` <span style="color:var(--muted)">· ${extra}</span>` : ''}`;
+}
+async function _svReq(method, path, body) {
+  const r = await fetch('/api/admin/wuz-cobranca' + path, { method, headers: adminAuthHeader(), body: method === 'GET' ? undefined : JSON.stringify(body || {}) });
+  if (r.status === 401) { toast('err','Sessão expirada'); setTimeout(doLogout,1500); throw new Error('Sessão expirada'); }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+  return d;
+}
+async function svCarregar() {
+  try {
+    const d = await _svReq('GET', '');
+    document.getElementById('sv-provider').value = d.provider || 'evolution';
+    document.getElementById('sv-atendente').value = d.atendente_whatsapp || '';
+    document.getElementById('sv-demo').value = d.demo_link || '';
+    if (!d.wuzapi_configured) { _svBadge('disconnected', 'WuzAPI não configurada no servidor (WUZAPI_URL / WUZAPI_ADMIN_TOKEN)'); return; }
+    _svBadge(d.has_user ? d.status : 'disconnected', d.provider === 'wuzapi' ? 'canal ativo' : 'canal inativo (usando Evolution)');
+    if (d.status === 'connected') { document.getElementById('sv-qr-area').innerHTML = ''; if (_svQrTimer) clearInterval(_svQrTimer); }
+  } catch (e) { _svBadge('erro', e.message); }
+}
+function _svMostrarQR(qr) {
+  document.getElementById('sv-qr-area').innerHTML = `
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px">Escaneie com o WhatsApp de Suporte e Vendas</div>
+    <img src="${qr}" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--accent);background:#fff">
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">O QR Code é atualizado sozinho enquanto você não escaneia</div>`;
+  _svBadge('connecting');
+  if (_svQrTimer) clearInterval(_svQrTimer);
+  let tries = 0;
+  _svQrTimer = setInterval(async () => {
+    if (++tries > 60) { clearInterval(_svQrTimer); return; }
+    try {
+      const r = await _svReq('GET', '/qr');
+      if (r.status === 'connected') {
+        clearInterval(_svQrTimer);
+        document.getElementById('sv-qr-area').innerHTML = '';
+        toast('ok', 'WhatsApp de Suporte e Vendas conectado!');
+        svCarregar();
+      } else if (r.qr) {
+        const img = document.querySelector('#sv-qr-area img');
+        if (img) img.src = r.qr;
+      }
+    } catch (_) {}
+  }, 4000);
+}
+async function svConectar() {
+  const area = document.getElementById('sv-qr-area');
+  area.innerHTML = '<div style="font-size:13px;color:var(--muted)">Conectando na WuzAPI e gerando o QR Code... (até 20s)</div>';
+  try {
+    const r = await _svReq('POST', '/connect');
+    if (r.status === 'connected') { area.innerHTML = ''; toast('ok', 'Já está conectado!'); svCarregar(); return; }
+    if (r.qr) _svMostrarQR(r.qr);
+  } catch (e) {
+    area.innerHTML = `<div style="font-size:13px;color:var(--danger)">${e.message}</div>`;
+  }
+}
+async function svDesconectar() {
+  if (!confirm('Desconectar o WhatsApp de Suporte e Vendas?')) return;
+  try { await _svReq('POST', '/disconnect'); toast('ok', 'Desconectado'); svCarregar(); } catch (e) { toast('err', e.message); }
+}
+async function svSalvar() {
+  try {
+    await _svReq('POST', '/config', {
+      provider: document.getElementById('sv-provider').value,
+      atendente_whatsapp: document.getElementById('sv-atendente').value.trim(),
+      demo_link: document.getElementById('sv-demo').value.trim()
+    });
+    toast('ok', 'Configuração salva!');
+    svCarregar();
+    carregarCobrancaWA();
+  } catch (e) { toast('err', 'Erro: ' + e.message); }
 }
 
 // ── 📲 WhatsApp para cobranças (instância admin) ──────

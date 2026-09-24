@@ -14,6 +14,7 @@ const zlib   = require('zlib')
 const crypto = require('crypto')
 const { buildOrderTrackingMessage } = require('./order-message')
 const { phoneLookupArgs, phoneLookupSql, phonesMatch } = require('./phone-utils')
+const _svBot = require('./suporte-vendas-bot') // WhatsApp de Suporte e Vendas (WuzAPI ou Evolution)
 
 // ── Helper: notifica cliente quando PIX é confirmado (online ou manual) ──────
 function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
@@ -277,14 +278,6 @@ function _getInstanciaCobranca(db, fallbackInst) {
   return fallbackInst
 }
 
-// ═══════════════════════════════════════════════════════
-// CHATBOT DE COBRANÇA — instância admin (Saques PIX)
-// Menu simples: Financeiro / Suporte / Falar com atendente.
-// Estado em memória por telefone (perde-se em restart — aceitável,
-// o cliente só recebe o menu de novo).
-// ═══════════════════════════════════════════════════════
-const _cobrancaBotState = new Map() // phone -> { step, tentativas }
-
 function _cobrancaConfigGlobal(db) {
   try {
     const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
@@ -292,40 +285,9 @@ function _cobrancaConfigGlobal(db) {
   } catch { return {} }
 }
 
-const _MENU_COBRANCA = [
-  `👋 Olá! Bem-vindo ao atendimento do *Estima Food*.`,
-  ``,
-  `Escolha uma opção digitando o número:`,
-  `1️⃣ *Assinar plano*`,
-  `2️⃣ *Falar com atendente*`,
-  `3️⃣ *Suporte*`,
-  `4️⃣ *Financeiro* (pagar fatura / 2ª via)`
-].join('\n')
-
-function _precosPlanosBot(db) {
-  const g = _cobrancaConfigGlobal(db)
-  const essencial = g.preco_essencial !== undefined ? parseFloat(g.preco_essencial) : 79.99
-  const premium   = g.preco_premium   !== undefined ? parseFloat(g.preco_premium)   : 99.90
-  return { essencial, premium }
-}
-
-// Calcula um delay (em ms) proporcional ao tamanho da mensagem, pra simular
-// o tempo real de digitação. Repassado como parâmetro "delay" pro Evolution
-// API, que mostra "digitando..." no WhatsApp do cliente antes de entregar.
-function _delayDigitando(text) {
-  const len = String(text || '').length
-  const ms = 500 + len * 25
-  return Math.max(900, Math.min(ms, 4000))
-}
-
-// Envia mensagem pro cliente já calculando o delay de "digitando..." automaticamente.
-async function _sendWaBot(sendWA, phone, text, inst) {
-  return sendWA(phone, text, inst, _delayDigitando(text))
-}
-
 // Gera cobrança PIX simples (sem opção de cartão) pra uso pelo chatbot.
 // Espelha _gerarCobrancaMP (routes.js dentro de handleRoutes), mas fica
-// no escopo do módulo pra poder ser chamada de dentro de _handleCobrancaBot.
+// no escopo do módulo pra poder ser chamada pelo robô de Suporte e Vendas (suporte-vendas-bot.js).
 async function _gerarCobrancaBotPix(ctx, tenant, opts) {
   const { db, MP_TOKEN, marcarDirty } = ctx
   const { plano, valor, meses } = opts
@@ -373,348 +335,48 @@ async function _gerarCobrancaBotPix(ctx, tenant, opts) {
   return { fatura, link: linkPagamento, qr_code: qrCode, qr_code_base64: qrCodeBase64 }
 }
 
-async function _handleCobrancaBot(ctx, body) {
-  const { EVO_INST, db, _pausaHumano } = ctx
-  const event = body?.event || ''
-  if (event !== 'messages.upsert' && event !== 'message.upsert') return
-
-  const msgs = Array.isArray(body?.data?.messages) ? body.data.messages : (body?.data ? [body.data] : [])
-
-  for (const m of msgs) {
-    const fromMe = m?.key?.fromMe === true || m?.key?.fromMe === 'true'
-    const jid    = m?.key?.remoteJid || ''
-    if (!jid || jid.startsWith('status@') || jid.endsWith('@lid') || jid.includes('@g.us')) continue
-    const phone = jid.replace('@s.whatsapp.net', '').replace('@c.us', '')
-    if (!phone) continue
-
-    const pausaKey = `pausa:_cobranca:${phone}`
-
-    // Admin/Igor respondeu manualmente pelo próprio WhatsApp → pausa o bot pra esse contato
-    if (fromMe) {
-      _pausaHumano.set(pausaKey, Date.now())
-      continue
-    }
-
-    // Bot pausado (conversa sendo levada por humano) — não interfere por 30min
-    const pausaAt = _pausaHumano.get(pausaKey)
-    if (pausaAt && (Date.now() - pausaAt) < 30 * 60 * 1000) continue
-
-    const texto = String(
-      m?.message?.conversation ||
-      m?.message?.extendedTextMessage?.text ||
-      ''
-    ).trim()
-    const temImagem = !!(m?.message?.imageMessage)
-    if (!texto && !temImagem) continue
-
-    // Junta mensagens rápidas do mesmo cliente numa só resposta — sem isso, um
-    // "Oi" seguido de "Boa tarde" (comum quando a pessoa digita em partes) fazia
-    // o bot responder cada mensagem separadamente. Espera 10s de silêncio antes
-    // de processar; cada mensagem nova reinicia a contagem.
-    _bufferizarMensagemCobrancaBot(ctx, phone, texto, temImagem)
-  }
+// O robo de atendimento (menu Vendas / Suporte / Financeiro) fica em suporte-vendas-bot.js.
+// Aqui so injetamos as dependencias dele (uma vez).
+let _svBotPronto = false
+function _svBotInit(ctx) {
+  if (_svBotPronto) return
+  _svBotPronto = true
+  _svBot.init({
+    db: ctx.db,
+    log: ctx.log,
+    marcarDirty: ctx.marcarDirty,
+    sendWA: ctx.sendWA,
+    sendWAImage: ctx.sendWAImage,
+    _pausaHumano: ctx._pausaHumano,
+    phonesMatch,
+    brandNome: _brandNome,
+    getInstanciaCobranca: () => _getInstanciaCobranca(ctx.db, ctx.EVO_INST),
+    gerarCobrancaPix: (tenant, opts) => _gerarCobrancaBotPix(ctx, tenant, opts)
+  })
 }
 
-// Buffer por telefone: { textos: string[], temImagem: boolean, timer } — junta
-// tudo que o cliente mandar dentro da janela de silêncio de 10s antes de chamar
-// o processamento de fato, uma única vez.
-const _cobrancaBotBuffer = new Map()
-const COBRANCA_BOT_DEBOUNCE_MS = 10_000
-
-function _bufferizarMensagemCobrancaBot(ctx, phone, texto, temImagem) {
-  let buf = _cobrancaBotBuffer.get(phone)
-  if (!buf) {
-    buf = { textos: [], temImagem: false, timer: null }
-    _cobrancaBotBuffer.set(phone, buf)
-  }
-  if (texto) buf.textos.push(texto)
-  if (temImagem) buf.temImagem = true
-  if (buf.timer) clearTimeout(buf.timer)
-  buf.timer = setTimeout(() => {
-    _cobrancaBotBuffer.delete(phone)
-    const textoFinal = buf.textos.join('\n')
-    _processarCobrancaBotMsg(ctx, phone, textoFinal, buf.temImagem)
-      .catch(e => ctx.log?.('⚠️', `Bot cobrança (buffer) erro tenant=${phone}:`, e.message))
-  }, COBRANCA_BOT_DEBOUNCE_MS)
+// Corpo cru da requisicao (a WuzAPI pode mandar o webhook como formulario: jsonData=...)
+function _lerCorpoCru(req, limit = 60 * 1024 * 1024) {
+  return new Promise((ok, err) => {
+    const chunks = []
+    let size = 0
+    req.on('data', c => {
+      size += c.length
+      if (size > limit) { req.destroy(); err(new Error('Corpo muito grande')); return }
+      chunks.push(c)
+    })
+    req.on('end', () => ok(Buffer.concat(chunks).toString('utf8')))
+    req.on('error', err)
+  })
 }
 
-async function _processarCobrancaBotMsg(ctx, phone, texto, temImagem) {
-  const { db, log, EVO_INST, sendWA, sendWAImage, _pausaHumano } = ctx
-  const inst = _getInstanciaCobranca(db, EVO_INST)
-  const pausaKey = `pausa:_cobranca:${phone}`
-
-    const gConfig = _cobrancaConfigGlobal(db)
-    const atendenteWa = (gConfig.cobranca_atendente_whatsapp || '').replace(/\D/g, '') || null
-
-    let state = _cobrancaBotState.get(phone) || { step: 'menu', tentativas: 0 }
-
-    // Cliente está no fluxo de suporte aguardando detalhes → repassa texto/imagem pro atendente
-    if (state.step === 'suporte_aguardando_info' && (texto || temImagem)) {
-      await _sendWaBot(sendWA, phone, 'Recebido! ✅ Repassei pro nosso suporte, já te retornam por aqui. 🙏', inst)
-      _cobrancaBotState.delete(phone)
-      _pausaHumano.set(pausaKey, Date.now())
-      if (atendenteWa) {
-        try {
-          const partes = [`🆘 *Novo chamado de suporte*`, ``, `De: ${phone}`]
-          if (texto) partes.push(``, `Mensagem: ${texto}`)
-          if (temImagem) partes.push(``, `📎 Cliente enviou uma imagem — confira o WhatsApp de cobranças.`)
-          await sendWA(atendenteWa, partes.join('\n'), inst)
-        } catch {}
-      }
-      return
-    }
-
-    // Comprovante enviado a qualquer momento (fora do fluxo de suporte) → avisa o atendente e pausa o bot
-    if (temImagem) {
-      await _sendWaBot(sendWA, phone, '📎 Recebi seu comprovante! Vou repassar pro financeiro conferir e te aviso por aqui assim que confirmarmos. 🙏', inst)
-      _pausaHumano.set(pausaKey, Date.now())
-      if (atendenteWa) {
-        try {
-          const tCli = db.prepare(`
-            SELECT id, nome FROM tenants
-            WHERE telefone_cobranca IS NOT NULL AND telefone_cobranca != ''
-          `).all().find(t => phonesMatch(t.telefone_cobranca, phone))
-          await sendWA(atendenteWa, `📎 *Novo comprovante recebido*\n\nDe: ${phone}${tCli ? `\nCliente: ${tCli.nome}` : ''}\n\nConfira o WhatsApp de cobranças.`, inst)
-        } catch {}
-      }
-      return
-    }
-
-    if (!texto) return
-
-    const txt = texto.toLowerCase()
-    const isGreeting = /^(oi+|ol[aá]+|bom dia|boa tarde|boa noite|menu|in[ií]cio|come[cç]ar)\b/.test(txt)
-
-    // Saudação a qualquer momento reseta pro menu
-    if (isGreeting || state.step === 'novo') {
-      state = { step: 'menu', tentativas: 0 }
-      _cobrancaBotState.set(phone, state)
-      await _sendWaBot(sendWA, phone, _MENU_COBRANCA, inst)
-      return
-    }
-
-    if (state.step === 'menu') {
-      if (/^1|assinar|plano|contratar/.test(txt)) {
-        state = { step: 'assinar_segmento', tentativas: 0 }
-        _cobrancaBotState.set(phone, state)
-        await _sendWaBot(sendWA, phone, '🍽️ O *Estima Food* é um sistema completo de delivery e gestão pro seu restaurante: cardápio digital, PDV, gestão de mesas e app de garçom, tudo em um só lugar.', inst)
-        await new Promise(r => setTimeout(r, 1200))
-        await _sendWaBot(sendWA, phone, [
-          `🚀 *Alguns benefícios:*`,
-          ``,
-          `✅ Cardápio online personalizado, sem taxa por pedido`,
-          `✅ Pedidos recebidos direto pelo WhatsApp`,
-          `✅ PIX integrado com confirmação automática`,
-          `🤖 Inteligência Artificial no atendimento — responde clientes, tira dúvidas e ajuda a fechar pedidos sozinha`,
-          `✅ Painel completo de gestão (financeiro, estoque, relatórios)`,
-          `✅ App de garçom pra mesas e comandas`
-        ].join('\n'), inst)
-        await new Promise(r => setTimeout(r, 1200))
-        await _sendWaBot(sendWA, phone, '💡 Você configura em poucos minutos e já começa a vender — com suporte sempre que precisar.', inst)
-        await new Promise(r => setTimeout(r, 1200))
-        await _sendWaBot(sendWA, phone, 'Pra eu te indicar o melhor plano, me conta: *qual o seu segmento?* (ex: pizzaria, hamburgueria, doceria, marmitaria, açaiteria...)', inst)
-      } else if (/^2|atendente|igor|humano/.test(txt)) {
-        _cobrancaBotState.delete(phone)
-        _pausaHumano.set(pausaKey, Date.now())
-        await _sendWaBot(sendWA, phone, 'Vou te transferir para a atendente, já já ela te retorna por aqui. Aguarde só um instante! 👤', inst)
-        if (atendenteWa) await sendWA(atendenteWa, `👤 *Cliente pediu atendimento* — ${phone}`, inst)
-      } else if (/^3|suporte/.test(txt)) {
-        state = { step: 'suporte_aguardando_info', tentativas: 0 }
-        _cobrancaBotState.set(phone, state)
-        await _sendWaBot(sendWA, phone, 'Beleza! 🙂 Pra te ajudar mais rápido, me conta o que está acontecendo (pode mandar prints ou fotos também, se ajudar a explicar).', inst)
-      } else if (/^4|financeiro|fatura|pagar/.test(txt)) {
-        state = { step: 'aguardando_telefone', tentativas: 0 }
-        _cobrancaBotState.set(phone, state)
-        await _sendWaBot(sendWA, phone, 'Certo! ✅ Pra localizar sua fatura, me informa o número de telefone cadastrado no sistema (com DDD).\n\nEx: 85991234567', inst)
-      } else {
-        await _sendWaBot(sendWA, phone, 'Não entendi 🤔\n\n' + _MENU_COBRANCA, inst)
-      }
-      return
-    }
-
-    // ── Assinar plano: cliente respondeu o segmento → agora pede o telefone ──
-    if (state.step === 'assinar_segmento') {
-      const segmento = texto.trim().slice(0, 80)
-      if (!segmento) {
-        await _sendWaBot(sendWA, phone, 'Não entendi 🤔 Me conta rapidinho qual o seu segmento (ex: pizzaria, hamburgueria, doceria...).', inst)
-        return
-      }
-      state = { step: 'assinar_telefone', segmento, tentativas: 0 }
-      _cobrancaBotState.set(phone, state)
-      await _sendWaBot(sendWA, phone, 'Anotado! ✅ Agora me informa um telefone com DDD — o mesmo cadastrado no sistema, se você já for cliente, ou qualquer telefone de contato caso ainda não seja.\n\nEx: 85991234567', inst)
-      return
-    }
-
-    if (state.step === 'aguardando_telefone') {
-      const digitado = texto.replace(/\D/g, '')
-      if (digitado.length < 8) {
-        await _sendWaBot(sendWA, phone, 'Não consegui identificar um número válido. Manda só os números, com DDD (ex: 85991234567).', inst)
-        return
-      }
-      const tenant = db.prepare(`
-        SELECT t.*, sc.store_whatsapp FROM tenants t
-        LEFT JOIN store_config sc ON sc.tenant_id = t.id
-        WHERE (t.telefone_cobranca IS NOT NULL AND t.telefone_cobranca != '')
-           OR (sc.store_whatsapp IS NOT NULL AND sc.store_whatsapp != '')
-      `).all().find(t => phonesMatch(t.telefone_cobranca || t.store_whatsapp, digitado))
-
-      if (!tenant) {
-        state.tentativas = (state.tentativas || 0) + 1
-        if (state.tentativas >= 3) {
-          _cobrancaBotState.delete(phone)
-          _pausaHumano.set(pausaKey, Date.now())
-          await _sendWaBot(sendWA, phone, 'Não encontrei esse número no sistema. Vou te encaminhar pro atendente pra te ajudar. 👤', inst)
-          if (atendenteWa) await sendWA(atendenteWa, `⚠️ *Telefone não reconhecido no bot de cobrança* — cliente: ${phone}, informou: ${digitado}`, inst)
-        } else {
-          _cobrancaBotState.set(phone, state)
-          await _sendWaBot(sendWA, phone, 'Não encontrei esse número no sistema. Confere se digitou certo, com DDD (ex: 85991234567).', inst)
-        }
-        return
-      }
-
-      const fatura = db.prepare(`SELECT * FROM faturas WHERE tenant_id=? AND status='pendente' ORDER BY created_at DESC LIMIT 1`).get(tenant.id)
-      if (!fatura) {
-        _cobrancaBotState.delete(phone)
-        await _sendWaBot(sendWA, phone, `Verifiquei aqui e não há nenhuma fatura em aberto pra *${tenant.nome}* no momento. Você está em dia! ✅`, inst)
-        return
-      }
-
-      const valorTxt = parseFloat(fatura.valor).toFixed(2).replace('.', ',')
-      // T00:00:00 evita que a data volte um dia por causa do fuso horário
-      // do servidor (fatura.vence_em é só "YYYY-MM-DD", sem hora).
-      const venceTxt = fatura.vence_em ? new Date(fatura.vence_em + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
-      const msg = [
-        `🧾 *Fatura em aberto — ${tenant.nome}*`,
-        ``,
-        `💰 *Valor:* R$ ${valorTxt}`,
-        `⏰ *Vencimento:* ${venceTxt}`,
-        ``,
-        `💸 Pague via PIX com o código Copia e Cola abaixo, ou pelo QR Code que vou te enviar:`
-      ].join('\n')
-      await _sendWaBot(sendWA, phone, msg, inst)
-      if (fatura.qr_code) {
-        await new Promise(r => setTimeout(r, 1000))
-        await _sendWaBot(sendWA, phone, fatura.qr_code, inst)
-      }
-      if (fatura.qr_code_base64) {
-        await sendWAImage(phone, fatura.qr_code_base64, `📱 QR Code PIX — R$ ${valorTxt}`, inst)
-      }
-      _cobrancaBotState.delete(phone)
-      return
-    }
-
-    // ── Assinar plano: primeiro identifica se é tenant existente ou lead novo ──
-    if (state.step === 'assinar_telefone') {
-      const digitado = texto.replace(/\D/g, '')
-      if (digitado.length < 8) {
-        await _sendWaBot(sendWA, phone, 'Não consegui identificar um número válido. Manda só os números, com DDD (ex: 85991234567).', inst)
-        return
-      }
-      const precos = _precosPlanosBot(db)
-      const essTxt = precos.essencial.toFixed(2).replace('.', ',')
-      const preTxt = precos.premium.toFixed(2).replace('.', ',')
-      const tenant = db.prepare(`
-        SELECT t.*, sc.store_whatsapp FROM tenants t
-        LEFT JOIN store_config sc ON sc.tenant_id = t.id
-        WHERE (t.telefone_cobranca IS NOT NULL AND t.telefone_cobranca != '')
-           OR (sc.store_whatsapp IS NOT NULL AND sc.store_whatsapp != '')
-      `).all().find(t => phonesMatch(t.telefone_cobranca || t.store_whatsapp, digitado))
-
-      if (tenant) {
-        state = { step: 'assinar_escolha_plano', tenantId: tenant.id, segmento: state.segmento, tentativas: 0 }
-        _cobrancaBotState.set(phone, state)
-        await _sendWaBot(sendWA, phone, `Encontrei seu cadastro, *${tenant.nome}*! Seu plano atual é *${_planoSaasLabel(tenant.plano)}*.\n\nQual plano você quer assinar?\n1️⃣ *Essencial* — R$ ${essTxt}/mês\n2️⃣ *Premium* — R$ ${preTxt}/mês`, inst)
-      } else {
-        state = { step: 'lead_escolha_plano', telefoneLead: digitado, segmento: state.segmento, tentativas: 0 }
-        _cobrancaBotState.set(phone, state)
-        await _sendWaBot(sendWA, phone, `Ainda não encontrei seu cadastro — sem problema, vamos começar! 🙌\n\nQual plano você tem interesse em assinar?\n1️⃣ *Essencial* — R$ ${essTxt}/mês\n2️⃣ *Premium* — R$ ${preTxt}/mês`, inst)
-      }
-      return
-    }
-
-    // ── Tenant existente escolheu o plano → gera PIX na hora e envia ──
-    if (state.step === 'assinar_escolha_plano') {
-      let planoEsc = null
-      if (/^1|essencial/.test(txt)) planoEsc = 'essencial'
-      else if (/^2|premium/.test(txt)) planoEsc = 'premium'
-      if (!planoEsc) {
-        await _sendWaBot(sendWA, phone, 'Não entendi 🤔 Responde só com *1* (Essencial) ou *2* (Premium).', inst)
-        return
-      }
-      const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(state.tenantId)
-      if (!tenant) {
-        _cobrancaBotState.delete(phone)
-        _pausaHumano.set(pausaKey, Date.now())
-        await _sendWaBot(sendWA, phone, 'Ops, tive um problema pra localizar seu cadastro. Vou te encaminhar pro atendente. 👤', inst)
-        if (atendenteWa) await sendWA(atendenteWa, `⚠️ *Erro assinar plano* — tenant não encontrado (id=${state.tenantId}), cliente: ${phone}`, inst)
-        return
-      }
-      const precos = _precosPlanosBot(db)
-      const valorEsc = planoEsc === 'premium' ? precos.premium : precos.essencial
-      try {
-        const result = await _gerarCobrancaBotPix(ctx, tenant, { plano: planoEsc, valor: valorEsc, meses: 1 })
-        const valorTxt = valorEsc.toFixed(2).replace('.', ',')
-        const msg = [
-          `🧾 *Assinatura Plano ${_planoSaasLabel(planoEsc)}*`,
-          ``,
-          `💰 *Valor:* R$ ${valorTxt}/mês`,
-          ``,
-          `💸 Pague via PIX com o código Copia e Cola abaixo, ou pelo QR Code que vou te enviar:`
-        ].join('\n')
-        await _sendWaBot(sendWA, phone, msg, inst)
-        if (result.qr_code) {
-          await new Promise(r => setTimeout(r, 1000))
-          await _sendWaBot(sendWA, phone, result.qr_code, inst)
-        }
-        if (result.qr_code_base64) {
-          await sendWAImage(phone, result.qr_code_base64, `📱 QR Code PIX — R$ ${valorTxt}`, inst)
-        }
-        if (atendenteWa) await sendWA(atendenteWa, `💳 *Assinatura solicitada via bot* — ${tenant.nome} escolheu o plano ${_planoSaasLabel(planoEsc)}${state.segmento ? ` (segmento informado: ${state.segmento})` : ''}`, inst)
-      } catch (eBot) {
-        log('⚠️', 'Assinar plano (bot) erro:', eBot.message)
-        _pausaHumano.set(pausaKey, Date.now())
-        await _sendWaBot(sendWA, phone, 'Tive um problema pra gerar o PIX agora. Vou te encaminhar pro atendente pra finalizar. 👤', inst)
-        if (atendenteWa) await sendWA(atendenteWa, `⚠️ *Falha ao gerar PIX de assinatura* — tenant: ${tenant.nome}, plano: ${planoEsc}, erro: ${eBot.message}`, inst)
-      }
-      _cobrancaBotState.delete(phone)
-      return
-    }
-
-    // ── Lead novo escolheu o plano → pede nome do estabelecimento ──
-    if (state.step === 'lead_escolha_plano') {
-      let planoEsc = null
-      if (/^1|essencial/.test(txt)) planoEsc = 'essencial'
-      else if (/^2|premium/.test(txt)) planoEsc = 'premium'
-      if (!planoEsc) {
-        await _sendWaBot(sendWA, phone, 'Não entendi 🤔 Responde só com *1* (Essencial) ou *2* (Premium).', inst)
-        return
-      }
-      state = { step: 'lead_nome', telefoneLead: state.telefoneLead, segmento: state.segmento, planoEsc, tentativas: 0 }
-      _cobrancaBotState.set(phone, state)
-      await _sendWaBot(sendWA, phone, 'Perfeito! Só mais uma coisa — qual o nome do seu restaurante/estabelecimento?', inst)
-      return
-    }
-
-    // ── Lead novo informou o nome → encaminha pro time comercial ──
-    if (state.step === 'lead_nome') {
-      const nomeRestaurante = texto.trim().slice(0, 120)
-      _cobrancaBotState.delete(phone)
-      _pausaHumano.set(pausaKey, Date.now())
-      await _sendWaBot(sendWA, phone, `Perfeito, *${nomeRestaurante}*! 🎉 Um consultor do Estima Food vai te chamar por aqui em breve pra finalizar seu cadastro e liberar seu acesso. Obrigado pelo interesse! 🙌`, inst)
-      if (atendenteWa) {
-        await sendWA(atendenteWa, [
-          `🆕 *Novo lead via bot*`,
-          ``,
-          `Telefone: ${phone}`,
-          `Estabelecimento: ${nomeRestaurante}`,
-          `Segmento: ${state.segmento || '-'}`,
-          `Plano de interesse: ${_planoSaasLabel(state.planoEsc)}`,
-          ``,
-          `Entre em contato pra finalizar o cadastro.`
-        ].join('\n'), inst)
-      }
-      return
-    }
+function _parseWebhookWuz(raw, contentType) {
+  try {
+    if (/application\/json/i.test(contentType || '') || raw.trim().startsWith('{')) return JSON.parse(raw)
+    const form = new URLSearchParams(raw)
+    const jsonData = form.get('jsonData')
+    return jsonData ? JSON.parse(jsonData) : {}
+  } catch { return {} }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1192,6 +854,7 @@ function _limparRoboFaturaAlert(db, sseBroadcast, tenantId) {
 }
 
 function _iniciarAutoCobrancaJob(ctx) {
+  _svBotInit(ctx)
   if (_autoCobrancaJobIniciado) return
   _autoCobrancaJobIniciado = true
   const { db, log, MP_TOKEN, EVO_URL, EVO_KEY, EVO_INST, sendWA, sendWAImage, marcarDirty, sseBroadcast } = ctx
@@ -1368,13 +1031,13 @@ function _iniciarAutoCobrancaJob(ctx) {
                 `⚠️ *Atenção:* se o pagamento não for feito até ${venceEmTxt}, o acesso ao sistema será suspenso.`
               ].join('\n')
               const instCob = _getInstanciaCobranca(db, EVO_INST)
-              await sendWA(telefone, msg, instCob)
+              await _svBot.sendText(telefone, msg)
               if (qr) {
                 await new Promise(r => setTimeout(r, 1000))
-                await sendWA(telefone, qr, instCob) // mensagem separada — facilita copiar o código
+                await _svBot.sendText(telefone, qr) // mensagem separada — facilita copiar o código
               }
               if (qrB64) {
-                await sendWAImage(telefone, qrB64, `📱 QR Code PIX — R$ ${valorTxt}`, instCob)
+                await _svBot.sendImage(telefone, qrB64, `📱 QR Code PIX — R$ ${valorTxt}`)
               }
             }
           } catch (eWa) { log('⚠️', `Auto-cobrança WA falhou tenant=${t.nome}: ${eWa.message}`) }
@@ -1407,6 +1070,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
           chatEnsureThreadFromOrder, chatEnsureThreadFromLead, chatAddMessageFromOrder, chatAddMessageToThread,
           deliveryPausaAtiva, linkCardapioTenant,
           emit } = ctx
+
+  _svBotInit(ctx)
 
   const INDICADOR_SESSION_TTL = 8 * 60 * 60 * 1000
   const criarSessaoIndicador = (ind) => {
@@ -6366,7 +6031,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
                   `Seu acesso continua ativo. Obrigado por usar o *${_brandNome(tenant.segmento)}*! 🍽️`
                 ].join('\n')
                 const instCob = _getInstanciaCobranca(db, EVO_INST)
-                await sendWA(telefone, msg, instCob)
+                await _svBot.sendText(telefone, msg)
                 log('📨', `Confirmação fatura WA enviada: tenant=${tenant.nome} (instância: ${instCob})`)
               }
             } catch (e) { log('⚠️', 'Confirmação fatura WA erro:', e.message) }
@@ -6906,8 +6571,25 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // cobrança não pertence a nenhum tenant — é do super admin.
   if (req.method === 'POST' && upath === '/webhook/cobranca-admin') {
     const body = await readBody(req)
-    try { await _handleCobrancaBot(ctx, body) } catch (e) { log('⚠️', 'Bot cobrança erro:', e.message) }
+    // So responde pela Evolution se ela for o canal escolhido (evita robo duplicado)
+    if (_svBot.provider() === 'evolution') {
+      try { await _svBot.handleEvolution(body) } catch (e) { log('⚠️', 'Bot suporte/vendas erro:', e.message) }
+    }
     send(res, 200, { ok: true })
+    return true
+  }
+
+  // ── Webhook da WuzAPI (WhatsApp de Suporte e Vendas) ──
+  // URL com segredo, registrada sozinha ao conectar em Admin → Saques PIX.
+  if (req.method === 'POST' && upath.startsWith('/webhook/cobranca-wuz/')) {
+    const secret = upath.slice('/webhook/cobranca-wuz/'.length)
+    if (!_svBot.webhookSecretMatches(secret)) { send(res, 401, { error: 'unauthorized' }); return true }
+    let body = {}
+    try { body = _parseWebhookWuz(await _lerCorpoCru(req), req.headers['content-type']) } catch {}
+    send(res, 200, { ok: true })
+    if (_svBot.provider() === 'wuzapi') {
+      _svBot.handleWuzapi(body).catch(e => log('⚠️', 'Bot suporte/vendas (WuzAPI) erro:', e.message))
+    }
     return true
   }
 
@@ -9020,7 +8702,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const msg = linhas.join('\n')
 
       const instCob = _getInstanciaCobranca(db, EVO_INST)
-      const r = await sendWA(telefone, msg, instCob)
+      const r = await _svBot.sendText(telefone, msg)
       if (!r.ok) {
         const motivo = r.data?.message || r.data?.error || r.error || 'Evolution API recusou o envio'
         log('⚠️', `Cobrança WA FALHOU: tenant=${tenant.nome} fatura=${fatura.id} tel=${telefone} (instância: ${instCob}) — ${motivo}`)
@@ -9301,6 +8983,50 @@ module.exports = async function handleRoutes(req, res, ctx) {
       }, req.headers)
       send(res, 200, { ok: true, instance: instance || null, atendente_whatsapp: atendenteRaw || null })
     } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── WhatsApp de Suporte e Vendas pela WuzAPI (painel admin) ──
+  if (upath.startsWith('/api/admin/wuz-cobranca')) {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const acao = upath.slice('/api/admin/wuz-cobranca'.length)
+    try {
+      if (req.method === 'GET' && (acao === '' || acao === '/')) {
+        send(res, 200, await _svBot.status()); return true
+      }
+      if (req.method === 'POST' && acao === '/connect') {
+        const r = await _svBot.connect(_baseUrlFromReq(req))
+        _registrarAudit(sess, { acao: 'config.suporte_wa_conectar', alvo_tipo: null, alvo_id: null, alvo_nome: null, detalhes: { status: r.status } }, req.headers)
+        send(res, 200, r); return true
+      }
+      if (req.method === 'GET' && acao === '/qr') {
+        send(res, 200, await _svBot.currentQr()); return true
+      }
+      if (req.method === 'POST' && acao === '/disconnect') {
+        await _svBot.disconnect()
+        send(res, 200, { ok: true }); return true
+      }
+      if (req.method === 'POST' && acao === '/config') {
+        const body = await readBody(req)
+        const patch = {}
+        if (body.provider !== undefined) patch.cobranca_provider = body.provider === 'wuzapi' ? 'wuzapi' : 'evolution'
+        if (body.demo_link !== undefined) {
+          const link = String(body.demo_link || '').trim().slice(0, 300)
+          if (link && !/^https?:\/\//i.test(link)) { send(res, 400, { error: 'O link de demonstração precisa começar com http:// ou https://' }); return true }
+          patch.bot_demo_link = link || null
+        }
+        if (body.atendente_whatsapp !== undefined) {
+          const at = String(body.atendente_whatsapp || '').replace(/\D/g, '')
+          if (at && at.length !== 10 && at.length !== 11) { send(res, 400, { error: 'WhatsApp do atendente inválido (use DDD + número)' }); return true }
+          patch.cobranca_atendente_whatsapp = at || null
+        }
+        _svBot.saveCfg(patch)
+        _registrarAudit(sess, { acao: 'config.suporte_wa', alvo_tipo: null, alvo_id: null, alvo_nome: null, detalhes: patch }, req.headers)
+        send(res, 200, { ok: true, ...(await _svBot.status()) }); return true
+      }
+      send(res, 404, { error: 'Rota não encontrada' })
+    } catch (e) { send(res, 400, { error: e.message }) }
     return true
   }
 
