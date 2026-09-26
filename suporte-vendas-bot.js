@@ -83,15 +83,33 @@ function rememberLid(phone, lid) {
   if (phone && lid && String(lid).endsWith('@lid')) altLid.set(num55(phone), lid)
 }
 
+// numeros com/sem o 9 depois do DDD — mesma logica ja usada em tenant-wa.js
+function phoneVariants(n) {
+  const list = [n]
+  if (n.startsWith('55') && n.length === 13 && n[4] === '9') list.push(n.slice(0, 4) + n.slice(5))
+  if (n.startsWith('55') && n.length === 12 && /[6-9]/.test(n[4])) list.push(n.slice(0, 4) + '9' + n.slice(4))
+  return list
+}
+// Resolucao ativa via /user/check quando o envio falha com "no LID found" — cobre a
+// cobranca automatica, que costuma ser o PRIMEIRO contato com aquele numero (o robo
+// nunca recebeu mensagem dele antes pra aprender o LID sozinho via webhook, e por
+// isso so tinha o telefone puro, que a WuzAPI as vezes recusa nesse caso).
+const _resolved = new Map()
+
 async function wuzSend(phone, fn) {
   const token = wuzToken()
   const to = num55(phone)
+  const cached = altLid.get(to) || _resolved.get(to)?.to
   try {
-    return await fn(token, to)
+    return await fn(token, cached || to)
   } catch (err) {
-    const lid = altLid.get(to)
-    if (!lid) throw err
-    return fn(token, lid)
+    if (!/no LID found|not (registered|on whatsapp)|not found|invalid/i.test(err.message || '')) throw err
+    const users = await wuzapi.checkUsers(token, phoneVariants(to)).catch(() => [])
+    const found = users.find(u => u.IsInWhatsapp || u.isInWhatsapp)
+    if (!found) throw err
+    const resolved = String(found.JID || found.jid || found.Query).split('@')[0]
+    _resolved.set(to, { to: resolved, at: Date.now() })
+    return fn(token, resolved)
   }
 }
 
@@ -313,7 +331,17 @@ function normalizeWuzapi(body) {
   const message = body.event.Message || {}
   const chat = String(info.Chat || '')
   if (info.IsGroup || chat.endsWith('@g.us') || chat.startsWith('status@') || chat.endsWith('@newsletter')) return []
-  const phone = phoneFromJid(info.Sender) || phoneFromJid(chat) || phoneFromJid(info.SenderAlt)
+  // IMPORTANTE: "Chat" é sempre o número da CONVERSA (o outro lado), nas duas direções.
+  // "Sender" só serve pra descobrir o número em mensagem RECEBIDA — numa mensagem que
+  // o próprio admin manda direto pelo celular (fromMe), Sender vem preenchido com o
+  // número DELE mesmo, não do contato. Antes Sender vinha primeiro aqui, e por isso o
+  // robô pausava (ou tentava pausar) o número errado quando o admin assumia a conversa
+  // na mão — a pausa nunca "grudava" no contato certo. Mesma prioridade já usada em
+  // tenant-wa.js (chat primeiro, Sender só se vier como @lid e SenderAlt resolver).
+  const rawSender = String(info.Sender || chat || '')
+  const senderAlt = String(info.SenderAlt || '')
+  const remoteJid = rawSender.endsWith('@lid') && senderAlt.endsWith('@s.whatsapp.net') ? senderAlt : (chat || rawSender)
+  const phone = phoneFromJid(remoteJid)
   if (!phone) return []
   const lid = [info.Sender, info.Chat, info.SenderAlt].map(String).find(j => j.endsWith('@lid'))
   if (lid && !info.IsFromMe) rememberLid(phone, lid.split(':')[0])
