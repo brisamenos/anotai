@@ -207,10 +207,21 @@ function normalizeWuzToBaileys(body) {
   const chat = String(info.Chat || '');
   if (info.IsGroup || chat.endsWith('@g.us') || chat.startsWith('status@') || chat.endsWith('@newsletter')) return [];
 
-  // Contas novas mandam o numero real como LID (@lid); o numero de verdade vem em SenderAlt
+  // Contas novas mandam o numero real como LID (@lid); o numero de verdade vem em SenderAlt/RecipientAlt.
+  // Em mensagem recebida, quem pode vir em @lid e o Sender (o contato) -> resolve com SenderAlt.
+  // Em mensagem fromMe (nos enviando pelo proprio zap), o Sender e sempre o nosso numero normal;
+  // quem pode vir em @lid ali e o CHAT (o contato pra quem mandamos) -> resolve com RecipientAlt.
+  // Sem esse segundo caso, uma resposta manual pra um contato "LID" grava um remoteJid tipo
+  // "xxxx@lid" que nunca bate com a chave (pausa:tenant:telefone) usada pelas mensagens recebidas
+  // desse mesmo contato, e a IA nao pausa quando o gestor assume a conversa.
   const rawSender = String(info.Sender || chat || '');
   const senderAlt = String(info.SenderAlt || '');
-  const remoteJid = rawSender.endsWith('@lid') && senderAlt.endsWith('@s.whatsapp.net') ? senderAlt : (chat || rawSender);
+  const recipientAlt = String(info.RecipientAlt || '');
+  let remoteJid = chat || rawSender;
+  if (remoteJid.endsWith('@lid')) {
+    if (remoteJid === chat && recipientAlt.endsWith('@s.whatsapp.net')) remoteJid = recipientAlt;
+    else if (senderAlt.endsWith('@s.whatsapp.net')) remoteJid = senderAlt;
+  }
 
   return [{
     key: {

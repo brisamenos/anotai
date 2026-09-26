@@ -338,12 +338,21 @@ function normalizeWuzapi(body) {
   // robô pausava (ou tentava pausar) o número errado quando o admin assumia a conversa
   // na mão — a pausa nunca "grudava" no contato certo. Mesma prioridade já usada em
   // tenant-wa.js (chat primeiro, Sender só se vier como @lid e SenderAlt resolver).
+  // Contato "LID": em msg recebida quem vem em @lid é o Sender (resolve com SenderAlt);
+  // em msg fromMe (admin mandando na mão) quem vem em @lid é o CHAT (resolve com
+  // RecipientAlt) — sem isso a pausa grava sob "xxxx@lid" e nunca bate com o telefone
+  // já resolvido das mensagens recebidas desse mesmo contato.
   const rawSender = String(info.Sender || chat || '')
   const senderAlt = String(info.SenderAlt || '')
-  const remoteJid = rawSender.endsWith('@lid') && senderAlt.endsWith('@s.whatsapp.net') ? senderAlt : (chat || rawSender)
+  const recipientAlt = String(info.RecipientAlt || '')
+  let remoteJid = chat || rawSender
+  if (remoteJid.endsWith('@lid')) {
+    if (remoteJid === chat && recipientAlt.endsWith('@s.whatsapp.net')) remoteJid = recipientAlt
+    else if (senderAlt.endsWith('@s.whatsapp.net')) remoteJid = senderAlt
+  }
   const phone = phoneFromJid(remoteJid)
   if (!phone) return []
-  const lid = [info.Sender, info.Chat, info.SenderAlt].map(String).find(j => j.endsWith('@lid'))
+  const lid = [info.Sender, info.Chat, info.SenderAlt, info.RecipientAlt].map(String).find(j => j.endsWith('@lid'))
   if (lid && !info.IsFromMe) rememberLid(phone, lid.split(':')[0])
   return [{
     phone,
