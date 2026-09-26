@@ -3263,6 +3263,46 @@ async function handleREST(req, res, table, params, body) {
       if (SSE_TABLES.has(table)) emit(tenantId||payload.tenant_id, table, parsedForEmit||payload, 'INSERT')
       if (table === 'orders' && rawForEmit) chatNotifyOrderCreated(rawForEmit)
 
+      // ── Salva/atualiza o cliente em "customers" a partir de QUALQUER pedido ──
+      // Antes só existia registro em customers quando o cliente criava conta
+      // (com senha, no cardápio) ou quando o cashback rodava — um pedido comum
+      // (cardápio público, PDV, mesa/garçom ou "Novo Pedido" lançado pelo gestor)
+      // não gravava nada, então o autocomplete de clientes ficava vazio mesmo
+      // depois de várias vendas. Aqui cobre os 4 canais de uma vez, porque
+      // todos passam pelo mesmo INSERT genérico em "orders".
+      if (table === 'orders' && rawForEmit && rawForEmit.phone) {
+        try {
+          const _tidCust = tenantId || payload.tenant_id
+          const _phoneDigits = String(rawForEmit.phone || '').replace(/\D/g, '')
+          if (_tidCust && _phoneDigits) {
+            const _existingCust = db.prepare(
+              `SELECT id, name, addr FROM customers WHERE tenant_id=? AND ${phoneLookupSql('phone')}`
+            ).get(_tidCust, ...phoneLookupArgs(_phoneDigits))
+            const _nomeCust = String(rawForEmit.client || '').trim()
+            if (_existingCust) {
+              // Só atualiza nome/endereço se o pedido trouxe algo real e diferente do que já tinha —
+              // não sobrescreve um nome já cadastrado com "Cliente" (placeholder genérico).
+              const _novoNome = (_nomeCust && _nomeCust !== 'Cliente' && _nomeCust !== _existingCust.name) ? _nomeCust : null
+              const _novoAddr = (rawForEmit.addr && rawForEmit.addr !== _existingCust.addr) ? rawForEmit.addr : null
+              if (_novoNome || _novoAddr) {
+                db.prepare('UPDATE customers SET name=COALESCE(?,name), addr=COALESCE(?,addr) WHERE id=?')
+                  .run(_novoNome, _novoAddr, _existingCust.id)
+              }
+            } else {
+              // ON CONFLICT como rede de segurança só pra corrida entre 2 pedidos
+              // simultâneos com o MESMO telefone dígito-a-dígito — a checagem por
+              // variante (com/sem o 9) já foi feita acima pelo SELECT com phoneLookupSql.
+              db.prepare(`
+                INSERT INTO customers (tenant_id,name,phone,addr) VALUES (?,?,?,?)
+                ON CONFLICT(tenant_id,phone) DO UPDATE SET
+                  name = CASE WHEN excluded.name <> 'Cliente' THEN excluded.name ELSE customers.name END,
+                  addr = COALESCE(excluded.addr, customers.addr)
+              `).run(_tidCust, _nomeCust || 'Cliente', _phoneDigits, rawForEmit.addr || null)
+            }
+          }
+        } catch(e) { log('⚠️', 'Upsert customers no pedido falhou:', e.message) }
+      }
+
       // Notificacao "Pedido Recebido" na criacao do pedido.
       // Para pix_manual, o bloco pix_cobranca abaixo ja envia a comanda com itens/total
       // junto da chave PIX; aqui evitamos duplicar e tratamos os demais pagamentos.

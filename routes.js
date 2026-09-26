@@ -13,7 +13,7 @@ const path   = require('path')
 const zlib   = require('zlib')
 const crypto = require('crypto')
 const { buildOrderTrackingMessage } = require('./order-message')
-const { phoneLookupArgs, phoneLookupSql, phonesMatch } = require('./phone-utils')
+const { phoneLookupArgs, phoneLookupSql, phonesMatch, phoneDigitsSql } = require('./phone-utils')
 const _svBot = require('./suporte-vendas-bot') // WhatsApp de Suporte e Vendas (WuzAPI ou Evolution)
 const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (como sempre foi) ou WuzAPI (alternativa leve)
 
@@ -7001,6 +7001,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
     try {
       // Customers com stats calculados via JOIN com orders
+      // Junta por customer_id OU pelos últimos 8 dígitos do telefone (não pelo
+      // telefone cru) — pedidos do mesmo cliente chegam formatados de jeitos
+      // diferentes (com/sem 9, com parênteses/traço do checkout, dígitos puros
+      // do gestor etc.), e comparar a string exata deixava de contar pedidos
+      // de um cliente que já tinha pedido antes com outra formatação.
       const customers = db.prepare(`
         SELECT
           c.id, c.name, c.phone, c.email, c.birthday, c.addr,
@@ -7010,7 +7015,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           MAX(o.created_at)                  AS last_order_at
         FROM customers c
         LEFT JOIN orders o ON o.tenant_id = c.tenant_id
-          AND (o.customer_id = c.id OR o.phone = c.phone)
+          AND (o.customer_id = c.id OR substr(${phoneDigitsSql('o.phone')}, -8) = substr(${phoneDigitsSql('c.phone')}, -8))
           AND o.status NOT IN ('cancelado', 'aguardando_pix')
         WHERE c.tenant_id = ?
         GROUP BY c.id

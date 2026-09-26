@@ -96,6 +96,7 @@ function phonesMatch(a, b) {
 module.exports = {
   cleanPhoneDigits,
   cleanWhatsappJid,
+  phoneDigitsSql,
   phoneLookupArgs,
   phoneLookupSql,
   phoneLookupVariants,
