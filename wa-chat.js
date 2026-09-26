@@ -7,6 +7,7 @@
 /* ─── Estado global ─────────────────────────────────── */
 const WA = {
   open:         false,
+  provider:     null,        // 'evolution' | 'wuzapi' — descoberto uma vez (waGetProvider)
   chats:        [],          // lista de conversas
   activeJid:    null,        // JID da conversa aberta
   activeName:   '',
@@ -328,9 +329,50 @@ function waUpdatePreview(jid, msg, fromMe) {
 }
 
 /* ─── Carregar chats (POST /chat/findChats) ─────────── */
+/* ─── Motor do WhatsApp desta loja (Evolution ou WuzAPI) ───────────── */
+// Descobre uma vez e guarda em cache — os dois motores usam o MESMO formato de
+// mensagem daqui pra frente (normalizado no servidor), então o resto da tela
+// de chat (renderização, mídia, etc.) não precisa saber qual dos dois está ativo.
+async function waGetProvider() {
+  if (WA.provider) return WA.provider;
+  try {
+    const tid = _sessao?.tenant_id || '';
+    const r = await fetch('/api/tenant-wa/status', { headers: { 'x-tenant-id': tid } });
+    const d = await r.json().catch(() => ({}));
+    WA.provider = d.provider === 'wuzapi' ? 'wuzapi' : 'evolution';
+  } catch(e) { WA.provider = 'evolution'; }
+  return WA.provider;
+}
+
+async function waLoadChatsWuz() {
+  const listEl = document.getElementById('wa-chat-list');
+  try {
+    const tid = _sessao?.tenant_id || '';
+    const r = await fetch('/api/tenant-wa/chats', { headers: { 'x-tenant-id': tid } });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Erro ao carregar conversas');
+    const chats = (d.chats || []).map(c => {
+      if (c._name && c._jid) WA.nameCache[c._jid] = c._name;
+      return c;
+    });
+    chats.sort((a, b) => (b._ts || 0) - (a._ts || 0));
+    WA.chats = chats;
+    waRenderList();
+  } catch(e) {
+    if (listEl) listEl.innerHTML = `<div class="wa-empty-state"><p style="color:#ef4444;font-size:12px">Erro: ${waEsc(e.message)}</p><button class="wa-btn-primary" style="margin-top:12px" onclick="waLoadChats()">Tentar novamente</button></div>`;
+  }
+}
+
 async function waLoadChats() {
   const listEl = document.getElementById('wa-chat-list');
   if (!listEl) return;
+
+  const provider = await waGetProvider();
+  if (provider === 'wuzapi') {
+    listEl.innerHTML = `<div class="wa-empty-state"><div class="wa-typing-dots"><span></span><span></span><span></span></div><p style="color:#64748b;font-size:12px;margin-top:10px">Carregando...</p></div>`;
+    return waLoadChatsWuz();
+  }
+
   const inst = EVO.instance;
   if (!inst) {
     listEl.innerHTML = `<div class="wa-empty-state"><p style="color:#94a3b8;font-size:13px;text-align:center">⚠️ Configure a instância no painel <b>Robô</b>.</p></div>`;
@@ -487,6 +529,12 @@ async function waOpenConv(jid, name) {
 
   const chat = WA.chats.find(c => c._jid === jid);
   if (chat) { chat._unread = 0; waRenderList(); }
+
+  // WuzAPI: marca como lido no servidor (a Evolution ja controla isso sozinha via unreadCount nativo)
+  if (WA.provider === 'wuzapi') {
+    const tid = _sessao?.tenant_id || '';
+    fetch('/api/tenant-wa/read', { method: 'POST', headers: { 'Content-Type':'application/json', 'x-tenant-id': tid }, body: JSON.stringify({ jid }) }).catch(() => {});
+  }
 
   // Carrega cache do banco primeiro (aparece instantaneamente)
   await waCacheLoad(jid);
@@ -849,10 +897,12 @@ function waOpenDoc(msgId) {
 async function waSendMessage() {
   const inp  = document.getElementById('wa-msg-input');
   const text = (inp?.value||'').trim();
-  const inst = EVO.instance;
-  if (!inst||!WA.activeJid) { waSbToast('err','Nenhuma conversa selecionada'); return; }
+  if (!WA.activeJid) { waSbToast('err','Nenhuma conversa selecionada'); return; }
   if (WA.pendingFile) { await waSendMedia(); return; }
   if (!text) return;
+
+  const provider = await waGetProvider();
+  if (provider === 'evolution' && !EVO.instance) { waSbToast('err','Nenhuma conversa selecionada'); return; }
 
   inp.value = '';
   waToggleSendMic(false);
@@ -868,19 +918,32 @@ async function waSendMessage() {
   if (el&&msgsEl) { msgsEl.appendChild(el); msgsEl.scrollTop=msgsEl.scrollHeight; }
 
   try {
-    // EVO 2.7: POST /message/sendText/{instance} — body: { number, text }
-    const r = await EVO.req('POST', `/message/sendText/${inst}`, {
-      number: waSendNum(WA.activeJid),
-      text
-    });
-    if (!r.ok) waSbToast('err', r.data?.message || r.data?.error || 'Erro ao enviar');
-    else {
-      // Pausa a IA: humano assumiu esta conversa
-      const _phone = waSendNum(WA.activeJid);
-      const _tid   = (()=>{ try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||'' } catch(e){ return '' } })();
-      if (_phone && _tid) fetch('/api/ia-humano-assumiu', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ phone: _phone, tenant_id: _tid }) }).catch(()=>{});
-      setTimeout(() => waLoadMessages(true), 2000);
+    let r;
+    if (provider === 'wuzapi') {
+      const tid = _sessao?.tenant_id || '';
+      const resp = await fetch('/api/tenant-wa/send', {
+        method: 'POST', headers: { 'Content-Type':'application/json', 'x-tenant-id': tid },
+        body: JSON.stringify({ phone: waSendNum(WA.activeJid), text })
+      });
+      const data = await resp.json().catch(() => ({}));
+      r = { ok: resp.ok, data };
+      // O /send ja salva a msg e pausa a IA no servidor — so recarrega a conversa
+      if (r.ok) setTimeout(() => waLoadMessages(true), 800);
+    } else {
+      // EVO 2.7: POST /message/sendText/{instance} — body: { number, text }
+      r = await EVO.req('POST', `/message/sendText/${EVO.instance}`, {
+        number: waSendNum(WA.activeJid),
+        text
+      });
+      if (r.ok) {
+        // Pausa a IA: humano assumiu esta conversa
+        const _phone = waSendNum(WA.activeJid);
+        const _tid   = (()=>{ try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||'' } catch(e){ return '' } })();
+        if (_phone && _tid) fetch('/api/ia-humano-assumiu', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ phone: _phone, tenant_id: _tid }) }).catch(()=>{});
+        setTimeout(() => waLoadMessages(true), 2000);
+      }
     }
+    if (!r.ok) waSbToast('err', r.data?.message || r.data?.error || 'Erro ao enviar');
   } catch(e) { waSbToast('err','Erro: '+e.message); }
 }
 

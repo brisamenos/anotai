@@ -14,6 +14,7 @@ const Database = require('better-sqlite3')
 const handleRoutes = require('./routes')
 const { buildOrderTrackingMessage } = require('./order-message')
 const phoneUtils = require('./phone-utils')
+const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (como sempre foi) ou WuzAPI (alternativa leve)
 
 const PORT        = process.env.PORT           || 3001
 const EVO_URL     = (process.env.EVOLUTION_URL || 'https://projeto-evolution-api.xtknqq.easypanel.host').replace(/\/+$/,'')
@@ -1259,6 +1260,18 @@ const MIGRATIONS = [
     `ALTER TABLE faturas ADD COLUMN wa_enviado_em TEXT`,
     `ALTER TABLE faturas ADD COLUMN wa_erro TEXT`,
     `ALTER TABLE faturas ADD COLUMN wa_tentativas INTEGER DEFAULT 0`
+  ]},
+  { version:87, description:'WhatsApp da loja por WuzAPI (alternativa mais leve a Evolution) + controle de lida do chat', up:[
+    `ALTER TABLE store_config ADD COLUMN whatsapp_provider TEXT NOT NULL DEFAULT 'evolution'`,
+    `ALTER TABLE store_config ADD COLUMN wuzapi_token TEXT`,
+    `ALTER TABLE store_config ADD COLUMN wuzapi_user_id TEXT`,
+    `ALTER TABLE store_config ADD COLUMN wuzapi_webhook_secret TEXT`,
+    `CREATE TABLE IF NOT EXISTS wa_reads (
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      remote_jid TEXT NOT NULL,
+      last_read_ts INTEGER DEFAULT 0,
+      PRIMARY KEY (tenant_id, remote_jid)
+    )`
   ]},
 ]
 
@@ -2586,7 +2599,7 @@ async function responderAcompanhamentoWhatsapp({ tenantId, phone, text, msgIds =
   const info = waTrackingTextInfo(text)
   if (!info.intent || !tenantId || !phone) return false
 
-  const inst = cfg?.evo_instance || EVO_INST
+  const inst = _waInstanceFor(tenantId, cfg)
   const offset = parseInt(cfg?.order_num_offset || 0) || 0
   const phoneWhere = phoneLookupSql('phone')
   const phoneArgs = phoneLookupArgs(phone)
@@ -3259,7 +3272,7 @@ async function handleREST(req, res, table, params, body) {
         setImmediate(async () => {
           try {
             const cfg   = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(_tid)
-            const inst  = cfg?.evo_instance || EVO_INST
+            const inst  = _waInstanceFor(_tid, cfg)
             const auto  = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
             const recAuto = auto['recebido'] || {}
             if (recAuto.on === false) { log('⏭️','Automacao recebido desligada'); return }
@@ -3302,7 +3315,7 @@ async function handleREST(req, res, table, params, body) {
         setImmediate(async () => {
           try {
             const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, ia_config, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(_tid)
-            const inst   = cfg?.evo_instance || EVO_INST
+            const inst   = _waInstanceFor(_tid, cfg)
             const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
             const ia     = (() => { try { return JSON.parse(cfg?.ia_config||'{}') } catch { return {} } })()
             const trackingAtivo = parseInt(_ord.wa_track || 0) === 1
@@ -3654,7 +3667,42 @@ function detectarCategoriaPedido(itemsStr, segmento) {
   return { emojis: ['🍽️','👨‍🍳','🔥','⚡','✨'], lojaEmoji: '🍽️' }
 }
 
+// Sentinela usado no lugar do nome da instancia Evolution quando a loja usa WuzAPI —
+// nunca colide com um nome de instancia de verdade (Evolution nao aceita ":" no nome).
+const WUZAPI_SENTINEL = '__WUZAPI__:'
+
+// Decide, por loja, o que passar como "inst" pro sendWA: nome da instancia Evolution
+// (comportamento de sempre) ou o sentinela que desvia pra WuzAPI.
+function _waInstanceFor(tenantId, cfg) {
+  if (tenantId) {
+    try {
+      if (_tenantWa.isWuzapi(tenantId)) return WUZAPI_SENTINEL + tenantId
+    } catch(e) {}
+  }
+  return cfg?.evo_instance || EVO_INST
+}
+
 async function sendWA(phone, text, inst, delayMs) {
+  if (typeof inst === 'string' && inst.startsWith(WUZAPI_SENTINEL)) {
+    const tenantId = inst.slice(WUZAPI_SENTINEL.length)
+    try {
+      const r = await _tenantWa.sendText(tenantId, phone, text)
+      const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
+      if (id) _tenantWa.markBotSent(id)
+      try {
+        const num = phone.replace(/\D/g,'')
+        const number = num.startsWith('55') ? num : `55${num}`
+        const jid = `${number}@s.whatsapp.net`
+        const msgId = id || `wz-${Date.now()}`
+        const payload = JSON.stringify({ key:{ remoteJid:jid, id:msgId, fromMe:true }, messageTimestamp: Math.floor(Date.now()/1000), message:{ conversation:text } })
+        db.prepare('INSERT OR IGNORE INTO wa_messages (tenant_id, remote_jid, msg_id, payload, from_me, ts) VALUES (?,?,?,?,1,?)')
+          .run(tenantId, jid, msgId, payload, Math.floor(Date.now()/1000))
+        marcarDirty()
+      } catch(e) { log('⚠️','sendWA(wuz) log falhou:', e.message) }
+      log('📤',`Enviado (WuzAPI) para ${phone}`)
+      return { ok:true, data:{ id } }
+    } catch(e) { log('❌','Erro WA (WuzAPI):',{error:e.message}); return { ok:false, error:e.message } }
+  }
   const instance = inst || EVO_INST
   const num      = phone.replace(/\D/g,'')
   const number   = num.startsWith('55') ? num : `55${num}`
@@ -3678,6 +3726,16 @@ async function sendWA(phone, text, inst, delayMs) {
 // imageBase64 aceita tanto data URL completa ("data:image/png;base64,...")
 // quanto o base64 puro — normaliza antes de enviar.
 async function sendWAImage(phone, imageBase64, caption, inst) {
+  if (typeof inst === 'string' && inst.startsWith(WUZAPI_SENTINEL)) {
+    const tenantId = inst.slice(WUZAPI_SENTINEL.length)
+    try {
+      const r = await _tenantWa.sendImage(tenantId, phone, imageBase64, caption)
+      const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
+      if (id) _tenantWa.markBotSent(id)
+      log('📤',`Imagem enviada (WuzAPI) para ${phone}`)
+      return { ok:true, data:{ id } }
+    } catch(e) { log('❌','Erro WA imagem (WuzAPI):',{error:e.message}); return { ok:false, error:e.message } }
+  }
   const instance = inst || EVO_INST
   const num      = phone.replace(/\D/g,'')
   const number   = num.startsWith('55') ? num : `55${num}`
@@ -3700,6 +3758,7 @@ async function sendWAImage(phone, imageBase64, caption, inst) {
 // for inválido — não bloqueia a resposta principal.
 async function markAsRead(phone, msgId, inst) {
   if (!msgId) return
+  if (typeof inst === 'string' && inst.startsWith(WUZAPI_SENTINEL)) return // WuzAPI: sem endpoint de leitura ainda — no-op silencioso
   const instance = inst || EVO_INST
   const num      = phone.replace(/\D/g,'')
   const number   = num.startsWith('55') ? num : `55${num}`
@@ -3744,7 +3803,7 @@ async function checarAniv() {
       const seen = new Set(deF.map(c=>c.phone))
       const anivs = [...deF,...deC.filter(c=>!seen.has(c.phone))]
       if (!anivs.length) { db.prepare("UPDATE store_config SET evo_aniv_last=? WHERE tenant_id=?").run(today,t.id); continue }
-      const inst = cfg.evo_instance||EVO_INST
+      const inst = _waInstanceFor(t.id, cfg)
       // Envia aniversários com delay variável entre cada cliente (3-7s)
       // pra não disparar 50 mensagens em rajada quando há muitos aniversariantes.
       // Antes: sleep fixo de 1.5s = padrão detectável de bot.
@@ -3778,7 +3837,7 @@ async function checarPedidoPerdido() {
       const pp   = auto['pedido_perdido']||{}
       if (pp.on === false) continue                  // desligado
       if (!pp.msg || !pp.msg.trim()) continue        // sem template configurado
-      const inst = cfg.evo_instance||EVO_INST
+      const inst = _waInstanceFor(t.id, cfg)
       // Pega, por JID, a última mensagem (maior ts) dentro da janela, só se for do cliente (from_me=0)
       const rows = db.prepare(`
         SELECT w.remote_jid, w.ts, w.from_me
@@ -4367,7 +4426,7 @@ async function handleOrderStatus(req, res) {
           const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(tid)
           const _tnt   = db.prepare("SELECT segmento FROM tenants WHERE id=?").get(tid)
           const _seg   = _tnt?.segmento || 'restaurante'
-          const inst   = cfg?.evo_instance || EVO_INST
+          const inst   = _waInstanceFor(tid, cfg)
           const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
           const pixConf = auto['pix_confirmado'] || {}
           if (pixConf.on === false) { log('⏭️','Automação pix_confirmado desligada'); return }
@@ -4406,7 +4465,7 @@ async function handleOrderStatus(req, res) {
     if (['finalizado','entregue'].includes(new_status) && !['finalizado','entregue'].includes(oldStatus)) {
       try {
         const cfg    = db.prepare('SELECT cashback_config, evo_automacoes, evo_instance, fid_config, stamp_config, store_name FROM store_config WHERE tenant_id=?').get(tid)
-        const inst   = cfg?.evo_instance || EVO_INST
+        const inst   = _waInstanceFor(tid, cfg)
         const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
         // CRÍTICO: declara `nome` aqui no escopo do bloco. Antes dessa correção,
         // todas as mensagens WA de cashback/pontos/carimbinho referenciavam `nome`
@@ -4561,7 +4620,7 @@ async function handleOrderStatus(req, res) {
           const cfg   = db.prepare("SELECT evo_instance,evo_automacoes,store_name,order_num_offset FROM store_config WHERE tenant_id=?").get(tid)
           const _tnt  = db.prepare("SELECT segmento FROM tenants WHERE id=?").get(tid)
           const _seg  = _tnt?.segmento || 'restaurante'
-          const inst  = cfg?.evo_instance||EVO_INST
+          const inst  = _waInstanceFor(tid, cfg)
           const auto  = jsonParse(cfg?.evo_automacoes)||{}
           const offset= parseInt(cfg?.order_num_offset)||0
           const loja  = cfg?.store_name || (_seg==='acougue' ? 'Açougue' : 'Restaurante')
@@ -5274,6 +5333,15 @@ async function _vozEnviarPixManual(phone, inst, numero, total, pixInfo) {
 // manualmente — aqui é a versão automática, chamada pelo robô.
 async function baixarMidiaWhatsapp(tenantId, messageId, remoteJid) {
   try {
+    if (_tenantWa.isWuzapi(tenantId)) {
+      const row = db.prepare('SELECT payload FROM wa_messages WHERE tenant_id=? AND msg_id=?').get(tenantId, messageId)
+      const payload = row?.payload ? JSON.parse(row.payload) : null
+      const media = payload?.message?.audioMessage
+      if (!media) return null
+      const r = await _tenantWa.downloadMedia(tenantId, 'audio', media)
+      if (!r) return null
+      return { base64: r.base64 || r.data, mimetype: r.mimetype || r.mimeType || 'audio/ogg' }
+    }
     const cfg  = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
     const inst = cfg?.evo_instance || EVO_INST
     const r = await fetch(`${EVO_URL}/chat/getBase64FromMediaMessage/${inst}`, {
@@ -5500,7 +5568,7 @@ async function handleIAWebhook(req, res) {
         ;(async () => {
           try {
             const cfgV = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
-            const inst = cfgV?.evo_instance || EVO_INST
+            const inst = _waInstanceFor(tenantId, cfgV)
             if (msgId) await markAsRead(phoneVoz, msgId, inst)
             if (!_vozDentroDoLimite(tenantId, phoneVoz)) {
               log('🚫', `[VOZ] Limite de áudios/hora atingido — ${phoneVoz} [${tenantId}]`)
@@ -5556,7 +5624,7 @@ async function handleIAWebhook(req, res) {
         `).get(tenantId, phoneImg)
         if (pedidoPix) {
           const cfgImg = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
-          await sendWA(phoneImg, '📎 Recebi seu comprovante! Assim que a loja confirmar o pagamento, seu pedido entra em preparo e eu te aviso por aqui.', cfgImg?.evo_instance || EVO_INST)
+          await sendWA(phoneImg, '📎 Recebi seu comprovante! Assim que a loja confirmar o pagamento, seu pedido entra em preparo e eu te aviso por aqui.', _waInstanceFor(tenantId, cfgImg))
           send(res, 200, { ok: true, voz: true }); return
         }
       }
@@ -5574,7 +5642,7 @@ async function handleIAWebhook(req, res) {
     // aqui não deve cair no roteador normal por engano.
     const vozDraft = _vozLerDraft(tenantId, phone)
     if (vozDraft) {
-      const inst = cfg.evo_instance || EVO_INST
+      const inst = _waInstanceFor(tenantId, cfg)
       const msgNorm = msg.trim().toLowerCase()
       if (vozDraft.estado === 'aguardando_grupo') {
         const pend = _vozProximaPendenciaGrupo(vozDraft.itens)
@@ -5739,7 +5807,7 @@ async function handleIAWebhook(req, res) {
       const pausaNow=_pausaHumano.get(pausaKey)
       if (pausaNow&&(Date.now()-pausaNow)<pausaMin*60*1000) { log('🔇',`IA bloqueada no timer (humano assumiu durante buffer) — ${phone} [${tenantId}]`); return }
       log('🔍', `[PAUSA-DEBUG] Timer — pausaKey: "${pausaKey}" | pausaNow: ${pausaNow || 'NÃO ENCONTRADO'} — IA vai responder`)
-      const msgFull=msgs.join('\n'), inst=cfg.evo_instance||EVO_INST, nomeLoja=cfg.store_name||'Restaurante'
+      const msgFull=msgs.join('\n'), inst=_waInstanceFor(tenantId, cfg), nomeLoja=cfg.store_name||'Restaurante'
 
       // ── DETECÇÃO DE MENSAGEM SENSÍVEL ─────────────────────────────────
       // Tópicos onde a IA SEMPRE alucina ou piora a situação: reclamações,

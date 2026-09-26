@@ -102,9 +102,128 @@ const EVO = {
   }
 };
 
+// WhatsApp da loja via WuzAPI — alternativa mais leve à Evolution (mesmo formato de retorno do EVO.req,
+// pra reusar a UI e o wa-chat.js sem duplicar lógica de exibição).
+const WUZ = {
+  async req(method, path, body) {
+    try {
+      const tid = _sessao?.tenant_id || '';
+      const r = await fetch(`/api/tenant-wa${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const data = await r.json().catch(() => ({}));
+      console.log(`[WUZ] ${method} ${path}`, r.status, data);
+      return { ok: r.ok, status: r.status, data };
+    } catch(e) {
+      console.error('[WUZ] fetch error:', e);
+      return { ok: false, error: e.message };
+    }
+  },
+  async sendText(number, text) {
+    return this.req('POST', '/send', { phone: number.replace(/\D/g,''), text });
+  }
+};
+
 let evoMsgHistory = [];
 let evoConnected  = false;
 let evoQrInterval = null;
+let wuzConnected  = false;
+let wuzQrInterval = null;
+
+// ── Seletor de motor (Evolution / WuzAPI) ──────────────
+async function waProviderInit() {
+  const r = await WUZ.req('GET', '/status');
+  const provider = r.data?.provider === 'wuzapi' ? 'wuzapi' : 'evolution';
+  const radioEvo = document.getElementById('wa-provider-evolution');
+  const radioWuz = document.getElementById('wa-provider-wuzapi');
+  if (radioEvo) radioEvo.checked = provider === 'evolution';
+  if (radioWuz) radioWuz.checked = provider === 'wuzapi';
+  _waProviderShow(provider);
+  if (provider === 'wuzapi') wuzCheckStatus(); else evoCheckStatus();
+}
+
+function _waProviderShow(provider) {
+  const evoCards = document.getElementById('evo-cards');
+  const wuzCards = document.getElementById('wuz-cards');
+  if (evoCards) evoCards.style.display = provider === 'wuzapi' ? 'none' : 'grid';
+  if (wuzCards) wuzCards.style.display = provider === 'wuzapi' ? 'grid' : 'none';
+}
+
+async function waProviderChange(provider) {
+  const r = await WUZ.req('POST', '/provider', { provider });
+  if (!r.ok) { sbToast('err', 'Erro ao trocar o motor do WhatsApp'); return; }
+  _waProviderShow(provider);
+  sbToast('ok', provider === 'wuzapi' ? 'Motor alterado para WuzAPI' : 'Motor alterado para Evolution API');
+  if (provider === 'wuzapi') wuzCheckStatus(); else evoCheckStatus();
+}
+
+// ── Conexão WuzAPI ──────────────────────────────────────
+function _wuzSetStatus(kind, txt) {
+  const dot = document.getElementById('wuz-status-dot');
+  const label = document.getElementById('wuz-status-txt');
+  if (label) label.textContent = txt;
+  if (dot) dot.style.background = kind === 'connected' ? 'var(--success,#22c55e)' : kind === 'loading' ? 'var(--warning,#f59e0b)' : 'var(--muted)';
+}
+
+async function wuzCheckStatus() {
+  _wuzSetStatus('loading', 'Verificando...');
+  const r = await WUZ.req('GET', '/status');
+  if (!r.ok) { _wuzSetStatus('disconnected', 'Desconectado'); return; }
+  if (r.data?.status === 'connected') {
+    wuzConnected = true;
+    _wuzSetStatus('connected', 'Conectado');
+    const area = document.getElementById('wuz-qr-area');
+    if (area) area.innerHTML = `<div style="margin-bottom:16px;color:var(--success,#22c55e)"><svg width="48" height="48" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.5 4L6 11.5 2.5 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div style="font-size:14px;font-weight:600;margin-bottom:12px">WhatsApp conectado!</div><button class="btn bg" onclick="wuzDesconectar()">Desconectar</button>`;
+  } else {
+    wuzConnected = false;
+    _wuzSetStatus('disconnected', 'Desconectado');
+  }
+}
+
+async function wuzConectar() {
+  const area = document.getElementById('wuz-qr-area');
+  if (area) area.innerHTML = '<div style="font-size:13px;color:var(--muted)">Conectando na WuzAPI e gerando o QR Code... (até 20s)</div>';
+  const r = await WUZ.req('POST', '/connect', {});
+  if (!r.ok) {
+    if (area) area.innerHTML = `<div style="font-size:13px;color:var(--danger);margin-bottom:12px">${r.data?.error || 'Erro ao conectar'}</div><button class="btn bp" onclick="wuzConectar()">Tentar de novo</button>`;
+    return;
+  }
+  if (r.data?.status === 'connected') { wuzCheckStatus(); sbToast('ok', 'WhatsApp já estava conectado!'); return; }
+  if (r.data?.qr && area) {
+    area.innerHTML = `<div style="font-size:13px;font-weight:600;margin-bottom:12px">Escaneie com seu WhatsApp</div><img src="${r.data.qr}" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--accent);margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:12px">O QR Code se atualiza sozinho</div><button class="btn bg" style="font-size:11.5px" onclick="wuzConectar()">Gerar novo QR Code</button>`;
+  }
+  _iniciarPollingWuz();
+}
+
+function _iniciarPollingWuz() {
+  if (wuzQrInterval) clearInterval(wuzQrInterval);
+  let tries = 0;
+  wuzQrInterval = setInterval(async () => {
+    tries++;
+    const r = await WUZ.req('GET', '/qr');
+    if (r.data?.status === 'connected') {
+      clearInterval(wuzQrInterval);
+      wuzCheckStatus();
+      sbToast('ok', 'WhatsApp conectado!');
+      return;
+    }
+    const img = document.querySelector('#wuz-qr-area img');
+    if (img && r.data?.qr) img.src = r.data.qr;
+    if (tries > 30) clearInterval(wuzQrInterval);
+  }, 4000);
+}
+
+async function wuzDesconectar() {
+  if (!confirm('Desconectar WhatsApp (WuzAPI)?')) return;
+  await WUZ.req('POST', '/disconnect', {});
+  wuzConnected = false;
+  _wuzSetStatus('disconnected', 'Desconectado');
+  const area = document.getElementById('wuz-qr-area');
+  if (area) area.innerHTML = `<div style="font-size:14px;font-weight:600;margin-bottom:6px">Aguardando conexão</div><div style="font-size:12px;color:var(--muted);margin-bottom:16px">Clique em "Conectar WhatsApp" para gerar o QR Code</div><button class="btn bp" onclick="wuzConectar()">Conectar WhatsApp</button>`;
+  sbToast('ok', 'WhatsApp desconectado');
+}
 
 function roboTab(tab) {
   ['wp','auto','msgs','ia','chat'].forEach(t => {
@@ -113,7 +232,7 @@ function roboTab(tab) {
     if (s) s.style.display = t===tab ? '' : 'none';
   });
   if (tab==='msgs') evoCarregarHistorico();
-  if (tab==='wp')   evoCheckStatus();
+  if (tab==='wp')   waProviderInit();
   if (tab==='ia')   iaCarregarConfig();
 }
 

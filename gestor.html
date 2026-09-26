@@ -1147,7 +1147,7 @@ function temaToggleRapido() {
     <div id="robo-section-wp">
 
       <div class="gz-page-head" style="margin-bottom:20px">
-        <div><div class="gz-page-title" style="font-size:18px">Conexão WhatsApp</div><div class="gz-page-sub">Conecte seu número via Evolution API para envio de mensagens automáticas</div></div>
+        <div><div class="gz-page-title" style="font-size:18px">Conexão WhatsApp</div><div class="gz-page-sub">Conecte seu número para envio de mensagens automáticas</div></div>
         <div style="display:flex;gap:8px;align-items:center">
           <div id="evo-status-badge" style="display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);font-size:12px;font-weight:600;color:var(--muted)">
             <div id="evo-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--muted)"></div>
@@ -1157,8 +1157,19 @@ function temaToggleRapido() {
         </div>
       </div>
 
-      <!-- Config da instância -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <!-- Motor do WhatsApp -->
+      <div class="card" style="padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+        <div style="font-size:13px;font-weight:600">Motor de envio:</div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="radio" name="wa-provider" id="wa-provider-evolution" value="evolution" checked onchange="waProviderChange('evolution')"> Evolution API
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="radio" name="wa-provider" id="wa-provider-wuzapi" value="wuzapi" onchange="waProviderChange('wuzapi')"> WuzAPI <span style="font-size:11px;color:var(--muted)">(mais leve)</span>
+        </label>
+      </div>
+
+      <!-- Config da instância (Evolution) -->
+      <div id="evo-cards" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
         <div class="card" style="padding:20px">
           <div class="card-title" style="margin-bottom:14px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M4 4l1 1M11 11l1 1M4 12l1-1M11 5l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg> Configuração da Instância</div>
           <div class="form-row">
@@ -1186,6 +1197,25 @@ function temaToggleRapido() {
             <div style="font-size:15px;font-weight:700;color:var(--success);margin-bottom:4px">WhatsApp Conectado!</div>
             <div id="evo-phone-display" style="font-size:12px;color:var(--muted);margin-bottom:16px">—</div>
             <button class="btn bd" style="font-size:12px" onclick="evoDesconectar()">Desconectar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Conexão WuzAPI (escondida por padrão — aparece quando o motor selecionado é WuzAPI) -->
+      <div id="wuz-cards" style="display:none;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+        <div class="card" style="padding:20px">
+          <div class="card-title" style="margin-bottom:14px">WuzAPI</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Motor mais leve que a Evolution — não precisa de nome de instância, a conexão é criada automaticamente pra esta loja.</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);font-size:12px;font-weight:600;color:var(--muted);width:fit-content">
+            <div id="wuz-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--muted)"></div>
+            <span id="wuz-status-txt">Verificando...</span>
+          </div>
+        </div>
+        <div class="card" style="padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:280px">
+          <div id="wuz-qr-area" style="text-align:center">
+            <div style="font-size:14px;font-weight:600;margin-bottom:6px">Aguardando conexão</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Clique em "Conectar WhatsApp" para gerar o QR Code</div>
+            <button class="btn bp" onclick="wuzConectar()">Conectar WhatsApp</button>
           </div>
         </div>
       </div>

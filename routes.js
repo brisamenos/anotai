@@ -15,6 +15,7 @@ const crypto = require('crypto')
 const { buildOrderTrackingMessage } = require('./order-message')
 const { phoneLookupArgs, phoneLookupSql, phonesMatch } = require('./phone-utils')
 const _svBot = require('./suporte-vendas-bot') // WhatsApp de Suporte e Vendas (WuzAPI ou Evolution)
+const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (como sempre foi) ou WuzAPI (alternativa leve)
 
 // ── Helper: notifica cliente quando PIX é confirmado (online ou manual) ──────
 function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
@@ -353,6 +354,60 @@ function _svBotInit(ctx) {
     getInstanciaCobranca: () => _getInstanciaCobranca(ctx.db, ctx.EVO_INST),
     gerarCobrancaPix: (tenant, opts) => _gerarCobrancaBotPix(ctx, tenant, opts)
   })
+}
+
+let _tenantWaPronto = false
+function _tenantWaInit(ctx) {
+  if (_tenantWaPronto) return
+  _tenantWaPronto = true
+  _tenantWa.init({
+    db: ctx.db,
+    log: ctx.log,
+    marcarDirty: ctx.marcarDirty,
+    sseBroadcast: ctx.sseBroadcast
+  })
+}
+
+// URL publica do sistema, pra montar o webhook da WuzAPI
+function _baseUrlFromReq(req) {
+  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim()
+  const host  = (req.headers['x-forwarded-host'] || req.headers['host'] || '').split(',')[0].trim()
+  return host ? `${proto}://${host}` : ''
+}
+
+// Salva no wa_messages + SSE + pausa a IA quando o gestor responde pelo proprio celular.
+// Usado pelos DOIS motores (Evolution e WuzAPI) — msgs ja normalizadas no formato Baileys
+// (m.key.remoteJid/id/fromMe, m.messageTimestamp, m.pushName, m.message.*).
+function _ingestWaMessages(ctx, tid, msgs) {
+  const { db, marcarDirty, sseBroadcast, log, _pausaHumano } = ctx
+  const stmt = db.prepare(
+    'INSERT OR IGNORE INTO wa_messages (tenant_id, remote_jid, msg_id, payload, from_me, ts) VALUES (?,?,?,?,?,?)'
+  )
+  for (const m of msgs) {
+    const fromMe = m?.key?.fromMe === true || m?.key?.fromMe === 'true'
+    const jid    = m?.key?.remoteJid || ''
+    const mid    = m?.key?.id || ''
+    const ts     = +m?.messageTimestamp || 0
+    if (!jid || !mid || jid.startsWith('status@') || jid.endsWith('@lid')) continue
+    try {
+      stmt.run(tid, jid, mid, JSON.stringify(m), fromMe ? 1 : 0, ts)
+      marcarDirty()
+    } catch(e) { /* UNIQUE — já existe */ }
+    if (fromMe) {
+      const phone = jid.replace('@s.whatsapp.net','').replace('@c.us','')
+      // Se foi o ROBO que mandou (sendWA via WuzAPI), nao pausa a IA nela mesma —
+      // so pausa quando quem mandou foi o gestor de verdade (pelo app ou pela tela de chat).
+      if (phone && !_tenantWa.wasBotSent(mid)) {
+        _pausaHumano.set(`pausa:${tid}:${phone}`, Date.now())
+        log('👤', `[PAUSA] Gestor enviou via WA — IA pausada para ${phone} [${tid}]`)
+      }
+    }
+    if (!fromMe) sseBroadcast(`wa-msgs:${tid}`, 'wa:msg', m)
+  }
+  try {
+    const cutoff = Math.floor(Date.now()/1000) - 7*24*3600
+    db.prepare('DELETE FROM wa_messages WHERE tenant_id=? AND ts < ? AND ts > 0').run(tid, cutoff)
+  } catch(e) {}
 }
 
 // Corpo cru da requisicao (a WuzAPI pode mandar o webhook como formulario: jsonData=...)
@@ -935,7 +990,7 @@ async function _retentarLembretesNaoEntregues(ctx) {
 }
 
 function _iniciarAutoCobrancaJob(ctx) {
-  _svBotInit(ctx)
+  _svBotInit(ctx); _tenantWaInit(ctx)
   if (_autoCobrancaJobIniciado) return
   _autoCobrancaJobIniciado = true
   const { db, log, MP_TOKEN, EVO_URL, EVO_KEY, EVO_INST, sendWA, sendWAImage, marcarDirty, sseBroadcast } = ctx
@@ -1125,7 +1180,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           deliveryPausaAtiva, linkCardapioTenant,
           emit } = ctx
 
-  _svBotInit(ctx)
+  _svBotInit(ctx); _tenantWaInit(ctx)
 
   const INDICADOR_SESSION_TTL = 8 * 60 * 60 * 1000
   const criarSessaoIndicador = (ind) => {
@@ -6585,6 +6640,107 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── WhatsApp de cada loja via WuzAPI (/api/tenant-wa/*) — alternativa a Evolution ──
+  if (upath.startsWith('/api/tenant-wa')) {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 401, { error: 'x-tenant-id obrigatório' }); return true }
+    const action = upath.replace('/api/tenant-wa', '')
+    try {
+      if (req.method === 'GET' && (action === '' || action === '/status')) {
+        const cfg = _tenantWa.getConfig(tid)
+        const st = await _tenantWa.status(tid)
+        send(res, 200, { ...st, provider: cfg.whatsapp_provider || 'evolution' })
+        return true
+      }
+      if (req.method === 'POST' && action === '/provider') {
+        const body = await readBody(req)
+        const provider = await _tenantWa.setProvider(tid, body.provider)
+        send(res, 200, { ok: true, provider })
+        return true
+      }
+      if (req.method === 'POST' && action === '/connect') {
+        const r = await _tenantWa.connect(tid, _baseUrlFromReq(req))
+        send(res, 200, r)
+        return true
+      }
+      if (req.method === 'GET' && action === '/qr') {
+        send(res, 200, await _tenantWa.currentQr(tid))
+        return true
+      }
+      if (req.method === 'POST' && action === '/disconnect') {
+        await _tenantWa.disconnect(tid)
+        send(res, 200, { ok: true })
+        return true
+      }
+      if (req.method === 'POST' && action === '/send') {
+        const body = await readBody(req)
+        const phone = String(body.phone || body.number || '').replace(/\D/g, '')
+        const text  = String(body.text || body.message || '').trim()
+        if (!phone || !text) { send(res, 400, { error: 'phone e text obrigatórios' }); return true }
+        const id = await _tenantWa.sendText(tid, phone, text)
+        // Salva a propria msg enviada no wa_messages, pra aparecer na hora na tela (sem esperar o webhook)
+        const jid = (phone.startsWith('55') ? phone : `55${phone}`) + '@s.whatsapp.net'
+        _ingestWaMessages(ctx, tid, [{
+          key: { remoteJid: jid, id: id || `local-${Date.now()}`, fromMe: true },
+          messageTimestamp: Math.floor(Date.now() / 1000),
+          message: { conversation: text }
+        }])
+        send(res, 200, { ok: true, id })
+        return true
+      }
+      if (req.method === 'POST' && action === '/read') {
+        const body = await readBody(req)
+        const jid = String(body.jid || '')
+        if (!jid) { send(res, 400, { error: 'jid obrigatório' }); return true }
+        // Marca como lido ATE A ULTIMA MENSAGEM QUE JA EXISTE no thread (nao "agora") — evita
+        // que uma mensagem que chegue no mesmo segundo do clique fique com o relogio empatado.
+        const lastTs = db.prepare('SELECT MAX(ts) AS ts FROM wa_messages WHERE tenant_id=? AND remote_jid=?').get(tid, jid)?.ts || Math.floor(Date.now() / 1000)
+        db.prepare(`INSERT INTO wa_reads (tenant_id, remote_jid, last_read_ts) VALUES (?,?,?)
+          ON CONFLICT(tenant_id, remote_jid) DO UPDATE SET last_read_ts=excluded.last_read_ts`)
+          .run(tid, jid, lastTs)
+        send(res, 200, { ok: true })
+        return true
+      }
+      // Lista de conversas montada a partir do wa_messages (a WuzAPI nao tem endpoint
+      // tipo "findChats" — e o jeito mais leve mesmo, sem depender do motor).
+      if (req.method === 'GET' && action === '/chats') {
+        const rows = db.prepare(`
+          SELECT remote_jid,
+                 MAX(ts) AS last_ts,
+                 (SELECT payload FROM wa_messages w2 WHERE w2.tenant_id=w.tenant_id AND w2.remote_jid=w.remote_jid ORDER BY w2.ts DESC, w2.id DESC LIMIT 1) AS last_payload
+          FROM wa_messages w
+          WHERE tenant_id=?
+          GROUP BY remote_jid
+          ORDER BY last_ts DESC
+          LIMIT 200
+        `).all(tid)
+        const reads = db.prepare('SELECT remote_jid, last_read_ts FROM wa_reads WHERE tenant_id=?').all(tid)
+        const readMap = Object.fromEntries(reads.map(r => [r.remote_jid, r.last_read_ts]))
+        const unreadStmt = db.prepare(
+          'SELECT COUNT(*) AS n FROM wa_messages WHERE tenant_id=? AND remote_jid=? AND from_me=0 AND ts > ?'
+        )
+        const chats = rows.map(r => {
+          let last = null
+          try { last = JSON.parse(r.last_payload) } catch {}
+          const lastRead = readMap[r.remote_jid] || 0
+          const unread = unreadStmt.get(tid, r.remote_jid, lastRead).n
+          return {
+            _jid: r.remote_jid,
+            _ts: r.last_ts,
+            _unread: unread,
+            _name: last?.pushName || '',
+            _pic: null,
+            lastMessage: last
+          }
+        })
+        send(res, 200, { chats })
+        return true
+      }
+      send(res, 404, { error: 'Rota não encontrada' })
+    } catch(e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
   // ── Proxy Evolution API (/api/evo/*) ─────────────────
   if (upath.startsWith('/api/evo')) {
     const tenantId = req.headers['x-tenant-id']
@@ -6647,7 +6803,50 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
-  // ── Webhook WhatsApp / IA ────────────────────────────
+  // ── Webhook da WuzAPI (WhatsApp de cada loja — alternativa a Evolution) ──
+  // Registrado sozinho ao conectar em Robô → WhatsApp → WuzAPI.
+  // Traduz pro mesmo formato da Evolution e reusa TUDO que ja existe (salvar em
+  // wa_messages, SSE da tela de conversas, pausa da IA quando o gestor responde manual).
+  if (req.method === 'POST' && upath.startsWith('/webhook/wuz/')) {
+    const parts = upath.split('/') // '', webhook, wuz, tenantId, secret
+    const tidWuz = parts[3] || null
+    const secretWuz = parts[4] || ''
+    if (!tidWuz || !_tenantWa.webhookSecretMatches(tidWuz, secretWuz)) {
+      send(res, 401, { error: 'unauthorized' }); return true
+    }
+    let bodyWuz = {}
+    try { bodyWuz = await readBody(req) } catch(e) {}
+    send(res, 200, { ok: true }) // responde rapido, processa em segundo plano
+
+    ;(async () => {
+      try {
+        const msgs = _tenantWa.normalizeWuzToBaileys(bodyWuz)
+        if (!msgs.length) return
+        _ingestWaMessages(ctx, tidWuz, msgs)
+
+        // Robo de pedidos automatico ja fala WuzAPI (sendWA/sendWAImage migrados —
+        // ver _waInstanceFor no server.js). So processamos as mensagens do CLIENTE
+        // (fromMe:false) aqui; as do gestor (fromMe:true) ja tiveram a pausa da IA
+        // tratada acima em _ingestWaMessages (com suppressao de eco do proprio robo).
+        const cfgWuz = db.prepare('SELECT whatsapp_provider FROM store_config WHERE tenant_id=?').get(tidWuz)
+        if (cfgWuz?.whatsapp_provider !== 'wuzapi') return
+        const fakeRes = { setHeader(){}, writeHead(){}, end(){}, req:{ headers:{} } }
+        for (const m of msgs) {
+          if (m?.key?.fromMe) continue
+          const fakeBody = { data: m }
+          const fakeReqWuz = Object.assign(Object.create(req), {
+            _parsedBody: fakeBody,
+            url: `/webhook/whatsapp/${tidWuz}`,
+            headers: Object.assign({}, req.headers, { 'x-tenant-id': tidWuz })
+          })
+          try { await handleIAWebhook(fakeReqWuz, fakeRes) } catch(e) { log('⚠️', '[wuz-webhook] IA erro:', e.message) }
+        }
+      } catch(e) { log('⚠️', '[wuz-webhook] erro:', e.message) }
+    })()
+    return true
+  }
+
+  // ── Webhook WhatsApp / IA (Evolution) ────────────────
   if (req.method === 'POST' && (upath.startsWith('/webhook/whatsapp') || upath.startsWith('/webhook/'))) {
     const body  = await readBody(req)
     const event = body?.event || ''
@@ -6666,47 +6865,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const msgs = Array.isArray(body?.data?.messages)
         ? body.data.messages
         : (body?.data ? [body.data] : [])
-
-      const stmt = db.prepare(
-        'INSERT OR IGNORE INTO wa_messages (tenant_id, remote_jid, msg_id, payload, from_me, ts) VALUES (?,?,?,?,?,?)'
-      )
-
-      for (const m of msgs) {
-        const fromMe = m?.key?.fromMe === true || m?.key?.fromMe === 'true'
-        const jid    = m?.key?.remoteJid || ''
-        const mid    = m?.key?.id || ''
-        const ts     = +m?.messageTimestamp || 0
-
-        // Só ignora status e LIDs — qualquer outra mensagem é válida
-        if (!jid || !mid || jid.startsWith('status@') || jid.endsWith('@lid')) continue
-
-        // Salva no banco (recebidas e enviadas)
-        try {
-          stmt.run(tid_wh, jid, mid, JSON.stringify(m), fromMe ? 1 : 0, ts)
-          marcarDirty()
-        } catch(e) { /* UNIQUE — já existe */ }
-
-        // Se gestor enviou mensagem pelo próprio WhatsApp → pausa a IA para este contato
-        if (fromMe && tid_wh) {
-          const phone = jid.replace('@s.whatsapp.net','').replace('@c.us','')
-          if (phone) {
-            const pausaKey = `pausa:${tid_wh}:${phone}`
-            _pausaHumano.set(pausaKey, Date.now())
-            log('👤', `[PAUSA] Gestor enviou via WA (webhook) — IA pausada para ${phone} [${tid_wh}]`)
-          }
-        }
-
-        // SSE para mensagens RECEBIDAS (fromMe=false)
-        if (!fromMe) {
-          sseBroadcast(`wa-msgs:${tid_wh}`, 'wa:msg', m)
-        }
-      }
-
-      // Limpa msgs com mais de 7 dias
-      try {
-        const cutoff = Math.floor(Date.now()/1000) - 7*24*3600
-        db.prepare('DELETE FROM wa_messages WHERE tenant_id=? AND ts < ? AND ts > 0').run(tid_wh, cutoff)
-      } catch(e) {}
+      _ingestWaMessages(ctx, tid_wh, msgs)
     }
 
     // Processa IA (re-usa body já lido)
@@ -6794,6 +6953,21 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const { messageId, remoteJid } = body
     if (!messageId || !remoteJid) { send(res, 400, { error: 'messageId e remoteJid obrigatórios' }); return true }
     try {
+      // Loja na WuzAPI: baixa usando os dados de mídia (url/mediaKey/...) já salvos no wa_messages
+      const cfgProvider = db.prepare('SELECT whatsapp_provider FROM store_config WHERE tenant_id=?').get(tenantId)
+      if (cfgProvider?.whatsapp_provider === 'wuzapi') {
+        const row = db.prepare('SELECT payload FROM wa_messages WHERE tenant_id=? AND msg_id=?').get(tenantId, messageId)
+        let msgContent = null
+        try { msgContent = JSON.parse(row?.payload || '{}')?.message || null } catch(e) {}
+        const tipo = msgContent?.imageMessage ? 'image' : msgContent?.videoMessage ? 'video'
+          : msgContent?.audioMessage ? 'audio' : msgContent?.documentMessage ? 'document' : null
+        if (!tipo) { send(res, 404, { error: 'Mensagem de mídia não encontrada' }); return true }
+        const media = msgContent[`${tipo}Message`]
+        const result = await _tenantWa.downloadMedia(tenantId, tipo, media)
+        send(res, 200, { base64: result.base64, mimetype: result.mimetype, fileName: null })
+        return true
+      }
+
       const cfg  = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
       const inst = cfg?.evo_instance || EVO_INST
       if (!inst) { send(res, 400, { error: 'Instância não configurada' }); return true }

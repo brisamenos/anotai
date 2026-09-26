@@ -55,6 +55,13 @@ async function wzFetch(path, { method = 'GET', body, token, admin = false } = {}
 
 // ==================== Usuarios (admin) ====================
 
+// Confere quais numeros existem no WhatsApp e o JID certo de cada um
+// (ex: celular cadastrado com o 9 extra, mas registrado no WhatsApp sem ele)
+async function checkUsers(token, phones) {
+  const data = await wzFetch('/user/check', { method: 'POST', token, body: { Phone: phones } });
+  return Array.isArray(data?.Users) ? data.Users : [];
+}
+
 async function listUsers() {
   const data = await wzFetch('/admin/users', { admin: true });
   return Array.isArray(data) ? data : [];
@@ -177,33 +184,41 @@ async function sendPresence(token, phone) {
   return wzFetch('/chat/presence', { method: 'POST', token, body: { Phone: phone, State: 'composing', Media: '' } });
 }
 
-// audio = objeto audioMessage que veio no webhook
-async function downloadAudio(token, audio) {
-  const data = await wzFetch('/chat/downloadaudio', {
+// tipo: 'image' | 'video' | 'audio' | 'document'. media = objeto {audio,image,video,document}Message do webhook.
+async function downloadMedia(token, tipo, media) {
+  const endpoint = { image: 'downloadimage', video: 'downloadvideo', audio: 'downloadaudio', document: 'downloaddocument' }[tipo];
+  if (!endpoint) throw new Error(`Tipo de mídia desconhecido: ${tipo}`);
+  const data = await wzFetch(`/chat/${endpoint}`, {
     method: 'POST',
     token,
     body: {
-      Url: audio.URL || audio.url,
-      DirectPath: audio.directPath,
-      MediaKey: audio.mediaKey,
-      Mimetype: audio.mimetype,
-      FileEncSHA256: audio.fileEncSHA256,
-      FileSHA256: audio.fileSHA256,
-      FileLength: Number(audio.fileLength || 0)
+      Url: media.URL || media.url,
+      DirectPath: media.directPath,
+      MediaKey: media.mediaKey,
+      Mimetype: media.mimetype,
+      FileEncSHA256: media.fileEncSHA256,
+      FileSHA256: media.fileSHA256,
+      FileLength: Number(media.fileLength || 0)
     }
   });
   const dataUrl = String(data?.Data || '');
   const comma = dataUrl.indexOf(',');
   return {
     base64: comma === -1 ? dataUrl || null : dataUrl.slice(comma + 1),
-    mimetype: data?.Mimetype || audio.mimetype || 'audio/ogg'
+    mimetype: data?.Mimetype || media.mimetype || 'application/octet-stream'
   };
+}
+
+// audio = objeto audioMessage que veio no webhook (mantido por compatibilidade)
+async function downloadAudio(token, audio) {
+  return downloadMedia(token, 'audio', audio);
 }
 
 module.exports = {
   isConfigured,
   createUser,
   deleteUser,
+  checkUsers,
   connect,
   setWebhook,
   getQr,
@@ -215,5 +230,6 @@ module.exports = {
   sendList,
   sendPoll,
   sendPresence,
+  downloadMedia,
   downloadAudio
 };
