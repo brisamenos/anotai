@@ -5209,6 +5209,61 @@ function _vozCasarPizzaPorNome(tenantId, texto) {
   }
   return melhorScore >= 1 ? melhor : null
 }
+// Detecta sinal EXPLÍCITO de meio a meio (2 sabores) no texto — sem esse
+// sinal, um sabor só mencionado (ex: "pizza de calabresa") é sempre tratado
+// como pizza INTEIRA, sem perguntar "inteira ou meio a meio" depois. Critério
+// deliberadamente estreito (poucos padrões bem claros) pra não arriscar tratar
+// como meio a meio um pedido que era só inteira mesmo.
+function _vozTemSinalMeioAMeio(texto) {
+  const norm = _normBairro(texto)
+  if (!norm) return false
+  if (/meio\s*a\s*meio/.test(norm)) return true
+  if (/\bmeio\b.*\bmeio\b/.test(norm)) return true
+  if (/\bmeia\b.*\bmeia\b/.test(norm)) return true
+  if (/\bmetade\b.*\bmetade\b/.test(norm)) return true
+  if (/\b(dois|2)\s+sabores\b/.test(norm)) return true
+  return false
+}
+// Só chamada quando _vozTemSinalMeioAMeio já deu true — tenta achar o 2º
+// sabor (outro lado) entre os "irmãos" (mesma categoria) do 1º sabor já
+// casado, com o mesmo critério rigoroso de _vozCasarPizzaPorNome (bate 100%
+// das palavras fortes do nome). Não achando, quem chamou pergunta só isso
+// (pula a pergunta "inteira ou meio a meio", que já foi respondida pelo sinal
+// no texto — falta só qual é o outro sabor).
+function _vozDetectarSegundoSaborNoTexto(tenantId, item1, texto) {
+  const norm = _normBairro(texto)
+  if (!norm) return null
+  const siblings = _vozPizzaSiblings(tenantId, item1)
+  let melhor = null, melhorScore = 0
+  for (const p of siblings) {
+    const nomeSabor = _normBairro(p.name.replace(/^pizza\s*/i, ''))
+    const palavras = nomeSabor.split(/\s+/).filter(w => w.length >= 4)
+    if (!palavras.length) continue
+    const bate = palavras.filter(w => norm.includes(w)).length
+    const score = bate / palavras.length
+    if (bate > 0 && score > melhorScore) { melhor = p; melhorScore = score }
+  }
+  return melhorScore >= 1 ? melhor : null
+}
+// Tenta achar o TAMANHO da pizza já dito no texto (ex: "pizza grande de
+// calabresa") — casa contra o NOME real de cada tamanho configurado pro item
+// (nunca um valor fixo tipo "grande"/"média", porque cada tenant nomeia do
+// seu jeito, ex: "Família", "Gigante", "Broto"). Só decide se achar
+// exatamente 1 tamanho batendo — 0 ou 2+ batendo é ambíguo, pergunta como já
+// era (mais seguro que arriscar tamanho errado, que muda o preço).
+function _vozDetectarTamanhoNoTexto(item, texto) {
+  const cfg = _vozPizzaSizes(item)
+  if (!cfg) return null
+  const norm = _normBairro(texto)
+  if (!norm) return null
+  const bateram = cfg.tamanhos.filter(t => {
+    const nomeNorm = _normBairro(t.nome).replace(/\(.*?\)/g, '').trim()
+    if (!nomeNorm) return false
+    const escapado = nomeNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`\\b${escapado}\\b`).test(norm)
+  })
+  return bateram.length === 1 ? bateram[0].key : null
+}
 function _vozCategoriasAtivas(tenantId) {
   return db.prepare(`
     SELECT c.id, c.name, c.label
@@ -5380,18 +5435,41 @@ async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId) {
 }
 
 // Pizza: escolhido o 1º sabor, pergunta o tamanho (se a pizza tiver tamanhos
-// configurados) antes de perguntar inteira/meio a meio.
-async function _vozPizzaPerguntarTamanho(tenantId, phone, inst, draft, item) {
+// configurados) antes de seguir. "extra" carrega o que já foi decidido a
+// partir do texto do cliente (ver _vozResolverPizzaCasada): meioDecidido=true
+// → já sabe que é inteira (não pergunta meio a meio depois); item2Id → já
+// sabe o 2º sabor; aguardaSabor2 → sabe que é meio a meio mas falta o 2º
+// sabor; soObrigatorios → pizza veio de texto/áudio (não do catálogo manual),
+// então adicional opcional não mencionado não é perguntado no final.
+async function _vozPizzaPerguntarTamanho(tenantId, phone, inst, draft, item, extra) {
+  const meta = extra || {}
   const cfg = _vozPizzaSizes(item)
-  if (!cfg) { await _vozPizzaPerguntarMeio(tenantId, phone, inst, draft, { ...draft.meta, item1Id: item.id, sizeKey: null }); return }
+  if (!cfg) { await _vozPizzaProximoPassoAposTamanho(tenantId, phone, inst, draft, { ...meta, item1Id: item.id, sizeKey: null }); return }
   const opcoes = cfg.tamanhos.map(t => ({ id: `tam:${t.key}`, label: t.nome }))
-  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pizza_tamanho', ...draft, meta: { opcoes, item1Id: item.id } })
+  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pizza_tamanho', ...draft, meta: { ...meta, opcoes, item1Id: item.id } })
   await _vozEnviarOpcoes(phone, inst, {
     titulo: 'Tamanho',
     texto: `Qual tamanho da pizza *${item.name}*?`,
     buttonText: 'Ver tamanhos',
     rows: opcoes.map(o => ({ id: o.id, title: o.label }))
   })
+}
+// Depois do tamanho resolvido (achado no texto ou respondido por botão),
+// decide o próximo passo: se já sabe o 2º sabor ou já sabe que é inteira
+// (vindo do texto do cliente), pula direto pra fechar o item; se sabe que é
+// meio a meio mas falta o 2º sabor, pula a pergunta "inteira ou meio a meio"
+// e pergunta só o 2º sabor; senão (nada detectado no texto, ex: catálogo
+// manual), segue perguntando inteira/meio a meio como sempre.
+async function _vozPizzaProximoPassoAposTamanho(tenantId, phone, inst, draft, meta) {
+  if (meta.item2Id) {
+    await _vozPizzaFinalizarItem(tenantId, phone, inst, draft, meta)
+  } else if (meta.meioDecidido) {
+    await _vozPizzaFinalizarItem(tenantId, phone, inst, draft, { ...meta, item2Id: null })
+  } else if (meta.aguardaSabor2) {
+    await _vozPizzaListarSegundoSabor(tenantId, phone, inst, draft, meta)
+  } else {
+    await _vozPizzaPerguntarMeio(tenantId, phone, inst, draft, meta)
+  }
 }
 
 async function _vozPizzaPerguntarMeio(tenantId, phone, inst, draft, meta) {
@@ -5445,9 +5523,38 @@ async function _vozPizzaFinalizarItem(tenantId, phone, inst, draft, meta) {
     name = item1.name
     obs = p1.label ? `Tamanho: ${p1.label}.` : ''
   }
-  const novoItem = { id: item1.id, qty: 1, name, price, obs, gruposFaltando: _vozGruposDoItem(item1) }
+  // soObrigatorios=true (pizza veio de texto/áudio, não do catálogo manual):
+  // só grupo obrigatório (ex: Borda) vira pendência — adicional opcional que
+  // o cliente não mencionou não é perguntado, ele já descreveu o pedido.
+  const gruposFaltando = meta.soObrigatorios ? _vozGruposDoItem(item1).filter(g => g.required) : _vozGruposDoItem(item1)
+  const novoItem = { id: item1.id, qty: 1, name, price, obs, gruposFaltando }
   const itensAtualizados = [...(draft.itens || []), novoItem]
   await _vozProcessarGruposPendentes(tenantId, phone, inst, { ...draft, itens: itensAtualizados, meta: undefined })
+}
+// Ponto de entrada quando uma pizza foi casada por NOME no texto
+// (_vozCasarPizzaPorNome) — antes, sempre perguntava tamanho e depois SEMPRE
+// "inteira ou meio a meio?", mesmo o cliente já tendo dito só 1 sabor (ex:
+// "quero uma pizza de calabresa"). Agora tenta resolver o máximo possível a
+// partir do próprio texto: tamanho (se o nome do tamanho aparecer no texto) e
+// meio a meio (só com sinal explícito — sem sinal, 1 sabor mencionado = pizza
+// inteira, sem perguntar). Como o cliente já descreveu o pedido, marca
+// soObrigatorios=true pra também não perguntar adicional opcional.
+async function _vozResolverPizzaCasada(tenantId, phone, inst, draft, item1, textoOriginal) {
+  const sizeKeyDetectado = _vozDetectarTamanhoNoTexto(item1, textoOriginal)
+  const temSinalMeio = _vozTemSinalMeioAMeio(textoOriginal)
+  const item2Detectado = temSinalMeio ? _vozDetectarSegundoSaborNoTexto(tenantId, item1, textoOriginal) : null
+  const metaBase = {
+    item1Id: item1.id,
+    item2Id: item2Detectado ? item2Detectado.id : null,
+    meioDecidido: !temSinalMeio,
+    aguardaSabor2: temSinalMeio && !item2Detectado,
+    soObrigatorios: true
+  }
+  if (sizeKeyDetectado || !_vozPizzaSizes(item1)) {
+    await _vozPizzaProximoPassoAposTamanho(tenantId, phone, inst, draft, { ...metaBase, sizeKey: sizeKeyDetectado })
+  } else {
+    await _vozPizzaPerguntarTamanho(tenantId, phone, inst, draft, item1, metaBase)
+  }
 }
 
 // Item comum (não-pizza) escolhido na lista de uma categoria — adiciona ao
@@ -5638,7 +5745,7 @@ async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido, textoOrig
   // os grupos pendentes deles também, então nada se perde.
   const pizzaCasada = (_vozEhWuzapi(tenantId) && textoOriginal) ? _vozCasarPizzaPorNome(tenantId, textoOriginal) : null
   if (pizzaCasada) {
-    await _vozPizzaPerguntarTamanho(tenantId, phone, inst, { itens: [...itensBase, ...extraido.itens], bairro: extraido.bairro, ...base }, pizzaCasada)
+    await _vozResolverPizzaCasada(tenantId, phone, inst, { itens: [...itensBase, ...extraido.itens], bairro: extraido.bairro, ...base }, pizzaCasada, textoOriginal)
     return
   }
   if (!extraido.itens.length) {
@@ -6245,9 +6352,11 @@ async function extrairPedidoDeTexto(tenantId, texto) {
         const gruposTotais = _vozGruposDoItem(item)
         // Resolve as escolhas que a IA já capturou do áudio, batendo o nome
         // da opção contra a lista real do grupo (evita aceitar algo inventado).
-        // Grupo não mencionado (obrigatório OU opcional) vira pendência — o
-        // sistema pergunta depois por botão/lista, com opção de recusar
-        // quando o grupo não é obrigatório.
+        // Grupo OBRIGATÓRIO não mencionado vira pendência — o sistema
+        // pergunta depois por botão/lista. Grupo OPCIONAL (adicional) não
+        // mencionado NÃO vira pendência — o cliente já descreveu o pedido,
+        // então adicional que ele não pediu simplesmente não entra (só entra
+        // se ele mencionar explicitamente, capturado acima em "escolhas").
         const escolhasIA = Array.isArray(it.escolhas) ? it.escolhas : []
         const gruposResolvidos = [] // [{nome, escolhas:[{nome,preco,qty}]}]
         const gruposFaltando = []   // [{nome, tipo, required, max, opcoes:[{nome,preco}]}]
@@ -6259,12 +6368,18 @@ async function extrairPedidoDeTexto(tenantId, texto) {
               .filter(Boolean)
               .map(o => ({ nome: o.nome, preco: parseFloat(o.preco) || 0, qty: 1 }))
             if (escolhas.length) gruposResolvidos.push({ nome: g.nome, escolhas })
-            else gruposFaltando.push(g)
+            // Grupo OBRIGATÓRIO sem escolha vira pendência (pergunta depois).
+            // Grupo OPCIONAL (adicional) sem menção NÃO vira pendência mais —
+            // o cliente já disse o que queria (ex: "pizza de calabresa",
+            // "x-tudo"), então não faz sentido perguntar adicional que ele
+            // não pediu; só entra se ele mencionar explicitamente (acima).
+            else if (g.required) gruposFaltando.push(g)
           } else {
             const escolha = escolhasIA.find(e => _normBairro(e?.grupo || '') === _normBairro(g.nome))
             const opcaoMatch = escolha ? g.opcoes.find(o => _normBairro(o.nome) === _normBairro(escolha.opcao || '')) : null
             if (opcaoMatch) gruposResolvidos.push({ nome: g.nome, escolhas: [{ nome: opcaoMatch.nome, preco: parseFloat(opcaoMatch.preco) || 0, qty: 1 }] })
-            else gruposFaltando.push(g)
+            else if (g.required) gruposFaltando.push(g)
+            // opcional sem menção: idem, segue sem perguntar.
           }
         }
         return {
@@ -6431,7 +6546,10 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
       return true
     }
     const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-    await _vozPizzaPerguntarMeio(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: escolha.id.slice(4) })
+    await _vozPizzaProximoPassoAposTamanho(tenantId, phone, inst, draftSemMeta, {
+      item1Id: meta.item1Id, sizeKey: escolha.id.slice(4), item2Id: meta.item2Id,
+      meioDecidido: meta.meioDecidido, aguardaSabor2: meta.aguardaSabor2, soObrigatorios: meta.soObrigatorios
+    })
     return true
   }
   if (vozDraft.estado === 'aguardando_pizza_meio') {
@@ -6442,9 +6560,9 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
     }
     const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
     if (escolha.id === 'meio') {
-      await _vozPizzaListarSegundoSabor(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey })
+      await _vozPizzaListarSegundoSabor(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey, soObrigatorios: meta.soObrigatorios })
     } else {
-      await _vozPizzaFinalizarItem(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey, item2Id: null })
+      await _vozPizzaFinalizarItem(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey, item2Id: null, soObrigatorios: meta.soObrigatorios })
     }
     return true
   }
@@ -6455,7 +6573,7 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
       return true
     }
     const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-    await _vozPizzaFinalizarItem(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey, item2Id: escolha.id.slice(5) })
+    await _vozPizzaFinalizarItem(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey, item2Id: escolha.id.slice(5), soObrigatorios: meta.soObrigatorios })
     return true
   }
   if (vozDraft.estado === 'aguardando_tipo_entrega') {
