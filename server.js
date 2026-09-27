@@ -5569,12 +5569,24 @@ async function _vozResolverTipoEEndereco(tenantId, phone, inst, draftIn) {
   const subtotalCheck = draft.itens.reduce((s, i) => s + i.price * i.qty, 0)
   if (pedidoMinimo > 0 && subtotalCheck < pedidoMinimo) {
     const fmt = v => v.toFixed(2).replace('.', ',')
-    // IMPORTANTE: precisa salvar um novo estado aqui — sem isso o rascunho
-    // ficava parado no estado anterior (ex: "aguardando_tipo_entrega"), e a
-    // próxima mensagem do cliente (dizendo o que mais ele quer) era lida
-    // pelo handler errado ("Não entendi — responda entrega ou retirada").
-    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pedido_minimo', ...draft, tipo_pedido: 'delivery' })
-    await sendWA(phone, `O pedido mínimo pra entrega é R$${fmt(pedidoMinimo)} — faltam R$${fmt(pedidoMinimo - subtotalCheck)}. Me diga o que mais você quer adicionar (ex: "mais uma coca-cola").`, inst)
+    const faltamTxt = `O pedido mínimo pra entrega é R$${fmt(pedidoMinimo)} — faltam R$${fmt(pedidoMinimo - subtotalCheck)}.`
+    if (_vozEhWuzapi(tenantId)) {
+      // Mostra o cardápio interativo (categorias) de novo, já com o aviso do
+      // mínimo — _vozOferecerMaisItens já cuida de salvar o estado certo
+      // ("aguardando_mais_itens"), então não precisa salvar aqui.
+      await sendWA(phone, faltamTxt, inst)
+      await _vozOferecerMaisItens(tenantId, phone, inst, { ...draft, tipo_pedido: 'delivery' })
+    } else {
+      // Sem lista/botão nativo — manda o link do cardápio pra ele escolher e
+      // dizer/escrever o que mais quer, sem precisar adivinhar os itens.
+      // IMPORTANTE: precisa salvar um novo estado aqui — sem isso o rascunho
+      // ficava parado no estado anterior (ex: "aguardando_tipo_entrega"), e a
+      // próxima mensagem do cliente (dizendo o que mais ele quer) era lida
+      // pelo handler errado ("Não entendi — responda entrega ou retirada").
+      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pedido_minimo', ...draft, tipo_pedido: 'delivery' })
+      const linkCardapio = linkCardapioTenant(tenantId)
+      await sendWA(phone, `${faltamTxt} Dá uma olhada no cardápio e me diga o que mais você quer: ${linkCardapio}`, inst)
+    }
     return
   }
   const feeConfig = sc?.delivery_fee_config ? jsonParse(sc.delivery_fee_config) : {}
