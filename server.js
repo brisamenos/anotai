@@ -3792,6 +3792,32 @@ async function sendWAImage(phone, imageBase64, caption, inst) {
   } catch(e) { log('❌','Erro WA imagem:',{error:e.message}); return { ok:false, error:e.message } }
 }
 
+// Envia lista/botões interativos nativos do WhatsApp — só existe pra WuzAPI hoje
+// (Evolution/Baileys não tem esse envio implementado aqui). Usado pelo catálogo
+// interativo do pedido por voz (categorias, itens, sabores de pizza). Retorna
+// false (em vez de lançar) quando o envio falha ou o tenant não é WuzAPI, pra
+// quem chamou poder cair de volta pro texto simples sem quebrar o fluxo.
+async function sendWAList(phone, inst, opts) {
+  if (typeof inst !== 'string' || !inst.startsWith(WUZAPI_SENTINEL)) return false
+  const tenantId = inst.slice(WUZAPI_SENTINEL.length)
+  try {
+    const r = await _tenantWa.sendList(tenantId, phone, opts)
+    const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
+    if (id) _tenantWa.markBotSent(id)
+    return true
+  } catch (e) { log('⚠️', '[VOZ] sendList falhou:', e.message); return false }
+}
+async function sendWAButtons(phone, inst, opts) {
+  if (typeof inst !== 'string' || !inst.startsWith(WUZAPI_SENTINEL)) return false
+  const tenantId = inst.slice(WUZAPI_SENTINEL.length)
+  try {
+    const r = await _tenantWa.sendButtons(tenantId, phone, opts)
+    const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
+    if (id) _tenantWa.markBotSent(id)
+    return true
+  } catch (e) { log('⚠️', '[VOZ] sendButtons falhou:', e.message); return false }
+}
+
 // Marca mensagem do cliente como "lida" (✓✓ azul) na Evolution API.
 // Faz parte do fluxo humanizado: leitura → pausa → digitando → resposta.
 // Falha silenciosamente se o endpoint não estiver disponível ou o ID
@@ -5059,14 +5085,357 @@ async function _vozResolverModoPix(tenantId) {
   } catch (e) { return { online: false, manualDisponivel: false } }
 }
 
-// Fila de pendências de grupo obrigatório (ex: Borda) ainda sem escolha —
-// pega o primeiro item da lista que ainda tem grupo faltando.
+// ── Catálogo interativo por voz (WuzAPI): listas/botões nativos do WhatsApp
+// pra navegar categorias/itens e montar pizza meio a meio, em vez de só texto.
+// Só roda pra tenant no WuzAPI (sendWAList/sendWAButtons não existem na Evolution
+// aqui) — tenant na Evolution continua no fluxo 100% em texto de sempre.
+function _vozEhWuzapi(tenantId) {
+  try { return _tenantWa.isWuzapi(tenantId) } catch (e) { return false }
+}
+
+// Extrai id/texto de uma resposta de lista ou botão do WhatsApp (mesmo padrão
+// já usado no bot de vendas do admin — suporte-vendas-bot.js:choiceFrom/textFrom).
+function _waChoiceFrom(message) {
+  if (!message) return null
+  const nf = message.interactiveResponseMessage?.nativeFlowResponseMessage
+  if (nf) {
+    try {
+      const p = JSON.parse(nf.paramsJSON || nf.paramsJson || '{}')
+      if (p.id) return String(p.id)
+    } catch {}
+  }
+  return message.listResponseMessage?.singleSelectReply?.selectedRowID
+    || message.listResponseMessage?.singleSelectReply?.selectedRowId
+    || message.buttonsResponseMessage?.selectedButtonID
+    || message.buttonsResponseMessage?.selectedButtonId
+    || message.templateButtonReplyMessage?.selectedID
+    || message.templateButtonReplyMessage?.selectedId
+    || null
+}
+function _waTextFrom(message) {
+  if (!message) return ''
+  return String(
+    message.conversation ||
+    message.extendedTextMessage?.text ||
+    message.imageMessage?.caption ||
+    message.listResponseMessage?.title ||
+    message.buttonsResponseMessage?.selectedDisplayText ||
+    ''
+  ).trim()
+}
+
+// Mesma configuração de tamanho/meio-a-meio já usada no cardápio web e no chat
+// de acompanhamento (custom_groups com tipo 'pizza_sizes'/'tamanhos_pizza') —
+// duplicado aqui (em vez de importar de routes.js) pra não criar dependência
+// cruzada entre os dois arquivos.
+function _vozPizzaSizes(item) {
+  let groups = []
+  try { groups = item?.custom_groups ? JSON.parse(item.custom_groups) : [] } catch {}
+  const g = (Array.isArray(groups) ? groups : []).find(x => x && (x.tipo === 'pizza_sizes' || x.tipo === 'tamanhos_pizza') && Array.isArray(x.tamanhos))
+  if (!g) return null
+  const tamanhos = g.tamanhos.map(t => ({
+    key: String(t.key || t.nome || '').toUpperCase(),
+    nome: String(t.nome || t.label || t.key || ''),
+    preco: parseFloat(t.preco ?? t.price ?? t.valor ?? 0) || 0
+  })).filter(t => t.key && t.preco >= 0)
+  if (!tamanhos.length) return null
+  return { regra: String(g.regra_meio || g.regra || 'maior').toLowerCase(), tamanhos }
+}
+function _vozPizzaSizePrice(item, sizeKey) {
+  const cfg = _vozPizzaSizes(item)
+  if (!cfg) return { price: parseFloat(item?.price) || 0, label: null, regra: 'maior' }
+  const t = cfg.tamanhos.find(x => x.key === String(sizeKey || '').toUpperCase()) || cfg.tamanhos[0]
+  return { price: t ? t.preco : (parseFloat(item?.price) || 0), label: t ? t.nome : null, regra: cfg.regra }
+}
+function _vozEhPizza(item) {
+  if (!item) return false
+  if (item.item_type === 'pizza') return true
+  if (_vozPizzaSizes(item)) return true
+  const catTxt = `${item.cat || ''} ${item.cat_key || ''}`.toLowerCase()
+  return catTxt.includes('pizza')
+}
+function _vozCategoriasAtivas(tenantId) {
+  return db.prepare(`
+    SELECT c.id, c.name, c.label
+    FROM categories c
+    WHERE c.tenant_id=? AND (c.ativo IS NULL OR c.ativo=1)
+      AND EXISTS (
+        SELECT 1 FROM menu_items m
+        WHERE m.tenant_id=c.tenant_id AND (m.category_id=c.id OR m.cat_key=c.id OR m.cat=c.name)
+          AND (m.status IS NULL OR m.status NOT IN ('esgotado','inativo'))
+      )
+    ORDER BY c.sort_order, c.id
+  `).all(tenantId)
+}
+function _vozItensDaCategoria(tenantId, catId) {
+  const cat = db.prepare('SELECT id, name FROM categories WHERE tenant_id=? AND id=?').get(tenantId, catId)
+  return db.prepare(`
+    SELECT * FROM menu_items
+    WHERE tenant_id=? AND (category_id=? OR cat_key=? OR cat=?)
+      AND (status IS NULL OR status NOT IN ('esgotado','inativo'))
+    ORDER BY name
+  `).all(tenantId, catId, catId, cat?.name || '__none__')
+}
+function _vozPizzaSiblings(tenantId, item) {
+  const catKey = item.category_id || item.cat_key || item.cat
+  return db.prepare(`
+    SELECT * FROM menu_items
+    WHERE tenant_id=? AND id<>? AND (category_id=? OR cat_key=? OR cat=?)
+      AND (status IS NULL OR status NOT IN ('esgotado','inativo'))
+    ORDER BY name
+  `).all(tenantId, item.id, catKey, catKey, catKey)
+}
+function _vozItemPorId(tenantId, itemId) {
+  return db.prepare('SELECT * FROM menu_items WHERE tenant_id=? AND id=?').get(tenantId, itemId)
+}
+// Casa a resposta do cliente (toque na lista/botão OU texto digitado — número
+// da opção ou nome parecido) contra uma lista de opções mostrada. Usado em
+// todos os passos novos do catálogo interativo, no mesmo espírito de robustez
+// que o resto do fluxo de voz já tem pros passos em texto puro.
+function _vozResolverEscolha(msgRaw, choiceId, opcoes) {
+  if (choiceId) {
+    const hit = opcoes.find(o => o.id === choiceId)
+    if (hit) return hit
+  }
+  const digitado = String(msgRaw || '').trim()
+  const idx = parseInt(digitado, 10)
+  if (idx >= 1 && idx <= opcoes.length && /^\d+$/.test(digitado)) return opcoes[idx - 1]
+  const norm = _normBairro(digitado)
+  if (norm) {
+    const exact = opcoes.find(o => _normBairro(o.label) === norm)
+    if (exact) return exact
+    const partial = opcoes.find(o => _normBairro(o.label).includes(norm) || norm.includes(_normBairro(o.label)))
+    if (partial) return partial
+  }
+  return null
+}
+const _fmtR$ = v => (parseFloat(v) || 0).toFixed(2).replace('.', ',')
+
+// Ponto único de decisão "botão vs lista" pra TODO o catálogo interativo —
+// categorias, itens, sabores de pizza, grupos de adicional. Até 3 opções vai
+// de BOTÃO (mais rápido de tocar, mais "profissional"); mais que isso vai de
+// LISTA (o WhatsApp não permite mais de 3 botões). Se o envio falhar por
+// qualquer motivo (ou o tenant não for WuzAPI), cai pro texto numerado de
+// sempre — nunca deixa o cliente sem next step.
+async function _vozEnviarOpcoes(phone, inst, { titulo, texto, rows, buttonText }) {
+  let ok = false
+  if (rows.length && rows.length <= 3) {
+    ok = await sendWAButtons(phone, inst, { text: texto, buttons: rows.map(r => ({ id: r.id, text: r.title })) })
+  } else if (rows.length) {
+    ok = await sendWAList(phone, inst, { title: titulo, text: texto, buttonText: buttonText || 'Ver opções', sections: [{ title: titulo, rows }] })
+  }
+  if (!ok) {
+    const txt = rows.map((r, i) => `${i + 1}. ${r.title}${r.description ? ` (${r.description})` : ''}`).join('\n')
+    await sendWA(phone, `${texto}\n${txt}\n\nResponda com o número da opção.`, inst)
+  }
+  return ok
+}
+
+// Lista de categorias + "Finalizar pedido" — ponto de entrada/retorno do
+// catálogo interativo. Sempre que chega aqui, todos os itens já ditos no
+// áudio (e grupos deles) já estão resolvidos — isso só oferece ADICIONAR mais.
+async function _vozOferecerMaisItens(tenantId, phone, inst, draft) {
+  if (!_vozEhWuzapi(tenantId)) { await _vozResolverTipoEEndereco(tenantId, phone, inst, draft); return }
+  const cats = _vozCategoriasAtivas(tenantId)
+  if (!cats.length) { await _vozResolverTipoEEndereco(tenantId, phone, inst, draft); return }
+  const opcoes = cats.map(c => ({ id: `cat:${c.id}`, label: c.label || c.name }))
+  opcoes.push({ id: '__finalizar', label: 'Finalizar pedido' })
+  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_mais_itens', ...draft, meta: { opcoes } })
+  const jaTemItens = draft.itens?.length > 0
+  const subtotal = (draft.itens || []).reduce((s, i) => s + i.price * i.qty, 0)
+  const rows = cats.map(c => ({ id: `cat:${c.id}`, title: (c.label || c.name).slice(0, 24) }))
+  rows.push({ id: '__finalizar', title: '✅ Finalizar pedido' })
+  await _vozEnviarOpcoes(phone, inst, {
+    titulo: 'Cardápio',
+    texto: jaTemItens ? `Já anotei seu pedido (R$${_fmtR$(subtotal)} até agora). Quer adicionar mais alguma coisa?` : 'O que você vai querer? Escolha uma categoria.',
+    buttonText: 'Ver categorias',
+    rows
+  })
+}
+
+// Lista os itens de uma categoria (ou, se for categoria de pizza, os sabores
+// disponíveis pra montar a pizza) — passo seguinte a escolher uma categoria.
+async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId) {
+  const itens = _vozItensDaCategoria(tenantId, catId)
+  if (!itens.length) { await _vozOferecerMaisItens(tenantId, phone, inst, draft); return }
+  const ehPizza = itens.some(_vozEhPizza)
+  const opcoes = itens.map(i => ({ id: `item:${i.id}`, label: i.name }))
+  opcoes.push({ id: '__voltar', label: 'Voltar às categorias' })
+  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_categoria_item', ...draft, meta: { opcoes, catId, ehPizza } })
+  const rows = itens.map(i => ({
+    id: `item:${i.id}`,
+    title: i.name.slice(0, 24),
+    description: i.hide_price ? '' : `R$${_fmtR$(i.price)}`
+  }))
+  rows.push({ id: '__voltar', title: '⬅️ Voltar às categorias' })
+  await _vozEnviarOpcoes(phone, inst, {
+    titulo: ehPizza ? 'Escolha o sabor' : 'Itens',
+    texto: ehPizza ? 'Toque no primeiro sabor da pizza:' : 'Toque no item que você quer:',
+    buttonText: 'Ver opções',
+    rows
+  })
+  // Se tiver poucas fotos, manda como "cards" (imagem+legenda) pra ajudar a
+  // decidir visualmente — só os primeiros com foto, pra não floodar o chat.
+  const comFoto = itens.filter(i => i.image_url).slice(0, 4)
+  for (const i of comFoto) {
+    try { await sendWAImage(phone, i.image_url, `${i.name}${i.hide_price ? '' : ` — R$${_fmtR$(i.price)}`}`, inst) } catch {}
+  }
+}
+
+// Pizza: escolhido o 1º sabor, pergunta o tamanho (se a pizza tiver tamanhos
+// configurados) antes de perguntar inteira/meio a meio.
+async function _vozPizzaPerguntarTamanho(tenantId, phone, inst, draft, item) {
+  const cfg = _vozPizzaSizes(item)
+  if (!cfg) { await _vozPizzaPerguntarMeio(tenantId, phone, inst, draft, { ...draft.meta, item1Id: item.id, sizeKey: null }); return }
+  const opcoes = cfg.tamanhos.map(t => ({ id: `tam:${t.key}`, label: t.nome }))
+  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pizza_tamanho', ...draft, meta: { opcoes, item1Id: item.id } })
+  await _vozEnviarOpcoes(phone, inst, {
+    titulo: 'Tamanho',
+    texto: `Qual tamanho da pizza *${item.name}*?`,
+    buttonText: 'Ver tamanhos',
+    rows: opcoes.map(o => ({ id: o.id, title: o.label }))
+  })
+}
+
+async function _vozPizzaPerguntarMeio(tenantId, phone, inst, draft, meta) {
+  const opcoes = [{ id: 'inteira', label: 'Pizza inteira (1 sabor)' }, { id: 'meio', label: 'Meio a meio (2 sabores)' }]
+  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pizza_meio', ...draft, meta: { opcoes, ...meta } })
+  await _vozEnviarOpcoes(phone, inst, {
+    titulo: 'Inteira ou meio a meio',
+    texto: 'Quer a pizza inteira de um sabor só, ou meio a meio (2 sabores)?',
+    buttonText: 'Escolher',
+    rows: opcoes.map(o => ({ id: o.id, title: o.label }))
+  })
+}
+
+async function _vozPizzaListarSegundoSabor(tenantId, phone, inst, draft, meta) {
+  const item1 = _vozItemPorId(tenantId, meta.item1Id)
+  const siblings = item1 ? _vozPizzaSiblings(tenantId, item1) : []
+  if (!siblings.length) {
+    // Sem outro sabor cadastrado na mesma categoria — segue como pizza inteira mesmo.
+    await _vozPizzaFinalizarItem(tenantId, phone, inst, draft, { ...meta, item2Id: null })
+    return
+  }
+  const opcoes = siblings.map(i => ({ id: `item:${i.id}`, label: i.name }))
+  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pizza_sabor2', ...draft, meta: { opcoes, ...meta } })
+  await _vozEnviarOpcoes(phone, inst, {
+    titulo: 'Segundo sabor',
+    texto: 'E o outro lado, qual sabor?',
+    buttonText: 'Ver sabores',
+    rows: opcoes.map(o => ({ id: o.id, title: o.label.slice(0, 24) }))
+  })
+}
+
+// Fecha o item de pizza (inteira ou meio a meio) com o mesmo formato de nome/
+// preço/obs já usado no resto do sistema (cardápio web e chat de acompanhamento):
+// preço = maior das duas metades (ou média, conforme regra_meio), nome
+// "Pizza <tamanho> meia X / meia Y", obs "Tamanho: X. Meio a meio."
+async function _vozPizzaFinalizarItem(tenantId, phone, inst, draft, meta) {
+  const item1 = _vozItemPorId(tenantId, meta.item1Id)
+  const item2 = meta.item2Id ? _vozItemPorId(tenantId, meta.item2Id) : null
+  if (!item1) { await _vozOferecerMaisItens(tenantId, phone, inst, draft); return }
+  const p1 = _vozPizzaSizePrice(item1, meta.sizeKey)
+  let name, price, obs
+  if (item2) {
+    const p2 = _vozPizzaSizePrice(item2, meta.sizeKey)
+    const regra = p1.regra || p2.regra || 'maior'
+    price = regra === 'media' ? ((p1.price + p2.price) / 2) : Math.max(p1.price, p2.price)
+    const label = p1.label || p2.label
+    name = `Pizza${label ? ' ' + label : ''} meia ${item1.name.replace(/^pizza\s*/i, '')} / meia ${item2.name.replace(/^pizza\s*/i, '')}`
+    obs = `${label ? `Tamanho: ${label}. ` : ''}Meio a meio.`
+  } else {
+    price = p1.price
+    name = item1.name
+    obs = p1.label ? `Tamanho: ${p1.label}.` : ''
+  }
+  const novoItem = { id: item1.id, qty: 1, name, price, obs, gruposFaltando: _vozGruposDoItem(item1) }
+  const itensAtualizados = [...(draft.itens || []), novoItem]
+  await _vozProcessarGruposPendentes(tenantId, phone, inst, { ...draft, itens: itensAtualizados, meta: undefined })
+}
+
+// Item comum (não-pizza) escolhido na lista de uma categoria — adiciona ao
+// rascunho e, se tiver grupo (obrigatório OU adicional opcional), pergunta
+// antes de seguir — todo grupo é perguntado, opcional sempre com opção de
+// recusar ("Não quero"/"Sem adicional").
+async function _vozAdicionarItemComum(tenantId, phone, inst, draft, item) {
+  const novoItem = {
+    id: item.id, qty: 1, name: item.name, price: parseFloat(item.price) || 0, obs: '',
+    gruposFaltando: _vozGruposDoItem(item)
+  }
+  const itensAtualizados = [...(draft.itens || []), novoItem]
+  await _vozProcessarGruposPendentes(tenantId, phone, inst, { ...draft, itens: itensAtualizados, meta: undefined })
+}
+
+// Todos os grupos de opções (custom_groups) de um item que fazem sentido
+// perguntar por voz/texto — obrigatórios (ex: Borda, precisa escolher 1) E
+// opcionais (ex: Adicionais, pode recusar) — excluindo os tipos especiais de
+// pizza (tratados à parte por _vozPizzaSizes). 'radio' = escolhe 1 opção;
+// 'checkbox' = pode escolher várias (até 'max'), uma de cada vez.
+function _vozGruposDoItem(item) {
+  let grupos = []
+  try { grupos = item?.custom_groups ? JSON.parse(item.custom_groups) : [] } catch {}
+  if (!Array.isArray(grupos)) return []
+  return grupos
+    .filter(g => g && !['pizza_sizes', 'tamanhos_pizza', 'cortes', 'pesos'].includes(g?.tipo) && Array.isArray(g.opcoes) && g.opcoes.length)
+    .map(g => {
+      // Opção com "dias" customizado (ex: só sexta/sábado) some do WhatsApp
+      // fora desse dia — mesma regra de disponibilidade do gestor/cardápio
+      // web, pra nunca oferecer aqui algo que lá estaria escondido.
+      const hojeIdx = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getDay()
+      return {
+        nome: String(g.nome || 'Opções'),
+        tipo: g.tipo === 'checkbox' ? 'checkbox' : 'radio',
+        required: !!g.required,
+        max: parseInt(g.max) || (g.tipo === 'checkbox' ? g.opcoes.length : 1),
+        opcoes: g.opcoes
+          .filter(o => !Array.isArray(o.dias) || o.dias.length !== 7 || o.dias[hojeIdx])
+          .map(o => ({ nome: String(o.nome || ''), preco: parseFloat(o.preco) || 0 }))
+          .filter(o => o.nome)
+      }
+    })
+    .filter(g => g.opcoes.length)
+}
+
+// Fila de pendências de grupo (obrigatório ou opcional) ainda sem resposta —
+// pega o primeiro item da lista que ainda tem grupo pendente.
 function _vozProximaPendenciaGrupo(itens) {
   for (let idx = 0; idx < itens.length; idx++) {
     const it = itens[idx]
     if (it.gruposFaltando && it.gruposFaltando.length) return { itemIndex: idx, item: it, grupo: it.gruposFaltando[0] }
   }
   return null
+}
+
+// Manda a pergunta do grupo atual como BOTÕES (até 3 opções — mais rápido de
+// tocar) ou LISTA (mais de 3), sempre com opção de recusar quando o grupo não
+// é obrigatório. Pra grupo 'checkbox' (multi-escolha), cada toque adiciona
+// uma opção e reenvia a mesma pergunta com o que já foi escolhido marcado,
+// até o cliente tocar em "Concluir" ou atingir o máximo de opções do grupo.
+async function _vozPerguntarGrupo(tenantId, phone, inst, draft, item, grupo) {
+  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_grupo', ...draft })
+  const fmt = v => (parseFloat(v) || 0).toFixed(2).replace('.', ',')
+  let rows, textoPergunta
+  if (grupo.tipo === 'checkbox') {
+    const selecionados = grupo._selecionados || []
+    const restantes = grupo.opcoes.filter(o => !selecionados.some(s => s.nome === o.nome))
+    const totalQty = selecionados.reduce((s, x) => s + x.qty, 0)
+    const podeAddMais = restantes.length && totalQty < grupo.max
+    const resumo = selecionados.length ? `Já escolhido: ${selecionados.map(s => `${s.qty > 1 ? s.qty + 'x ' : ''}${s.nome}`).join(', ')}.\n` : ''
+    textoPergunta = `${resumo}Pro *${item.name}*, quer adicionar algo em *${grupo.nome.toLowerCase()}*?`
+    rows = podeAddMais ? grupo.opcoes.filter(o => !selecionados.some(s => s.nome === o.nome)).map(o => ({ id: `op:${o.nome}`, title: o.nome.slice(0, 24), description: o.preco > 0 ? `+R$${fmt(o.preco)}` : 'Grátis' })) : []
+    rows.push({ id: '__concluir', title: selecionados.length ? '✅ Concluir' : '🚫 Sem adicional' })
+  } else {
+    textoPergunta = `Pro seu *${item.name}*, qual *${grupo.nome.toLowerCase()}*?`
+    rows = grupo.opcoes.map(o => ({ id: `op:${o.nome}`, title: o.nome.slice(0, 24), description: o.preco > 0 ? `+R$${fmt(o.preco)}` : '' }))
+    if (!grupo.required) rows.push({ id: '__nenhum', title: '🚫 Não quero' })
+  }
+  let ok = false
+  if (rows.length <= 3) ok = await sendWAButtons(phone, inst, { text: textoPergunta, buttons: rows.map(r => ({ id: r.id, text: r.title })) })
+  else ok = await sendWAList(phone, inst, { title: grupo.nome, text: textoPergunta, buttonText: 'Ver opções', sections: [{ title: grupo.nome, rows }] })
+  if (!ok) {
+    const txt = rows.map((r, i) => `${i + 1}. ${r.title}${r.description ? ` (${r.description})` : ''}`).join('\n')
+    await sendWA(phone, `${textoPergunta}\n${txt}\n\nResponda com o número da opção${grupo.tipo === 'checkbox' ? ' (pode escolher mais de uma, uma de cada vez)' : ''}.`, inst)
+  }
 }
 
 function _vozTiposEntregaDisponiveis(tenantId) {
@@ -5100,6 +5469,16 @@ function _vozPontosRetirada(tenantId) {
 
 async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido) {
   if (!extraido.itens.length) {
+    // Loja no WuzAPI: em vez de desistir (ex: cliente só pediu pizza, que o
+    // áudio não sabe montar), abre o catálogo por lista pra ele escolher —
+    // cobre exatamente o caso de pizza/meio-a-meio pedido por voz.
+    if (_vozEhWuzapi(tenantId)) {
+      await _vozOferecerMaisItens(tenantId, phone, inst, {
+        itens: [], bairro: extraido.bairro, tipo_pedido: extraido.tipo_pedido,
+        forma_pagamento: extraido.forma_pagamento, observacao_geral: extraido.observacao_geral
+      })
+      return
+    }
     const motivo = extraido.nao_entendido ? ` (${extraido.nao_entendido})` : ''
     await sendWA(phone, `Não consegui identificar nenhum item do cardápio no seu áudio${motivo}. Pode tentar de novo ou escrever o pedido?`, inst)
     return
@@ -5113,27 +5492,32 @@ async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido) {
   })
 }
 
-// Pergunta, um de cada vez, qualquer grupo obrigatório (ex: Borda) que o
-// áudio não tenha esclarecido — só segue pro tipo de pedido/endereço quando
-// TODOS os itens já tiverem grupo resolvido (preço final fechado).
+// Pergunta, um de cada vez, qualquer grupo (obrigatório OU adicional opcional)
+// que o áudio/texto não tenha esclarecido — só segue pro tipo de pedido/
+// endereço quando TODOS os itens já tiverem todo grupo resolvido (preço final
+// fechado). "gruposResolvidos" sempre no formato {nome, escolhas:[{nome,preco,qty}]}
+// — escolhas vazio = cliente recusou o adicional opcional.
 async function _vozProcessarGruposPendentes(tenantId, phone, inst, draft) {
   const pend = _vozProximaPendenciaGrupo(draft.itens)
   if (pend) {
-    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_grupo', ...draft })
-    const fmt = v => v.toFixed(2).replace('.', ',')
-    const opcoesTxt = pend.grupo.opcoes.map(o => o.preco > 0 ? `${o.nome} (+R$${fmt(o.preco)})` : o.nome).join(', ')
-    await sendWA(phone, `Pro seu *${pend.item.name}*, qual ${pend.grupo.nome.toLowerCase()}? Opções: ${opcoesTxt}`, inst)
+    await _vozPerguntarGrupo(tenantId, phone, inst, draft, pend.item, pend.grupo)
     return
   }
   // Todos os grupos resolvidos — fecha o preço final de cada item (base +
   // extras escolhidos) e monta a descrição pro resumo/comanda.
   const itensFinal = draft.itens.map(it => {
-    const extras = (it.gruposResolvidos || []).reduce((s, g) => s + g.precoExtra, 0)
+    const extras = (it.gruposResolvidos || []).reduce((s, g) => s + g.escolhas.reduce((s2, e) => s2 + e.preco * e.qty, 0), 0)
     const fmt = v => v.toFixed(2).replace('.', ',')
-    const obsGrupos = (it.gruposResolvidos || []).map(g => `${g.nome}: ${g.opcaoNome}${g.precoExtra > 0 ? ` (+R$${fmt(g.precoExtra)})` : ''}`).join(' · ')
+    const obsGrupos = (it.gruposResolvidos || [])
+      .filter(g => g.escolhas.length)
+      .map(g => `${g.nome}: ${g.escolhas.map(e => `${e.qty > 1 ? e.qty + 'x ' : ''}${e.nome}${e.preco > 0 ? ` (+R$${fmt(e.preco * e.qty)})` : ''}`).join(', ')}`)
+      .join(' · ')
     return { id: it.id, name: it.name, qty: it.qty, price: it.price + extras, obs: [obsGrupos, it.obs].filter(Boolean).join(' | ') }
   })
-  await _vozResolverTipoEEndereco(tenantId, phone, inst, { itens: itensFinal, bairro: draft.bairro, tipo_pedido: draft.tipo_pedido, forma_pagamento: draft.forma_pagamento, observacao_geral: draft.observacao_geral })
+  // Loja no WuzAPI: antes de seguir pro tipo de entrega, oferece o catálogo
+  // por lista pra adicionar mais alguma coisa (inclusive pizza) — Evolution
+  // (sem lista/botão implementado aqui) segue direto como sempre seguiu.
+  await _vozOferecerMaisItens(tenantId, phone, inst, { itens: itensFinal, bairro: draft.bairro, tipo_pedido: draft.tipo_pedido, forma_pagamento: draft.forma_pagamento, observacao_geral: draft.observacao_geral })
 }
 
 // Resolve tipo de pedido (entrega/retirada) e, a partir dele, o
@@ -5494,9 +5878,9 @@ async function extrairPedidoDeTexto(tenantId, texto) {
     })
     if (!itensAtivos.length) return { itens: [], bairro: null, tipo_pedido: null, forma_pagamento: null, observacao_geral: null, nao_entendido: itensRaw.length ? 'Todos os itens do cardápio precisam de alguma escolha (sabor, tamanho, peso) que ainda não dá pra fazer por áudio.' : 'Cardápio vazio ou não configurado.' }
     const cardapioCtx = itensAtivos.map(i => {
-      const grupos = _vozGruposObrigatorios(i)
+      const grupos = _vozGruposDoItem(i)
       const base = { id: i.id, nome: i.name, preco: parseFloat(i.price) || 0 }
-      if (grupos.length) base.grupos_obrigatorios = grupos.map(g => ({ nome: g.nome, opcoes: g.opcoes.map(o => ({ nome: o.nome, preco_extra: parseFloat(o.preco) || 0 })) }))
+      if (grupos.length) base.grupos = grupos.map(g => ({ nome: g.nome, tipo: g.tipo, obrigatorio: g.required, opcoes: g.opcoes.map(o => ({ nome: o.nome, preco_extra: parseFloat(o.preco) || 0 })) }))
       return base
     })
     const sysPrompt = [
@@ -5504,7 +5888,8 @@ async function extrairPedidoDeTexto(tenantId, texto) {
       'Responda APENAS com um JSON válido, sem nenhum texto fora do JSON, no formato:',
       '{"itens":[{"item_id":123,"qty":1,"obs":"","escolhas":[{"grupo":"Borda","opcao":"Catupiry"}]}],"bairro":"nome do bairro ou null","tipo_pedido":"delivery|retirada|mesa|null","forma_pagamento":"dinheiro|pix|cartao|null","observacao_geral":"texto ou null","nao_entendido":"texto ou null"}',
       'Regras: use SOMENTE item_id que existam na lista de cardápio fornecida — nunca invente um id.',
-      'Se o item tiver "grupos_obrigatorios" no cardápio, é PRECISO escolher uma opção de cada grupo — se o cliente já disse no áudio (ex: "borda catupiry"), preencha em "escolhas" usando o nome EXATO da opção fornecida; se não disse, deixe "escolhas" vazio pra esse item (o sistema pergunta depois).',
+      'Cada item pode ter "grupos" no cardápio fornecido. Grupo com "obrigatorio":true PRECISA de 1 opção escolhida — se o cliente já disse no áudio (ex: "borda catupiry"), preencha em "escolhas" usando o nome EXATO da opção fornecida; se não disse, deixe sem nenhuma entrada pra esse grupo (o sistema pergunta depois). Grupo com "obrigatorio":false é um ADICIONAL opcional — só preencha "escolhas" pra ele se o cliente pediu explicitamente (ex: "com bacon extra"); NUNCA invente uma escolha pra um adicional que ele não mencionou.',
+      'Grupo com "tipo":"checkbox" aceita MAIS DE UMA opção — se o cliente pediu duas coisas desse grupo, repita uma entrada em "escolhas" pra cada uma, todas com o mesmo "grupo". Grupo "tipo":"radio" aceita só 1 opção.',
       'Se o cliente mencionar algo que não existe no cardápio, não invente um item parecido: descreva em "nao_entendido".',
       'Se o cliente não falar bairro/endereço, deixe "bairro" como null.',
       'Se o cliente disser que vai buscar/retirar, "tipo_pedido"="retirada". Se disser que é pra entregar/mandar em casa, "tipo_pedido"="delivery". Se disser que está numa mesa do restaurante, "tipo_pedido"="mesa". Se não falar nada sobre isso, deixe null.',
@@ -5533,17 +5918,30 @@ async function extrairPedidoDeTexto(tenantId, texto) {
         const item = mapaCardapio.get(parseInt(it.item_id))
         if (!item) return null // ignora qualquer id que a IA tenha inventado
         const qty = Math.max(1, parseInt(it.qty) || 1)
-        const gruposObrig = _vozGruposObrigatorios(item)
+        const gruposTotais = _vozGruposDoItem(item)
         // Resolve as escolhas que a IA já capturou do áudio, batendo o nome
         // da opção contra a lista real do grupo (evita aceitar algo inventado).
+        // Grupo não mencionado (obrigatório OU opcional) vira pendência — o
+        // sistema pergunta depois por botão/lista, com opção de recusar
+        // quando o grupo não é obrigatório.
         const escolhasIA = Array.isArray(it.escolhas) ? it.escolhas : []
-        const gruposResolvidos = [] // [{nome, opcaoNome, precoExtra}]
-        const gruposFaltando = []   // [{nome, opcoes:[{nome,preco}]}]
-        for (const g of gruposObrig) {
-          const escolha = escolhasIA.find(e => _normBairro(e?.grupo || '') === _normBairro(g.nome))
-          const opcaoMatch = escolha ? g.opcoes.find(o => _normBairro(o.nome) === _normBairro(escolha.opcao || '')) : null
-          if (opcaoMatch) gruposResolvidos.push({ nome: g.nome, opcaoNome: opcaoMatch.nome, precoExtra: parseFloat(opcaoMatch.preco) || 0 })
-          else gruposFaltando.push({ nome: g.nome, opcoes: g.opcoes.map(o => ({ nome: o.nome, preco: parseFloat(o.preco) || 0 })) })
+        const gruposResolvidos = [] // [{nome, escolhas:[{nome,preco,qty}]}]
+        const gruposFaltando = []   // [{nome, tipo, required, max, opcoes:[{nome,preco}]}]
+        for (const g of gruposTotais) {
+          if (g.tipo === 'checkbox') {
+            const matches = escolhasIA.filter(e => _normBairro(e?.grupo || '') === _normBairro(g.nome))
+            const escolhas = matches
+              .map(e => g.opcoes.find(o => _normBairro(o.nome) === _normBairro(e?.opcao || '')))
+              .filter(Boolean)
+              .map(o => ({ nome: o.nome, preco: parseFloat(o.preco) || 0, qty: 1 }))
+            if (escolhas.length) gruposResolvidos.push({ nome: g.nome, escolhas })
+            else gruposFaltando.push(g)
+          } else {
+            const escolha = escolhasIA.find(e => _normBairro(e?.grupo || '') === _normBairro(g.nome))
+            const opcaoMatch = escolha ? g.opcoes.find(o => _normBairro(o.nome) === _normBairro(escolha.opcao || '')) : null
+            if (opcaoMatch) gruposResolvidos.push({ nome: g.nome, escolhas: [{ nome: opcaoMatch.nome, preco: parseFloat(opcaoMatch.preco) || 0, qty: 1 }] })
+            else gruposFaltando.push(g)
+          }
         }
         return {
           id: item.id, name: item.name, price: parseFloat(item.price) || 0, qty,
@@ -5573,7 +5971,12 @@ async function handleIAWebhook(req, res) {
   else { const slug=upath.split('/')[2]||null; if(slug){const row=db.prepare("SELECT id FROM tenants WHERE slug=? OR id=?").get(slug,slug);tenantId=row?.id||null} }
   tenantId = tenantId||req.headers['x-tenant-id']||null
   try {
-    const msg    = body?.data?.message?.conversation||body?.data?.message?.extendedTextMessage?.text||''
+    // _waTextFrom também cobre resposta de lista/botão (title/selectedDisplayText),
+    // não só texto puro — sem isso, um toque numa lista/botão do catálogo
+    // interativo (aguardando_mais_itens etc.) chegava aqui como msg vazio e
+    // era descartado logo no "if (!msg||!from)" abaixo.
+    const msg    = _waTextFrom(body?.data?.message)
+    const msgChoiceId = _waChoiceFrom(body?.data?.message)
     const data   = body?.data || {}
     const from   = [data?.key?.remoteJid, data?.key?.remoteJidAlt, data?.key?.participant, data?.key?.participantAlt, data?.participant, data?.sender].find(j => phoneUtils.cleanWhatsappJid(j)) || data?.key?.remoteJid || ''
     const fromMe = body?.data?.key?.fromMe||false
@@ -5670,7 +6073,7 @@ async function handleIAWebhook(req, res) {
       }
     }
 
-    if (!msg||!from) { send(res,200,{ok:true}); return }
+    if ((!msg && !msgChoiceId)||!from) { send(res,200,{ok:true}); return }
     const phone = phoneUtils.cleanWhatsappJid(from)
     if (!phone) { send(res,200,{ok:true}); return }
     if (!tenantId) { send(res,200,{ok:true}); return }
@@ -5687,23 +6090,138 @@ async function handleIAWebhook(req, res) {
       if (vozDraft.estado === 'aguardando_grupo') {
         const pend = _vozProximaPendenciaGrupo(vozDraft.itens)
         if (!pend) { _vozApagarDraft(tenantId, phone); send(res,200,{ok:true, voz:true}); return }
-        const digitado = msg.trim()
-        const opcaoMatch = pend.grupo.opcoes.find(o => _normBairro(o.nome) === _normBairro(digitado))
-          || pend.grupo.opcoes.find(o => _normBairro(o.nome).includes(_normBairro(digitado)) || _normBairro(digitado).includes(_normBairro(o.nome)))
-        if (!opcaoMatch) {
-          const opcoesTxt = pend.grupo.opcoes.map(o => o.nome).join(', ')
-          await sendWA(phone, `Não entendi. Opções pra *${pend.grupo.nome}*: ${opcoesTxt}`, inst)
+        const grupo = pend.grupo
+        if (grupo.tipo === 'checkbox') {
+          const selecionados = grupo._selecionados || []
+          const opcoesResp = [
+            ...grupo.opcoes.filter(o => !selecionados.some(s => s.nome === o.nome)).map(o => ({ id: `op:${o.nome}`, label: o.nome })),
+            { id: '__concluir', label: selecionados.length ? 'Concluir' : 'Sem adicional' }
+          ]
+          const escolha = _vozResolverEscolha(msg, msgChoiceId, opcoesResp)
+          if (!escolha) {
+            await sendWA(phone, `Não entendi — toque numa opção pra *${grupo.nome}* ou responda com o número dela.`, inst)
+            send(res,200,{ok:true, voz:true}); return
+          }
+          if (escolha.id === '__concluir') {
+            const itensAtualizados = vozDraft.itens.map((it, idx) => idx !== pend.itemIndex ? it : {
+              ...it,
+              gruposFaltando: it.gruposFaltando.slice(1),
+              gruposResolvidos: [...(it.gruposResolvidos || []), { nome: grupo.nome, escolhas: selecionados }]
+            })
+            await _vozProcessarGruposPendentes(tenantId, phone, inst, { ...vozDraft, itens: itensAtualizados })
+          } else {
+            const opDef = grupo.opcoes.find(o => o.nome === escolha.id.slice(3))
+            const jaTem = selecionados.find(s => s.nome === opDef.nome)
+            const novosSelecionados = jaTem
+              ? selecionados.map(s => s.nome === opDef.nome ? { ...s, qty: s.qty + 1 } : s)
+              : [...selecionados, { nome: opDef.nome, preco: opDef.preco, qty: 1 }]
+            const grupoAtualizado = { ...grupo, _selecionados: novosSelecionados }
+            const itensAtualizados = vozDraft.itens.map((it, idx) => idx !== pend.itemIndex ? it : {
+              ...it, gruposFaltando: [grupoAtualizado, ...it.gruposFaltando.slice(1)]
+            })
+            await _vozPerguntarGrupo(tenantId, phone, inst, { ...vozDraft, itens: itensAtualizados }, itensAtualizados[pend.itemIndex], grupoAtualizado)
+          }
           send(res,200,{ok:true, voz:true}); return
         }
-        const itensAtualizados = vozDraft.itens.map((it, idx) => {
-          if (idx !== pend.itemIndex) return it
-          return {
-            ...it,
-            gruposFaltando: it.gruposFaltando.slice(1),
-            gruposResolvidos: [...(it.gruposResolvidos || []), { nome: pend.grupo.nome, opcaoNome: opcaoMatch.nome, precoExtra: parseFloat(opcaoMatch.preco) || 0 }]
-          }
+        // radio — 1 escolha só, com "Não quero" quando o grupo não é obrigatório
+        const opcoesResp = [
+          ...grupo.opcoes.map(o => ({ id: `op:${o.nome}`, label: o.nome })),
+          ...(grupo.required ? [] : [{ id: '__nenhum', label: 'Não quero' }])
+        ]
+        const escolha = _vozResolverEscolha(msg, msgChoiceId, opcoesResp)
+        if (!escolha) {
+          const opcoesTxt = grupo.opcoes.map(o => o.nome).join(', ')
+          await sendWA(phone, `Não entendi. Opções pra *${grupo.nome}*: ${opcoesTxt}${grupo.required ? '' : ' (ou "não quero")'}`, inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        const escolhas = escolha.id === '__nenhum' ? [] : (() => {
+          const o = grupo.opcoes.find(x => x.nome === escolha.id.slice(3))
+          return o ? [{ nome: o.nome, preco: o.preco, qty: 1 }] : []
+        })()
+        const itensAtualizados = vozDraft.itens.map((it, idx) => idx !== pend.itemIndex ? it : {
+          ...it,
+          gruposFaltando: it.gruposFaltando.slice(1),
+          gruposResolvidos: [...(it.gruposResolvidos || []), { nome: grupo.nome, escolhas }]
         })
         await _vozProcessarGruposPendentes(tenantId, phone, inst, { ...vozDraft, itens: itensAtualizados })
+        send(res,200,{ok:true, voz:true}); return
+      }
+      // ── Catálogo interativo (WuzAPI): categorias → itens/sabores → pizza ──
+      if (vozDraft.estado === 'aguardando_mais_itens') {
+        const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
+        if (!escolha) {
+          await sendWA(phone, 'Não entendi — toque numa opção da lista ou responda com o número dela.', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        // IMPORTANTE: também descarta o "estado" antigo aqui (não só "meta") —
+        // sem isso, a função chamada a seguir salva o rascunho com {estado:'X',
+        // ...draftSemMeta}, e como o spread vem DEPOIS do literal, um estado
+        // antigo sobrevivendo em draftSemMeta sobrescreveria o novo por engano,
+        // e a próxima resposta do cliente seria lida pelo handler errado.
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        if (escolha.id === '__finalizar') {
+          if (!draftSemMeta.itens?.length) {
+            await sendWA(phone, 'Você ainda não escolheu nenhum item — toque numa categoria da lista pra começar.', inst)
+            send(res,200,{ok:true, voz:true}); return
+          }
+          await _vozResolverTipoEEndereco(tenantId, phone, inst, draftSemMeta)
+        } else if (escolha.id.startsWith('cat:')) {
+          await _vozListarItensCategoria(tenantId, phone, inst, draftSemMeta, escolha.id.slice(4))
+        }
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_categoria_item') {
+        const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
+        if (!escolha) {
+          await sendWA(phone, 'Não entendi — toque numa opção da lista ou responda com o número dela.', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        if (escolha.id === '__voltar') {
+          await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta)
+        } else if (escolha.id.startsWith('item:')) {
+          const item = _vozItemPorId(tenantId, escolha.id.slice(5))
+          if (!item) { await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta); send(res,200,{ok:true, voz:true}); return }
+          if (meta?.ehPizza || _vozEhPizza(item)) {
+            await _vozPizzaPerguntarTamanho(tenantId, phone, inst, draftSemMeta, item)
+          } else {
+            await _vozAdicionarItemComum(tenantId, phone, inst, draftSemMeta, item)
+          }
+        }
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_pizza_tamanho') {
+        const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
+        if (!escolha) {
+          await sendWA(phone, 'Não entendi o tamanho — toque numa opção ou responda com o número dela.', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        await _vozPizzaPerguntarMeio(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: escolha.id.slice(4) })
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_pizza_meio') {
+        const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
+        if (!escolha) {
+          await sendWA(phone, 'Não entendi — a pizza vai ser inteira de um sabor só, ou meio a meio?', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        if (escolha.id === 'meio') {
+          await _vozPizzaListarSegundoSabor(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey })
+        } else {
+          await _vozPizzaFinalizarItem(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey, item2Id: null })
+        }
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_pizza_sabor2') {
+        const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
+        if (!escolha || !escolha.id.startsWith('item:')) {
+          await sendWA(phone, 'Não entendi — toque no sabor do outro lado da pizza, ou responda com o número dele.', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        await _vozPizzaFinalizarItem(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey, item2Id: escolha.id.slice(5) })
         send(res,200,{ok:true, voz:true}); return
       }
       if (vozDraft.estado === 'aguardando_tipo_entrega') {
@@ -5942,6 +6460,24 @@ async function handleIAWebhook(req, res) {
             _vozRegistrarUso(tenantId, phone)
             log('🎙️', `[VOZ-TXT] Pedido por texto detectado [${tenantId}] ${phone}: "${msgFull.slice(0, 80)}"`)
             await _vozIniciarConfirmacao(tenantId, phone, inst, extraidoTxt)
+            return
+          }
+          // Zero itens reconhecidos, mas o texto deixa clara a intenção de
+          // fazer um PEDIDO NOVO agora (ex: "quero pedir uma pizza", "to com
+          // fome", "quero fazer um pedido") — pra loja no WuzAPI, abre o
+          // catálogo por lista em vez de deixar a mensagem cair no roteador
+          // normal (que só manda o link). Fica igual ao que já acontece
+          // quando isso vem por áudio (mesma função, mesmo ponto de entrada).
+          // Regex deliberadamente mais estreita que a do link de cardápio —
+          // "cardápio"/"menu" sozinhos continuam só mandando o link (o link
+          // mostra foto/promoção melhor que a lista do WhatsApp); só intenção
+          // explícita de PEDIR abre o catálogo, pra não interceptar mensagem
+          // ambígua tipo só "cardápio?" ou pergunta de horário.
+          const _intencaoPedidoNovo = /\b(quero\s+pedir|fazer\s+um?\s+pedido|quero\s+fazer\s+(um\s+)?pedido|t[oô]\s+com\s+fome|estou\s+com\s+fome|quero\s+comprar|posso\s+pedir)\b/i
+          if (!_isSoSaudacao && _vozEhWuzapi(tenantId) && _intencaoPedidoNovo.test(msgFull)) {
+            _vozRegistrarUso(tenantId, phone)
+            log('🎙️', `[VOZ-TXT] Intenção de pedido sem item reconhecido — abrindo catálogo [${tenantId}] ${phone}: "${msgFull.slice(0, 80)}"`)
+            await _vozOferecerMaisItens(tenantId, phone, inst, { itens: [], bairro: null, tipo_pedido: null, forma_pagamento: null, observacao_geral: null })
             return
           }
         }
@@ -6217,12 +6753,19 @@ async function handleIAWebhook(req, res) {
       else if (_isPrimeiraMsgDia || _isSoSaudacao || _kwCardapio.test(_msgL)) {
         const nomeLojaFmt = `*${nomeLoja}*`
         const aviso = _avisoFechado ? `\n${_avisoFechado}` : ''
+        // Só menciona "pode pedir por áudio" se o add-on de voz estiver ativo
+        // pra ESSE tenant (tenants.voz_ativo) — cliente de loja sem o add-on
+        // nunca deve ver essa opção, senão manda áudio e o sistema ignora
+        // (comportamento de sempre quando voz_ativo=0/null).
+        const _vozHint = _tRowTxt?.voz_ativo
+          ? '\n\n🎙️ Ou, se preferir, manda um *áudio* contando o que você quer que eu já monto seu pedido aqui mesmo!'
+          : ''
         if (_isPrimeiraMsgDia || _isSoSaudacao) {
           resposta = _pickOne([
             `${_saudacaoHora}! 😊 Seja muito bem-vindo(a) ao ${nomeLojaFmt}!${aviso}\nDá uma olhadinha no nosso cardápio, tem coisa boa esperando por você: ${linkCardapio}`,
             `${_saudacaoHora}! 👋 Que bom te ver por aqui! Aqui é a ${nomeLojaFmt}.${aviso}\nConfira nosso cardápio e escolhe o que mais te agradar: ${linkCardapio}`,
             `${_saudacaoHora}! 🍽️ Bem-vindo(a) ao ${nomeLojaFmt} — vai ser um prazer te atender!${aviso}\nNosso cardápio completo está aqui: ${linkCardapio}`
-          ])
+          ]) + _vozHint
         } else {
           resposta = _pickOne([
             `${aviso ? aviso + '\n' : ''}Claro! 😋 Aqui está nosso cardápio: ${linkCardapio}`,

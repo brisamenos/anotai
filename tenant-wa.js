@@ -155,6 +155,29 @@ async function sendImage(tenantId, phone, imageBase64, caption) {
   return wuzapi.sendImage(cfg.wuzapi_token, first, imageBase64, caption || '');
 }
 
+// opts: { title, text, footer, buttonText, sections:[{title, rows:[{id,title,description}]}] }
+// Lista interativa nativa do WhatsApp — usada pelo catálogo de pedido por voz (categorias, itens, sabores de pizza).
+async function sendList(tenantId, phone, opts) {
+  const cfg = getConfig(tenantId);
+  if (!cfg.wuzapi_token) throw new Error('WhatsApp (WuzAPI) não conectado para esta loja');
+  const n = String(phone || '').replace(/\D/g, '');
+  const digits = n.startsWith('55') ? n : `55${n}`;
+  const known = _resolved.get(`${tenantId}:${digits}`);
+  const first = known && Date.now() - known.at < 24 * 3600 * 1000 ? known.to : digits;
+  return wuzapi.sendList(cfg.wuzapi_token, first, opts);
+}
+
+// opts: { text, footer, buttons:[{id,text}], image }
+async function sendButtons(tenantId, phone, opts) {
+  const cfg = getConfig(tenantId);
+  if (!cfg.wuzapi_token) throw new Error('WhatsApp (WuzAPI) não conectado para esta loja');
+  const n = String(phone || '').replace(/\D/g, '');
+  const digits = n.startsWith('55') ? n : `55${n}`;
+  const known = _resolved.get(`${tenantId}:${digits}`);
+  const first = known && Date.now() - known.at < 24 * 3600 * 1000 ? known.to : digits;
+  return wuzapi.sendButtons(cfg.wuzapi_token, first, opts);
+}
+
 // tipo: 'image' | 'video' | 'audio' | 'document'
 async function downloadMedia(tenantId, tipo, media) {
   const cfg = getConfig(tenantId);
@@ -247,6 +270,8 @@ module.exports = {
   sendText,
   sendPresence,
   sendImage,
+  sendList,
+  sendButtons,
   downloadMedia,
   webhookSecretMatches,
   normalizeWuzToBaileys,
