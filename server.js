@@ -4954,16 +4954,14 @@ setInterval(() => {
     if (r.changes > 0) log('🧹', `[PAUSA] Limpou ${r.changes} pausa(s) antiga(s) do banco`)
   } catch {}
 }, 60*60*1000)
-// Limite de uso do pedido por voz — protege contra custo de transcrição sem
-// controle (cliente mandando dezenas de áudios seguidos). Configurável aqui;
-// não existe tela pra isso ainda, é intencionalmente conservador.
+// Limite de uso do pedido por voz — REMOVIDO por pedido do Antnoi (28/09):
+// cliente mandando vários áudios seguidos vinha sendo bloqueado com "Você
+// enviou muitos áudios em pouco tempo...". Função sempre libera agora; o
+// log de uso (voz_uso_log) continua sendo gravado normalmente, então dá pra
+// reativar o limite depois só voltando o count check aqui, se precisar.
 const VOZ_LIMITE_POR_HORA = 8
 function _vozDentroDoLimite(tenantId, phone) {
-  try {
-    const umaHoraAtras = Date.now() - 60 * 60 * 1000
-    const row = db.prepare('SELECT COUNT(*) AS c FROM voz_uso_log WHERE tenant_id=? AND phone=? AND ts>?').get(tenantId, phone, umaHoraAtras)
-    return (row?.c || 0) < VOZ_LIMITE_POR_HORA
-  } catch (e) { return true } // falha na checagem não deve travar o cliente
+  return true
 }
 function _vozRegistrarUso(tenantId, phone) {
   try { db.prepare('INSERT INTO voz_uso_log (tenant_id,phone,ts) VALUES (?,?,?)').run(tenantId, phone, Date.now()) } catch (e) {}
@@ -5322,6 +5320,19 @@ function _vozResolverEscolha(msgRaw, choiceId, opcoes) {
   return null
 }
 const _fmtR$ = v => (parseFloat(v) || 0).toFixed(2).replace('.', ',')
+// Fotos de itens (image_url) são gravadas como caminho relativo (ex:
+// "/uploads/xxx.jpg") — funciona no cardápio web (mesmo domínio), mas o
+// WhatsApp (Evolution/WuzAPI) precisa de uma URL pública completa pra baixar
+// a imagem; sem isso o envio falha em silêncio (só o "digitando" aparece).
+// Já vem absoluta (http/https) → mantém como está.
+function _vozUrlAbsoluta(tenantId, url) {
+  const u = String(url || '')
+  if (/^https?:\/\//i.test(u)) return u
+  let segmento = ''
+  try { segmento = db.prepare('SELECT segmento FROM tenants WHERE id=?').get(tenantId)?.segmento || '' } catch {}
+  const base = segmento === 'acougue' ? BUTCHERBOX_BASE_URL : PUBLIC_BASE_URL
+  return `${base}${u.startsWith('/') ? '' : '/'}${u}`
+}
 
 // Ponto único de decisão "botão vs lista" pra TODO o catálogo interativo —
 // categorias, itens, sabores de pizza, grupos de adicional. Até 3 opções vai
@@ -5424,7 +5435,7 @@ async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId) {
   // foto, pra não floodar o chat.
   const comFoto = itens.filter(i => i.image_url).slice(0, 4)
   for (const i of comFoto) {
-    try { await sendWAImage(phone, i.image_url, `${i.name}${i.hide_price ? '' : ` — R$${_fmtR$(i.price)}`}`, inst) } catch {}
+    try { await sendWAImage(phone, _vozUrlAbsoluta(tenantId, i.image_url), `${i.name}${i.hide_price ? '' : ` — R$${_fmtR$(i.price)}`}`, inst) } catch {}
   }
   await _vozEnviarOpcoes(phone, inst, {
     titulo: ehPizza ? 'Escolha o sabor' : 'Itens',
@@ -5624,9 +5635,24 @@ async function _vozPerguntarGrupo(tenantId, phone, inst, draft, item, grupo) {
     const restantes = grupo.opcoes.filter(o => !selecionados.some(s => s.nome === o.nome))
     const totalQty = selecionados.reduce((s, x) => s + x.qty, 0)
     const podeAddMais = restantes.length && totalQty < grupo.max
+    // Primeiro convite (nada escolhido ainda) de um grupo OPCIONAL com muitas
+    // opções (viraria uma lista longa): pergunta antes com 2 botões de
+    // verdade — "Adicionar" abre a lista de opções, "Sem adicional" já
+    // resolve o grupo — em vez de enfiar o "Sem adicional" como só mais uma
+    // linha no fim de uma lista grande, onde o cliente pode nem perceber
+    // que essa saída existe (fica escondida atrás de "Ver opções").
+    if (!grupo.required && !selecionados.length && !grupo._listaAberta && restantes.length > 3) {
+      const textoConvite = `Pro *${item.name}*, quer adicionar algo em *${grupo.nome.toLowerCase()}*?`
+      const ok = await sendWAButtons(phone, inst, {
+        text: textoConvite,
+        buttons: [{ id: '__abrir_grupo', text: '➕ Adicionar' }, { id: '__concluir', text: '🚫 Sem adicional' }]
+      })
+      if (!ok) await sendWA(phone, `${textoConvite}\n1. Adicionar\n2. Sem adicional\n\nResponda com o número da opção.`, inst)
+      return
+    }
     const resumo = selecionados.length ? `Já escolhido: ${selecionados.map(s => `${s.qty > 1 ? s.qty + 'x ' : ''}${s.nome}`).join(', ')}.\n` : ''
     textoPergunta = `${resumo}Pro *${item.name}*, quer adicionar algo em *${grupo.nome.toLowerCase()}*?`
-    rows = podeAddMais ? grupo.opcoes.filter(o => !selecionados.some(s => s.nome === o.nome)).map(o => ({ id: `op:${o.nome}`, title: o.nome.slice(0, 24), description: o.preco > 0 ? `+R$${fmt(o.preco)}` : 'Grátis' })) : []
+    rows = podeAddMais ? restantes.map(o => ({ id: `op:${o.nome}`, title: o.nome.slice(0, 24), description: o.preco > 0 ? `+R$${fmt(o.preco)}` : 'Grátis' })) : []
     rows.push({ id: '__concluir', title: selecionados.length ? '✅ Concluir' : '🚫 Sem adicional' })
   } else {
     textoPergunta = `Pro seu *${item.name}*, qual *${grupo.nome.toLowerCase()}*?`
@@ -6418,13 +6444,28 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
     const grupo = pend.grupo
     if (grupo.tipo === 'checkbox') {
       const selecionados = grupo._selecionados || []
-      const opcoesResp = [
-        ...grupo.opcoes.filter(o => !selecionados.some(s => s.nome === o.nome)).map(o => ({ id: `op:${o.nome}`, label: o.nome })),
-        { id: '__concluir', label: selecionados.length ? 'Concluir' : 'Sem adicional' }
-      ]
+      const restantes = grupo.opcoes.filter(o => !selecionados.some(s => s.nome === o.nome))
+      // Espelha a mesma condição do convite de 2 botões em _vozPerguntarGrupo
+      // — enquanto essa tela está de pé, as opções válidas são só essas 2,
+      // não a lista inteira de itens (que ainda nem foi mostrada).
+      const naGate = !grupo.required && !selecionados.length && !grupo._listaAberta && restantes.length > 3
+      const opcoesResp = naGate
+        ? [{ id: '__abrir_grupo', label: 'Adicionar' }, { id: '__concluir', label: 'Sem adicional' }]
+        : [
+            ...restantes.map(o => ({ id: `op:${o.nome}`, label: o.nome })),
+            { id: '__concluir', label: selecionados.length ? 'Concluir' : 'Sem adicional' }
+          ]
       const escolha = _vozResolverEscolha(msg, msgChoiceId, opcoesResp)
       if (!escolha) {
         await sendWA(phone, `Não entendi — toque numa opção pra *${grupo.nome}* ou responda com o número dela.`, inst)
+        return true
+      }
+      if (escolha.id === '__abrir_grupo') {
+        const grupoAtualizado = { ...grupo, _listaAberta: true }
+        const itensAtualizados = vozDraft.itens.map((it, idx) => idx !== pend.itemIndex ? it : {
+          ...it, gruposFaltando: [grupoAtualizado, ...it.gruposFaltando.slice(1)]
+        })
+        await _vozPerguntarGrupo(tenantId, phone, inst, { ...vozDraft, itens: itensAtualizados }, itensAtualizados[pend.itemIndex], grupoAtualizado)
         return true
       }
       if (escolha.id === '__concluir') {
