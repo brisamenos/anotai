@@ -5234,7 +5234,8 @@ async function _vozEnviarOpcoes(phone, inst, { titulo, texto, rows, buttonText }
 // Lista de categorias + "Finalizar pedido" — ponto de entrada/retorno do
 // catálogo interativo. Sempre que chega aqui, todos os itens já ditos no
 // áudio (e grupos deles) já estão resolvidos — isso só oferece ADICIONAR mais.
-async function _vozOferecerMaisItens(tenantId, phone, inst, draft) {
+async function _vozOferecerMaisItens(tenantId, phone, inst, draftIn) {
+  const { estado: _e, meta: _m, ...draft } = draftIn
   if (!_vozEhWuzapi(tenantId)) { await _vozResolverTipoEEndereco(tenantId, phone, inst, draft); return }
   const cats = _vozCategoriasAtivas(tenantId)
   if (!cats.length) { await _vozResolverTipoEEndereco(tenantId, phone, inst, draft); return }
@@ -5522,7 +5523,11 @@ async function _vozProcessarGruposPendentes(tenantId, phone, inst, draft) {
 
 // Resolve tipo de pedido (entrega/retirada) e, a partir dele, o
 // endereço/taxa — depois segue pra forma de pagamento.
-async function _vozResolverTipoEEndereco(tenantId, phone, inst, draft) {
+async function _vozResolverTipoEEndereco(tenantId, phone, inst, draftIn) {
+  // Descarta qualquer "estado"/"meta" residual que tenha vindo grudado no
+  // draft (mesma proteção já aplicada em _vozContinuarPagamento/_vozPedirRuaNumero)
+  // — sem isso, um _vozSalvarDraft mais abaixo pode gravar o estado errado.
+  const { estado: _e, meta: _m, ...draft } = draftIn
   const tiposDisp = _vozTiposEntregaDisponiveis(tenantId)
   if (!tiposDisp.length) {
     await sendWA(phone, 'No momento o pedido por voz não está disponível pra essa loja. Fale com o atendente ou use o cardápio.', inst)
@@ -5564,7 +5569,12 @@ async function _vozResolverTipoEEndereco(tenantId, phone, inst, draft) {
   const subtotalCheck = draft.itens.reduce((s, i) => s + i.price * i.qty, 0)
   if (pedidoMinimo > 0 && subtotalCheck < pedidoMinimo) {
     const fmt = v => v.toFixed(2).replace('.', ',')
-    await sendWA(phone, `O pedido mínimo pra entrega é R$${fmt(pedidoMinimo)} — faltam R$${fmt(pedidoMinimo - subtotalCheck)}. Quer adicionar mais alguma coisa?`, inst)
+    // IMPORTANTE: precisa salvar um novo estado aqui — sem isso o rascunho
+    // ficava parado no estado anterior (ex: "aguardando_tipo_entrega"), e a
+    // próxima mensagem do cliente (dizendo o que mais ele quer) era lida
+    // pelo handler errado ("Não entendi — responda entrega ou retirada").
+    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pedido_minimo', ...draft, tipo_pedido: 'delivery' })
+    await sendWA(phone, `O pedido mínimo pra entrega é R$${fmt(pedidoMinimo)} — faltam R$${fmt(pedidoMinimo - subtotalCheck)}. Me diga o que mais você quer adicionar (ex: "mais uma coca-cola").`, inst)
     return
   }
   const feeConfig = sc?.delivery_fee_config ? jsonParse(sc.delivery_fee_config) : {}
@@ -5579,28 +5589,69 @@ async function _vozResolverTipoEEndereco(tenantId, phone, inst, draft) {
     await sendWA(phone, `Pra qual bairro é a entrega?${sugestoesTxt}`, inst)
     return
   }
-  await _vozContinuarPagamento(tenantId, phone, inst, { ...draft, tipo_pedido: 'delivery', addr: resTaxa.addrLabel || draft.bairro, taxa: resTaxa.taxa })
+  await _vozPedirRuaNumero(tenantId, phone, inst, { ...draft, tipo_pedido: 'delivery', bairroLabel: resTaxa.addrLabel || draft.bairro, taxa: resTaxa.taxa })
 }
 
-async function _vozContinuarPagamento(tenantId, phone, inst, draft) {
-  if (!draft.forma_pagamento) {
-    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pagamento', ...draft })
-    const pixInfo = await _vozResolverModoPix(tenantId)
-    const opcoes = ['*dinheiro*']
-    if (pixInfo.online || pixInfo.manualDisponivel) opcoes.push('*pix*')
-    const opcoesTxt = opcoes.length > 1 ? opcoes.join(' ou ') : opcoes[0]
-    await sendWA(phone, `Como prefere pagar? Responda ${opcoesTxt}.`, inst)
+// Depois do bairro resolvido (só serve pra calcular a taxa), pede rua e
+// número pra fechar o endereço completo — sem isso o entregador só saberia
+// o bairro, que não é suficiente pra achar a casa. Segue o mesmo padrão de
+// pergunta livre (texto) já usado pro bairro, já que é campo aberto.
+async function _vozPedirRuaNumero(tenantId, phone, inst, draftIn) {
+  const { estado: _e, meta: _m, ...draft } = draftIn
+  if (draft.rua_numero) {
+    const addr = [draft.rua_numero, draft.bairroLabel].filter(Boolean).join(' - ')
+    const { bairroLabel, rua_numero, ...draftLimpo } = draft
+    await _vozContinuarPagamento(tenantId, phone, inst, { ...draftLimpo, addr })
     return
   }
-  // Cartão ainda não é aceito por voz — normaliza pra dinheiro aqui (antes da
-  // pergunta de troco), guardando o aviso pra mostrar no resumo final.
-  if (draft.forma_pagamento === 'cartao') draft = { ...draft, forma_pagamento: 'dinheiro', _eraCartao: true }
+  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_rua_numero', ...draft })
+  await sendWA(phone, 'Qual é a rua e o número da entrega? (ex: "Rua das Flores, 123")', inst)
+}
+
+async function _vozContinuarPagamento(tenantId, phone, inst, draftIn) {
+  const { estado: _e, meta: _m, ...draft } = draftIn
+  if (!draft.forma_pagamento) {
+    const pixInfo = await _vozResolverModoPix(tenantId)
+    const opcoes = [
+      { id: 'dinheiro', label: 'Dinheiro' },
+      { id: 'credito', label: 'Cartão de Crédito' },
+      { id: 'debito', label: 'Cartão de Débito' }
+    ]
+    if (pixInfo.online || pixInfo.manualDisponivel) opcoes.push({ id: 'pix', label: 'Pix' })
+    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_pagamento', ...draft, meta: { opcoes } })
+    await _vozEnviarOpcoes(phone, inst, {
+      titulo: 'Pagamento',
+      texto: 'Como prefere pagar?',
+      buttonText: 'Ver formas de pagamento',
+      rows: opcoes.map(o => ({ id: o.id, title: o.label }))
+    })
+    return
+  }
+  // Cliente falou só "cartão" (comum por áudio, sem dizer qual) — confirma
+  // se é crédito ou débito antes de fechar, pro gestor já receber certo.
+  if (draft.forma_pagamento === 'cartao') {
+    const opcoes = [{ id: 'credito', label: 'Crédito' }, { id: 'debito', label: 'Débito' }]
+    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_tipo_cartao', ...draft, meta: { opcoes } })
+    await _vozEnviarOpcoes(phone, inst, {
+      titulo: 'Cartão',
+      texto: 'É cartão de crédito ou débito?',
+      buttonText: 'Escolher',
+      rows: opcoes.map(o => ({ id: o.id, title: o.label }))
+    })
+    return
+  }
   // Pagamento em dinheiro: o cardápio sempre pergunta troco no checkout —
   // replica aqui antes de fechar o resumo, pra não deixar o entregador sem
   // saber se precisa levar troco.
   if (draft.forma_pagamento === 'dinheiro' && draft.troco === undefined) {
-    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_troco', ...draft })
-    await sendWA(phone, 'Precisa de troco? Se sim, me diga pra quanto (ex: "pra 50 reais"). Se não precisar, responda *não*.', inst)
+    const opcoes = [{ id: 'sim', label: 'Sim, preciso de troco' }, { id: 'nao', label: 'Não precisa' }]
+    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_troco', ...draft, meta: { opcoes } })
+    await _vozEnviarOpcoes(phone, inst, {
+      titulo: 'Troco',
+      texto: 'Precisa de troco?',
+      buttonText: 'Escolher',
+      rows: opcoes.map(o => ({ id: o.id, title: o.label }))
+    })
     return
   }
   await _vozMontarConfirmacaoFinal(tenantId, phone, inst, draft)
@@ -5614,7 +5665,8 @@ async function _vozMontarConfirmacaoFinal(tenantId, phone, inst, draft) {
   const total = subtotal + taxa
   const fmt = v => v.toFixed(2).replace('.', ',')
   const listaItens = draft.itens.map(i => `${i.qty}x ${i.name}${i.obs ? ` (${i.obs})` : ''}`).join('\n')
-  let pagLabel = draft.forma_pagamento === 'pix' ? 'PIX' : draft._eraCartao ? 'Cartão (ainda não aceito por voz — será dinheiro na entrega)' : 'Dinheiro na entrega'
+  const pagLabelMap = { pix: 'PIX', credito: 'Cartão de Crédito (na entrega)', debito: 'Cartão de Débito (na entrega)', dinheiro: 'Dinheiro na entrega' }
+  let pagLabel = pagLabelMap[draft.forma_pagamento] || 'Dinheiro na entrega'
   if (draft.forma_pagamento === 'dinheiro' && draft.troco) {
     pagLabel += draft.troco === -1 ? ' (precisa de troco, valor a combinar)' : ` (troco para R$${fmt(draft.troco)})`
   }
@@ -5652,10 +5704,15 @@ async function _vozCriarPedido(tenantId, phone, inst, draft, nomeCliente) {
   let pixInfo = { online: false, manualDisponivel: false }
   const querPix = draft.forma_pagamento === 'pix'
   if (querPix) pixInfo = await _vozResolverModoPix(tenantId)
-  let pag = 'dinheiro', status = 'analise'
+  // credito/debito seguem o mesmo valor usado pelo cardápio público (ver
+  // routes.js) pra que o gestor exiba o badge certo (ex: "CRÉDITO") igual a
+  // um pedido feito pelo cardápio normal.
+  let pag = (draft.forma_pagamento === 'credito' || draft.forma_pagamento === 'debito') ? draft.forma_pagamento : 'dinheiro'
+  let status = 'analise'
   if (querPix && pixInfo.online) { pag = 'pix'; status = 'aguardando_pix' }
   else if (querPix && pixInfo.manualDisponivel) { pag = 'pix_manual'; status = 'aguardando_pix' }
   else if (querPix) {
+    pag = 'dinheiro'
     await sendWA(phone, 'Não consegui gerar PIX pra essa loja no momento — vou registrar seu pedido como pagamento na entrega (dinheiro). Se preferir, fale com a loja.', inst)
   }
 
@@ -5700,7 +5757,7 @@ async function _vozCriarPedido(tenantId, phone, inst, draft, nomeCliente) {
   }
   const numero = data?.order_num || data?.id
 
-  if (pag === 'dinheiro') {
+  if (pag === 'dinheiro' || pag === 'credito' || pag === 'debito') {
     await sendWA(phone, `✅ Pedido #${numero} confirmado! Já caiu no sistema da loja e logo começa a ser preparado.`, inst)
     return
   }
@@ -5886,14 +5943,15 @@ async function extrairPedidoDeTexto(tenantId, texto) {
     const sysPrompt = [
       'Você extrai pedidos de restaurante a partir de um texto transcrito de áudio de WhatsApp.',
       'Responda APENAS com um JSON válido, sem nenhum texto fora do JSON, no formato:',
-      '{"itens":[{"item_id":123,"qty":1,"obs":"","escolhas":[{"grupo":"Borda","opcao":"Catupiry"}]}],"bairro":"nome do bairro ou null","tipo_pedido":"delivery|retirada|mesa|null","forma_pagamento":"dinheiro|pix|cartao|null","observacao_geral":"texto ou null","nao_entendido":"texto ou null"}',
+      '{"itens":[{"item_id":123,"qty":1,"obs":"","escolhas":[{"grupo":"Borda","opcao":"Catupiry"}]}],"bairro":"nome do bairro ou null","tipo_pedido":"delivery|retirada|mesa|null","forma_pagamento":"dinheiro|pix|cartao|credito|debito|null","observacao_geral":"texto ou null","nao_entendido":"texto ou null"}',
       'Regras: use SOMENTE item_id que existam na lista de cardápio fornecida — nunca invente um id.',
       'Cada item pode ter "grupos" no cardápio fornecido. Grupo com "obrigatorio":true PRECISA de 1 opção escolhida — se o cliente já disse no áudio (ex: "borda catupiry"), preencha em "escolhas" usando o nome EXATO da opção fornecida; se não disse, deixe sem nenhuma entrada pra esse grupo (o sistema pergunta depois). Grupo com "obrigatorio":false é um ADICIONAL opcional — só preencha "escolhas" pra ele se o cliente pediu explicitamente (ex: "com bacon extra"); NUNCA invente uma escolha pra um adicional que ele não mencionou.',
       'Grupo com "tipo":"checkbox" aceita MAIS DE UMA opção — se o cliente pediu duas coisas desse grupo, repita uma entrada em "escolhas" pra cada uma, todas com o mesmo "grupo". Grupo "tipo":"radio" aceita só 1 opção.',
       'Se o cliente mencionar algo que não existe no cardápio, não invente um item parecido: descreva em "nao_entendido".',
       'Se o cliente não falar bairro/endereço, deixe "bairro" como null.',
       'Se o cliente disser que vai buscar/retirar, "tipo_pedido"="retirada". Se disser que é pra entregar/mandar em casa, "tipo_pedido"="delivery". Se disser que está numa mesa do restaurante, "tipo_pedido"="mesa". Se não falar nada sobre isso, deixe null.',
-      'Se o cliente não falar forma de pagamento, deixe "forma_pagamento" como null — não assuma dinheiro por padrão.',
+      'Se o cliente não falar forma de pagamento, deixe "forma_pagamento" como null — não assuma dinheiro por padrão. Se ele disser "cartão" de forma genérica sem dizer crédito ou débito, use "cartao" (o sistema pergunta depois qual dos dois); se ele já disser explicitamente "crédito" ou "débito", use "credito" ou "debito".',
+      'O bairro/endereço dito no áudio só serve pra calcular a taxa de entrega — a rua e o número da casa são sempre perguntados depois separadamente, então não precisa tentar extrair rua/número aqui.',
       '"obs" é só pra observação daquele item específico (ex: "sem cebola"), não pro pedido inteiro.'
     ].join(' ')
     const userPrompt = JSON.stringify({ texto_transcrito: texto, cardapio: cardapioCtx })
@@ -5950,7 +6008,7 @@ async function extrairPedidoDeTexto(tenantId, texto) {
         }
       })
       .filter(Boolean)
-    const formaPagValida = ['dinheiro', 'pix', 'cartao'].includes(parsed.forma_pagamento) ? parsed.forma_pagamento : null
+    const formaPagValida = ['dinheiro', 'pix', 'cartao', 'credito', 'debito'].includes(parsed.forma_pagamento) ? parsed.forma_pagamento : null
     const tipoPedidoValido = ['delivery', 'retirada', 'mesa'].includes(parsed.tipo_pedido) ? parsed.tipo_pedido : null
     return {
       itens,
@@ -6232,7 +6290,8 @@ async function handleIAWebhook(req, res) {
           await sendWA(phone, 'Não entendi — responda *entrega* ou *retirada*.', inst)
           send(res,200,{ok:true, voz:true}); return
         }
-        await _vozResolverTipoEEndereco(tenantId, phone, inst, { ...vozDraft, tipo_pedido: tipo })
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        await _vozResolverTipoEEndereco(tenantId, phone, inst, { ...draftSemMeta, tipo_pedido: tipo })
         send(res,200,{ok:true, voz:true}); return
       }
       if (vozDraft.estado === 'aguardando_ponto_retirada') {
@@ -6245,42 +6304,111 @@ async function handleIAWebhook(req, res) {
           send(res,200,{ok:true, voz:true}); return
         }
         const addr = ['Retirada', ponto.endereco || ponto.nome].filter(Boolean).join(' — ')
-        await _vozContinuarPagamento(tenantId, phone, inst, { ...vozDraft, addr, taxa: 0 })
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        await _vozContinuarPagamento(tenantId, phone, inst, { ...draftSemMeta, addr, taxa: 0 })
         send(res,200,{ok:true, voz:true}); return
       }
       if (vozDraft.estado === 'aguardando_bairro') {
         const feeConfig = cfg.delivery_fee_config ? jsonParse(cfg.delivery_fee_config) : {}
         const resTaxa = _vozResolverTaxa(feeConfig, msg.trim())
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
         if (resTaxa.suportado && resTaxa.resolvido) {
-          await _vozContinuarPagamento(tenantId, phone, inst, { ...vozDraft, addr: resTaxa.addrLabel, taxa: resTaxa.taxa })
+          await _vozPedirRuaNumero(tenantId, phone, inst, { ...draftSemMeta, bairroLabel: resTaxa.addrLabel, taxa: resTaxa.taxa })
         } else {
           const sugestoesTxt = resTaxa.sugestoes?.length ? ` Você quis dizer: ${resTaxa.sugestoes.join(', ')}?` : ''
           await sendWA(phone, `Não encontrei esse bairro na nossa área de entrega.${sugestoesTxt} Pode confirmar o nome do bairro?`, inst)
         }
         send(res,200,{ok:true, voz:true}); return
       }
-      if (vozDraft.estado === 'aguardando_pagamento') {
-        const _pixRegex = /\bpix\b/i
-        const _dinheiroRegex = /\b(dinheiro|especie|espécie|cash)\b/i
-        const _cartaoRegex = /\bcart[aã]o\b/i
-        let forma = null
-        if (_pixRegex.test(msgNorm)) forma = 'pix'
-        else if (_dinheiroRegex.test(msgNorm)) forma = 'dinheiro'
-        else if (_cartaoRegex.test(msgNorm)) forma = 'cartao'
-        if (!forma) {
-          await sendWA(phone, 'Não entendi — responda *dinheiro* ou *pix*.', inst)
+      // Depois do bairro, pede rua e número pra fechar o endereço completo
+      // (usado no pedido e na impressão pro gestor, igual ao cardápio normal).
+      if (vozDraft.estado === 'aguardando_rua_numero') {
+        const ruaNumero = msg.trim().slice(0, 140)
+        if (!ruaNumero || ruaNumero.length < 4) {
+          await sendWA(phone, 'Não peguei direito — pode escrever a rua e o número da entrega? (ex: "Rua das Flores, 123")', inst)
           send(res,200,{ok:true, voz:true}); return
         }
-        await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...vozDraft, forma_pagamento: forma })
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        await _vozPedirRuaNumero(tenantId, phone, inst, { ...draftSemMeta, rua_numero: ruaNumero })
+        send(res,200,{ok:true, voz:true}); return
+      }
+      // Pedido abaixo do mínimo pra entrega — o cliente disse o que mais
+      // quer adicionar (texto livre), extrai os itens novos e junta com os
+      // que já estavam no rascunho, depois refaz a checagem do mínimo.
+      if (vozDraft.estado === 'aguardando_pedido_minimo') {
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        let extraido = null
+        try { extraido = await extrairPedidoDeTexto(tenantId, msg) } catch (e) { log('❌', '[VOZ] Falha ao extrair item extra:', e.message) }
+        const novosItens = extraido?.itens?.length ? extraido.itens : []
+        if (!novosItens.length) {
+          await sendWA(phone, 'Não consegui identificar um item novo nessa mensagem — pode dizer o que mais você quer adicionar? (ex: "mais uma coca-cola")', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        await _vozProcessarGruposPendentes(tenantId, phone, inst, {
+          ...draftSemMeta,
+          itens: [...(draftSemMeta.itens || []), ...novosItens]
+        })
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_pagamento') {
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
+        let forma = escolha?.id
+        if (!forma) {
+          // Fallback pra quem digitar livre sem tocar no botão/lista.
+          if (/\bpix\b/i.test(msgNorm)) forma = 'pix'
+          else if (/\bd[eé]bito\b/i.test(msgNorm)) forma = 'debito'
+          else if (/\bcr[eé]dito\b|\bcart[aã]o\b/i.test(msgNorm)) forma = 'credito'
+          else if (/\b(dinheiro|especie|espécie|cash)\b/i.test(msgNorm)) forma = 'dinheiro'
+        }
+        if (!forma || !['dinheiro', 'credito', 'debito', 'pix'].includes(forma)) {
+          await sendWA(phone, 'Não entendi — toque numa opção ou responda *dinheiro*, *crédito*, *débito* ou *pix*.', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        await _vozContinuarPagamento(tenantId, phone, inst, { ...draftSemMeta, forma_pagamento: forma })
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_tipo_cartao') {
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
+        let forma = escolha?.id
+        if (!forma) {
+          if (/\bd[eé]bito\b/i.test(msgNorm)) forma = 'debito'
+          else if (/\bcr[eé]dito\b/i.test(msgNorm)) forma = 'credito'
+        }
+        if (!forma) {
+          await sendWA(phone, 'Não entendi — toque numa opção ou responda *crédito* ou *débito*.', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        await _vozContinuarPagamento(tenantId, phone, inst, { ...draftSemMeta, forma_pagamento: forma })
         send(res,200,{ok:true, voz:true}); return
       }
       if (vozDraft.estado === 'aguardando_troco') {
-        let troco = null
-        if (!/^n[aã]o\b|^nao\b|sem troco/i.test(msgNorm)) {
-          const valorMatch = msg.match(/(\d+[.,]?\d*)/)
-          troco = valorMatch ? parseFloat(valorMatch[1].replace(',', '.')) : -1
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
+        if (escolha?.id === 'nao' || /^n[aã]o\b|^nao\b|sem troco/i.test(msgNorm)) {
+          await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...draftSemMeta, troco: null })
+          send(res,200,{ok:true, voz:true}); return
         }
-        await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...vozDraft, troco })
+        if (escolha?.id === 'sim') {
+          _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_troco_valor', ...draftSemMeta })
+          await sendWA(phone, 'Troco pra quanto? (ex: "50")', inst)
+          send(res,200,{ok:true, voz:true}); return
+        }
+        // Fallback pra quem já manda o valor direto sem tocar no botão (ex: "pra 50 reais")
+        const valorMatch = msg.match(/(\d+[.,]?\d*)/)
+        if (valorMatch) {
+          await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...draftSemMeta, troco: parseFloat(valorMatch[1].replace(',', '.')) })
+          send(res,200,{ok:true, voz:true}); return
+        }
+        await sendWA(phone, 'Não entendi — toque numa opção ou responda *sim* ou *não*.', inst)
+        send(res,200,{ok:true, voz:true}); return
+      }
+      if (vozDraft.estado === 'aguardando_troco_valor') {
+        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+        const valorMatch = msg.match(/(\d+[.,]?\d*)/)
+        const troco = valorMatch ? parseFloat(valorMatch[1].replace(',', '.')) : -1
+        await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...draftSemMeta, troco })
         send(res,200,{ok:true, voz:true}); return
       }
       if (vozDraft.estado === 'aguardando_nome') {
