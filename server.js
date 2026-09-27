@@ -5307,7 +5307,7 @@ async function _vozOfertarBebidaSeAplicavel(tenantId, phone, inst, draft) {
     titulo: 'Bebidas',
     texto: 'Quer aproveitar e já pedir uma bebida pra acompanhar? 🥤',
     voltarLabel: 'Não, obrigado',
-    limiteFotos: 4
+    semCards: true
   })
   return true
 }
@@ -5484,29 +5484,28 @@ async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId, opt
   // Manda todo item com foto como "card" (imagem+botão) ANTES da lista de
   // escolha — assim o cliente toca direto no botão embaixo da própria foto
   // pra adicionar aquele item, sem precisar abrir a lista separada depois.
-  // Sem limite por padrão (categoria normal) — só respeita opts.limiteFotos
-  // quando informado (ex: upsell de bebida, pra não floodar com muitos
-  // cards de sugestão). Se o envio com botão nativo falhar por algum
-  // motivo, cai pra foto simples de antes (o cliente ainda escolhe pela
-  // lista mais abaixo, que sempre traz todos).
-  const comFotoTodos = itens.filter(i => i.image_url)
-  const comFoto = opts.limiteFotos ? comFotoTodos.slice(0, opts.limiteFotos) : comFotoTodos
-  for (const i of comFoto) {
-    const precoTxt = i.hide_price ? '' : `R$${_fmtR$(i.price)}`
-    const desc = String(i.description || '').trim()
-    const corpo = [i.name, precoTxt].filter(Boolean).join(' — ') + (desc ? `\n${desc}` : '')
-    const ehPizzaItem = _vozEhPizza(i)
-    let enviouComBotao = false
-    try {
-      enviouComBotao = await sendWAButtons(phone, inst, {
-        text: corpo,
-        image: _vozUrlAbsoluta(tenantId, i.image_url),
-        buttons: [{ id: `item:${i.id}`, text: ehPizzaItem ? 'Escolher' : 'Adicionar ✅' }]
-      })
-    } catch {}
-    if (!enviouComBotao) {
-      const legenda = `${i.name}${precoTxt ? ` — ${precoTxt}` : ''}${desc ? `\n${desc}` : ''}`
-      try { await sendWAImage(phone, _vozUrlAbsoluta(tenantId, i.image_url), legenda, inst) } catch {}
+  // Sem limite por padrão (categoria normal). opts.semCards pula esse bloco
+  // inteiro e manda só a lista (ex: upsell de bebida — fica só a listinha,
+  // sem cards).
+  if (!opts.semCards) {
+    const comFoto = itens.filter(i => i.image_url)
+    for (const i of comFoto) {
+      const precoTxt = i.hide_price ? '' : `R$${_fmtR$(i.price)}`
+      const desc = String(i.description || '').trim()
+      const corpo = [i.name, precoTxt].filter(Boolean).join(' — ') + (desc ? `\n${desc}` : '')
+      const ehPizzaItem = _vozEhPizza(i)
+      let enviouComBotao = false
+      try {
+        enviouComBotao = await sendWAButtons(phone, inst, {
+          text: corpo,
+          image: _vozUrlAbsoluta(tenantId, i.image_url),
+          buttons: [{ id: `item:${i.id}`, text: ehPizzaItem ? 'Escolher' : 'Adicionar ✅' }]
+        })
+      } catch {}
+      if (!enviouComBotao) {
+        const legenda = `${i.name}${precoTxt ? ` — ${precoTxt}` : ''}${desc ? `\n${desc}` : ''}`
+        try { await sendWAImage(phone, _vozUrlAbsoluta(tenantId, i.image_url), legenda, inst) } catch {}
+      }
     }
   }
   await _vozEnviarOpcoes(phone, inst, {
