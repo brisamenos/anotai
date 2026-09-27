@@ -5275,6 +5275,41 @@ function _vozCategoriasAtivas(tenantId) {
     ORDER BY c.sort_order, c.id
   `).all(tenantId, ..._VOZ_STATUS_INDISPONIVEL)
 }
+// Identifica a categoria de bebidas do cardápio (pelo nome/label) pra poder
+// oferecer proativamente depois que o cliente adiciona um item de comida —
+// se a loja não tiver uma categoria assim configurada, simplesmente não há
+// o que sugerir.
+function _vozCategoriaBebidas(tenantId) {
+  const cats = _vozCategoriasAtivas(tenantId)
+  return cats.find(c => /bebida|refrigerante|refresco|suco\b|drink|cerveja|chopp/i.test(`${c.name} ${c.label || ''}`)) || null
+}
+function _vozItemEhDaCategoria(item, cat) {
+  return !!item && !!cat && (item.category_id === cat.id || item.cat_key === cat.name || item.cat === cat.name)
+}
+// Verifica se o rascunho já tem algum item da categoria de bebidas — evita
+// oferecer bebida de novo pra quem já colocou uma no pedido.
+function _vozPedidoJaTemBebida(tenantId, draft, catBebida) {
+  return (draft.itens || []).some(it => _vozItemEhDaCategoria(_vozItemPorId(tenantId, it.id), catBebida))
+}
+// Mostra o carrossel/lista de bebidas como sugestão (upsell) depois que o
+// cliente já tem pelo menos um item de comida no pedido. Retorna true se
+// mandou a oferta (quem chamou deve parar ali e esperar a resposta); false
+// se não tinha o que oferecer (sem categoria de bebida, sem itens, já
+// ofertado antes nesse pedido, ou o cliente já colocou bebida).
+async function _vozOfertarBebidaSeAplicavel(tenantId, phone, inst, draft) {
+  if (draft._bebidaOferecida) return false
+  const catBebida = _vozCategoriaBebidas(tenantId)
+  if (!catBebida) return false
+  if (_vozPedidoJaTemBebida(tenantId, draft, catBebida)) return false
+  const itensBebida = _vozItensDaCategoria(tenantId, catBebida.id)
+  if (!itensBebida.length) return false
+  await _vozListarItensCategoria(tenantId, phone, inst, { ...draft, _bebidaOferecida: true }, catBebida.id, {
+    titulo: 'Bebidas',
+    texto: 'Quer aproveitar e já pedir uma bebida pra acompanhar? 🥤',
+    voltarLabel: 'Não, obrigado'
+  })
+  return true
+}
 function _vozItensDaCategoria(tenantId, catId) {
   const cat = db.prepare('SELECT id, name FROM categories WHERE tenant_id=? AND id=?').get(tenantId, catId)
   const catName = cat?.name || '__none__'
@@ -5385,6 +5420,10 @@ async function _vozOferecerMaisItens(tenantId, phone, inst, draftIn) {
   // da mesma lista de categorias (confunde o cliente — ele via uma lista só
   // com tudo junto), primeiro pergunta com 2 BOTÕES separados e claros: um
   // pra ver as categorias e adicionar mais, outro pra fechar o pedido.
+  // Antes disso, se ainda não ofertou bebida nesse pedido e o cliente ainda
+  // não tem nenhuma no carrinho, sugere uma vez (upsell) — só continua pra
+  // tela de decisão se não tinha bebida pra oferecer.
+  if (await _vozOfertarBebidaSeAplicavel(tenantId, phone, inst, draft)) return
   const subtotal = draft.itens.reduce((s, i) => s + i.price * i.qty, 0)
   const opcoesDecisao = [{ id: '__adicionar', label: 'Adicionar item' }, { id: '__finalizar', label: 'Finalizar pedido' }]
   _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_decisao_itens', ...draft, meta: { opcoes: opcoesDecisao } })
@@ -5416,38 +5455,60 @@ async function _vozListarCategorias(tenantId, phone, inst, draft) {
 
 // Lista os itens de uma categoria (ou, se for categoria de pizza, os sabores
 // disponíveis pra montar a pizza) — passo seguinte a escolher uma categoria.
-async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId) {
+async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId, opts = {}) {
   const itens = _vozItensDaCategoria(tenantId, catId)
   if (!itens.length) { await _vozOferecerMaisItens(tenantId, phone, inst, draft); return }
   const ehPizza = itens.some(_vozEhPizza)
   const opcoes = itens.map(i => ({ id: `item:${i.id}`, label: i.name }))
-  opcoes.push({ id: '__voltar', label: 'Voltar às categorias' })
+  opcoes.push({ id: '__voltar', label: opts.voltarLabel || 'Voltar às categorias' })
   _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_categoria_item', ...draft, meta: { opcoes, catId, ehPizza } })
   const rows = itens.map(i => {
-    const preco = i.hide_price ? '' : `R$${_fmtR$(i.price)}`
-    const desc  = String(i.description || '').trim()
-    const linha = [preco, desc].filter(Boolean).join(' — ')
+    const precoTxt = i.hide_price ? '' : `R$${_fmtR$(i.price)}`
+    // Título mostra nome + preço (limite do WhatsApp é 24 caracteres) — o
+    // preço sempre aparece por completo, e o nome é truncado se precisar de
+    // espaço, pra não cortar o valor no meio.
+    const title = precoTxt
+      ? `${i.name.slice(0, Math.max(0, 24 - precoTxt.length - 1)).trimEnd()} ${precoTxt}`.slice(0, 24)
+      : i.name.slice(0, 24)
+    // Descrição fica livre pros ingredientes/detalhes do produto (72
+    // caracteres do WhatsApp), sem precisar dividir espaço com o preço.
+    const desc = String(i.description || '').trim()
     return {
       id: `item:${i.id}`,
-      title: i.name.slice(0, 24),
-      description: linha.slice(0, 72)
+      title,
+      description: desc.slice(0, 72)
     }
   })
-  rows.push({ id: '__voltar', title: '⬅️ Voltar às categorias' })
-  // Se tiver poucas fotos, manda como "cards" (imagem+legenda) ANTES da lista
-  // de escolha — assim o cliente já vê o produto antes de tocar na opção, em
-  // vez de escolher às cegas e só depois ver a foto — só os primeiros com
-  // foto, pra não floodar o chat.
-  const comFoto = itens.filter(i => i.image_url).slice(0, 4)
+  rows.push({ id: '__voltar', title: opts.voltarLabel ? opts.voltarLabel.slice(0, 24) : '⬅️ Voltar às categorias' })
+  // Manda todo item com foto como "card" (imagem+botão) ANTES da lista de
+  // escolha — assim o cliente toca direto no botão embaixo da própria foto
+  // pra adicionar aquele item, sem precisar abrir a lista separada depois.
+  // Sem limite de quantidade (a pedido) — categoria com muitas fotos manda
+  // várias mensagens em sequência. Se o envio com botão nativo falhar por
+  // algum motivo, cai pra foto simples de antes (o cliente ainda escolhe
+  // pela lista mais abaixo, que sempre traz todos).
+  const comFoto = itens.filter(i => i.image_url)
   for (const i of comFoto) {
-    const preco = i.hide_price ? '' : ` — R$${_fmtR$(i.price)}`
-    const desc  = String(i.description || '').trim()
-    const legenda = `${i.name}${preco}${desc ? `\n${desc}` : ''}`
-    try { await sendWAImage(phone, _vozUrlAbsoluta(tenantId, i.image_url), legenda, inst) } catch {}
+    const precoTxt = i.hide_price ? '' : `R$${_fmtR$(i.price)}`
+    const desc = String(i.description || '').trim()
+    const corpo = [i.name, precoTxt].filter(Boolean).join(' — ') + (desc ? `\n${desc}` : '')
+    const ehPizzaItem = _vozEhPizza(i)
+    let enviouComBotao = false
+    try {
+      enviouComBotao = await sendWAButtons(phone, inst, {
+        text: corpo,
+        image: _vozUrlAbsoluta(tenantId, i.image_url),
+        buttons: [{ id: `item:${i.id}`, text: ehPizzaItem ? 'Escolher' : 'Adicionar ✅' }]
+      })
+    } catch {}
+    if (!enviouComBotao) {
+      const legenda = `${i.name}${precoTxt ? ` — ${precoTxt}` : ''}${desc ? `\n${desc}` : ''}`
+      try { await sendWAImage(phone, _vozUrlAbsoluta(tenantId, i.image_url), legenda, inst) } catch {}
+    }
   }
   await _vozEnviarOpcoes(phone, inst, {
-    titulo: ehPizza ? 'Escolha o sabor' : 'Itens',
-    texto: ehPizza ? 'Toque no primeiro sabor da pizza:' : 'Toque no item que você quer:',
+    titulo: opts.titulo || (ehPizza ? 'Escolha o sabor' : 'Itens'),
+    texto: opts.texto || (ehPizza ? 'Toque no primeiro sabor da pizza:' : 'Toque no item que você quer:'),
     buttonText: 'Ver opções',
     rows
   })
