@@ -5601,19 +5601,22 @@ async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido, textoOrig
     forma_pagamento: extraido.forma_pagamento,
     observacao_geral: extraido.observacao_geral
   }
+  // Loja no WuzAPI: tenta casar o texto com o SABOR de uma pizza (pizza
+  // fica de fora da extração por IA — ver _vozCasarPizzaPorNome) — SEMPRE,
+  // mesmo quando o áudio já reconheceu outros itens junto (ex: "quero uma
+  // pizza de carne de sol com borda de catupiry e um refrigerante de 1
+  // litro" — o refrigerante é reconhecido normalmente pela IA, mas a pizza
+  // só é achada aqui). Se achar, os outros itens já reconhecidos entram
+  // como base do pedido e a pizza segue seu próprio fluxo (tamanho/meio-a-
+  // meio); ao terminar, _vozPizzaFinalizarItem retoma esses itens e resolve
+  // os grupos pendentes deles também, então nada se perde.
+  const pizzaCasada = (_vozEhWuzapi(tenantId) && textoOriginal) ? _vozCasarPizzaPorNome(tenantId, textoOriginal) : null
+  if (pizzaCasada) {
+    await _vozPizzaPerguntarTamanho(tenantId, phone, inst, { itens: [...itensBase, ...extraido.itens], bairro: extraido.bairro, ...base }, pizzaCasada)
+    return
+  }
   if (!extraido.itens.length) {
-    // Loja no WuzAPI: antes de desistir, tenta casar o texto com o SABOR de
-    // uma pizza (pizza fica de fora da extração por IA — ver
-    // _vozCasarPizzaPorNome) — se o cliente já disse o sabor ("quero uma
-    // pizza de carne de sol"), pula direto pro fluxo de pizza (tamanho/
-    // meio-a-meio) em vez de abrir o catálogo do zero: agilidade, ele já
-    // disse o que quer, não precisa navegar categoria por categoria de novo.
     if (_vozEhWuzapi(tenantId)) {
-      const pizzaCasada = textoOriginal ? _vozCasarPizzaPorNome(tenantId, textoOriginal) : null
-      if (pizzaCasada) {
-        await _vozPizzaPerguntarTamanho(tenantId, phone, inst, { itens: itensBase, bairro: extraido.bairro, ...base }, pizzaCasada)
-        return
-      }
       if (emAndamento) {
         // Pedido já em andamento — não faz sentido oferecer repetir o
         // ÚLTIMO pedido de novo (o cliente já está montando um pedido
@@ -5657,19 +5660,31 @@ async function _vozProcessarGruposPendentes(tenantId, phone, inst, draft) {
       .join(' · ')
     return { id: it.id, name: it.name, qty: it.qty, price: it.price + extras, obs: [obsGrupos, it.obs].filter(Boolean).join(' | ') }
   })
-  // Loja no WuzAPI: antes de seguir pro tipo de entrega, oferece o catálogo
-  // por lista pra adicionar mais alguma coisa (inclusive pizza) — Evolution
-  // (sem lista/botão implementado aqui) segue direto como sempre seguiu.
+  const draftCompleto = {
+    itens: itensFinal, bairro: draft.bairro, tipo_pedido: draft.tipo_pedido,
+    forma_pagamento: draft.forma_pagamento, observacao_geral: draft.observacao_geral,
+    addr: draft.addr, taxa: draft.taxa, troco: draft.troco, bairro_nome: draft.bairro_nome
+  }
+  // Se o cliente já disse EXPLICITAMENTE o tipo de entrega nesse mesmo
+  // áudio/texto (ex: pedido "completo" numa mensagem só: itens + "pra
+  // entrega"/"pra retirar") E o endereço ainda não tinha sido resolvido
+  // antes, trata como pedido fechado e já segue direto pra resolver
+  // endereço/pagamento — sem obrigar a tocar "Finalizar pedido" à toa
+  // antes. NÃO faz isso quando "addr" já existe (isso só acontece na
+  // edição depois da confirmação — "Não" → "Adicionar item" — onde ainda
+  // faz sentido oferecer o catálogo de novo, pra poder acrescentar mais de
+  // um item antes de finalizar). Se ele não disse nada sobre entrega/
+  // retirada, também continua oferecendo o catálogo, como sempre foi.
+  if (!draft.addr && (draft.tipo_pedido === 'delivery' || draft.tipo_pedido === 'retirada' || draft.tipo_pedido === 'mesa')) {
+    await _vozResolverTipoEEndereco(tenantId, phone, inst, draftCompleto)
+    return
+  }
   // IMPORTANTE: preserva addr/taxa/troco/bairro_nome quando já existirem —
   // isso acontece quando esse item está sendo adicionado DEPOIS da
   // confirmação (cliente clicou "Não" → "Adicionar item"), caso em que
   // tipo/endereço/pagamento já foram resolvidos antes e não podem se perder
   // aqui, senão o "Finalizar pedido" acabaria repetindo essas perguntas.
-  await _vozOferecerMaisItens(tenantId, phone, inst, {
-    itens: itensFinal, bairro: draft.bairro, tipo_pedido: draft.tipo_pedido,
-    forma_pagamento: draft.forma_pagamento, observacao_geral: draft.observacao_geral,
-    addr: draft.addr, taxa: draft.taxa, troco: draft.troco, bairro_nome: draft.bairro_nome
-  })
+  await _vozOferecerMaisItens(tenantId, phone, inst, draftCompleto)
 }
 
 // Resolve tipo de pedido (entrega/retirada) e, a partir dele, o
@@ -6695,7 +6710,14 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
 // ITEM NOVO (ver _vozIniciarConfirmacao/_vozCasarPizzaPorNome) em vez de só
 // responder a pergunta pendente — porque nesses estados é mais natural o
 // cliente falar o nome de um produto do que repetir a opção exibida.
-const _VOZ_ESTADOS_ITEM = ['aguardando_mais_itens', 'aguardando_categoria_item', 'aguardando_pizza_tamanho', 'aguardando_pizza_meio', 'aguardando_pizza_sabor2', 'aguardando_grupo']
+// "aguardando_grupo" (escolher/recusar um adicional) FICA DE FORA desse
+// grupo de propósito — nesse estado, o cliente falando o nome do adicional
+// por áudio (ex: "quero um adicional de queijo") já é resolvido certinho
+// por _vozTratarEstadoPendente, que casa o texto contra as opções REAIS do
+// grupo (e avisa quando o adicional pedido não existe entre as opções,
+// listando as que existem) — não precisa (nem faz sentido) tentar reconhecer
+// um item novo aqui.
+const _VOZ_ESTADOS_ITEM = ['aguardando_mais_itens', 'aguardando_categoria_item', 'aguardando_pizza_tamanho', 'aguardando_pizza_meio', 'aguardando_pizza_sabor2']
 
 async function handleIAWebhook(req, res) {
   const body = req._parsedBody !== undefined ? req._parsedBody : await readBody(req)
