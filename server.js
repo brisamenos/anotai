@@ -5570,14 +5570,24 @@ async function _vozResolverTipoEEndereco(tenantId, phone, inst, draftIn) {
   if (pedidoMinimo > 0 && subtotalCheck < pedidoMinimo) {
     const fmt = v => v.toFixed(2).replace('.', ',')
     const faltamTxt = `O pedido mínimo pra entrega é R$${fmt(pedidoMinimo)} — faltam R$${fmt(pedidoMinimo - subtotalCheck)}.`
-    if (_vozEhWuzapi(tenantId)) {
-      // Mostra o cardápio interativo (categorias) de novo, já com o aviso do
-      // mínimo — _vozOferecerMaisItens já cuida de salvar o estado certo
-      // ("aguardando_mais_itens"), então não precisa salvar aqui.
-      await sendWA(phone, faltamTxt, inst)
-      await _vozOferecerMaisItens(tenantId, phone, inst, { ...draft, tipo_pedido: 'delivery' })
+    // IMPORTANTE: NUNCA chamar _vozOferecerMaisItens daqui de volta — se a loja
+    // não tiver nenhuma categoria ativa, _vozOferecerMaisItens cai de novo em
+    // _vozResolverTipoEEndereco, que cai de novo aqui (mínimo ainda não
+    // atingido), e assim por diante: um loop infinito síncrono mandando a
+    // mesma mensagem sem parar (foi exatamente isso que travou o teste).
+    // Por isso aqui SEMPRE só manda uma mensagem e salva estado — nunca
+    // volta a chamar uma função que possa reentrar neste mesmo bloco.
+    const cats = _vozEhWuzapi(tenantId) ? _vozCategoriasAtivas(tenantId) : []
+    if (cats.length) {
+      const opcoes = cats.map(c => ({ id: `cat:${c.id}`, label: c.label || c.name }))
+      opcoes.push({ id: '__finalizar', label: 'Finalizar pedido' })
+      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_mais_itens', ...draft, tipo_pedido: 'delivery', meta: { opcoes } })
+      const rows = cats.map(c => ({ id: `cat:${c.id}`, title: (c.label || c.name).slice(0, 24) }))
+      rows.push({ id: '__finalizar', title: '✅ Finalizar pedido' })
+      await _vozEnviarOpcoes(phone, inst, { titulo: 'Cardápio', texto: faltamTxt, buttonText: 'Ver categorias', rows })
     } else {
-      // Sem lista/botão nativo — manda o link do cardápio pra ele escolher e
+      // Sem categoria interativa disponível (não-WuzAPI, ou WuzAPI sem
+      // cardápio configurado) — manda o link do cardápio pra ele escolher e
       // dizer/escrever o que mais quer, sem precisar adivinhar os itens.
       // IMPORTANTE: precisa salvar um novo estado aqui — sem isso o rascunho
       // ficava parado no estado anterior (ex: "aguardando_tipo_entrega"), e a
