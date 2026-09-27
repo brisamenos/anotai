@@ -5154,6 +5154,17 @@ function _vozEhPizza(item) {
   const catTxt = `${item.cat || ''} ${item.cat_key || ''}`.toLowerCase()
   return catTxt.includes('pizza')
 }
+// IMPORTANTE: o cardápio (gestor-cardapio.js, fonte da verdade) liga item à
+// categoria pelo NOME — "menu_items.cat_key" (ou o texto "cat") tem que bater
+// com "categories.name" — NUNCA por "categories.id". Não existe FK numérica
+// de verdade em uso hoje (category_id fica sempre vazio na prática). O bug
+// original comparava cat_key com c.id (um número contra um texto, nunca
+// batia), por isso nenhuma categoria aparecia no catálogo por voz mesmo
+// quando a loja tinha itens cadastrados normalmente.
+// Status de item também segue o admin: 'esgotado' e 'pausado' ficam de fora
+// (mantemos 'inativo' também na lista só por segurança, caso apareça em
+// dado antigo).
+const _VOZ_STATUS_INDISPONIVEL = ['esgotado', 'pausado', 'inativo']
 function _vozCategoriasAtivas(tenantId) {
   return db.prepare(`
     SELECT c.id, c.name, c.label
@@ -5161,29 +5172,31 @@ function _vozCategoriasAtivas(tenantId) {
     WHERE c.tenant_id=? AND (c.ativo IS NULL OR c.ativo=1)
       AND EXISTS (
         SELECT 1 FROM menu_items m
-        WHERE m.tenant_id=c.tenant_id AND (m.category_id=c.id OR m.cat_key=c.id OR m.cat=c.name)
-          AND (m.status IS NULL OR m.status NOT IN ('esgotado','inativo'))
+        WHERE m.tenant_id=c.tenant_id AND (m.category_id=c.id OR m.cat_key=c.name OR m.cat=c.name)
+          AND (m.status IS NULL OR m.status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))
       )
     ORDER BY c.sort_order, c.id
-  `).all(tenantId)
+  `).all(tenantId, ..._VOZ_STATUS_INDISPONIVEL)
 }
 function _vozItensDaCategoria(tenantId, catId) {
   const cat = db.prepare('SELECT id, name FROM categories WHERE tenant_id=? AND id=?').get(tenantId, catId)
+  const catName = cat?.name || '__none__'
   return db.prepare(`
     SELECT * FROM menu_items
     WHERE tenant_id=? AND (category_id=? OR cat_key=? OR cat=?)
-      AND (status IS NULL OR status NOT IN ('esgotado','inativo'))
+      AND (status IS NULL OR status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))
     ORDER BY name
-  `).all(tenantId, catId, catId, cat?.name || '__none__')
+  `).all(tenantId, catId, catName, catName, ..._VOZ_STATUS_INDISPONIVEL)
 }
 function _vozPizzaSiblings(tenantId, item) {
-  const catKey = item.category_id || item.cat_key || item.cat
+  const catKey = item.cat_key || null
+  const catLabel = item.cat || null
   return db.prepare(`
     SELECT * FROM menu_items
-    WHERE tenant_id=? AND id<>? AND (category_id=? OR cat_key=? OR cat=?)
-      AND (status IS NULL OR status NOT IN ('esgotado','inativo'))
+    WHERE tenant_id=? AND id<>? AND (cat_key=? OR cat=?)
+      AND (status IS NULL OR status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))
     ORDER BY name
-  `).all(tenantId, item.id, catKey, catKey, catKey)
+  `).all(tenantId, item.id, catKey, catLabel, ..._VOZ_STATUS_INDISPONIVEL)
 }
 function _vozItemPorId(tenantId, itemId) {
   return db.prepare('SELECT * FROM menu_items WHERE tenant_id=? AND id=?').get(tenantId, itemId)
@@ -5949,7 +5962,7 @@ async function extrairPedidoDeTexto(tenantId, texto) {
     // Grupos obrigatórios genéricos (ex: Borda) NÃO excluem mais o item —
     // eles entram no contexto da IA pra ela tentar capturar a escolha, ou o
     // sistema pergunta depois se não veio no áudio.
-    const itensRaw = db.prepare("SELECT id,name,price,item_type,custom_groups,hide_price,cat,cat_key FROM menu_items WHERE tenant_id=? AND COALESCE(status,'ativo')!='pausado'").all(tenantId)
+    const itensRaw = db.prepare(`SELECT id,name,price,item_type,custom_groups,hide_price,cat,cat_key FROM menu_items WHERE tenant_id=? AND (status IS NULL OR status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))`).all(tenantId, ..._VOZ_STATUS_INDISPONIVEL)
     const itensAtivos = itensRaw.filter(i => {
       if (i.hide_price) return false
       if (_vozItemEhComplexo(i)) return false
