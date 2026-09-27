@@ -4122,7 +4122,7 @@ function exportarCardapio() {
           .map(i => ({
             name: i.name,
             emoji: i.emoji || '🍽️',
-            description: i.description || '',
+            description: i.desc || '',
             price: i.price || 0,
             price_old: i.priceOld || null,
             image_url: i.imageUrl || null,

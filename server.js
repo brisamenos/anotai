@@ -5423,11 +5423,16 @@ async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId) {
   const opcoes = itens.map(i => ({ id: `item:${i.id}`, label: i.name }))
   opcoes.push({ id: '__voltar', label: 'Voltar às categorias' })
   _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_categoria_item', ...draft, meta: { opcoes, catId, ehPizza } })
-  const rows = itens.map(i => ({
-    id: `item:${i.id}`,
-    title: i.name.slice(0, 24),
-    description: i.hide_price ? '' : `R$${_fmtR$(i.price)}`
-  }))
+  const rows = itens.map(i => {
+    const preco = i.hide_price ? '' : `R$${_fmtR$(i.price)}`
+    const desc  = String(i.description || '').trim()
+    const linha = [preco, desc].filter(Boolean).join(' — ')
+    return {
+      id: `item:${i.id}`,
+      title: i.name.slice(0, 24),
+      description: linha.slice(0, 72)
+    }
+  })
   rows.push({ id: '__voltar', title: '⬅️ Voltar às categorias' })
   // Se tiver poucas fotos, manda como "cards" (imagem+legenda) ANTES da lista
   // de escolha — assim o cliente já vê o produto antes de tocar na opção, em
@@ -5435,7 +5440,10 @@ async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId) {
   // foto, pra não floodar o chat.
   const comFoto = itens.filter(i => i.image_url).slice(0, 4)
   for (const i of comFoto) {
-    try { await sendWAImage(phone, _vozUrlAbsoluta(tenantId, i.image_url), `${i.name}${i.hide_price ? '' : ` — R$${_fmtR$(i.price)}`}`, inst) } catch {}
+    const preco = i.hide_price ? '' : ` — R$${_fmtR$(i.price)}`
+    const desc  = String(i.description || '').trim()
+    const legenda = `${i.name}${preco}${desc ? `\n${desc}` : ''}`
+    try { await sendWAImage(phone, _vozUrlAbsoluta(tenantId, i.image_url), legenda, inst) } catch {}
   }
   await _vozEnviarOpcoes(phone, inst, {
     titulo: ehPizza ? 'Escolha o sabor' : 'Itens',
