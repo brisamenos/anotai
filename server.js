@@ -6438,6 +6438,20 @@ async function extrairPedidoDeTexto(tenantId, texto) {
 // correspondente (o chamador decide o que fazer nesse caso).
 async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, msgChoiceId, cfg) {
   const msgNorm = msg.trim().toLowerCase()
+  // Comando global de cancelamento — funciona em QUALQUER etapa do pedido já
+  // em andamento (escolhendo item, adicional, endereço, pagamento etc.),
+  // digitado ou por áudio transcrito: apaga o rascunho inteiro e convida o
+  // cliente a começar de novo. Não entra nas telas que já têm seu próprio
+  // fluxo de cancelar (confirmação final e "editar pedido"), que de
+  // propósito oferecem um passo a mais (editar em vez de cancelar direto)
+  // antes de desistir — não queremos pular esse cuidado ali.
+  const _estadosComCancelarProprio = ['aguardando_confirmacao', 'aguardando_editar_pedido']
+  if (!msgChoiceId && !_estadosComCancelarProprio.includes(vozDraft.estado) && /^(cancela|cancelar)\b/i.test(msgNorm)) {
+    if (_vozApagarDraft(tenantId, phone)) {
+      await sendWA(phone, 'Pedido cancelado! ✅ Quando quiser começar de novo, é só mandar um áudio contando o que você quer, ou escrever aqui mesmo.', inst)
+    }
+    return true
+  }
   if (vozDraft.estado === 'aguardando_grupo') {
     const pend = _vozProximaPendenciaGrupo(vozDraft.itens)
     if (!pend) { _vozApagarDraft(tenantId, phone); return true }
