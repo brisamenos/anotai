@@ -5390,6 +5390,47 @@ async function _vozEnviarOpcoes(phone, inst, { titulo, texto, rows, buttonText }
   return ok
 }
 
+// Manda o detalhamento do pedido atual — item a item, com preço, e o total —
+// toda vez que o fluxo passa por aqui com item(ns) já resolvido(s) (seja um
+// item novo reconhecido por áudio/texto, seja um escolhido no catálogo
+// interativo). Assim o cliente sempre vê exatamente o que foi entendido e
+// quanto cada coisa custa, sem precisar perguntar.
+async function _vozEnviarResumoItens(phone, inst, itens) {
+  const linhas = (itens || []).map(it => {
+    const obsTxt = it.obs ? ` (${it.obs})` : ''
+    return `${it.qty}x ${it.name}${obsTxt} — R$${_fmtR$(it.price * it.qty)}`
+  }).join('\n')
+  const total = (itens || []).reduce((s, it) => s + it.price * it.qty, 0)
+  await sendWA(phone, `✅ Pedido atualizado:\n\n${linhas}\n\n*Total: R$${_fmtR$(total)}*`, inst)
+}
+
+// Abre a lista "qual item remover" — usado tanto na edição depois da
+// confirmação final quanto na tela de decisão "adicionar/remover/finalizar"
+// no meio do catálogo interativo.
+async function _vozIniciarRemoverItem(tenantId, phone, inst, draftSemMeta) {
+  const itens = draftSemMeta.itens || []
+  if (!itens.length) {
+    await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta)
+    return
+  }
+  const opcoesRm = itens.map((it, idx) => ({ id: `rm:${idx}`, label: `${it.qty}x ${it.name}` }))
+  opcoesRm.push({ id: '__voltar', label: 'Voltar' })
+  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_remover_item', ...draftSemMeta, meta: { opcoes: opcoesRm } })
+  await _vozEnviarOpcoes(phone, inst, {
+    titulo: 'Remover item',
+    texto: 'Qual item você quer remover?',
+    buttonText: 'Ver itens',
+    rows: opcoesRm.map(o => ({ id: o.id, title: o.label.slice(0, 24) }))
+  })
+}
+// Depois de remover (ou voltar sem remover): se tipo/endereço/pagamento já
+// tinham sido resolvidos antes (edição depois da confirmação final), volta
+// pro resumo final; senão (edição no meio do catálogo, antes de chegar lá),
+// volta pra tela normal de "adicionar mais / finalizar".
+async function _vozVoltarAposRemover(tenantId, phone, inst, draft) {
+  if (draft.addr) { await _vozMontarConfirmacaoFinal(tenantId, phone, inst, draft) } else { await _vozOferecerMaisItens(tenantId, phone, inst, draft) }
+}
+
 // Lista de categorias + "Finalizar pedido" — ponto de entrada/retorno do
 // catálogo interativo. Sempre que chega aqui, todos os itens já ditos no
 // áudio (e grupos deles) já estão resolvidos — isso só oferece ADICIONAR mais.
@@ -5417,20 +5458,28 @@ async function _vozOferecerMaisItens(tenantId, phone, inst, draftIn) {
     await _vozListarCategorias(tenantId, phone, inst, draft)
     return
   }
+  // Antes de qualquer outra coisa, manda o detalhamento item a item + total
+  // — assim o cliente sempre vê o que foi entendido/adicionado e o preço de
+  // cada item, sem precisar perguntar "quanto ficou".
+  await _vozEnviarResumoItens(phone, inst, draft.itens)
   // Já tem item(ns) no pedido: em vez de misturar "Finalizar pedido" dentro
   // da mesma lista de categorias (confunde o cliente — ele via uma lista só
-  // com tudo junto), primeiro pergunta com 2 BOTÕES separados e claros: um
-  // pra ver as categorias e adicionar mais, outro pra fechar o pedido.
+  // com tudo junto), primeiro pergunta com BOTÕES separados e claros: um
+  // pra ver as categorias e adicionar mais, outro pra remover algo, outro
+  // pra fechar o pedido.
   // Antes disso, se ainda não ofertou bebida nesse pedido e o cliente ainda
   // não tem nenhuma no carrinho, sugere uma vez (upsell) — só continua pra
   // tela de decisão se não tinha bebida pra oferecer.
   if (await _vozOfertarBebidaSeAplicavel(tenantId, phone, inst, draft)) return
-  const subtotal = draft.itens.reduce((s, i) => s + i.price * i.qty, 0)
-  const opcoesDecisao = [{ id: '__adicionar', label: 'Adicionar item' }, { id: '__finalizar', label: 'Finalizar pedido' }]
+  const opcoesDecisao = [
+    { id: '__adicionar', label: 'Adicionar item' },
+    { id: '__remover', label: 'Remover item' },
+    { id: '__finalizar', label: 'Finalizar pedido' }
+  ]
   _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_decisao_itens', ...draft, meta: { opcoes: opcoesDecisao } })
   await _vozEnviarOpcoes(phone, inst, {
     titulo: 'Cardápio',
-    texto: `Já anotei seu pedido (R$${_fmtR$(subtotal)} até agora). Quer adicionar mais alguma coisa?`,
+    texto: 'Quer adicionar mais alguma coisa?',
     buttonText: 'Escolher',
     rows: opcoesDecisao.map(o => ({ id: o.id, title: o.label }))
   })
@@ -6628,6 +6677,8 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
     const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
     if (escolha.id === '__adicionar') {
       await _vozListarCategorias(tenantId, phone, inst, draftSemMeta)
+    } else if (escolha.id === '__remover') {
+      await _vozIniciarRemoverItem(tenantId, phone, inst, draftSemMeta)
     } else if (escolha.id === '__finalizar') {
       if (!draftSemMeta.itens?.length) {
         await sendWA(phone, 'Você ainda não escolheu nenhum item — toque em "Adicionar item" pra começar.', inst)
@@ -6943,20 +6994,7 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
       return true
     }
     if (escolha?.id === 'remover') {
-      const itens = draftSemMeta.itens || []
-      if (!itens.length) {
-        await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta)
-        return true
-      }
-      const opcoesRm = itens.map((it, idx) => ({ id: `rm:${idx}`, label: `${it.qty}x ${it.name}` }))
-      opcoesRm.push({ id: '__voltar', label: 'Voltar' })
-      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_remover_item', ...draftSemMeta, meta: { opcoes: opcoesRm } })
-      await _vozEnviarOpcoes(phone, inst, {
-        titulo: 'Remover item',
-        texto: 'Qual item você quer remover?',
-        buttonText: 'Ver itens',
-        rows: opcoesRm.map(o => ({ id: o.id, title: o.label.slice(0, 24) }))
-      })
+      await _vozIniciarRemoverItem(tenantId, phone, inst, draftSemMeta)
       return true
     }
     if (escolha?.id === 'cancelar') {
@@ -6976,7 +7014,7 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
       return true
     }
     if (escolha.id === '__voltar') {
-      await _vozMontarConfirmacaoFinal(tenantId, phone, inst, draftSemMeta)
+      await _vozVoltarAposRemover(tenantId, phone, inst, draftSemMeta)
       return true
     }
     const idx = parseInt(escolha.id.slice(3))
@@ -6987,7 +7025,7 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
       }
       return true
     }
-    await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...draftSemMeta, itens: itensNovos })
+    await _vozVoltarAposRemover(tenantId, phone, inst, { ...draftSemMeta, itens: itensNovos })
     return true
   }
   return false
