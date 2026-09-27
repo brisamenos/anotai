@@ -5286,6 +5286,64 @@ function _vozCategoriaBebidas(tenantId) {
 function _vozItemEhDaCategoria(item, cat) {
   return !!item && !!cat && (item.category_id === cat.id || item.cat_key === cat.name || item.cat === cat.name)
 }
+// ── Pergunta de disponibilidade ("tem pratinho?", "vocês tem sobremesa?")
+// ────────────────────────────────────────────────────────────────────────
+// Reconhece uma PERGUNTA sobre se um item existe/está disponível — bem
+// diferente de um PEDIDO ("quero um pratinho"). Só casa um padrão simples e
+// comum ("(vocês) tem <algo>?"); frase longa ou fora desse padrão não entra
+// aqui (cai no fluxo normal de pedido/extração por IA).
+const _VOZ_PERGUNTA_TEM_RE = /^(?:e\s+)?(?:voc[eê]s?\s+)?(?:ainda\s+)?tem\s+(.+?)\s*\??$/i
+function _vozDetectarPerguntaDisponibilidade(texto) {
+  const t = String(texto || '').trim()
+  if (!t || t.length > 60) return null // frase curta e direta — evita casar frases longas de pedido
+  const m = t.match(_VOZ_PERGUNTA_TEM_RE)
+  if (!m) return null
+  let nome = m[1].trim()
+    .replace(/^(a[íi]|um|uma|uns|umas)\s+/i, '')
+    .replace(/\bno card[aá]pio\b/gi, '')
+    .replace(/[?!.]+$/g, '')
+    .trim()
+  if (!nome || nome.split(/\s+/).length > 6) return null
+  return nome
+}
+// Busca o nome perguntado contra TODO o cardápio do tenant (inclui item
+// pausado/esgotado — só pra saber que existe mas não pode ser oferecido
+// agora, sem revelar esse detalhe pro cliente). Match exato tem
+// prioridade; senão aceita nome contido/contendo (ex: "coca" bate com
+// "Coca-Cola 1L").
+function _vozBuscarDisponibilidade(tenantId, nomePerguntado) {
+  const todos = db.prepare('SELECT id, name, price, status FROM menu_items WHERE tenant_id=?').all(tenantId)
+  const norm = _normBairro(nomePerguntado)
+  if (!norm) return null
+  let parcial = null
+  for (const it of todos) {
+    const nomeNorm = _normBairro(it.name)
+    if (!nomeNorm) continue
+    if (nomeNorm === norm) return { item: it, disponivel: !_VOZ_STATUS_INDISPONIVEL.includes(it.status) }
+    if (!parcial && (nomeNorm.includes(norm) || norm.includes(nomeNorm))) parcial = it
+  }
+  return parcial ? { item: parcial, disponivel: !_VOZ_STATUS_INDISPONIVEL.includes(parcial.status) } : null
+}
+// Se o texto for uma pergunta de disponibilidade, responde na hora (sem
+// mexer no carrinho) e retoma o pedido de onde estava (mostra os botões de
+// novo) — chamado só quando já existe um pedido em andamento (draft com
+// item(ns) ou estado pendente), que é quando essa pergunta tende a surgir
+// ("lembrei que também tem X"). Item pausado/esgotado/inexistente sempre
+// responde "não temos" (o cliente não precisa saber que está pausado).
+// Retorna true se tratou (quem chamou deve parar ali); false se não era
+// uma pergunta desse tipo.
+async function _vozResponderPerguntaDisponibilidade(tenantId, phone, inst, draft, texto) {
+  const nome = _vozDetectarPerguntaDisponibilidade(texto)
+  if (!nome) return false
+  const achado = _vozBuscarDisponibilidade(tenantId, nome)
+  if (achado?.disponivel) {
+    await sendWA(phone, `Sim, temos! 😉 *${achado.item.name}* — R$${_fmtR$(achado.item.price)}`, inst)
+  } else {
+    await sendWA(phone, `No momento não temos "${nome}" 🙏`, inst)
+  }
+  await _vozOferecerMaisItens(tenantId, phone, inst, draft || { itens: [] })
+  return true
+}
 // Verifica se o rascunho já tem algum item da categoria de bebidas — evita
 // oferecer bebida de novo pra quem já colocou uma no pedido.
 function _vozPedidoJaTemBebida(tenantId, draft, catBebida) {
@@ -5890,6 +5948,17 @@ async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido, textoOrig
   // meio); ao terminar, _vozPizzaFinalizarItem retoma esses itens e resolve
   // os grupos pendentes deles também, então nada se perde.
   const pizzaCasada = (_vozEhWuzapi(tenantId) && textoOriginal) ? _vozCasarPizzaPorNome(tenantId, textoOriginal) : null
+  // Reconhecimento PARCIAL: pelo menos 1 item (comum ou pizza) foi
+  // reconhecido, mas a IA também sinalizou algo que não achou no cardápio
+  // (ex: "coca de 1 litro" não existe) — sem isso, esse aviso era
+  // descartado em silêncio e o cliente nunca ficava sabendo que uma parte
+  // do que ele pediu não entrou. Não dispara aqui quando NENHUM item foi
+  // reconhecido, porque nesse caso o "nao_entendido" já entra embutido na
+  // mensagem de "Não consegui identificar..." mais abaixo.
+  const teveAlgumItem = !!pizzaCasada || extraido.itens.length > 0
+  if (teveAlgumItem && extraido.nao_entendido) {
+    await sendWA(phone, `⚠️ ${extraido.nao_entendido}`, inst)
+  }
   if (pizzaCasada) {
     await _vozResolverPizzaCasada(tenantId, phone, inst, { itens: [...itensBase, ...extraido.itens], bairro: extraido.bairro, ...base }, pizzaCasada, textoOriginal)
     return
@@ -6859,6 +6928,9 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
       await sendWA(phone, 'Não consegui identificar um item novo nessa mensagem — pode dizer o que mais você quer adicionar? (ex: "mais uma coca-cola")', inst)
       return true
     }
+    if (extraido.nao_entendido) {
+      await sendWA(phone, `⚠️ ${extraido.nao_entendido}`, inst)
+    }
     await _vozProcessarGruposPendentes(tenantId, phone, inst, {
       ...draftSemMeta,
       itens: [...(draftSemMeta.itens || []), ...novosItens]
@@ -7116,6 +7188,20 @@ async function handleIAWebhook(req, res) {
               return
             }
             log('🎙️', `[VOZ] Transcrito [${tenantId}] ${phoneVoz}: "${texto}"`)
+            // Cliente perguntando pelo status de um PEDIDO JÁ FEITO (ex:
+            // "cadê meu pedido?", "meu pedido já saiu?", "#011") por ÁUDIO —
+            // mesmo tratamento que já existia só pro texto digitado (ver
+            // responderAcompanhamentoWhatsapp). Roda ANTES do fluxo de novo
+            // pedido/pergunta de disponibilidade: se a intenção for essa,
+            // não faz sentido tentar casar o áudio contra o cardápio.
+            if (await responderAcompanhamentoWhatsapp({ tenantId, phone: phoneVoz, text: texto, msgIds: [], cfg: cfgV })) return
+            // Pergunta de disponibilidade ("tem pratinho?") no meio de um
+            // pedido em andamento — responde na hora, sem mexer no carrinho,
+            // e retoma de onde estava (mostra os botões de novo). Só checa
+            // isso quando já existe pedido em andamento (draft com itens ou
+            // estado pendente) — é quando essa pergunta tende a surgir.
+            const emAndamentoVoz = !!(draftExistente?.itens?.length || draftExistente?.estado)
+            if (emAndamentoVoz && await _vozResponderPerguntaDisponibilidade(tenantId, phoneVoz, inst, draftExistente, texto)) return
             // Se já tem um rascunho esperando uma resposta SIMPLES (ex:
             // "entrega ou retirada?", bairro, forma de pagamento, sim/não da
             // confirmação) — não estado de navegação por item/categoria —
@@ -7183,6 +7269,14 @@ async function handleIAWebhook(req, res) {
     const vozDraft = _vozLerDraft(tenantId, phone)
     if (vozDraft) {
       const inst = _waInstanceFor(tenantId, cfg)
+      // Pergunta de disponibilidade ("tem pratinho?") no meio de um pedido
+      // em andamento — mesma lógica do áudio (ver acima): responde na hora
+      // e retoma o pedido de onde estava, antes de tentar casar a
+      // mensagem contra o estado pendente.
+      const emAndamentoTxt = !!(vozDraft.itens?.length || vozDraft.estado)
+      if (emAndamentoTxt && msg && !msgChoiceId && await _vozResponderPerguntaDisponibilidade(tenantId, phone, inst, vozDraft, msg)) {
+        send(res,200,{ok:true, voz:true}); return
+      }
       if (await _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, msgChoiceId, cfg)) {
         send(res,200,{ok:true, voz:true}); return
       }
