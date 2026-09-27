@@ -5790,7 +5790,14 @@ async function _vozCriarPedido(tenantId, phone, inst, draft, nomeCliente) {
     await sendWA(phone, 'Tive um problema técnico ao finalizar seu pedido. Por favor finalize pelo cardápio da loja ou fale com o atendente.', inst)
     return
   }
-  const numero = data?.order_num || data?.id
+  // O POST em /api/orders não devolve "order_num" pronto (ele só é
+  // atribuído depois, sob demanda) — por isso aqui caía no "data.id", que é
+  // o ID interno da tabela (ex: 27095), diferente do número sequencial da
+  // loja (#002) que a notificação automática do pedido mostra. Chama a
+  // MESMA função que o resto do sistema usa (_iaPedNum, gestor, etc.) pra
+  // garantir consistência — sempre o número sequencial da loja, nunca o ID interno.
+  const _offsetCfgVoz = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tenantId)
+  const numero = String(atribuirOrderNumSeNecessario(tenantId, data?.id) || numeroPedidoPad(data, parseInt(_offsetCfgVoz?.order_num_offset) || 0) || data?.id).padStart(3, '0')
 
   if (pag === 'dinheiro' || pag === 'credito' || pag === 'debito') {
     await sendWA(phone, `✅ Pedido #${numero} confirmado! Já caiu no sistema da loja e logo começa a ser preparado.`, inst)
