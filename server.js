@@ -5306,7 +5306,8 @@ async function _vozOfertarBebidaSeAplicavel(tenantId, phone, inst, draft) {
   await _vozListarItensCategoria(tenantId, phone, inst, { ...draft, _bebidaOferecida: true }, catBebida.id, {
     titulo: 'Bebidas',
     texto: 'Quer aproveitar e já pedir uma bebida pra acompanhar? 🥤',
-    voltarLabel: 'Não, obrigado'
+    voltarLabel: 'Não, obrigado',
+    limiteFotos: 4
   })
   return true
 }
@@ -5483,11 +5484,13 @@ async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId, opt
   // Manda todo item com foto como "card" (imagem+botão) ANTES da lista de
   // escolha — assim o cliente toca direto no botão embaixo da própria foto
   // pra adicionar aquele item, sem precisar abrir a lista separada depois.
-  // Sem limite de quantidade (a pedido) — categoria com muitas fotos manda
-  // várias mensagens em sequência. Se o envio com botão nativo falhar por
-  // algum motivo, cai pra foto simples de antes (o cliente ainda escolhe
-  // pela lista mais abaixo, que sempre traz todos).
-  const comFoto = itens.filter(i => i.image_url)
+  // Sem limite por padrão (categoria normal) — só respeita opts.limiteFotos
+  // quando informado (ex: upsell de bebida, pra não floodar com muitos
+  // cards de sugestão). Se o envio com botão nativo falhar por algum
+  // motivo, cai pra foto simples de antes (o cliente ainda escolhe pela
+  // lista mais abaixo, que sempre traz todos).
+  const comFotoTodos = itens.filter(i => i.image_url)
+  const comFoto = opts.limiteFotos ? comFotoTodos.slice(0, opts.limiteFotos) : comFotoTodos
   for (const i of comFoto) {
     const precoTxt = i.hide_price ? '' : `R$${_fmtR$(i.price)}`
     const desc = String(i.description || '').trim()
