@@ -5322,18 +5322,20 @@ async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId) {
     description: i.hide_price ? '' : `R$${_fmtR$(i.price)}`
   }))
   rows.push({ id: '__voltar', title: '⬅️ Voltar às categorias' })
+  // Se tiver poucas fotos, manda como "cards" (imagem+legenda) ANTES da lista
+  // de escolha — assim o cliente já vê o produto antes de tocar na opção, em
+  // vez de escolher às cegas e só depois ver a foto — só os primeiros com
+  // foto, pra não floodar o chat.
+  const comFoto = itens.filter(i => i.image_url).slice(0, 4)
+  for (const i of comFoto) {
+    try { await sendWAImage(phone, i.image_url, `${i.name}${i.hide_price ? '' : ` — R$${_fmtR$(i.price)}`}`, inst) } catch {}
+  }
   await _vozEnviarOpcoes(phone, inst, {
     titulo: ehPizza ? 'Escolha o sabor' : 'Itens',
     texto: ehPizza ? 'Toque no primeiro sabor da pizza:' : 'Toque no item que você quer:',
     buttonText: 'Ver opções',
     rows
   })
-  // Se tiver poucas fotos, manda como "cards" (imagem+legenda) pra ajudar a
-  // decidir visualmente — só os primeiros com foto, pra não floodar o chat.
-  const comFoto = itens.filter(i => i.image_url).slice(0, 4)
-  for (const i of comFoto) {
-    try { await sendWAImage(phone, i.image_url, `${i.name}${i.hide_price ? '' : ` — R$${_fmtR$(i.price)}`}`, inst) } catch {}
-  }
 }
 
 // Pizza: escolhido o 1º sabor, pergunta o tamanho (se a pizza tiver tamanhos
