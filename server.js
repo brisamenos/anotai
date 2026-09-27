@@ -3724,9 +3724,21 @@ function _waInstanceFor(tenantId, cfg) {
   return cfg?.evo_instance || EVO_INST
 }
 
+// Mostra "digitando..." antes de mandar uma mensagem via WuzAPI, pra não
+// parecer resposta instantânea de robô — mesmo padrão já usado no bot de
+// cobrança (suporte-vendas-bot.js). Na Evolution API isso já é nativo (via
+// delay+presence:'composing' na própria chamada de sendText), então esse
+// helper só se aplica ao branch WuzAPI, que não tem esse recurso embutido.
+async function _wuzDigitando(tenantId, phone, delayMs) {
+  try { await _tenantWa.sendPresence(tenantId, phone) } catch (e) {}
+  const delay = typeof delayMs === 'number' ? Math.max(0, delayMs) : 1200
+  if (delay) await new Promise(r => setTimeout(r, Math.min(delay, 2500)))
+}
+
 async function sendWA(phone, text, inst, delayMs) {
   if (typeof inst === 'string' && inst.startsWith(WUZAPI_SENTINEL)) {
     const tenantId = inst.slice(WUZAPI_SENTINEL.length)
+    await _wuzDigitando(tenantId, phone, delayMs)
     try {
       const r = await _tenantWa.sendText(tenantId, phone, text)
       const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
@@ -3771,6 +3783,7 @@ async function sendWAImage(phone, imageBase64, caption, inst) {
   if (typeof inst === 'string' && inst.startsWith(WUZAPI_SENTINEL)) {
     const tenantId = inst.slice(WUZAPI_SENTINEL.length)
     try {
+      await _wuzDigitando(tenantId, phone)
       const r = await _tenantWa.sendImage(tenantId, phone, imageBase64, caption)
       const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
       if (id) _tenantWa.markBotSent(id)
@@ -3803,6 +3816,7 @@ async function sendWAList(phone, inst, opts) {
   if (typeof inst !== 'string' || !inst.startsWith(WUZAPI_SENTINEL)) return false
   const tenantId = inst.slice(WUZAPI_SENTINEL.length)
   try {
+    await _wuzDigitando(tenantId, phone)
     const r = await _tenantWa.sendList(tenantId, phone, opts)
     const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
     if (id) _tenantWa.markBotSent(id)
@@ -3813,6 +3827,7 @@ async function sendWAButtons(phone, inst, opts) {
   if (typeof inst !== 'string' || !inst.startsWith(WUZAPI_SENTINEL)) return false
   const tenantId = inst.slice(WUZAPI_SENTINEL.length)
   try {
+    await _wuzDigitando(tenantId, phone)
     const r = await _tenantWa.sendButtons(tenantId, phone, opts)
     const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
     if (id) _tenantWa.markBotSent(id)
@@ -5558,7 +5573,34 @@ async function _vozOferecerRepetirPedido(tenantId, phone, inst, draft) {
   })
 }
 
-async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido, textoOriginal) {
+// "draftExistente" é o rascunho JÁ salvo pra esse telefone (se houver) no
+// momento em que esse áudio/texto chegou — ex: catálogo aberto esperando
+// categoria, item já escolhido, endereço/pagamento já resolvidos etc. Existe
+// pra cobrir o caso de o cliente mandar um SEGUNDO áudio/texto no meio de um
+// pedido que já estava em andamento: sem isso, esse pedido em andamento era
+// simplesmente ignorado e tudo recomeçava do zero — inclusive voltando a
+// oferecer "repetir o último pedido", que o cliente já tinha respondido
+// "não" (motivo do bug relatado: repete a pergunta de repetir pedido depois
+// que o cliente já abriu o catálogo e mandou um novo áudio).
+async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido, textoOriginal, draftExistente) {
+  const emAndamento = !!(draftExistente?.itens?.length || draftExistente?.estado)
+  const itensBase = draftExistente?.itens || []
+  // Contexto já resolvido antes (se houver) prevalece sobre o que esse novo
+  // áudio eventualmente tenha dito de novo — ex: já sabe o bairro/endereço,
+  // não é pra esse áudio novo sobrescrever isso com null.
+  const base = emAndamento ? {
+    tipo_pedido: draftExistente.tipo_pedido ?? extraido.tipo_pedido,
+    addr: draftExistente.addr,
+    taxa: draftExistente.taxa,
+    bairro_nome: draftExistente.bairro_nome,
+    forma_pagamento: draftExistente.forma_pagamento ?? extraido.forma_pagamento,
+    troco: draftExistente.troco,
+    observacao_geral: draftExistente.observacao_geral ?? extraido.observacao_geral
+  } : {
+    tipo_pedido: extraido.tipo_pedido,
+    forma_pagamento: extraido.forma_pagamento,
+    observacao_geral: extraido.observacao_geral
+  }
   if (!extraido.itens.length) {
     // Loja no WuzAPI: antes de desistir, tenta casar o texto com o SABOR de
     // uma pizza (pizza fica de fora da extração por IA — ver
@@ -5569,31 +5611,28 @@ async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido, textoOrig
     if (_vozEhWuzapi(tenantId)) {
       const pizzaCasada = textoOriginal ? _vozCasarPizzaPorNome(tenantId, textoOriginal) : null
       if (pizzaCasada) {
-        await _vozPizzaPerguntarTamanho(tenantId, phone, inst, {
-          itens: [], bairro: extraido.bairro, tipo_pedido: extraido.tipo_pedido,
-          forma_pagamento: extraido.forma_pagamento, observacao_geral: extraido.observacao_geral
-        }, pizzaCasada)
+        await _vozPizzaPerguntarTamanho(tenantId, phone, inst, { itens: itensBase, bairro: extraido.bairro, ...base }, pizzaCasada)
         return
       }
-      // Sem sabor de pizza reconhecido — oferece repetir o último pedido
-      // (ver _vozOferecerRepetirPedido) antes de abrir o catálogo do zero.
-      await _vozOferecerRepetirPedido(tenantId, phone, inst, {
-        itens: [], bairro: extraido.bairro, tipo_pedido: extraido.tipo_pedido,
-        forma_pagamento: extraido.forma_pagamento, observacao_geral: extraido.observacao_geral
-      })
+      if (emAndamento) {
+        // Pedido já em andamento — não faz sentido oferecer repetir o
+        // ÚLTIMO pedido de novo (o cliente já está montando um pedido
+        // NOVO); só reabre o catálogo de onde ele parou, com os itens que
+        // já tinha escolhido preservados.
+        await _vozOferecerMaisItens(tenantId, phone, inst, { itens: itensBase, bairro: extraido.bairro, ...base })
+        return
+      }
+      // Sem sabor de pizza reconhecido e sem pedido em andamento — oferece
+      // repetir o último pedido (ver _vozOferecerRepetirPedido) antes de
+      // abrir o catálogo do zero.
+      await _vozOferecerRepetirPedido(tenantId, phone, inst, { itens: [], bairro: extraido.bairro, ...base })
       return
     }
     const motivo = extraido.nao_entendido ? ` (${extraido.nao_entendido})` : ''
     await sendWA(phone, `Não consegui identificar nenhum item do cardápio no seu áudio${motivo}. Pode tentar de novo ou escrever o pedido?`, inst)
     return
   }
-  await _vozProcessarGruposPendentes(tenantId, phone, inst, {
-    itens: extraido.itens,
-    bairro: extraido.bairro,
-    tipo_pedido: extraido.tipo_pedido,
-    forma_pagamento: extraido.forma_pagamento,
-    observacao_geral: extraido.observacao_geral
-  })
+  await _vozProcessarGruposPendentes(tenantId, phone, inst, { itens: [...itensBase, ...extraido.itens], bairro: extraido.bairro, ...base })
 }
 
 // Pergunta, um de cada vez, qualquer grupo (obrigatório OU adicional opcional)
@@ -5654,8 +5693,14 @@ async function _vozResolverTipoEEndereco(tenantId, phone, inst, draftIn) {
     if (tiposDisp.length === 1) {
       tipo = tiposDisp[0]
     } else {
-      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_tipo_entrega', ...draft })
-      await sendWA(phone, 'Vai ser *entrega* ou *retirada*?', inst)
+      const opcoesTipo = [{ id: 'delivery', label: 'Entrega' }, { id: 'retirada', label: 'Retirada' }]
+      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_tipo_entrega', ...draft, meta: { opcoes: opcoesTipo } })
+      await _vozEnviarOpcoes(phone, inst, {
+        titulo: 'Entrega ou retirada',
+        texto: 'Vai ser entrega ou retirada?',
+        buttonText: 'Escolher',
+        rows: opcoesTipo.map(o => ({ id: o.id, title: o.label }))
+      })
       return
     }
   }
@@ -6200,6 +6245,458 @@ async function extrairPedidoDeTexto(tenantId, texto) {
   } catch (e) { log('❌', '[VOZ] Falha na extração do pedido:', e.message); return null }
 }
 
+// Processa uma resposta (texto digitado OU áudio transcrito) contra um
+// rascunho de pedido por voz já em andamento (vozDraft.estado). Extraído do
+// dispatcher do webhook pra poder ser chamado tanto pelo fluxo de texto
+// (síncrono) quanto pelo de áudio (assíncrono) — antes, um áudio chegando
+// no meio do pedido (ex: respondendo "entrega ou retirada?") ignorava esse
+// estado inteiro e reiniciava o pedido do zero. Retorna true se algum
+// estado bateu e a resposta já foi enviada; false se não achou estado
+// correspondente (o chamador decide o que fazer nesse caso).
+async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, msgChoiceId, cfg) {
+  const msgNorm = msg.trim().toLowerCase()
+  if (vozDraft.estado === 'aguardando_grupo') {
+    const pend = _vozProximaPendenciaGrupo(vozDraft.itens)
+    if (!pend) { _vozApagarDraft(tenantId, phone); return true }
+    const grupo = pend.grupo
+    if (grupo.tipo === 'checkbox') {
+      const selecionados = grupo._selecionados || []
+      const opcoesResp = [
+        ...grupo.opcoes.filter(o => !selecionados.some(s => s.nome === o.nome)).map(o => ({ id: `op:${o.nome}`, label: o.nome })),
+        { id: '__concluir', label: selecionados.length ? 'Concluir' : 'Sem adicional' }
+      ]
+      const escolha = _vozResolverEscolha(msg, msgChoiceId, opcoesResp)
+      if (!escolha) {
+        await sendWA(phone, `Não entendi — toque numa opção pra *${grupo.nome}* ou responda com o número dela.`, inst)
+        return true
+      }
+      if (escolha.id === '__concluir') {
+        const itensAtualizados = vozDraft.itens.map((it, idx) => idx !== pend.itemIndex ? it : {
+          ...it,
+          gruposFaltando: it.gruposFaltando.slice(1),
+          gruposResolvidos: [...(it.gruposResolvidos || []), { nome: grupo.nome, escolhas: selecionados }]
+        })
+        await _vozProcessarGruposPendentes(tenantId, phone, inst, { ...vozDraft, itens: itensAtualizados })
+      } else {
+        const opDef = grupo.opcoes.find(o => o.nome === escolha.id.slice(3))
+        const jaTem = selecionados.find(s => s.nome === opDef.nome)
+        const novosSelecionados = jaTem
+          ? selecionados.map(s => s.nome === opDef.nome ? { ...s, qty: s.qty + 1 } : s)
+          : [...selecionados, { nome: opDef.nome, preco: opDef.preco, qty: 1 }]
+        const grupoAtualizado = { ...grupo, _selecionados: novosSelecionados }
+        const itensAtualizados = vozDraft.itens.map((it, idx) => idx !== pend.itemIndex ? it : {
+          ...it, gruposFaltando: [grupoAtualizado, ...it.gruposFaltando.slice(1)]
+        })
+        await _vozPerguntarGrupo(tenantId, phone, inst, { ...vozDraft, itens: itensAtualizados }, itensAtualizados[pend.itemIndex], grupoAtualizado)
+      }
+      return true
+    }
+    // radio — 1 escolha só, com "Não quero" quando o grupo não é obrigatório
+    const opcoesResp = [
+      ...grupo.opcoes.map(o => ({ id: `op:${o.nome}`, label: o.nome })),
+      ...(grupo.required ? [] : [{ id: '__nenhum', label: 'Não quero' }])
+    ]
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, opcoesResp)
+    if (!escolha) {
+      const opcoesTxt = grupo.opcoes.map(o => o.nome).join(', ')
+      await sendWA(phone, `Não entendi. Opções pra *${grupo.nome}*: ${opcoesTxt}${grupo.required ? '' : ' (ou "não quero")'}`, inst)
+      return true
+    }
+    const escolhas = escolha.id === '__nenhum' ? [] : (() => {
+      const o = grupo.opcoes.find(x => x.nome === escolha.id.slice(3))
+      return o ? [{ nome: o.nome, preco: o.preco, qty: 1 }] : []
+    })()
+    const itensAtualizados = vozDraft.itens.map((it, idx) => idx !== pend.itemIndex ? it : {
+      ...it,
+      gruposFaltando: it.gruposFaltando.slice(1),
+      gruposResolvidos: [...(it.gruposResolvidos || []), { nome: grupo.nome, escolhas }]
+    })
+    await _vozProcessarGruposPendentes(tenantId, phone, inst, { ...vozDraft, itens: itensAtualizados })
+    return true
+  }
+  // ── Catálogo interativo (WuzAPI): categorias → itens/sabores → pizza ──
+  if (vozDraft.estado === 'aguardando_mais_itens') {
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
+    if (!escolha) {
+      await sendWA(phone, 'Não entendi — toque numa opção da lista ou responda com o número dela.', inst)
+      return true
+    }
+    // IMPORTANTE: também descarta o "estado" antigo aqui (não só "meta") —
+    // sem isso, a função chamada a seguir salva o rascunho com {estado:'X',
+    // ...draftSemMeta}, e como o spread vem DEPOIS do literal, um estado
+    // antigo sobrevivendo em draftSemMeta sobrescreveria o novo por engano,
+    // e a próxima resposta do cliente seria lida pelo handler errado.
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    if (escolha.id === '__finalizar') {
+      if (!draftSemMeta.itens?.length) {
+        await sendWA(phone, 'Você ainda não escolheu nenhum item — toque numa categoria da lista pra começar.', inst)
+        return true
+      }
+      // "addr" só existe se tipo/endereço/pagamento JÁ tinham sido
+      // resolvidos antes (ex: cliente clicou "Não" na confirmação e
+      // depois "Adicionar item") — nesse caso não repete essas perguntas,
+      // só volta direto pro resumo final com os itens atualizados.
+      if (draftSemMeta.addr) {
+        await _vozMontarConfirmacaoFinal(tenantId, phone, inst, draftSemMeta)
+      } else {
+        await _vozResolverTipoEEndereco(tenantId, phone, inst, draftSemMeta)
+      }
+    } else if (escolha.id.startsWith('cat:')) {
+      await _vozListarItensCategoria(tenantId, phone, inst, draftSemMeta, escolha.id.slice(4))
+    }
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_categoria_item') {
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
+    if (!escolha) {
+      await sendWA(phone, 'Não entendi — toque numa opção da lista ou responda com o número dela.', inst)
+      return true
+    }
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    if (escolha.id === '__voltar') {
+      await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta)
+    } else if (escolha.id.startsWith('item:')) {
+      const item = _vozItemPorId(tenantId, escolha.id.slice(5))
+      if (!item) { await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta); return true }
+      if (meta?.ehPizza || _vozEhPizza(item)) {
+        await _vozPizzaPerguntarTamanho(tenantId, phone, inst, draftSemMeta, item)
+      } else {
+        await _vozAdicionarItemComum(tenantId, phone, inst, draftSemMeta, item)
+      }
+    }
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_pizza_tamanho') {
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
+    if (!escolha) {
+      await sendWA(phone, 'Não entendi o tamanho — toque numa opção ou responda com o número dela.', inst)
+      return true
+    }
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    await _vozPizzaPerguntarMeio(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: escolha.id.slice(4) })
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_pizza_meio') {
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
+    if (!escolha) {
+      await sendWA(phone, 'Não entendi — a pizza vai ser inteira de um sabor só, ou meio a meio?', inst)
+      return true
+    }
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    if (escolha.id === 'meio') {
+      await _vozPizzaListarSegundoSabor(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey })
+    } else {
+      await _vozPizzaFinalizarItem(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey, item2Id: null })
+    }
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_pizza_sabor2') {
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
+    if (!escolha || !escolha.id.startsWith('item:')) {
+      await sendWA(phone, 'Não entendi — toque no sabor do outro lado da pizza, ou responda com o número dele.', inst)
+      return true
+    }
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    await _vozPizzaFinalizarItem(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey, item2Id: escolha.id.slice(5) })
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_tipo_entrega') {
+    let tipo = null
+    if (/\bentrega\b|\bdelivery\b/i.test(msgNorm)) tipo = 'delivery'
+    else if (/\bretirad|\bretirar\b|\bbuscar\b/i.test(msgNorm)) tipo = 'retirada'
+    const escolha = !tipo ? _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || []) : null
+    if (escolha?.id === 'delivery' || escolha?.id === 'retirada') tipo = escolha.id
+    if (!tipo) {
+      await sendWA(phone, 'Não entendi — toque numa opção ou responda *entrega* ou *retirada*.', inst)
+      return true
+    }
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    await _vozResolverTipoEEndereco(tenantId, phone, inst, { ...draftSemMeta, tipo_pedido: tipo })
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_ponto_retirada') {
+    const pontos = _vozPontosRetirada(tenantId)
+    const idxDigitado = parseInt(msg.trim())
+    let ponto = (idxDigitado >= 1 && idxDigitado <= pontos.length) ? pontos[idxDigitado - 1] : null
+    if (!ponto) ponto = pontos.find(p => _normBairro(p.nome).includes(_normBairro(msg.trim())))
+    if (!ponto) {
+      await sendWA(phone, 'Não entendi — responda com o número da unidade.', inst)
+      return true
+    }
+    const addr = ['Retirada', ponto.endereco || ponto.nome].filter(Boolean).join(' — ')
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    await _vozContinuarPagamento(tenantId, phone, inst, { ...draftSemMeta, addr, taxa: 0 })
+    return true
+  }
+  // Cliente respondendo se quer repetir o último pedido (ver
+  // _vozOferecerRepetirPedido) — sim entra com os itens já prontos no
+  // catálogo (que já pergunta, via botão "Finalizar pedido" x categoria,
+  // se quer adicionar mais alguma coisa); não abre o catálogo do zero.
+  if (vozDraft.estado === 'aguardando_repetir_pedido') {
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
+    if (escolha?.id === 'sim') {
+      await _vozOferecerMaisItens(tenantId, phone, inst, { ...draftSemMeta, itens: meta?.itensRepetir || [] })
+      return true
+    }
+    if (escolha?.id === 'nao') {
+      await _vozOferecerMaisItens(tenantId, phone, inst, { ...draftSemMeta, itens: [] })
+      return true
+    }
+    await sendWA(phone, 'Não entendi — toque numa opção ou responda *sim* ou *não*.', inst)
+    return true
+  }
+  // Endereço salvo de um pedido anterior — cliente confirmando (sim/não)
+  // se ainda mora lá (ver _vozResolverTipoEEndereco).
+  if (vozDraft.estado === 'aguardando_confirma_endereco') {
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
+    if (escolha?.id === 'sim') {
+      const feeConfig = cfg.delivery_fee_config ? jsonParse(cfg.delivery_fee_config) : {}
+      const resTaxa = _vozResolverTaxa(feeConfig, meta.bairroSalvo)
+      if (resTaxa.suportado && resTaxa.resolvido) {
+        await _vozContinuarPagamento(tenantId, phone, inst, { ...draftSemMeta, addr: meta.addrSalvo, bairro_nome: meta.bairroSalvo, taxa: resTaxa.taxa })
+      } else {
+        _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_bairro', ...draftSemMeta, tipo_pedido: 'delivery' })
+        await sendWA(phone, 'Não consegui confirmar a taxa desse endereço salvo — pode me dizer o bairro de novo?', inst)
+      }
+      return true
+    }
+    if (escolha?.id === 'nao') {
+      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_bairro', ...draftSemMeta, tipo_pedido: 'delivery' })
+      await sendWA(phone, 'Sem problemas! Pra qual bairro é a entrega?', inst)
+      return true
+    }
+    await sendWA(phone, 'Não entendi — toque numa opção ou responda *sim* ou *não*.', inst)
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_bairro') {
+    const feeConfig = cfg.delivery_fee_config ? jsonParse(cfg.delivery_fee_config) : {}
+    const resTaxa = _vozResolverTaxa(feeConfig, msg.trim())
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    if (resTaxa.suportado && resTaxa.resolvido) {
+      await _vozPedirRuaNumero(tenantId, phone, inst, { ...draftSemMeta, bairroLabel: resTaxa.addrLabel, taxa: resTaxa.taxa })
+    } else {
+      const sugestoesTxt = resTaxa.sugestoes?.length ? ` Você quis dizer: ${resTaxa.sugestoes.join(', ')}?` : ''
+      await sendWA(phone, `Não encontrei esse bairro na nossa área de entrega.${sugestoesTxt} Pode confirmar o nome do bairro?`, inst)
+    }
+    return true
+  }
+  // Depois do bairro, pede rua e número pra fechar o endereço completo
+  // (usado no pedido e na impressão pro gestor, igual ao cardápio normal).
+  if (vozDraft.estado === 'aguardando_rua_numero') {
+    const ruaNumero = msg.trim().slice(0, 140)
+    if (!ruaNumero || ruaNumero.length < 4) {
+      await sendWA(phone, 'Não peguei direito — pode escrever a rua e o número da entrega? (ex: "Rua das Flores, 123")', inst)
+      return true
+    }
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    await _vozPedirRuaNumero(tenantId, phone, inst, { ...draftSemMeta, rua_numero: ruaNumero })
+    return true
+  }
+  // Pedido abaixo do mínimo pra entrega — o cliente disse o que mais
+  // quer adicionar (texto livre), extrai os itens novos e junta com os
+  // que já estavam no rascunho, depois refaz a checagem do mínimo.
+  if (vozDraft.estado === 'aguardando_pedido_minimo') {
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    let extraido = null
+    try { extraido = await extrairPedidoDeTexto(tenantId, msg) } catch (e) { log('❌', '[VOZ] Falha ao extrair item extra:', e.message) }
+    const novosItens = extraido?.itens?.length ? extraido.itens : []
+    if (!novosItens.length) {
+      await sendWA(phone, 'Não consegui identificar um item novo nessa mensagem — pode dizer o que mais você quer adicionar? (ex: "mais uma coca-cola")', inst)
+      return true
+    }
+    await _vozProcessarGruposPendentes(tenantId, phone, inst, {
+      ...draftSemMeta,
+      itens: [...(draftSemMeta.itens || []), ...novosItens]
+    })
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_pagamento') {
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
+    let forma = escolha?.id
+    if (!forma) {
+      // Fallback pra quem digitar livre sem tocar no botão/lista.
+      if (/\bpix\b/i.test(msgNorm)) forma = 'pix'
+      else if (/\bd[eé]bito\b/i.test(msgNorm)) forma = 'debito'
+      else if (/\bcr[eé]dito\b|\bcart[aã]o\b/i.test(msgNorm)) forma = 'credito'
+      else if (/\b(dinheiro|especie|espécie|cash)\b/i.test(msgNorm)) forma = 'dinheiro'
+    }
+    if (!forma || !['dinheiro', 'credito', 'debito', 'pix'].includes(forma)) {
+      await sendWA(phone, 'Não entendi — toque numa opção ou responda *dinheiro*, *crédito*, *débito* ou *pix*.', inst)
+      return true
+    }
+    await _vozContinuarPagamento(tenantId, phone, inst, { ...draftSemMeta, forma_pagamento: forma })
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_tipo_cartao') {
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
+    let forma = escolha?.id
+    if (!forma) {
+      if (/\bd[eé]bito\b/i.test(msgNorm)) forma = 'debito'
+      else if (/\bcr[eé]dito\b/i.test(msgNorm)) forma = 'credito'
+    }
+    if (!forma) {
+      await sendWA(phone, 'Não entendi — toque numa opção ou responda *crédito* ou *débito*.', inst)
+      return true
+    }
+    await _vozContinuarPagamento(tenantId, phone, inst, { ...draftSemMeta, forma_pagamento: forma })
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_troco') {
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
+    if (escolha?.id === 'nao' || /^n[aã]o\b|^nao\b|sem troco/i.test(msgNorm)) {
+      await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...draftSemMeta, troco: null })
+      return true
+    }
+    if (escolha?.id === 'sim') {
+      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_troco_valor', ...draftSemMeta })
+      await sendWA(phone, 'Troco pra quanto? (ex: "50")', inst)
+      return true
+    }
+    // Fallback pra quem já manda o valor direto sem tocar no botão (ex: "pra 50 reais")
+    const valorMatch = msg.match(/(\d+[.,]?\d*)/)
+    if (valorMatch) {
+      await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...draftSemMeta, troco: parseFloat(valorMatch[1].replace(',', '.')) })
+      return true
+    }
+    await sendWA(phone, 'Não entendi — toque numa opção ou responda *sim* ou *não*.', inst)
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_troco_valor') {
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    const valorMatch = msg.match(/(\d+[.,]?\d*)/)
+    const troco = valorMatch ? parseFloat(valorMatch[1].replace(',', '.')) : -1
+    await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...draftSemMeta, troco })
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_nome') {
+    const nomeDigitado = msg.trim().slice(0, 60)
+    if (!nomeDigitado || nomeDigitado.length < 2) {
+      await sendWA(phone, 'Não peguei seu nome — pode escrever de novo?', inst)
+      return true
+    }
+    if (_vozApagarDraft(tenantId, phone)) {
+      await _vozCriarPedido(tenantId, phone, inst, vozDraft, nomeDigitado)
+    }
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_confirmacao') {
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    // Fallback pros regexes antigos cobre quem digita "sim"/"não" direto
+    // sem tocar no botão (ex: reenvio antigo, ou cliente digitando mesmo).
+    const _simRegex = /^(sim|s|confirmo|confirma|isso|ok|pode|correto|certo)\b/i
+    const _naoRegex = /^(n[aã]o|nao|n|cancela|cancelar|errado)\b/i
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [{ id: 'sim', label: 'Sim' }, { id: 'nao', label: 'Não' }])
+    const ehSim = escolha?.id === 'sim' || (!escolha && _simRegex.test(msgNorm))
+    const ehNao = escolha?.id === 'nao' || (!escolha && _naoRegex.test(msgNorm))
+    if (ehSim) {
+      // IMPORTANTE: NÃO usa mais o "pushName" (nome que o cliente colocou
+      // no perfil do próprio WhatsApp, às vezes um apelido/emoji/nome de
+      // grupo) — só usa um nome que o PRÓPRIO cliente já confirmou aqui
+      // antes (gravado em customers.name por um pedido anterior). Assim,
+      // na primeira vez ele é sempre perguntado, e nas próximas nunca
+      // mais, porque já tem o nome real salvo.
+      const _custNomeRow = db.prepare(`SELECT name FROM customers WHERE tenant_id=? AND ${phoneLookupSql('phone')} ORDER BY id DESC LIMIT 1`).get(tenantId, ...phoneLookupArgs(phone))
+      const nomeCli = (_custNomeRow?.name && _custNomeRow.name !== 'Cliente') ? _custNomeRow.name : null
+      if (!nomeCli) {
+        // Primeira vez desse telefone (ou só tem o placeholder genérico
+        // "Cliente") — pergunta o nome, em vez de criar o pedido com
+        // "Cliente WhatsApp" genérico no kanban do gestor.
+        _vozSalvarDraft(tenantId, phone, { ...draftSemMeta, estado: 'aguardando_nome' })
+        await sendWA(phone, 'Qual seu nome, por favor?', inst)
+      } else if (_vozApagarDraft(tenantId, phone)) {
+        // Só segue se REALMENTE apagou agora — protege contra mensagem "sim"
+        // duplicada (reenvio de rede do WhatsApp) criar o pedido 2x.
+        await _vozCriarPedido(tenantId, phone, inst, vozDraft, nomeCli)
+      }
+    } else if (ehNao) {
+      // Em vez de cancelar direto, oferece editar o pedido (adicionar ou
+      // remover item) antes de desistir de vez.
+      const opcoesEdit = [
+        { id: 'adicionar', label: 'Adicionar item' },
+        { id: 'remover', label: 'Remover item' },
+        { id: 'cancelar', label: 'Cancelar pedido' }
+      ]
+      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_editar_pedido', ...draftSemMeta, meta: { opcoes: opcoesEdit } })
+      await _vozEnviarOpcoes(phone, inst, {
+        titulo: 'Editar pedido',
+        texto: 'Sem problemas! O que você quer fazer?',
+        buttonText: 'Escolher',
+        rows: opcoesEdit.map(o => ({ id: o.id, title: o.label }))
+      })
+    } else {
+      await sendWA(phone, 'Não entendi — toque numa opção ou responda *sim* ou *não*.', inst)
+    }
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_editar_pedido') {
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
+    if (escolha?.id === 'adicionar') {
+      await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta)
+      return true
+    }
+    if (escolha?.id === 'remover') {
+      const itens = draftSemMeta.itens || []
+      if (!itens.length) {
+        await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta)
+        return true
+      }
+      const opcoesRm = itens.map((it, idx) => ({ id: `rm:${idx}`, label: `${it.qty}x ${it.name}` }))
+      opcoesRm.push({ id: '__voltar', label: 'Voltar' })
+      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_remover_item', ...draftSemMeta, meta: { opcoes: opcoesRm } })
+      await _vozEnviarOpcoes(phone, inst, {
+        titulo: 'Remover item',
+        texto: 'Qual item você quer remover?',
+        buttonText: 'Ver itens',
+        rows: opcoesRm.map(o => ({ id: o.id, title: o.label.slice(0, 24) }))
+      })
+      return true
+    }
+    if (escolha?.id === 'cancelar') {
+      if (_vozApagarDraft(tenantId, phone)) {
+        await sendWA(phone, 'Pedido cancelado. Se quiser, mande outro áudio ou fale com a loja.', inst)
+      }
+      return true
+    }
+    await sendWA(phone, 'Não entendi — toque numa opção da lista.', inst)
+    return true
+  }
+  if (vozDraft.estado === 'aguardando_remover_item') {
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
+    if (!escolha) {
+      await sendWA(phone, 'Não entendi — toque numa opção da lista ou responda com o número dela.', inst)
+      return true
+    }
+    if (escolha.id === '__voltar') {
+      await _vozMontarConfirmacaoFinal(tenantId, phone, inst, draftSemMeta)
+      return true
+    }
+    const idx = parseInt(escolha.id.slice(3))
+    const itensNovos = (draftSemMeta.itens || []).filter((_, i) => i !== idx)
+    if (!itensNovos.length) {
+      if (_vozApagarDraft(tenantId, phone)) {
+        await sendWA(phone, 'Seu pedido ficou sem nenhum item — pedido cancelado. Se quiser, mande outro áudio ou fale com a loja.', inst)
+      }
+      return true
+    }
+    await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...draftSemMeta, itens: itensNovos })
+    return true
+  }
+  return false
+}
+
+// Estados do catálogo interativo onde um áudio deve tentar reconhecer um
+// ITEM NOVO (ver _vozIniciarConfirmacao/_vozCasarPizzaPorNome) em vez de só
+// responder a pergunta pendente — porque nesses estados é mais natural o
+// cliente falar o nome de um produto do que repetir a opção exibida.
+const _VOZ_ESTADOS_ITEM = ['aguardando_mais_itens', 'aguardando_categoria_item', 'aguardando_pizza_tamanho', 'aguardando_pizza_meio', 'aguardando_pizza_sabor2', 'aguardando_grupo']
+
 async function handleIAWebhook(req, res) {
   const body = req._parsedBody !== undefined ? req._parsedBody : await readBody(req)
   const upath = new URL(req.url,`http://x`).pathname
@@ -6247,7 +6744,7 @@ async function handleIAWebhook(req, res) {
         send(res, 200, { ok: true, voz: true }) // responde rápido — processa em background
         ;(async () => {
           try {
-            const cfgV = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
+            const cfgV = db.prepare("SELECT ia_config,evo_instance,store_name,store_descricao,store_whatsapp,store_tempo_entrega,store_tempo_retirada,delivery_fee_config,horarios_config,store_open,order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
             const inst = _waInstanceFor(tenantId, cfgV)
             if (msgId) await markAsRead(phoneVoz, msgId, inst)
             if (!_vozDentroDoLimite(tenantId, phoneVoz)) {
@@ -6256,6 +6753,11 @@ async function handleIAWebhook(req, res) {
               return
             }
             _vozRegistrarUso(tenantId, phoneVoz)
+            // Carrega ANTES de processar o áudio — se já tiver um rascunho
+            // de pedido em andamento (catálogo aberto, item já escolhido
+            // etc.), esse áudio entra NELE em vez de reiniciar o pedido do
+            // zero (ver _vozIniciarConfirmacao).
+            const draftExistente = _vozLerDraft(tenantId, phoneVoz)
             const media = await baixarMidiaWhatsapp(tenantId, msgId, from)
             if (!media?.base64) {
               await sendWA(phoneVoz, 'Não consegui baixar seu áudio 😕 Pode tentar reenviar ou escrever o pedido?', inst)
@@ -6267,6 +6769,17 @@ async function handleIAWebhook(req, res) {
               return
             }
             log('🎙️', `[VOZ] Transcrito [${tenantId}] ${phoneVoz}: "${texto}"`)
+            // Se já tem um rascunho esperando uma resposta SIMPLES (ex:
+            // "entrega ou retirada?", bairro, forma de pagamento, sim/não da
+            // confirmação) — não estado de navegação por item/categoria —
+            // trata esse áudio como a resposta a essa pergunta pendente, em
+            // vez de reiniciar o pedido do zero. Sem isso, um áudio
+            // respondendo "entrega" enquanto o bot esperava exatamente essa
+            // resposta era ignorado e o pedido inteiro recomeçava.
+            if (draftExistente?.estado && !_VOZ_ESTADOS_ITEM.includes(draftExistente.estado)) {
+              const tratado = await _vozTratarEstadoPendente(tenantId, phoneVoz, inst, draftExistente, texto, null, cfgV)
+              if (tratado) return
+            }
             // Checa loja aberta ANTES de gastar a chamada de extração — evita o
             // cliente passar por todo o fluxo (itens, bairro, pagamento) só pra
             // descobrir no final que a loja está fechada. Agendamento não é
@@ -6281,7 +6794,7 @@ async function handleIAWebhook(req, res) {
               await sendWA(phoneVoz, 'Entendi o áudio, mas tive um problema pra montar o pedido. Pode tentar de novo ou escrever?', inst)
               return
             }
-            await _vozIniciarConfirmacao(tenantId, phoneVoz, inst, extraido, texto)
+            await _vozIniciarConfirmacao(tenantId, phoneVoz, inst, extraido, texto, draftExistente)
           } catch (e) { log('❌', '[VOZ] erro no processamento do áudio:', e.message) }
         })()
         return
@@ -6323,436 +6836,7 @@ async function handleIAWebhook(req, res) {
     const vozDraft = _vozLerDraft(tenantId, phone)
     if (vozDraft) {
       const inst = _waInstanceFor(tenantId, cfg)
-      const msgNorm = msg.trim().toLowerCase()
-      if (vozDraft.estado === 'aguardando_grupo') {
-        const pend = _vozProximaPendenciaGrupo(vozDraft.itens)
-        if (!pend) { _vozApagarDraft(tenantId, phone); send(res,200,{ok:true, voz:true}); return }
-        const grupo = pend.grupo
-        if (grupo.tipo === 'checkbox') {
-          const selecionados = grupo._selecionados || []
-          const opcoesResp = [
-            ...grupo.opcoes.filter(o => !selecionados.some(s => s.nome === o.nome)).map(o => ({ id: `op:${o.nome}`, label: o.nome })),
-            { id: '__concluir', label: selecionados.length ? 'Concluir' : 'Sem adicional' }
-          ]
-          const escolha = _vozResolverEscolha(msg, msgChoiceId, opcoesResp)
-          if (!escolha) {
-            await sendWA(phone, `Não entendi — toque numa opção pra *${grupo.nome}* ou responda com o número dela.`, inst)
-            send(res,200,{ok:true, voz:true}); return
-          }
-          if (escolha.id === '__concluir') {
-            const itensAtualizados = vozDraft.itens.map((it, idx) => idx !== pend.itemIndex ? it : {
-              ...it,
-              gruposFaltando: it.gruposFaltando.slice(1),
-              gruposResolvidos: [...(it.gruposResolvidos || []), { nome: grupo.nome, escolhas: selecionados }]
-            })
-            await _vozProcessarGruposPendentes(tenantId, phone, inst, { ...vozDraft, itens: itensAtualizados })
-          } else {
-            const opDef = grupo.opcoes.find(o => o.nome === escolha.id.slice(3))
-            const jaTem = selecionados.find(s => s.nome === opDef.nome)
-            const novosSelecionados = jaTem
-              ? selecionados.map(s => s.nome === opDef.nome ? { ...s, qty: s.qty + 1 } : s)
-              : [...selecionados, { nome: opDef.nome, preco: opDef.preco, qty: 1 }]
-            const grupoAtualizado = { ...grupo, _selecionados: novosSelecionados }
-            const itensAtualizados = vozDraft.itens.map((it, idx) => idx !== pend.itemIndex ? it : {
-              ...it, gruposFaltando: [grupoAtualizado, ...it.gruposFaltando.slice(1)]
-            })
-            await _vozPerguntarGrupo(tenantId, phone, inst, { ...vozDraft, itens: itensAtualizados }, itensAtualizados[pend.itemIndex], grupoAtualizado)
-          }
-          send(res,200,{ok:true, voz:true}); return
-        }
-        // radio — 1 escolha só, com "Não quero" quando o grupo não é obrigatório
-        const opcoesResp = [
-          ...grupo.opcoes.map(o => ({ id: `op:${o.nome}`, label: o.nome })),
-          ...(grupo.required ? [] : [{ id: '__nenhum', label: 'Não quero' }])
-        ]
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, opcoesResp)
-        if (!escolha) {
-          const opcoesTxt = grupo.opcoes.map(o => o.nome).join(', ')
-          await sendWA(phone, `Não entendi. Opções pra *${grupo.nome}*: ${opcoesTxt}${grupo.required ? '' : ' (ou "não quero")'}`, inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        const escolhas = escolha.id === '__nenhum' ? [] : (() => {
-          const o = grupo.opcoes.find(x => x.nome === escolha.id.slice(3))
-          return o ? [{ nome: o.nome, preco: o.preco, qty: 1 }] : []
-        })()
-        const itensAtualizados = vozDraft.itens.map((it, idx) => idx !== pend.itemIndex ? it : {
-          ...it,
-          gruposFaltando: it.gruposFaltando.slice(1),
-          gruposResolvidos: [...(it.gruposResolvidos || []), { nome: grupo.nome, escolhas }]
-        })
-        await _vozProcessarGruposPendentes(tenantId, phone, inst, { ...vozDraft, itens: itensAtualizados })
-        send(res,200,{ok:true, voz:true}); return
-      }
-      // ── Catálogo interativo (WuzAPI): categorias → itens/sabores → pizza ──
-      if (vozDraft.estado === 'aguardando_mais_itens') {
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
-        if (!escolha) {
-          await sendWA(phone, 'Não entendi — toque numa opção da lista ou responda com o número dela.', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        // IMPORTANTE: também descarta o "estado" antigo aqui (não só "meta") —
-        // sem isso, a função chamada a seguir salva o rascunho com {estado:'X',
-        // ...draftSemMeta}, e como o spread vem DEPOIS do literal, um estado
-        // antigo sobrevivendo em draftSemMeta sobrescreveria o novo por engano,
-        // e a próxima resposta do cliente seria lida pelo handler errado.
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        if (escolha.id === '__finalizar') {
-          if (!draftSemMeta.itens?.length) {
-            await sendWA(phone, 'Você ainda não escolheu nenhum item — toque numa categoria da lista pra começar.', inst)
-            send(res,200,{ok:true, voz:true}); return
-          }
-          // "addr" só existe se tipo/endereço/pagamento JÁ tinham sido
-          // resolvidos antes (ex: cliente clicou "Não" na confirmação e
-          // depois "Adicionar item") — nesse caso não repete essas perguntas,
-          // só volta direto pro resumo final com os itens atualizados.
-          if (draftSemMeta.addr) {
-            await _vozMontarConfirmacaoFinal(tenantId, phone, inst, draftSemMeta)
-          } else {
-            await _vozResolverTipoEEndereco(tenantId, phone, inst, draftSemMeta)
-          }
-        } else if (escolha.id.startsWith('cat:')) {
-          await _vozListarItensCategoria(tenantId, phone, inst, draftSemMeta, escolha.id.slice(4))
-        }
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_categoria_item') {
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
-        if (!escolha) {
-          await sendWA(phone, 'Não entendi — toque numa opção da lista ou responda com o número dela.', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        if (escolha.id === '__voltar') {
-          await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta)
-        } else if (escolha.id.startsWith('item:')) {
-          const item = _vozItemPorId(tenantId, escolha.id.slice(5))
-          if (!item) { await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta); send(res,200,{ok:true, voz:true}); return }
-          if (meta?.ehPizza || _vozEhPizza(item)) {
-            await _vozPizzaPerguntarTamanho(tenantId, phone, inst, draftSemMeta, item)
-          } else {
-            await _vozAdicionarItemComum(tenantId, phone, inst, draftSemMeta, item)
-          }
-        }
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_pizza_tamanho') {
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
-        if (!escolha) {
-          await sendWA(phone, 'Não entendi o tamanho — toque numa opção ou responda com o número dela.', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        await _vozPizzaPerguntarMeio(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: escolha.id.slice(4) })
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_pizza_meio') {
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
-        if (!escolha) {
-          await sendWA(phone, 'Não entendi — a pizza vai ser inteira de um sabor só, ou meio a meio?', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        if (escolha.id === 'meio') {
-          await _vozPizzaListarSegundoSabor(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey })
-        } else {
-          await _vozPizzaFinalizarItem(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey, item2Id: null })
-        }
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_pizza_sabor2') {
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
-        if (!escolha || !escolha.id.startsWith('item:')) {
-          await sendWA(phone, 'Não entendi — toque no sabor do outro lado da pizza, ou responda com o número dele.', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        await _vozPizzaFinalizarItem(tenantId, phone, inst, draftSemMeta, { item1Id: meta.item1Id, sizeKey: meta.sizeKey, item2Id: escolha.id.slice(5) })
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_tipo_entrega') {
-        let tipo = null
-        if (/\bentrega\b|\bdelivery\b/i.test(msgNorm)) tipo = 'delivery'
-        else if (/\bretirad|\bretirar\b|\bbuscar\b/i.test(msgNorm)) tipo = 'retirada'
-        if (!tipo) {
-          await sendWA(phone, 'Não entendi — responda *entrega* ou *retirada*.', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        await _vozResolverTipoEEndereco(tenantId, phone, inst, { ...draftSemMeta, tipo_pedido: tipo })
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_ponto_retirada') {
-        const pontos = _vozPontosRetirada(tenantId)
-        const idxDigitado = parseInt(msg.trim())
-        let ponto = (idxDigitado >= 1 && idxDigitado <= pontos.length) ? pontos[idxDigitado - 1] : null
-        if (!ponto) ponto = pontos.find(p => _normBairro(p.nome).includes(_normBairro(msg.trim())))
-        if (!ponto) {
-          await sendWA(phone, 'Não entendi — responda com o número da unidade.', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        const addr = ['Retirada', ponto.endereco || ponto.nome].filter(Boolean).join(' — ')
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        await _vozContinuarPagamento(tenantId, phone, inst, { ...draftSemMeta, addr, taxa: 0 })
-        send(res,200,{ok:true, voz:true}); return
-      }
-      // Cliente respondendo se quer repetir o último pedido (ver
-      // _vozOferecerRepetirPedido) — sim entra com os itens já prontos no
-      // catálogo (que já pergunta, via botão "Finalizar pedido" x categoria,
-      // se quer adicionar mais alguma coisa); não abre o catálogo do zero.
-      if (vozDraft.estado === 'aguardando_repetir_pedido') {
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
-        if (escolha?.id === 'sim') {
-          await _vozOferecerMaisItens(tenantId, phone, inst, { ...draftSemMeta, itens: meta?.itensRepetir || [] })
-          send(res,200,{ok:true, voz:true}); return
-        }
-        if (escolha?.id === 'nao') {
-          await _vozOferecerMaisItens(tenantId, phone, inst, { ...draftSemMeta, itens: [] })
-          send(res,200,{ok:true, voz:true}); return
-        }
-        await sendWA(phone, 'Não entendi — toque numa opção ou responda *sim* ou *não*.', inst)
-        send(res,200,{ok:true, voz:true}); return
-      }
-      // Endereço salvo de um pedido anterior — cliente confirmando (sim/não)
-      // se ainda mora lá (ver _vozResolverTipoEEndereco).
-      if (vozDraft.estado === 'aguardando_confirma_endereco') {
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
-        if (escolha?.id === 'sim') {
-          const feeConfig = cfg.delivery_fee_config ? jsonParse(cfg.delivery_fee_config) : {}
-          const resTaxa = _vozResolverTaxa(feeConfig, meta.bairroSalvo)
-          if (resTaxa.suportado && resTaxa.resolvido) {
-            await _vozContinuarPagamento(tenantId, phone, inst, { ...draftSemMeta, addr: meta.addrSalvo, bairro_nome: meta.bairroSalvo, taxa: resTaxa.taxa })
-          } else {
-            _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_bairro', ...draftSemMeta, tipo_pedido: 'delivery' })
-            await sendWA(phone, 'Não consegui confirmar a taxa desse endereço salvo — pode me dizer o bairro de novo?', inst)
-          }
-          send(res,200,{ok:true, voz:true}); return
-        }
-        if (escolha?.id === 'nao') {
-          _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_bairro', ...draftSemMeta, tipo_pedido: 'delivery' })
-          await sendWA(phone, 'Sem problemas! Pra qual bairro é a entrega?', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        await sendWA(phone, 'Não entendi — toque numa opção ou responda *sim* ou *não*.', inst)
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_bairro') {
-        const feeConfig = cfg.delivery_fee_config ? jsonParse(cfg.delivery_fee_config) : {}
-        const resTaxa = _vozResolverTaxa(feeConfig, msg.trim())
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        if (resTaxa.suportado && resTaxa.resolvido) {
-          await _vozPedirRuaNumero(tenantId, phone, inst, { ...draftSemMeta, bairroLabel: resTaxa.addrLabel, taxa: resTaxa.taxa })
-        } else {
-          const sugestoesTxt = resTaxa.sugestoes?.length ? ` Você quis dizer: ${resTaxa.sugestoes.join(', ')}?` : ''
-          await sendWA(phone, `Não encontrei esse bairro na nossa área de entrega.${sugestoesTxt} Pode confirmar o nome do bairro?`, inst)
-        }
-        send(res,200,{ok:true, voz:true}); return
-      }
-      // Depois do bairro, pede rua e número pra fechar o endereço completo
-      // (usado no pedido e na impressão pro gestor, igual ao cardápio normal).
-      if (vozDraft.estado === 'aguardando_rua_numero') {
-        const ruaNumero = msg.trim().slice(0, 140)
-        if (!ruaNumero || ruaNumero.length < 4) {
-          await sendWA(phone, 'Não peguei direito — pode escrever a rua e o número da entrega? (ex: "Rua das Flores, 123")', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        await _vozPedirRuaNumero(tenantId, phone, inst, { ...draftSemMeta, rua_numero: ruaNumero })
-        send(res,200,{ok:true, voz:true}); return
-      }
-      // Pedido abaixo do mínimo pra entrega — o cliente disse o que mais
-      // quer adicionar (texto livre), extrai os itens novos e junta com os
-      // que já estavam no rascunho, depois refaz a checagem do mínimo.
-      if (vozDraft.estado === 'aguardando_pedido_minimo') {
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        let extraido = null
-        try { extraido = await extrairPedidoDeTexto(tenantId, msg) } catch (e) { log('❌', '[VOZ] Falha ao extrair item extra:', e.message) }
-        const novosItens = extraido?.itens?.length ? extraido.itens : []
-        if (!novosItens.length) {
-          await sendWA(phone, 'Não consegui identificar um item novo nessa mensagem — pode dizer o que mais você quer adicionar? (ex: "mais uma coca-cola")', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        await _vozProcessarGruposPendentes(tenantId, phone, inst, {
-          ...draftSemMeta,
-          itens: [...(draftSemMeta.itens || []), ...novosItens]
-        })
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_pagamento') {
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
-        let forma = escolha?.id
-        if (!forma) {
-          // Fallback pra quem digitar livre sem tocar no botão/lista.
-          if (/\bpix\b/i.test(msgNorm)) forma = 'pix'
-          else if (/\bd[eé]bito\b/i.test(msgNorm)) forma = 'debito'
-          else if (/\bcr[eé]dito\b|\bcart[aã]o\b/i.test(msgNorm)) forma = 'credito'
-          else if (/\b(dinheiro|especie|espécie|cash)\b/i.test(msgNorm)) forma = 'dinheiro'
-        }
-        if (!forma || !['dinheiro', 'credito', 'debito', 'pix'].includes(forma)) {
-          await sendWA(phone, 'Não entendi — toque numa opção ou responda *dinheiro*, *crédito*, *débito* ou *pix*.', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        await _vozContinuarPagamento(tenantId, phone, inst, { ...draftSemMeta, forma_pagamento: forma })
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_tipo_cartao') {
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
-        let forma = escolha?.id
-        if (!forma) {
-          if (/\bd[eé]bito\b/i.test(msgNorm)) forma = 'debito'
-          else if (/\bcr[eé]dito\b/i.test(msgNorm)) forma = 'credito'
-        }
-        if (!forma) {
-          await sendWA(phone, 'Não entendi — toque numa opção ou responda *crédito* ou *débito*.', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        await _vozContinuarPagamento(tenantId, phone, inst, { ...draftSemMeta, forma_pagamento: forma })
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_troco') {
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
-        if (escolha?.id === 'nao' || /^n[aã]o\b|^nao\b|sem troco/i.test(msgNorm)) {
-          await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...draftSemMeta, troco: null })
-          send(res,200,{ok:true, voz:true}); return
-        }
-        if (escolha?.id === 'sim') {
-          _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_troco_valor', ...draftSemMeta })
-          await sendWA(phone, 'Troco pra quanto? (ex: "50")', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        // Fallback pra quem já manda o valor direto sem tocar no botão (ex: "pra 50 reais")
-        const valorMatch = msg.match(/(\d+[.,]?\d*)/)
-        if (valorMatch) {
-          await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...draftSemMeta, troco: parseFloat(valorMatch[1].replace(',', '.')) })
-          send(res,200,{ok:true, voz:true}); return
-        }
-        await sendWA(phone, 'Não entendi — toque numa opção ou responda *sim* ou *não*.', inst)
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_troco_valor') {
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        const valorMatch = msg.match(/(\d+[.,]?\d*)/)
-        const troco = valorMatch ? parseFloat(valorMatch[1].replace(',', '.')) : -1
-        await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...draftSemMeta, troco })
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_nome') {
-        const nomeDigitado = msg.trim().slice(0, 60)
-        if (!nomeDigitado || nomeDigitado.length < 2) {
-          await sendWA(phone, 'Não peguei seu nome — pode escrever de novo?', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        if (_vozApagarDraft(tenantId, phone)) {
-          await _vozCriarPedido(tenantId, phone, inst, vozDraft, nomeDigitado)
-        }
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_confirmacao') {
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        // Fallback pros regexes antigos cobre quem digita "sim"/"não" direto
-        // sem tocar no botão (ex: reenvio antigo, ou cliente digitando mesmo).
-        const _simRegex = /^(sim|s|confirmo|confirma|isso|ok|pode|correto|certo)\b/i
-        const _naoRegex = /^(n[aã]o|nao|n|cancela|cancelar|errado)\b/i
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [{ id: 'sim', label: 'Sim' }, { id: 'nao', label: 'Não' }])
-        const ehSim = escolha?.id === 'sim' || (!escolha && _simRegex.test(msgNorm))
-        const ehNao = escolha?.id === 'nao' || (!escolha && _naoRegex.test(msgNorm))
-        if (ehSim) {
-          // IMPORTANTE: NÃO usa mais o "pushName" (nome que o cliente colocou
-          // no perfil do próprio WhatsApp, às vezes um apelido/emoji/nome de
-          // grupo) — só usa um nome que o PRÓPRIO cliente já confirmou aqui
-          // antes (gravado em customers.name por um pedido anterior). Assim,
-          // na primeira vez ele é sempre perguntado, e nas próximas nunca
-          // mais, porque já tem o nome real salvo.
-          const _custNomeRow = db.prepare(`SELECT name FROM customers WHERE tenant_id=? AND ${phoneLookupSql('phone')} ORDER BY id DESC LIMIT 1`).get(tenantId, ...phoneLookupArgs(phone))
-          const nomeCli = (_custNomeRow?.name && _custNomeRow.name !== 'Cliente') ? _custNomeRow.name : null
-          if (!nomeCli) {
-            // Primeira vez desse telefone (ou só tem o placeholder genérico
-            // "Cliente") — pergunta o nome, em vez de criar o pedido com
-            // "Cliente WhatsApp" genérico no kanban do gestor.
-            _vozSalvarDraft(tenantId, phone, { ...draftSemMeta, estado: 'aguardando_nome' })
-            await sendWA(phone, 'Qual seu nome, por favor?', inst)
-          } else if (_vozApagarDraft(tenantId, phone)) {
-            // Só segue se REALMENTE apagou agora — protege contra mensagem "sim"
-            // duplicada (reenvio de rede do WhatsApp) criar o pedido 2x.
-            await _vozCriarPedido(tenantId, phone, inst, vozDraft, nomeCli)
-          }
-        } else if (ehNao) {
-          // Em vez de cancelar direto, oferece editar o pedido (adicionar ou
-          // remover item) antes de desistir de vez.
-          const opcoesEdit = [
-            { id: 'adicionar', label: 'Adicionar item' },
-            { id: 'remover', label: 'Remover item' },
-            { id: 'cancelar', label: 'Cancelar pedido' }
-          ]
-          _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_editar_pedido', ...draftSemMeta, meta: { opcoes: opcoesEdit } })
-          await _vozEnviarOpcoes(phone, inst, {
-            titulo: 'Editar pedido',
-            texto: 'Sem problemas! O que você quer fazer?',
-            buttonText: 'Escolher',
-            rows: opcoesEdit.map(o => ({ id: o.id, title: o.label }))
-          })
-        } else {
-          await sendWA(phone, 'Não entendi — toque numa opção ou responda *sim* ou *não*.', inst)
-        }
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_editar_pedido') {
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
-        if (escolha?.id === 'adicionar') {
-          await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        if (escolha?.id === 'remover') {
-          const itens = draftSemMeta.itens || []
-          if (!itens.length) {
-            await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta)
-            send(res,200,{ok:true, voz:true}); return
-          }
-          const opcoesRm = itens.map((it, idx) => ({ id: `rm:${idx}`, label: `${it.qty}x ${it.name}` }))
-          opcoesRm.push({ id: '__voltar', label: 'Voltar' })
-          _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_remover_item', ...draftSemMeta, meta: { opcoes: opcoesRm } })
-          await _vozEnviarOpcoes(phone, inst, {
-            titulo: 'Remover item',
-            texto: 'Qual item você quer remover?',
-            buttonText: 'Ver itens',
-            rows: opcoesRm.map(o => ({ id: o.id, title: o.label.slice(0, 24) }))
-          })
-          send(res,200,{ok:true, voz:true}); return
-        }
-        if (escolha?.id === 'cancelar') {
-          if (_vozApagarDraft(tenantId, phone)) {
-            await sendWA(phone, 'Pedido cancelado. Se quiser, mande outro áudio ou fale com a loja.', inst)
-          }
-          send(res,200,{ok:true, voz:true}); return
-        }
-        await sendWA(phone, 'Não entendi — toque numa opção da lista.', inst)
-        send(res,200,{ok:true, voz:true}); return
-      }
-      if (vozDraft.estado === 'aguardando_remover_item') {
-        const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-        const escolha = _vozResolverEscolha(msg, msgChoiceId, meta?.opcoes || [])
-        if (!escolha) {
-          await sendWA(phone, 'Não entendi — toque numa opção da lista ou responda com o número dela.', inst)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        if (escolha.id === '__voltar') {
-          await _vozMontarConfirmacaoFinal(tenantId, phone, inst, draftSemMeta)
-          send(res,200,{ok:true, voz:true}); return
-        }
-        const idx = parseInt(escolha.id.slice(3))
-        const itensNovos = (draftSemMeta.itens || []).filter((_, i) => i !== idx)
-        if (!itensNovos.length) {
-          if (_vozApagarDraft(tenantId, phone)) {
-            await sendWA(phone, 'Seu pedido ficou sem nenhum item — pedido cancelado. Se quiser, mande outro áudio ou fale com a loja.', inst)
-          }
-          send(res,200,{ok:true, voz:true}); return
-        }
-        await _vozMontarConfirmacaoFinal(tenantId, phone, inst, { ...draftSemMeta, itens: itensNovos })
+      if (await _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, msgChoiceId, cfg)) {
         send(res,200,{ok:true, voz:true}); return
       }
     }
@@ -6895,7 +6979,7 @@ async function handleIAWebhook(req, res) {
           if (extraidoTxt && extraidoTxt.itens.length > 0) {
             _vozRegistrarUso(tenantId, phone)
             log('🎙️', `[VOZ-TXT] Pedido por texto detectado [${tenantId}] ${phone}: "${msgFull.slice(0, 80)}"`)
-            await _vozIniciarConfirmacao(tenantId, phone, inst, extraidoTxt, msgFull)
+            await _vozIniciarConfirmacao(tenantId, phone, inst, extraidoTxt, msgFull, vozDraft)
             return
           }
           // Zero itens reconhecidos, mas o texto deixa clara a intenção de
