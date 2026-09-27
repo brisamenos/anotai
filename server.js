@@ -6636,7 +6636,12 @@ async function handleIAWebhook(req, res) {
           // mostra foto/promoção melhor que a lista do WhatsApp); só intenção
           // explícita de PEDIR abre o catálogo, pra não interceptar mensagem
           // ambígua tipo só "cardápio?" ou pergunta de horário.
-          const _intencaoPedidoNovo = /\b(quero\s+pedir|fazer\s+um?\s+pedido|quero\s+fazer\s+(um\s+)?pedido|t[oô]\s+com\s+fome|estou\s+com\s+fome|quero\s+comprar|posso\s+pedir)\b/i
+          // "um?" batia só "u"/"um" seguido IMEDIATAMENTE de "pedido" — não
+          // reconhecia frases naturais tipo "quero fazer um NOVO pedido"
+          // (bem comum logo depois de fechar um pedido). Trocado por
+          // "(um\s+)?(novo\s+)?" pra aceitar palavra(s) no meio, e somado
+          // "novo pedido"/"outro pedido" soltos como intenção própria.
+          const _intencaoPedidoNovo = /\b(quero\s+pedir|fazer\s+(um\s+)?(novo\s+)?pedido|quero\s+fazer\s+(um\s+)?(novo\s+)?pedido|novo\s+pedido|outro\s+pedido|mais\s+um\s+pedido|t[oô]\s+com\s+fome|estou\s+com\s+fome|quero\s+comprar|posso\s+pedir)\b/i
           if (!_isSoSaudacao && _vozEhWuzapi(tenantId) && _intencaoPedidoNovo.test(msgFull)) {
             _vozRegistrarUso(tenantId, phone)
             log('🎙️', `[VOZ-TXT] Intenção de pedido sem item reconhecido — abrindo catálogo [${tenantId}] ${phone}: "${msgFull.slice(0, 80)}"`)
