@@ -5307,16 +5307,42 @@ async function _vozOferecerMaisItens(tenantId, phone, inst, draftIn) {
     if (draft.addr) { await _vozMontarConfirmacaoFinal(tenantId, phone, inst, draft) } else { await _vozResolverTipoEEndereco(tenantId, phone, inst, draft) }
     return
   }
-  const opcoes = cats.map(c => ({ id: `cat:${c.id}`, label: c.label || c.name }))
-  opcoes.push({ id: '__finalizar', label: 'Finalizar pedido' })
-  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_mais_itens', ...draft, meta: { opcoes } })
   const jaTemItens = draft.itens?.length > 0
-  const subtotal = (draft.itens || []).reduce((s, i) => s + i.price * i.qty, 0)
-  const rows = cats.map(c => ({ id: `cat:${c.id}`, title: (c.label || c.name).slice(0, 24) }))
-  rows.push({ id: '__finalizar', title: '✅ Finalizar pedido' })
+  if (!jaTemItens) {
+    // Pedido ainda vazio — não faz sentido oferecer "Finalizar pedido" (não
+    // tem nada pra finalizar ainda), então já mostra a lista de categorias
+    // direto, sem a etapa de decisão abaixo.
+    await _vozListarCategorias(tenantId, phone, inst, draft)
+    return
+  }
+  // Já tem item(ns) no pedido: em vez de misturar "Finalizar pedido" dentro
+  // da mesma lista de categorias (confunde o cliente — ele via uma lista só
+  // com tudo junto), primeiro pergunta com 2 BOTÕES separados e claros: um
+  // pra ver as categorias e adicionar mais, outro pra fechar o pedido.
+  const subtotal = draft.itens.reduce((s, i) => s + i.price * i.qty, 0)
+  const opcoesDecisao = [{ id: '__adicionar', label: 'Adicionar item' }, { id: '__finalizar', label: 'Finalizar pedido' }]
+  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_decisao_itens', ...draft, meta: { opcoes: opcoesDecisao } })
   await _vozEnviarOpcoes(phone, inst, {
     titulo: 'Cardápio',
-    texto: jaTemItens ? `Já anotei seu pedido (R$${_fmtR$(subtotal)} até agora). Quer adicionar mais alguma coisa?` : 'O que você vai querer? Escolha uma categoria.',
+    texto: `Já anotei seu pedido (R$${_fmtR$(subtotal)} até agora). Quer adicionar mais alguma coisa?`,
+    buttonText: 'Escolher',
+    rows: opcoesDecisao.map(o => ({ id: o.id, title: o.label }))
+  })
+}
+
+// Mostra a lista de categorias pra escolher o que adicionar — usada tanto
+// quando o pedido ainda está vazio (ver acima) quanto depois que o cliente
+// toca "Adicionar item" na tela de decisão.
+async function _vozListarCategorias(tenantId, phone, inst, draft) {
+  const cats = _vozCategoriasAtivas(tenantId)
+  const opcoes = cats.map(c => ({ id: `cat:${c.id}`, label: c.label || c.name }))
+  opcoes.push({ id: '__voltar', label: 'Voltar' })
+  _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_mais_itens', ...draft, meta: { opcoes } })
+  const rows = cats.map(c => ({ id: `cat:${c.id}`, title: (c.label || c.name).slice(0, 24) }))
+  rows.push({ id: '__voltar', title: '⬅️ Voltar' })
+  await _vozEnviarOpcoes(phone, inst, {
+    titulo: 'Cardápio',
+    texto: draft.itens?.length ? 'Escolha uma categoria:' : 'O que você vai querer? Escolha uma categoria.',
     buttonText: 'Ver categorias',
     rows
   })
@@ -5751,12 +5777,13 @@ async function _vozResolverTipoEEndereco(tenantId, phone, inst, draftIn) {
     // volta a chamar uma função que possa reentrar neste mesmo bloco.
     const cats = _vozEhWuzapi(tenantId) ? _vozCategoriasAtivas(tenantId) : []
     if (cats.length) {
-      const opcoes = cats.map(c => ({ id: `cat:${c.id}`, label: c.label || c.name }))
-      opcoes.push({ id: '__finalizar', label: 'Finalizar pedido' })
-      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_mais_itens', ...draft, tipo_pedido: 'delivery', meta: { opcoes } })
-      const rows = cats.map(c => ({ id: `cat:${c.id}`, title: (c.label || c.name).slice(0, 24) }))
-      rows.push({ id: '__finalizar', title: '✅ Finalizar pedido' })
-      await _vozEnviarOpcoes(phone, inst, { titulo: 'Cardápio', texto: faltamTxt, buttonText: 'Ver categorias', rows })
+      // Sem "Finalizar pedido" aqui de propósito — o pedido ainda está
+      // ABAIXO do mínimo, então finalizar não é uma opção válida nesse
+      // momento (só repetiria essa mesma mensagem). _vozListarCategorias
+      // não chama de volta pra _vozResolverTipoEEndereco, então continua
+      // seguro contra o loop descrito acima.
+      await sendWA(phone, faltamTxt, inst)
+      await _vozListarCategorias(tenantId, phone, inst, { ...draft, tipo_pedido: 'delivery' })
     } else {
       // Sem categoria interativa disponível (não-WuzAPI, ou WuzAPI sem
       // cardápio configurado) — manda o link do cardápio pra ele escolher e
@@ -6342,9 +6369,27 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
     // antigo sobrevivendo em draftSemMeta sobrescreveria o novo por engano,
     // e a próxima resposta do cliente seria lida pelo handler errado.
     const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
-    if (escolha.id === '__finalizar') {
+    if (escolha.id === '__voltar') {
+      // Volta pra tela de decisão (2 botões: Adicionar item / Finalizar pedido)
+      await _vozOferecerMaisItens(tenantId, phone, inst, draftSemMeta)
+    } else if (escolha.id.startsWith('cat:')) {
+      await _vozListarItensCategoria(tenantId, phone, inst, draftSemMeta, escolha.id.slice(4))
+    }
+    return true
+  }
+  // ── Decisão: adicionar mais um item ou finalizar o pedido ──
+  if (vozDraft.estado === 'aguardando_decisao_itens') {
+    const escolha = _vozResolverEscolha(msg, msgChoiceId, vozDraft.meta?.opcoes || [])
+    if (!escolha) {
+      await sendWA(phone, 'Não entendi — toque numa opção da lista ou responda com o número dela.', inst)
+      return true
+    }
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    if (escolha.id === '__adicionar') {
+      await _vozListarCategorias(tenantId, phone, inst, draftSemMeta)
+    } else if (escolha.id === '__finalizar') {
       if (!draftSemMeta.itens?.length) {
-        await sendWA(phone, 'Você ainda não escolheu nenhum item — toque numa categoria da lista pra começar.', inst)
+        await sendWA(phone, 'Você ainda não escolheu nenhum item — toque em "Adicionar item" pra começar.', inst)
         return true
       }
       // "addr" só existe se tipo/endereço/pagamento JÁ tinham sido
@@ -6356,8 +6401,6 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
       } else {
         await _vozResolverTipoEEndereco(tenantId, phone, inst, draftSemMeta)
       }
-    } else if (escolha.id.startsWith('cat:')) {
-      await _vozListarItensCategoria(tenantId, phone, inst, draftSemMeta, escolha.id.slice(4))
     }
     return true
   }
