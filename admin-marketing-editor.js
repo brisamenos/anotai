@@ -99,7 +99,7 @@
     const st = document.createElement('style');
     st.id = 'ed-css';
     st.textContent = `
-.ed{position:fixed;inset:0;z-index:230;background:var(--bg);display:none;flex-direction:column}
+.ed{position:fixed;inset:0;height:100vh;height:100dvh;z-index:230;background:var(--bg);display:none;flex-direction:column}
 .ed.on{display:flex}
 .ed-top{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:var(--s1);flex-wrap:wrap}
 .ed-nome{flex:1;min-width:140px;max-width:340px}
@@ -365,8 +365,8 @@
   function ligar(de, porta, para) {
     if (de === para || para === 'inicio') return;
     const g = ED.d.grafo;
-    g.edges = g.edges.filter(e => !(e.de === de && e.porta === porta));
-    g.edges.push({ de, porta, para });
+    if (g.edges.some(e => e.de === de && e.porta === porta && e.para === para)) { tirarArmado(); return; }
+    g.edges.push({ de, porta, para }); // uma saida pode alimentar varios nos
     ED.sujo = true;
     atualizaPortas(); desenharArestas();
   }
@@ -396,8 +396,9 @@
       cv.setPointerCapture(e.pointerId);
       if (out) {
         ED.drag = { k: 'liga', de: out.dataset.de, porta: out.dataset.porta, ox: e.clientX, oy: e.clientY, moved: false, a: centro(out) };
-      } else if (head) {
-        const n = porId(head.dataset.drag);
+      } else if (nd && !e.target.closest('.pt-in')) {
+        // arrasta pelo no inteiro (cabecalho ou corpo)
+        const n = porId(nd.dataset.id);
         ED.drag = { k: 'no', id: n.id, ox: e.clientX, oy: e.clientY, nx: n.x, ny: n.y, moved: false };
       } else if (nd) {
         ED.drag = { k: 'sel', id: nd.dataset.id, ox: e.clientX, oy: e.clientY, moved: false };
@@ -721,8 +722,9 @@
         <ul class="ed-help">
           <li>Toque em <b>Gatilho</b> para definir as palavras-chave que iniciam o fluxo.</li>
           <li>Adicione nós pela lista à esquerda (no celular, <b>+ Adicionar nó</b>). Com um nó selecionado, o novo já sai ligado a ele.</li>
-          <li>Para ligar: arraste da <b>bolinha à direita</b> de um nó até o nó de destino, ou toque na bolinha e depois no destino.</li>
+          <li>Arraste qualquer nó pelo desenho para posicionar onde quiser. Para ligar: arraste da <b>bolinha à direita</b> de um nó até o nó de destino, ou toque na bolinha e depois no destino.</li>
           <li>Em <b>Botões</b> e <b>Lista</b>, cada opção tem a própria saída: é o que acontece quando o cliente toca nela.</li>
+          <li>Uma mesma saída pode ir para <b>vários nós</b>: basta ligar de novo. Eles rodam em sequência, de cima para baixo conforme a posição no desenho.</li>
           <li>Toque no <b>×</b> no meio da seta para desfazer a ligação.</li>
           <li>Arraste o fundo para mover a tela; use dois dedos ou os botões para o zoom.</li>
         </ul>`;

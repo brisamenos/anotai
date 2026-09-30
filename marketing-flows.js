@@ -438,7 +438,7 @@ function sanitizarGrafo(g) {
     if (!de || !para || para.id === 'inicio') continue
     const porta = String(e?.porta || 'out')
     if (!portasDe(de.tipo, de.cfg).some(p => p.id === porta)) continue
-    edges.set(`${de.id}|${porta}`, { de: de.id, porta, para: para.id }) // uma seta por saida
+    edges.set(`${de.id}|${porta}|${para.id}`, { de: de.id, porta, para: para.id }) // varias setas por saida (sem repetir o mesmo destino)
   }
   return { nodes, edges: [...edges.values()] }
 }
@@ -833,8 +833,11 @@ const limparAguardo = tel => D.db.prepare("UPDATE mkt_sessoes SET aguardando=NUL
 
 function mapaGrafo(flow) {
   const nodes = new Map(flow.grafo.nodes.map(n => [n.id, n]))
-  const arestas = new Map(flow.grafo.edges.map(e => [`${e.de}|${e.porta}`, e.para]))
-  return { nodes, prox: (id, porta) => arestas.get(`${id}|${porta}`) || null, tem: (id, porta) => arestas.has(`${id}|${porta}`) }
+  // Uma saida pode ir para varios nos: eles rodam em sequencia, de cima para baixo conforme a posicao no desenho
+  const arestas = new Map()
+  for (const e of flow.grafo.edges) { const k = `${e.de}|${e.porta}`; if (!arestas.has(k)) arestas.set(k, []); arestas.get(k).push(e.para) }
+  for (const l of arestas.values()) l.sort((a, b) => ((nodes.get(a)?.y || 0) - (nodes.get(b)?.y || 0)) || ((nodes.get(a)?.x || 0) - (nodes.get(b)?.x || 0)))
+  return { nodes, prox: (id, porta) => arestas.get(`${id}|${porta}`) || [], tem: (id, porta) => arestas.has(`${id}|${porta}`) }
 }
 
 function avaliarCaso(caso, vars) {
@@ -924,16 +927,20 @@ async function executarNo(flow, g, no, tel, ctx, prof) {
 }
 
 // Segue o grafo a partir de um no ate acabar o caminho (ou parar esperando o cliente).
-async function correr(flow, tel, ctx, noId, prof = 0) {
+async function correr(flow, tel, ctx, inicio, prof = 0) {
   const g = mapaGrafo(flow)
-  let cur = noId
+  const fila = Array.isArray(inicio) ? inicio : (inicio ? [inicio] : [])
+  if (fila.length > 1) { for (const d of fila) await correr(flow, tel, ctx, d, prof); return }
+  let cur = fila[0]
   while (cur) {
     if (++ctx.passos > 100) throw new Error('O fluxo entrou em repetição (mais de 100 passos seguidos)')
     const no = g.nodes.get(cur)
     if (!no) break
     const r = await executarNo(flow, g, no, tel, ctx, prof)
     if (r.fim) break
-    cur = g.prox(no.id, r.porta)
+    const ds = g.prox(no.id, r.porta)
+    if (ds.length > 1) { for (const d of ds) await correr(flow, tel, ctx, d, prof); break }
+    cur = ds[0]
   }
 }
 
@@ -989,7 +996,7 @@ async function executarFluxo(flow, tel, { origem = 'palavra', nome = '', rodape 
 async function retomarClique(flow, tel, noId, porta, pushName) {
   const g = mapaGrafo(flow)
   const destino = g.prox(noId, porta)
-  if (!destino) return
+  if (!destino.length) return
   const ses = lerSessao(tel)
   const custom = ses ? json(ses.custom, {}) : {}
   await rodar(flow, tel, 'botao', async () => {
@@ -1034,7 +1041,7 @@ async function varrerTimeouts() {
     const flow = fluxoVivo(ses.flow_id, ses.telefone)
     if (!flow) continue
     const destino = mapaGrafo(flow).prox(ses.aguardando, 'timeout')
-    if (!destino) continue
+    if (!destino.length) continue
     enfileirar(ses.telefone, () => rodar(flow, ses.telefone, 'tempo_limite', async () => {
       const ctx = await novoCtx(flow, ses.telefone, { custom: json(ses.custom, {}) })
       await correr(flow, ses.telefone, ctx, destino)
