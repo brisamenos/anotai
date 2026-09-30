@@ -33,7 +33,7 @@ function _salaoPrintClientesHtml(orders) {
       itemMap[key].qty += (i.qty || 1);
     });
     const rows = Object.values(itemMap).map(i => {
-      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${_salaoEscape(i.obs)}</div>` : '';
+      const obs = i.obs ? (typeof _obsListaHtml === 'function' ? _obsListaHtml(i.obs, _salaoEscape, 12) : `<div style="padding-left:12px;font-size:0.88em">↳ ${_salaoEscape(i.obs)}</div>`) : '';
       return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${_salaoEscape((i.name || '').toUpperCase())}<span style="float:right">R$ ${(i.price * i.qty).toFixed(2).replace('.',',')}</span></div>${obs}</div>`;
     }).join('');
     return `<div style="font-weight:900;border-top:1px dashed #000;margin:6px 0 3px;padding-top:4px">${_salaoEscape(g.label).toUpperCase()}</div>

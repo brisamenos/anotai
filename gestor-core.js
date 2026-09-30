@@ -1190,7 +1190,7 @@ async function _printComandaMesa(mesaNum, mesaData) {
         <div style="font-weight:bold;word-break:break-word">${i.qty}x ${i.name.toUpperCase()}
           <span style="float:right">R$ ${(i.price * i.qty).toFixed(2).replace('.',',')}</span>
         </div>
-        ${i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${i.obs}</div>` : ''}
+        ${i.obs ? (typeof _obsListaHtml === 'function' ? _obsListaHtml(i.obs, s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'), 12) : `<div style="padding-left:12px;font-size:0.88em">↳ ${i.obs}</div>`) : ''}
       </div>`).join('')}
       <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
       <div style="display:flex;justify-content:space-between;font-weight:900;font-size:1.05em">

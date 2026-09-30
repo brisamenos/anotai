@@ -2096,6 +2096,26 @@ function _garcomOrderNum(id, orderNum) {
   return n > off ? Math.max(1, n - off) : n;
 }
 
+// Obs do item em lista: "Adicionais: 10x Carne, 20x Queijo" vira uma linha por adicional.
+function _garcomObsLista(raw, pad) {
+  if (!raw) return '';
+  const esc = _garcomHtmlEscape;
+  const splitVirg = (v) => { const a = []; let b = '', d = 0;
+    for (const ch of v) { if (ch === '(') d++; else if (ch === ')') d = Math.max(0, d - 1);
+      if (ch === ',' && d === 0) { if (b.trim()) a.push(b.trim()); b = ''; } else b += ch; }
+    if (b.trim()) a.push(b.trim()); return a; };
+  const row = (t, st) => `<div style="${st || ''}">${t}</div>`;
+  let h = '';
+  String(raw).split(' | ').forEach(sec => sec.split(' · ').forEach(parte => {
+    parte = parte.trim(); if (!parte) return;
+    const m = parte.match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ ]{0,28}):\s*(.+)$/);
+    if (m && m[1].trim().split(/\s+/).length <= 4) {
+      h += row(esc(m[1].trim()) + ':', 'font-weight:bold;margin-top:2px');
+      splitVirg(m[2]).forEach(x => { h += row('• ' + esc(x), 'padding-left:10px'); });
+    } else h += row(esc(parte), 'font-weight:bold');
+  }));
+  return `<div style="padding-left:${pad == null ? 12 : pad}px;font-size:0.88em;word-break:break-word">${h}</div>`;
+}
 function _garcomHtmlEscape(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 }
@@ -2229,7 +2249,7 @@ function _garcomPrintClientesHtml(orders) {
       itemMap[key].qty += (i.qty || 1);
     });
     const rows = Object.values(itemMap).map(i => {
-      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${_garcomHtmlEscape(i.obs)}</div>` : '';
+      const obs = i.obs ? _garcomObsLista(i.obs) : '';
       return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${_garcomHtmlEscape((i.name || '').toUpperCase())}<span style="float:right">R$ ${(i.price * i.qty).toFixed(2).replace('.',',')}</span></div>${obs}</div>`;
     }).join('');
     return `<div style="font-weight:900;border-top:1px dashed #000;margin:6px 0 3px;padding-top:4px">${_garcomHtmlEscape(g.label).toUpperCase()}</div>
@@ -2340,7 +2360,7 @@ function _garcomBuildSetorHtml(order, cfg, titulo, lista) {
     const header = showCats ? `<div style="font-weight:bold;text-align:center;border-top:1px solid #000;border-bottom:1px solid #000;margin:6px 0 4px;padding:3px 0">${_garcomHtmlEscape(g.cat).toUpperCase()}</div>` : '';
     return header + g.items.map(i => {
       const cliente = i.cliente_nome ? `<div style="font-size:0.86em;font-weight:bold;word-break:break-word">CLIENTE: ${_garcomHtmlEscape(i.cliente_nome)}</div>` : '';
-      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em;font-weight:bold;word-break:break-word">OBS: ${_garcomHtmlEscape(i.obs)}</div>` : '';
+      const obs = i.obs ? _garcomObsLista(i.obs) : '';
       return `<div style="margin-bottom:4px;border-bottom:1px dotted #ddd;padding-bottom:4px"><div style="font-weight:bold;word-break:break-word">${_garcomHtmlEscape((i.qty || 1) + 'x ' + (i.name || '')).toUpperCase()}</div>${cliente}${obs}</div>`;
     }).join('');
   }).join('');
@@ -2436,7 +2456,7 @@ async function garcomPrint(order, newItems) {
 
     const renderItem = i => {
       const cliente = i.cliente_nome ? `<div style="font-size:0.86em;font-weight:bold">Cliente: ${_garcomHtmlEscape(i.cliente_nome)}</div>` : '';
-      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${_garcomHtmlEscape(i.obs)}</div>` : '';
+      const obs = i.obs ? _garcomObsLista(i.obs) : '';
       return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${_garcomHtmlEscape((i.name||'').toUpperCase())}</div>${cliente}${obs}</div>`;
     };
 
@@ -6001,7 +6021,7 @@ async function confirmarImprimirComanda() {
     const itensPorClienteHtml = _garcomPrintClientesHtml([{ items: todosItens }]);
 
     const renderItem = i => {
-      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${_garcomHtmlEscape(i.obs)}</div>` : '';
+      const obs = i.obs ? _garcomObsLista(i.obs) : '';
       const itemName = _garcomHtmlEscape((i.name || '').toUpperCase());
       const priceStr = `<span style="float:right">R$ ${(i.price * i.qty).toFixed(2).replace('.',',')}</span>`;
       return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${itemName}${priceStr}</div>${obs}</div>`;

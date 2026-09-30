@@ -2994,7 +2994,7 @@ function _buildSetorHtml(order, cfg, titulo, lista) {
   const itemHtml = groups.map(g => {
     const header = showCats ? `<div style="font-weight:bold;text-align:center;border-top:1px solid #000;border-bottom:1px solid #000;margin:6px 0 4px;padding:3px 0">${_printHtmlEscape(g.cat).toUpperCase()}</div>` : '';
     return header + g.items.map(i => {
-      const obs = i.obs ? `<div style="padding-left:8px;font-size:0.9em;font-weight:bold;word-break:break-word">OBS: ${_printHtmlEscape(i.obs)}</div>` : '';
+      const obs = i.obs ? _obsListaHtml(i.obs, _printHtmlEscape, 8) : '';
       return `<div style="border-bottom:1px dotted #ddd;padding-bottom:4px;margin-bottom:4px">
         <div style="font-weight:bold;font-size:1.05em;word-break:break-word">${_printHtmlEscape((i.qty || 1) + 'x ' + (i.name || '')).toUpperCase()}</div>
         ${obs}
@@ -3394,6 +3394,24 @@ function _parseObs(rawObs) {
   }
 
   return out;
+}
+
+
+// Versão em lista (HTML) do obs do item, para os cupons que antes imprimiam
+// o texto corrido. Cada adicional vira uma linha "• 10x Bolinha de carne".
+function _obsListaHtml(rawObs, esc, pad) {
+  esc = esc || (s => String(s ?? ''));
+  const p = _parseObs(rawObs);
+  const L = (t, st) => `<div style="${st || ''}">${t}</div>`;
+  const it = (t) => L('• ' + esc(t), 'padding-left:10px');
+  let h = '';
+  if (p.meioMeio) h += L('MEIO A MEIO: ' + esc(p.meioMeio), 'font-weight:bold');
+  if (p.kitItens.length) h += L('CONTÉM:', 'font-weight:bold') + p.kitItens.map(it).join('');
+  if (p.cortes.length) h += L('CORTES:', 'font-weight:bold') + p.cortes.map(it).join('');
+  p.grupos.forEach(g => { h += L(esc(g.nome) + ':', 'font-weight:bold;margin-top:2px') + g.itens.map(it).join(''); });
+  if (p.obsLivre) h += L('OBS: ' + esc(p.obsLivre), 'font-weight:bold;margin-top:2px');
+  if (!h) return '';
+  return `<div style="padding-left:${pad == null ? 8 : pad}px;font-size:0.9em;word-break:break-word">${h}</div>`;
 }
 
 // Quebra texto em múltiplas linhas respeitando largura máxima (impressora térmica)
