@@ -931,7 +931,16 @@ async function rodar(flow, tel, origem, fn) {
 }
 
 // Roda o fluxo desde o gatilho para um contato (palavra-chave, teste, disparo). Lanca erro se algum no falhar.
+// Testes: o fluxo pode estar desativado, mas enquanto voce testa (ate 3 h) os cliques e respostas do numero de teste continuam valendo
+const testes = new Map()
+const emTeste = (id, tel) => (testes.get(`${id}:${tel}`) || 0) > Date.now() - 3 * 3600 * 1000
+function fluxoVivo(id, tel) {
+  const f = obterFluxo(id)
+  return f && (f.ativo || emTeste(id, tel)) ? f : null
+}
+
 async function executarFluxo(flow, tel, { origem = 'palavra', nome = '', rodape = '', pushName = '' } = {}) {
+  if (origem === 'teste') testes.set(`${flow.id}:${tel}`, Date.now())
   await rodar(flow, tel, origem, async () => {
     limparAguardo(tel)
     const ctx = await novoCtx(flow, tel, { nome, pushName })
@@ -962,7 +971,7 @@ async function retomarClique(flow, tel, noId, porta, pushName) {
 // Cliente respondeu a um "Aguardar resposta". Retorna true se a mensagem foi consumida.
 function tratarResposta(ses, texto, tel, pushName) {
   const flow = obterFluxo(ses.flow_id)
-  if (!flow || !flow.ativo) { limparAguardo(tel); return false }
+  if (!flow || !(flow.ativo || emTeste(flow.id, tel))) { limparAguardo(tel); return false }
   if (!validarEntrada(ses.tipo_entrada || 'texto', texto)) {
     const tent = (ses.tentativas || 0) + 1
     if (tent >= 3) { limparAguardo(tel); return true }
@@ -990,8 +999,8 @@ async function varrerTimeouts() {
   const vencidos = D.db.prepare('SELECT * FROM mkt_sessoes WHERE aguardando IS NOT NULL AND expira_em IS NOT NULL AND expira_em < ?').all(Date.now())
   for (const ses of vencidos) {
     limparAguardo(ses.telefone)
-    const flow = obterFluxo(ses.flow_id)
-    if (!flow || !flow.ativo) continue
+    const flow = fluxoVivo(ses.flow_id, ses.telefone)
+    if (!flow) continue
     const destino = mapaGrafo(flow).prox(ses.aguardando, 'timeout')
     if (!destino) continue
     enfileirar(ses.telefone, () => rodar(flow, ses.telefone, 'tempo_limite', async () => {
@@ -1046,7 +1055,7 @@ function onMessage(m, { fromMe = false } = {}) {
     // 1) Clique em botao/linha de lista que tem seta no grafo: segue a ramificacao
     const clique = /^mkt_g_(\d+)_([a-z0-9]+)_(?:(k\d+)_)?([bl]\d+)$/i.exec(String(m.choiceId || ''))
     if (clique && !fromMe) {
-      const flow = fluxosAtivos().find(f => f.id === Number(clique[1]))
+      const flow = fluxoVivo(Number(clique[1]), tel)
       if (!flow) return false
       if (m.paused && !flow.opcoes?.ignorar_pausa) return false
       enfileirar(tel, () => retomarClique(flow, tel, clique[2], (clique[3] || '') + clique[4], m.pushName || ''))
@@ -1060,7 +1069,7 @@ function onMessage(m, { fromMe = false } = {}) {
       if (ses?.aguardando) {
         if (ses.expira_em && ses.expira_em < Date.now()) limparAguardo(tel)
         else {
-          const flow = fluxosAtivos().find(f => f.id === ses.flow_id)
+          const flow = fluxoVivo(ses.flow_id, tel)
           if (flow && m.paused && !flow.opcoes?.ignorar_pausa) return false
           return tratarResposta(ses, m.text, tel, m.pushName || '')
         }

@@ -566,7 +566,7 @@
       if (tipo === 'video') prev = `<video class="ed-media" controls data-blob="${esc(c.midia)}"></video>`;
       if (tipo === 'audio') prev = `<audio controls data-blob="${esc(c.midia)}" style="margin-top:6px;max-width:100%"></audio>`;
     }
-    return `<div class="ed-file">
+    return `<div class="ed-up form-hint" style="display:none;font-weight:700;margin:0 0 6px"></div><div class="ed-file">
         <button class="btn bg2 bsm" onclick="MKED.arquivo(${idx},'${tipo}','${accept}'${KA})">${c.midia ? 'Trocar arquivo' : 'Escolher arquivo'}</button>
         <span class="form-hint" style="margin:0">${tem ? esc(c.nome || c.midia) : (c.midia ? '' : 'Nenhum arquivo')}</span>
         ${tem ? `<button class="btn bd bsm" onclick="MKED.limpaMidia(${idx}${KA})">Remover</button>` : ''}
@@ -821,28 +821,57 @@
   }
 
   // ── Midia ──────────────────────────────────────────
+  // Reduz foto grande do celular (max 1600px, JPEG) antes de enviar: sobe mais rapido e nao estoura limite de tamanho
+  async function reduzImagem(file) {
+    if (file.size < 1.2 * 1048576 || !window.createImageBitmap) return file;
+    try {
+      const bmp = await createImageBitmap(file);
+      const esc = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(bmp.width * esc); cv.height = Math.round(bmp.height * esc);
+      cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+      const blob = await new Promise(ok => cv.toBlob(ok, 'image/jpeg', 0.85));
+      if (!blob || blob.size >= file.size) return file;
+      return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+    } catch (_) { return file; }
+  }
+  const lerArquivo = f => new Promise((ok, no) => { const rd = new FileReader(); rd.onload = () => ok(rd.result); rd.onerror = () => no(new Error('Não consegui ler o arquivo')); rd.readAsDataURL(f); });
+  function statusUpload(msg, erro) {
+    document.querySelectorAll('#ed-side .ed-up').forEach(el => { el.textContent = msg; el.style.display = msg ? 'block' : 'none'; el.style.color = erro ? '#f87171' : 'var(--accent)'; });
+  }
+
   function arquivo(i, tipo, accept, k) {
     const f = document.createElement('input');
-    f.type = 'file'; f.accept = accept;
-    f.onchange = () => {
-      const file = f.files[0];
-      if (!file) return;
-      const rd = new FileReader();
-      toast('ok', 'Enviando arquivo...');
-      rd.onload = async () => {
-        try {
-          const r = await MKUI.req('POST', '/midia', { nome: file.name, tipo, dados: rd.result });
-          const n = cfgIdx(i), alvo = k == null ? n.cfg : n.cfg.cartoes[k];
-          alvo.midia = r.arquivo; alvo.nome = file.name;
-          if (n.tipo === 'audio') n.cfg.segundos = r.segundos || 0;
-          ED.blobs[r.arquivo] = URL.createObjectURL(file);
-          ED.sujo = true;
-          if (r.aviso) toast('err', r.aviso); else toast('ok', r.convertido ? 'Áudio enviado e convertido para mensagem de voz' : 'Arquivo enviado');
-          renderPainel(); atualizaNo(n.id);
-        } catch (e) { toast('err', e.message); }
-      };
-      rd.readAsDataURL(file);
-    };
+    f.type = 'file';
+    f.accept = tipo === 'imagem' ? 'image/*,' + accept : tipo === 'video' ? 'video/*,' + accept : tipo === 'audio' ? 'audio/*,' + accept : accept;
+    f.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(f); // no Android o input solto da pagina pode nunca disparar o "change"
+    const limpa = () => setTimeout(() => f.remove(), 60000);
+    f.addEventListener('change', async () => {
+      let file = f.files[0];
+      if (!file) { f.remove(); return; }
+      try {
+        statusUpload('Enviando ' + file.name + '...');
+        toast('ok', 'Enviando arquivo...');
+        if (tipo === 'imagem') file = await reduzImagem(file);
+        const dados = await lerArquivo(file);
+        const r = await MKUI.req('POST', '/midia', { nome: file.name, tipo, dados });
+        const n = cfgIdx(i), alvo = k == null ? n.cfg : n.cfg.cartoes[k];
+        alvo.midia = r.arquivo; alvo.nome = file.name;
+        if (n.tipo === 'audio') n.cfg.segundos = r.segundos || 0;
+        ED.blobs[r.arquivo] = URL.createObjectURL(file);
+        ED.sujo = true;
+        if (r.aviso) toast('err', r.aviso); else toast('ok', r.convertido ? 'Áudio enviado e convertido para mensagem de voz' : 'Arquivo enviado: ' + file.name);
+        renderPainel(); atualizaNo(n.id);
+        statusUpload('');
+      } catch (e) {
+        statusUpload('Falha no envio: ' + e.message, true);
+        toast('err', 'Falha no envio: ' + e.message);
+      }
+      f.remove();
+    });
+    f.addEventListener('cancel', () => f.remove());
+    limpa();
     f.click();
   }
   function limpaMidia(i, k) { const n = cfgIdx(i), alvo = k == null ? n.cfg : n.cfg.cartoes[k]; alvo.midia = ''; alvo.nome = ''; if (n.tipo === 'audio') n.cfg.segundos = 0; ED.sujo = true; renderPainel(); atualizaNo(n.id); }
