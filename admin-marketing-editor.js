@@ -105,7 +105,9 @@
 .ed-nome{flex:1;min-width:140px;max-width:340px}
 .ed-acts{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
 .ed-main{flex:1;display:flex;min-height:0;position:relative}
-.ed-pal{width:176px;overflow:auto;border-right:1px solid var(--border);background:var(--s1);padding:10px;flex-shrink:0}
+.ed-pal{position:absolute;z-index:8;left:0;top:0;bottom:0;width:230px;overflow:auto;border-right:1px solid var(--border);background:var(--s1);padding:10px;transform:translateX(-104%);transition:transform .18s;box-shadow:8px 0 30px rgba(0,0,0,.4)}
+.ed-pal.on{transform:none}
+.ed-fab{position:absolute;left:12px;top:12px;z-index:5;height:38px;padding:0 14px;border-radius:99px;border:0;background:var(--accent);color:#fff;font-weight:800;font-size:13px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .ed-pal h4{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:12px 0 6px}
 .ed-pal h4:first-child{margin-top:0}
 .ed-pal button{display:block;width:100%;text-align:left;margin-bottom:5px;padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:12.5px;cursor:pointer;border-left:3px solid var(--c)}
@@ -139,12 +141,13 @@
 .ed-zoom{position:absolute;left:12px;bottom:12px;display:flex;gap:6px;z-index:5;flex-wrap:wrap}
 .ed-zoom button{height:34px;min-width:34px;padding:0 10px;border-radius:9px;border:1px solid var(--border-hover);background:var(--s1);color:var(--text);cursor:pointer;font-size:12.5px;font-weight:700}
 .ed-banner{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:var(--accent);color:#fff;padding:7px 14px;border-radius:99px;font-size:12.5px;font-weight:700;z-index:6;display:none;max-width:90%;text-align:center}
-.ed-side{width:370px;overflow:auto;border-left:1px solid var(--border);background:var(--s1);padding:14px;flex-shrink:0}
+.ed-side{position:absolute;z-index:7;right:0;top:0;bottom:0;width:min(400px,94%);overflow:auto;border-left:1px solid var(--border);background:var(--s1);padding:14px;transform:translateX(104%);transition:transform .18s,width .18s;box-shadow:-8px 0 30px rgba(0,0,0,.35)}
+.ed-side.on{transform:none}
+.ed-side.wide{width:min(820px,96%)}
 .ed-side-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 .ed-side-t{font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:15px}
 .ed-help{font-size:12.5px;color:var(--text-2);line-height:1.6}
 .ed-help li{margin:4px 0 4px 16px}
-.ed-mob{display:none}
 .ed-fld{margin-bottom:12px}
 .ed-box{border:1px solid var(--border);border-radius:10px;padding:9px;margin-bottom:8px;background:var(--s2)}
 .ed-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -162,13 +165,12 @@
 .ed-check{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--text-2);margin:7px 0;line-height:1.4;cursor:pointer}
 .ed-check input{margin-top:2px}
 @media(max-width:820px){
-  .ed-pal{position:absolute;z-index:8;left:0;top:0;bottom:0;transform:translateX(-102%);transition:transform .18s;box-shadow:8px 0 30px rgba(0,0,0,.4)}
-  .ed-pal.on{transform:none}
-  .ed-side{position:absolute;z-index:7;left:0;right:0;bottom:0;width:auto;height:56%;border-left:0;border-top:1px solid var(--border-hover);border-radius:16px 16px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.4);display:none}
-  .ed-side.on{display:block}
-  .ed-mob{display:inline-flex}
+  .ed-pal{width:min(260px,82%)}
+  .ed-side{left:0;right:0;top:auto;bottom:0;width:auto;height:56%;border-left:0;border-top:1px solid var(--border-hover);border-radius:16px 16px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.4);transform:translateY(104%);transition:transform .18s,height .18s}
+  .ed-side.on{transform:none}
+  .ed-side.wide{width:auto;height:92%}
   .ed-nome{min-width:0;max-width:none;flex-basis:100%;order:2}
-  .ed-zoom{bottom:auto;top:10px;left:auto;right:10px}
+  .ed-zoom{z-index:6}
   .ed-side.on ~ .ed-cv .ed-zoom{display:none}
 }
 `;
@@ -184,9 +186,9 @@
     el.innerHTML = `
       <div class="ed-top">
         <button class="btn bg2 bsm" onclick="MKED.fechar()">Fechar</button>
-        <button class="btn bg2 bsm ed-mob" onclick="MKED.paleta()">+ Adicionar nó</button>
         <input class="minput ed-nome" id="ed-nome" placeholder="Nome do fluxo" maxlength="80" oninput="MKED.nome(this.value)">
         <div class="ed-acts">
+          <button class="btn bg2 bsm" onclick="MKED.ajuda()">Ajuda</button>
           <button class="btn bg2 bsm" onclick="MKED.testar()">Testar</button>
           <button class="btn bg2 bsm" onclick="MKED.salvar(false)">Salvar</button>
           <button class="btn bp bsm" onclick="MKED.salvar(true)">Salvar e ativar</button>
@@ -200,6 +202,7 @@
             <div id="ed-nodes"></div>
           </div>
           <div class="ed-banner" id="ed-banner"></div>
+          <button class="ed-fab" onclick="MKED.paleta()">+ Adicionar nó</button>
           <div class="ed-zoom">
             <button title="Diminuir" onclick="MKED.zoom(-0.15)">−</button>
             <button title="Aumentar" onclick="MKED.zoom(0.15)">+</button>
@@ -235,7 +238,7 @@
     if (!ED.d.grafo || !ED.d.grafo.nodes) ED.d.grafo = { nodes: [{ id: 'inicio', tipo: 'gatilho', x: 60, y: 140, cfg: {} }], edges: [] };
     if (!ED.d.grafo.nodes.some(n => n.id === 'inicio')) ED.d.grafo.nodes.unshift({ id: 'inicio', tipo: 'gatilho', x: 60, y: 140, cfg: {} });
     ED.seq = Math.max(0, ...ED.d.grafo.nodes.map(n => parseInt(String(n.id).replace(/\D/g, ''), 10) || 0));
-    ED.sel = null; ED.arm = null; ED.sujo = false; ED.lixo.clear();
+    ED.sel = null; ED.ajuda = false; ED.arm = null; ED.sujo = false; ED.lixo.clear();
     $('ed-nome').value = ED.d.nome || '';
     $('mked').classList.add('on');
     document.body.style.overflow = 'hidden';
@@ -392,6 +395,7 @@
     const cv = $('ed-cv');
 
     cv.addEventListener('pointerdown', e => {
+      if (e.target.closest('.ed-zoom, .ed-fab')) return; // botões flutuantes: deixa o clique normal
       ED.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (ED.ptrs.size === 2) { // pinca
         const [a, b] = [...ED.ptrs.values()];
@@ -498,11 +502,39 @@
   }
 
   // ── Selecao e edicao de nos ────────────────────────
-  function selecionar(id) {
+  function mostrarNo(id) { // se o painel lateral cobrir o nó, desloca a tela para ele ficar visível
+    const cvr = $('ed-cv').getBoundingClientRect(), side = $('ed-side'), n = porId(id);
+    const el = document.querySelector(`#ed-nodes .nd[data-id="${id}"]`);
+    if (!n || !el) return;
+    const mob = cvr.width <= 820, wide = side.classList.contains('wide');
+    const pw = mob ? 0 : Math.min(wide ? 820 : 400, cvr.width * (wide ? 0.96 : 0.94));
+    const ph = mob ? cvr.height * (wide ? 0.92 : 0.56) : 0;
+    const z = ED.v.z, w = (el.offsetWidth || 244) * z, h = (el.offsetHeight || 120) * z, m = 16;
+    const sx = n.x * z + ED.v.x, sy = n.y * z + ED.v.y, visW = cvr.width - pw, visH = cvr.height - ph;
+    let dx = 0, dy = 0;
+    if (sx + w > visW - m) dx = visW - m - (sx + w);
+    if (sx + dx < m) dx = m - sx;
+    if (sy + h > visH - m) dy = visH - m - (sy + h);
+    if (sy + dy < m) dy = m - sy;
+    if (dx || dy) { ED.v.x += dx; ED.v.y += dy; aplicarView(); }
+  }
+  function ajuda() {
+    ED.ajuda = !ED.ajuda;
+    if (ED.ajuda) selecionar(null, true); else renderPainel();
+    $('ed-pal').classList.remove('on');
+  }
+  function ampliar() {
+    const b = $('ed-side'); b.classList.toggle('wide');
+    const t = b.querySelector('.ed-wide'); if (t) t.textContent = b.classList.contains('wide') ? 'Reduzir' : 'Ampliar';
+    if (ED.sel) mostrarNo(ED.sel);
+  }
+  function selecionar(id, manterAjuda) {
     ED.sel = id;
+    if (id) ED.ajuda = false; else if (!manterAjuda) ED.ajuda = false;
     document.querySelectorAll('#ed-nodes .nd').forEach(el => el.classList.toggle('sel', el.dataset.id === id));
     renderPainel();
     $('ed-pal').classList.remove('on');
+    if (id) mostrarNo(id);
   }
 
   function novoId() { return 'n' + (++ED.seq); }
@@ -727,12 +759,13 @@
     const box = $('ed-side');
     if (!box || !ED.d) return;
     const n = ED.sel ? porId(ED.sel) : null;
-    box.classList.toggle('on', !!n);
+    box.classList.toggle('on', !!n || !!ED.ajuda);
+    if (!n && !ED.ajuda) return;
     if (!n) {
-      box.innerHTML = `<div class="ed-side-t" style="margin-bottom:8px">Como montar o fluxo</div>
+      box.innerHTML = `<div class="ed-side-h"><div class="ed-side-t">Como montar o fluxo</div><button class="btn bg2 bsm" onclick="MKED.ajuda()">Fechar</button></div>
         <ul class="ed-help">
           <li>Toque em <b>Gatilho</b> para definir as palavras-chave que iniciam o fluxo.</li>
-          <li>Adicione nós pela lista à esquerda (no celular, <b>+ Adicionar nó</b>). Com um nó selecionado, o novo já sai ligado a ele.</li>
+          <li>Adicione nós no botão <b>+ Adicionar nó</b> (canto superior esquerdo da tela). Com um nó selecionado, o novo já sai ligado a ele.</li>
           <li>Arraste qualquer nó pelo desenho para posicionar onde quiser. Para ligar: arraste da <b>bolinha à direita</b> de um nó até o nó de destino, ou toque na bolinha e depois no destino.</li>
           <li>Em <b>Botões</b> e <b>Lista</b>, cada opção tem a própria saída: é o que acontece quando o cliente toca nela.</li>
           <li>Uma mesma saída pode ir para <b>vários nós</b>: basta ligar de novo. Eles rodam em sequência, de cima para baixo conforme a posição no desenho.</li>
@@ -746,6 +779,7 @@
     const prev = ['texto', 'imagem', 'video', 'audio', 'documento', 'botoes', 'lista', 'carrossel'].includes(n.tipo) ? `<div class="form-label" style="margin-top:14px">Como o cliente vê</div><div class="ed-ph">${bolha(n)}</div>` : '';
     box.innerHTML = `<div class="ed-side-h"><div class="ed-side-t">${NOME[n.tipo]}</div><div style="display:flex;gap:6px">
         ${n.tipo !== 'gatilho' ? `<button class="btn bd bsm" onclick="MKED.del()">Excluir nó</button>` : ''}
+        <button class="btn bg2 bsm ed-wide" onclick="MKED.ampliar()">${$('ed-side').classList.contains('wide') ? 'Reduzir' : 'Ampliar'}</button>
         <button class="btn bg2 bsm" onclick="MKED.sel(null)">Fechar</button></div></div>
       ${n.tipo === 'gatilho' ? `<div class="ed-fld"><label class="form-label">Quando este fluxo começa</label>
         <select class="minput" data-k="gatilho.tipo" onchange="MKED.in(this,'gatilho')">${sel(ED.d.gatilho.tipo, [['palavra', 'Quando alguém enviar uma palavra-chave'], ['manual', 'Somente por disparo manual (lista de contatos)']])}</select></div>` : ''}
@@ -950,7 +984,7 @@
   window.MKED = {
     abrir, fechar, salvar, testar, nome: nomeFluxo,
     add, del: () => ED.sel && removerNo(ED.sel), sel: selecionar,
-    paleta: () => $('ed-pal').classList.toggle('on'),
+    paleta: () => $('ed-pal').classList.toggle('on'), ajuda, ampliar,
     zoom, ajustar, organizar,
     in: entrada, foco, varr,
     addBotao, rmBotao, addCartao, rmCartao, addBotaoCartao, rmBotaoCartao, addSecao, rmSecao, addLinha, rmLinha, addCaso, rmCaso,
