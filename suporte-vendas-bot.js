@@ -211,7 +211,9 @@ async function status() {
     has_user: !!g.wuzapi_user_token,
     status: state,
     demo_link: g.bot_demo_link || '',
-    atendente_whatsapp: g.cobranca_atendente_whatsapp || ''
+    atendente_whatsapp: g.cobranca_atendente_whatsapp || '',
+    pix_chave: g.cobranca_pix_chave || '',
+    pix_nome: g.cobranca_pix_nome || ''
   }
 }
 
@@ -396,10 +398,20 @@ async function handleIncoming(list) {
     }
     // Admin respondeu pelo proprio WhatsApp → pausa o robo para esse contato
     if (m.fromMe) {
+      // Voce digitou so "/pix" na conversa → manda a chave + botao copiar para o cliente (sem pausar o robo)
+      if (!sentIds.has(m.id) && /^\/pix$/i.test(String(m.text || '').trim())) {
+        enviarPixChave(m.phone, { manual: true }).catch(e => D.log?.('⚠️', `Bot /pix erro (${m.phone}): ${e.message}`))
+        continue
+      }
       if (!sentIds.has(m.id)) pause(m.phone)
       continue
     }
     if (isPaused(m.phone)) continue
+    // Cliente digitou /pix → responde na hora (sem esperar o debounce de texto)
+    if (!m.choiceId && isPixCmd(m.text)) {
+      enviarPixChave(m.phone).catch(e => D.log?.('⚠️', `Bot /pix erro (${m.phone}): ${e.message}`))
+      continue
+    }
     if (!m.text && !m.choiceId && !m.hasImage) continue
     buffer(m)
   }
@@ -642,6 +654,64 @@ async function textoPlanos(phone, tenant) {
     `✅ Sem taxa por pedido`,
     `✅ Suporte pelo WhatsApp`
   ].join('\n'), botoes)
+}
+
+// ==================== Comando /pix ====================
+// Quem digita /pix (o cliente, ou voce pelo proprio WhatsApp) faz o robo mandar a chave Pix (CNPJ)
+// com o botao nativo "Copiar chave Pix". A chave fica em /admin → WhatsApp de Suporte e Vendas.
+
+const PIX_CMD = /(^|\n)\s*\/pix\s*($|\n)/i
+const isPixCmd = text => PIX_CMD.test(String(text || ''))
+const pixCooldown = new Map() // phone -> ultimo envio (evita repeticao se o cliente spammar)
+
+function formatCnpj(d) {
+  return String(d).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+}
+
+async function enviarPixChave(phone, { manual = false } = {}) {
+  const key = num55(phone)
+  const last = pixCooldown.get(key) || 0
+  if (!manual && Date.now() - last < 15000) return
+  pixCooldown.set(key, Date.now())
+
+  const g = cfg()
+  const chave = String(g.cobranca_pix_chave || '').replace(/\D/g, '')
+  if (chave.length !== 14) {
+    D.log?.('⚠️', 'Bot: /pix pedido, mas a chave Pix (CNPJ) não está configurada no painel admin')
+    if (manual) await notifyAtendente('Você usou */pix*, mas a chave Pix (CNPJ) ainda não está cadastrada. Cadastre em Admin → WhatsApp de Suporte e Vendas.')
+    else await sendText(phone, 'Não consegui pegar a chave Pix agora Já avisei a equipe, em instantes alguém te responde por aqui.')
+    if (!manual) await notifyAtendente(`Cliente ${phone} pediu /pix, mas a chave Pix (CNPJ) não está cadastrada no painel.`)
+    return
+  }
+
+  const cabecalho = [
+    `*Pagamento via Pix*`,
+    ``,
+    `*Chave Pix (CNPJ):*`,
+    formatCnpj(chave),
+    ...(g.cobranca_pix_nome ? [``, `*Favorecido:* ${g.cobranca_pix_nome}`] : [])
+  ].join('\n')
+  const rodape = `Depois de pagar, é só mandar o comprovante por aqui`
+  const texto = `${cabecalho}\n\nToque no botão abaixo para *copiar a chave* e cole no app do seu banco\n\n${rodape}`
+
+  if (provider() === 'wuzapi') {
+    try {
+      const id = await wuzSend(phone, (t, to) => wuzapi.sendButtons(t, to, {
+        text: texto,
+        footer: 'Estima Food',
+        buttons: [{ type: 'copy', id: 'pix_copiar', text: 'Copiar chave Pix', copyCode: chave }]
+      }))
+      rememberSent(id)
+      return
+    } catch (e) {
+      D.log?.('⚠️', `WuzAPI botão copiar Pix falhou, enviando texto: ${e.message}`)
+    }
+  }
+  // Reserva (Evolution ou falha no botao): texto simples, com a chave sozinha na ultima linha
+  // para o cliente segurar e copiar com um toque
+  await sendText(phone, `${cabecalho}\n\nSegure a chave abaixo para copiar`)
+  await sendText(phone, chave)
+  await sendText(phone, rodape)
 }
 
 // ==================== Processamento ====================

@@ -9257,6 +9257,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
           if (at && at.length !== 10 && at.length !== 11) { send(res, 400, { error: 'WhatsApp do atendente inválido (use DDD + número)' }); return true }
           patch.cobranca_atendente_whatsapp = at || null
         }
+        if (body.pix_chave !== undefined) {
+          const d = String(body.pix_chave || '').replace(/\D/g, '')
+          if (d) {
+            // CNPJ: 14 digitos + digitos verificadores (evita cadastrar uma chave errada)
+            const calc = (base) => { let soma = 0, peso = base.length - 7; for (const n of base) { soma += Number(n) * peso--; if (peso < 2) peso = 9 } const r = soma % 11; return r < 2 ? 0 : 11 - r }
+            const okCnpj = d.length === 14 && !/^(\d)\1{13}$/.test(d) &&
+              calc(d.slice(0, 12)) === Number(d[12]) && calc(d.slice(0, 13)) === Number(d[13])
+            if (!okCnpj) { send(res, 400, { error: 'CNPJ da chave Pix inválido (confira os 14 dígitos)' }); return true }
+          }
+          patch.cobranca_pix_chave = d || null
+        }
+        if (body.pix_nome !== undefined) patch.cobranca_pix_nome = String(body.pix_nome || '').trim().slice(0, 80) || null
         _svBot.saveCfg(patch)
         _registrarAudit(sess, { acao: 'config.suporte_wa', alvo_tipo: null, alvo_id: null, alvo_nome: null, detalhes: patch }, req.headers)
         send(res, 200, { ok: true, ...(await _svBot.status()) }); return true

@@ -149,7 +149,10 @@ async function sendButtons(token, phone, { text, footer, buttons, image }) {
       Body: text,
       Footer: footer && footer.trim() ? footer : undefined,
       Image: image || undefined,
-      Buttons: buttons.map(b => ({ type: 'reply', title: b.text, id: b.id }))
+      // type 'copy' = botao nativo "copiar" (cta_copy): copia b.copyCode para a area de transferencia
+      Buttons: buttons.map(b => b.type === 'copy'
+        ? { type: 'copy', title: b.text, id: b.id, copy_code: String(b.copyCode || '') }
+        : { type: 'reply', title: b.text, id: b.id })
     }
   });
   return data?.Id || null;

@@ -1745,6 +1745,17 @@ td{padding:12px 16px;color:#dce6f7}
             <div class="form-hint">Se preenchido, aparece a opção "🎥 Ver demonstração" no menu de Vendas.</div>
           </div>
 
+          <div class="form-group" style="margin-bottom:14px">
+            <label class="form-label">Chave Pix (CNPJ) <span style="color:var(--muted);font-weight:400">(enviada pelo comando /pix)</span></label>
+            <input class="minput" id="sv-pix-chave" type="text" inputmode="numeric" placeholder="00.000.000/0000-00" autocomplete="off">
+            <div class="form-hint">Quando você (ou o cliente) digitar <b>/pix</b> na conversa, o robô envia a chave com o botão <b>📋 Copiar chave Pix</b>.</div>
+          </div>
+
+          <div class="form-group" style="margin-bottom:14px">
+            <label class="form-label">Nome do favorecido <span style="color:var(--muted);font-weight:400">(opcional, aparece na mensagem)</span></label>
+            <input class="minput" id="sv-pix-nome" type="text" maxlength="80" placeholder="Ex: Estima Food Ltda">
+          </div>
+
           <button class="btn bp bsm" onclick="svSalvar()">Salvar</button>
 
           <details style="margin-top:14px">
@@ -1753,6 +1764,7 @@ td{padding:12px 16px;color:#dce6f7}
               <b>🚀 Vendas:</b> 🍽️ Conhecer o sistema · 💰 Plano e preço · 🎥 Demonstração · ✅ Quero assinar / Renovar (gera Pix)<br>
               <b>🛠️ Suporte:</b> 🆘 Abrir chamado (lista de assuntos + print) · 💬 Falar com atendente<br>
               <b>💳 Financeiro:</b> 🧾 Pagar fatura (QR + Copia e Cola) · 📅 Meu plano · 📎 Enviar comprovante<br>
+              <b>Comando /pix:</b> envia a chave Pix (CNPJ) com o botão "Copiar chave Pix" — vale para o cliente digitando ou para você digitando na conversa.<br>
               Cliente cadastrado é reconhecido pelo número e chamado pelo nome da loja. Se você responder pelo celular, o robô pausa 30 min naquela conversa.
             </div>
           </details>
@@ -5482,6 +5494,8 @@ async function svCarregar() {
     document.getElementById('sv-provider').value = d.provider || 'evolution';
     document.getElementById('sv-atendente').value = d.atendente_whatsapp || '';
     document.getElementById('sv-demo').value = d.demo_link || '';
+    document.getElementById('sv-pix-chave').value = d.pix_chave ? d.pix_chave.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : '';
+    document.getElementById('sv-pix-nome').value = d.pix_nome || '';
     if (!d.wuzapi_configured) { _svBadge('disconnected', 'WuzAPI não configurada no servidor (WUZAPI_URL / WUZAPI_ADMIN_TOKEN)'); return; }
     _svBadge(d.has_user ? d.status : 'disconnected', d.provider === 'wuzapi' ? 'canal ativo' : 'canal inativo (usando Evolution)');
     if (d.status === 'connected') { document.getElementById('sv-qr-area').innerHTML = ''; if (_svQrTimer) clearInterval(_svQrTimer); }
@@ -5531,7 +5545,9 @@ async function svSalvar() {
     await _svReq('POST', '/config', {
       provider: document.getElementById('sv-provider').value,
       atendente_whatsapp: document.getElementById('sv-atendente').value.trim(),
-      demo_link: document.getElementById('sv-demo').value.trim()
+      demo_link: document.getElementById('sv-demo').value.trim(),
+      pix_chave: document.getElementById('sv-pix-chave').value.trim(),
+      pix_nome: document.getElementById('sv-pix-nome').value.trim()
     });
     toast('ok', 'Configuração salva!');
     svCarregar();
