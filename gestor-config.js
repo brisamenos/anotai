@@ -792,6 +792,7 @@ function _optHtml(o) {
   html += '<div class="grp-opt-row-main">';
   html += '<input class="grp-opt-name" placeholder="Nome da opção" value="' + (o.nome||'').replace(/"/g,'&quot;') + '" onchange="_atualizarPauseBtnRow(this)">';
   html += '<input class="grp-opt-price" type="number" step="0.01" min="0" placeholder="+R$" value="' + (o.preco||'') + '">';
+  html += '<input class="grp-opt-max" type="number" step="1" min="1" max="999" placeholder="Máx" title="Quantidade máxima que o cliente pode escolher desta opção (vazio = sem limite). Vale para grupos de Múltipla" value="' + (parseInt(o.max) > 0 ? parseInt(o.max) : '') + '">';
   html += '<button type="button" class="grp-opt-dias-btn" title="' + diasTitle + '" style="width:28px;height:28px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;' + diasStyle + '" onclick="toggleOptDiasPanel(this)">📅</button>';
   html += '<button type="button" class="grp-opt-pause" title="' + pauseTitle + '" style="width:28px;height:28px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;' + pauseStyle + '" onclick="_togglePauseRow(this)">' + pauseIcon + '</button>';
   html += '<button type="button" class="grp-opt-del" onclick="delGrupoOpt(this)">×</button>';
@@ -1035,6 +1036,8 @@ function readGrupos(ctx) {
       try { dias = JSON.parse(row.dataset.dias || '[]'); } catch(e) { dias = []; }
       if (!Array.isArray(dias) || dias.length !== 7) dias = [1,1,1,1,1,1,1];
       var opt = { nome: n.trim(), preco: p };
+      var mx = parseInt((row.querySelector('.grp-opt-max') || {}).value) || 0;
+      if (mx > 0) opt.max = mx;
       if (dias.some(function(d){ return !d; })) opt.dias = dias; // só grava se for personalizado (economiza espaço/compat)
       return opt;
     }).filter(function(o){ return o.nome; });

@@ -3755,7 +3755,7 @@ function renderImGrupos(item) {
       const clickAttr = bloqueado ? '' : `onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})"`;
       const styleAttr = bloqueado ? 'opacity:.5;cursor:not-allowed;pointer-events:none' : '';
       return `<div class="grp-opt-item${bloqueado?' esgotado':''}" ${clickAttr} style="${styleAttr}">
-        <div class="grp-opt-left">${indicator}<span class="grp-opt-name">${o.nome}</span></div>
+        <div class="grp-opt-left">${indicator}<span class="grp-opt-name">${o.nome}${o.max>0&&g.tipo==='checkbox'?` <small style="color:var(--muted);font-weight:500">(até ${o.max})</small>`:''}</span></div>
         <div style="display:flex;align-items:center;gap:8px">${esgBadge || priceLabel}${qtyEl}</div>
       </div>`;
     }).join('');
@@ -3797,6 +3797,18 @@ function grpQty(grupoNome, optNome, preco, delta) {
   if (!_imGruposState[grupoNome]) return;
   const opt = _imGruposState[grupoNome].find(o => o.nome === optNome);
   if (!opt) return;
+  if (delta > 0) {
+    const _it = allItems.find(x => x.id === _imItemId);
+    const _g  = ((_it && _it.custom_groups) || []).find(x => x.nome === grupoNome);
+    const _o  = _g && (_g.opcoes || []).find(x => x.nome === optNome);
+    const _mx = _o ? parseInt(_o.max) || 0 : 0;
+    const _gmx = _g ? parseInt(_g.max) || 0 : 0;
+    if (_g && _g.tipo === 'checkbox' && _gmx > 1) {
+      const _tot = _imGruposState[grupoNome].reduce((s, x) => s + (x.qty||1), 0);
+      if (_tot >= _gmx) { showToast(`Máximo de ${_gmx} no total para ${grupoNome}`); return; }
+    }
+    if (_mx > 0 && (opt.qty||1) >= _mx) { showToast(`Máximo de ${_mx} para ${optNome}`); return; }
+  }
   opt.qty = Math.max(1, (opt.qty||1) + delta);
   const el = document.getElementById(`gqnum_${_slug(grupoNome)}_${_slug(optNome)}`);
   if (el) el.textContent = opt.qty;
