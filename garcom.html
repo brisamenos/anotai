@@ -2108,7 +2108,7 @@ function _garcomObsLista(raw, pad) {
   let h = '';
   String(raw).split(' | ').forEach(sec => sec.split(' · ').forEach(parte => {
     parte = parte.trim(); if (!parte) return;
-    const m = parte.match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ ]{0,28}):\s*(.+)$/);
+    const m = parte.match(/^([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 \-\/&+.]{0,28}):\s*(.+)$/);
     if (m && m[1].trim().split(/\s+/).length <= 4) {
       h += row(esc(m[1].trim()) + ':', 'font-weight:bold;margin-top:2px');
       splitVirg(m[2]).forEach(x => { h += row('• ' + esc(x), 'padding-left:10px'); });

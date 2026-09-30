@@ -3325,7 +3325,7 @@ function _parseObs(rawObs) {
     if (colonIdx <= 0 || colonIdx >= 30) return null;
     const nomeRaw = texto.substring(0, colonIdx).trim();
     // Nome do grupo deve ser palavras curtas, sem ·, sem números
-    if (!/^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]*$/.test(nomeRaw)) return null;
+    if (!/^[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\s\-\/&+.]*$/.test(nomeRaw)) return null;
     if (nomeRaw.split(/\s+/).length > 4) return null; // mais de 4 palavras = obs livre
     const valor = texto.substring(colonIdx + 1).trim();
     return { nome: nomeRaw, itens: splitVirg(valor) };
