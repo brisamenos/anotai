@@ -152,7 +152,11 @@ async function sendButtons(token, phone, { text, footer, buttons, image }) {
       // type 'copy' = botao nativo "copiar" (cta_copy): copia b.copyCode para a area de transferencia
       Buttons: buttons.map(b => b.type === 'copy'
         ? { type: 'copy', title: b.text, id: b.id, copy_code: String(b.copyCode || '') }
-        : { type: 'reply', title: b.text, id: b.id })
+        : b.type === 'url'
+          ? { type: 'cta_url', title: b.text, id: b.id, url: String(b.url || '') }
+          : b.type === 'call'
+            ? { type: 'cta_call', title: b.text, id: b.id, phone_number: String(b.phone || '') }
+            : { type: 'reply', title: b.text, id: b.id })
     }
   });
   return data?.Id || null;
@@ -183,8 +187,31 @@ async function sendPoll(token, phone, { question, options }) {
   return data?.Id || null;
 }
 
-async function sendPresence(token, phone) {
-  return wzFetch('/chat/presence', { method: 'POST', token, body: { Phone: phone, State: 'composing', Media: '' } });
+// media: '' (digitando...) ou 'audio' (gravando audio...). state: 'composing' | 'paused'
+async function sendPresence(token, phone, media = '', state = 'composing') {
+  return wzFetch('/chat/presence', { method: 'POST', token, body: { Phone: phone, State: state, Media: media } });
+}
+
+// ==================== Midia (video, audio, documento) ====================
+
+// video: data URL ("data:video/mp4;base64,...") ou URL http(s) publica
+async function sendVideo(token, phone, video, caption) {
+  const data = await wzFetch('/chat/send/video', { method: 'POST', token, body: { Phone: phone, Video: video, Caption: caption || '' } });
+  return data?.Id || null;
+}
+
+// audio: data URL ("data:audio/ogg;base64,...") ou URL http(s). ptt=true aparece como mensagem de voz gravada na hora.
+async function sendAudio(token, phone, audio, { ptt = true, seconds = 0, mimetype } = {}) {
+  const body = { Phone: phone, Audio: audio, PTT: ptt };
+  if (seconds) body.Seconds = Math.round(seconds);
+  if (mimetype) body.MimeType = mimetype;
+  const data = await wzFetch('/chat/send/audio', { method: 'POST', token, body });
+  return data?.Id || null;
+}
+
+async function sendDocument(token, phone, document, fileName, caption) {
+  const data = await wzFetch('/chat/send/document', { method: 'POST', token, body: { Phone: phone, Document: document, FileName: fileName || 'arquivo', Caption: caption || '' } });
+  return data?.Id || null;
 }
 
 // tipo: 'image' | 'video' | 'audio' | 'document'. media = objeto {audio,image,video,document}Message do webhook.
@@ -233,6 +260,9 @@ module.exports = {
   sendList,
   sendPoll,
   sendPresence,
+  sendVideo,
+  sendAudio,
+  sendDocument,
   downloadMedia,
   downloadAudio
 };

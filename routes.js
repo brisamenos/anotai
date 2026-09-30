@@ -15,6 +15,7 @@ const crypto = require('crypto')
 const { buildOrderTrackingMessage } = require('./order-message')
 const { phoneLookupArgs, phoneLookupSql, phonesMatch, phoneDigitsSql } = require('./phone-utils')
 const _svBot = require('./suporte-vendas-bot') // WhatsApp de Suporte e Vendas (WuzAPI ou Evolution)
+const _mkt = require('./marketing-flows') // Marketing: fluxos de mensagens e disparos (WuzAPI)
 const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (como sempre foi) ou WuzAPI (alternativa leve)
 
 // ── Helper: notifica cliente quando PIX é confirmado (online ou manual) ──────
@@ -352,8 +353,10 @@ function _svBotInit(ctx) {
     phonesMatch,
     brandNome: _brandNome,
     getInstanciaCobranca: () => _getInstanciaCobranca(ctx.db, ctx.EVO_INST),
-    gerarCobrancaPix: (tenant, opts) => _gerarCobrancaBotPix(ctx, tenant, opts)
+    gerarCobrancaPix: (tenant, opts) => _gerarCobrancaBotPix(ctx, tenant, opts),
+    marketing: _mkt
   })
+  _mkt.init({ db: ctx.db, log: ctx.log, bot: _svBot, uploadsDir: ctx.UPLOADS_DIR })
 }
 
 let _tenantWaPronto = false
@@ -9220,6 +9223,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
       send(res, 200, { ok: true, instance: instance || null, atendente_whatsapp: atendenteRaw || null })
     } catch(e) { send(res, 500, { error: e.message }) }
     return true
+  }
+
+  // ── Marketing: fluxos de mensagens e disparos (painel admin) ──
+  if (upath === '/api/admin/marketing' || upath.startsWith('/api/admin/marketing/')) {
+    return _mkt.api(req, res, { upath, send, readBody, validarSessaoAdmin })
   }
 
   // ── WhatsApp de Suporte e Vendas pela WuzAPI (painel admin) ──

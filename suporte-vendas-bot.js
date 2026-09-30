@@ -398,6 +398,8 @@ async function handleIncoming(list) {
     }
     // Admin respondeu pelo proprio WhatsApp → pausa o robo para esse contato
     if (m.fromMe) {
+      // Fluxo de Marketing com "aceitar quando eu digitar" (palavra exata digitada por voce)
+      if (!sentIds.has(m.id) && D.marketing?.onMessage({ ...m, paused: false }, { fromMe: true })) continue
       // Voce digitou so "/pix" na conversa → manda a chave + botao copiar para o cliente (sem pausar o robo)
       if (!sentIds.has(m.id) && /^\/pix$/i.test(String(m.text || '').trim())) {
         enviarPixChave(m.phone, { manual: true }).catch(e => D.log?.('⚠️', `Bot /pix erro (${m.phone}): ${e.message}`))
@@ -406,6 +408,8 @@ async function handleIncoming(list) {
       if (!sentIds.has(m.id)) pause(m.phone)
       continue
     }
+    // Fluxos de Marketing (palavra-chave / clique de botao). Retorna true se algum fluxo assumiu a mensagem.
+    if (D.marketing?.onMessage({ ...m, paused: isPaused(m.phone) }, { fromMe: false })) continue
     if (isPaused(m.phone)) continue
     // Cliente digitou /pix → responde na hora (sem esperar o debounce de texto)
     if (!m.choiceId && isPixCmd(m.text)) {
@@ -894,6 +898,13 @@ module.exports = {
   saveCfg,
   webhookSecretMatches,
   // webhooks
+  // usados pelos fluxos de Marketing (marketing-flows.js)
+  wuzRun: (phone, fn) => wuzSend(phone, fn),
+  wuzToken,
+  rememberSent,
+  pausar: pause,
+  tenantByPhone,
+  config: cfg,
   handleEvolution: body => handleIncoming(normalizeEvolution(body)),
   handleWuzapi: body => handleIncoming(normalizeWuzapi(body))
 }

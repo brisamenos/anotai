@@ -760,6 +760,7 @@ td{padding:12px 16px;color:#dce6f7}
 }
 </style>
 <script src="/api-client.js"></script>
+<script src="/admin-marketing.js"></script>
 </head>
 <body>
 <div id="toast"></div>
@@ -811,6 +812,9 @@ td{padding:12px 16px;color:#dce6f7}
       </button>
       <button class="sb-item" id="nav-comunicados" onclick="navTo('comunicados')">
         <span class="sb-icon">!</span> Comunicados
+      </button>
+      <button class="sb-item" id="nav-marketing" onclick="navTo('marketing')">
+        <span class="sb-icon"></span> Marketing
       </button>
       <button class="sb-item" id="nav-saques" onclick="navTo('saques')">
         <span class="sb-icon"></span> Saques PIX
@@ -1254,6 +1258,9 @@ td{padding:12px 16px;color:#dce6f7}
       </div>
 
       <!-- ════ PLANOS & LEADS ════ -->
+      <!-- MARKETING (fluxos de WhatsApp) — conteudo montado por admin-marketing.js -->
+      <div id="sec-marketing" style="display:none" class="sec-page"></div>
+
       <!-- COMUNICADOS -->
       <div id="sec-comunicados" style="display:none" class="sec-page">
         <div class="sec-head">
@@ -3129,6 +3136,7 @@ function polishAdminUI(root = document) {
     'nav-clientes':'clients',
     'nav-planos':'card',
     'nav-comunicados':'mail',
+    'nav-marketing':'target',
     'nav-saques':'wallet',
     'nav-faturamento':'invoice',
     'nav-indicacoes':'target',
@@ -3223,18 +3231,20 @@ function polishAdminUI(root = document) {
 window.addEventListener('DOMContentLoaded', () => polishAdminUI());
 
 function navTo(id) {
-  ['dash','clientes','ia','backup','saques','planos','comunicados','faturamento','fiscal-uso','indicacoes','auditoria','icones','operacao'].forEach(s => {
+  ['dash','clientes','ia','backup','saques','planos','comunicados','marketing','faturamento','fiscal-uso','indicacoes','auditoria','icones','operacao'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
     if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
   });
   const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Planos & Leads', faturamento:'Faturamento', 'fiscal-uso':'Uso NFC-e', indicacoes:'Indicações', auditoria:'Auditoria', icones:'Ícones do Açougue', operacao:'Operação ao Vivo' };
   titles.comunicados = 'Comunicados';
+  titles.marketing = 'Marketing';
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
   if (id==='backup')      { renderBackupList(); telegramBackupCarregar(); }
   if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); carregarCobrancaWA(); svCarregar(); conectarAdminSSE(); }
   if (id==='planos')      { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
+  if (id==='marketing')   { window.MKUI && MKUI.init(); }
   if (id==='comunicados') { renderComunicadoTargetsAdmin(); carregarComunicadosAdmin(); }
   if (id==='faturamento') { carregarFaturamento(); }
   if (id==='fiscal-uso')  { carregarFiscalUso(); }
