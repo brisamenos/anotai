@@ -577,11 +577,38 @@ function fluxosAtivos() {
   return _cache
 }
 
+// ── Limpeza de midia: arquivo que nenhum fluxo usa mais e apagado do servidor na hora ──
+const ARQ_EM_TEXTO = /[a-f0-9]{16}\.[a-z0-9]{2,5}/g
+const arquivosDe = txt => new Set(String(txt || '').match(ARQ_EM_TEXTO) || [])
+function arquivosDoFluxo(id) {
+  const r = D.db.prepare('SELECT grafo, passos FROM mkt_flows WHERE id=?').get(id)
+  return r ? new Set([...arquivosDe(r.grafo), ...arquivosDe(r.passos)]) : new Set()
+}
+function arquivosEmUso() {
+  const em = new Set()
+  for (const r of D.db.prepare('SELECT grafo, passos FROM mkt_flows').all()) { arquivosDe(r.grafo).forEach(a => em.add(a)); arquivosDe(r.passos).forEach(a => em.add(a)) }
+  return em
+}
+// Apaga os arquivos da lista que nao estao em nenhum fluxo salvo. Devolve quantos foram removidos.
+function apagarMidiasSemUso(lista) {
+  let n = 0
+  try {
+    const em = arquivosEmUso(), dir = pastaMidia()
+    for (const a of new Set(lista || [])) {
+      if (!ARQUIVO_RE.test(String(a)) || em.has(a)) continue
+      try { fs.unlinkSync(path.join(dir, a)); n++ } catch { /* ja nao existe */ }
+    }
+  } catch (e) { D.log?.('⚠️', `Marketing: limpeza de mídia falhou: ${e.message}`) }
+  return n
+}
+
 function salvarFluxo(id, body) {
   const f = sanitizarFluxo(body)
+  let antes = null
   if (id) {
     const atual = obterFluxo(id)
     if (!atual) throw new Error('Fluxo não encontrado')
+    antes = arquivosDoFluxo(id)
     // Se ficou incompleto, desativa para nao disparar pela metade
     const ativo = atual.ativo && !problemas(f).length ? 1 : 0
     D.db.prepare("UPDATE mkt_flows SET nome=?, gatilho=?, opcoes=?, grafo=?, passos='[]', ativo=?, updated_at=datetime('now') WHERE id=?")
@@ -591,6 +618,7 @@ function salvarFluxo(id, body) {
       .run(f.nome, JSON.stringify(f.gatilho), JSON.stringify(f.opcoes), JSON.stringify(f.grafo)).lastInsertRowid
   }
   invalidar()
+  if (antes) apagarMidiasSemUso([...antes]) // trocou ou removeu arquivo: o antigo sai do servidor
   return obterFluxo(Number(id))
 }
 
@@ -615,9 +643,11 @@ function duplicarFluxo(id) {
 function excluirFluxo(id) {
   const busy = D.db.prepare("SELECT 1 FROM mkt_disparos WHERE flow_id=? AND status IN ('fila','rodando')").get(id)
   if (busy) throw new Error('Este fluxo tem um disparo em andamento. Cancele o disparo antes de excluir.')
+  const arqs = arquivosDoFluxo(id)
   D.db.prepare('DELETE FROM mkt_flows WHERE id=?').run(id)
   D.db.prepare('DELETE FROM mkt_sessoes WHERE flow_id=?').run(id)
   invalidar()
+  apagarMidiasSemUso([...arqs])
 }
 
 function registrarLog(flowId, tel, origem, status, erro) {
@@ -1354,6 +1384,10 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
         ? D.db.prepare('SELECT * FROM mkt_logs WHERE flow_id=? ORDER BY id DESC LIMIT 60').all(fid)
         : D.db.prepare('SELECT l.*, f.nome AS fluxo FROM mkt_logs l LEFT JOIN mkt_flows f ON f.id=l.flow_id ORDER BY l.id DESC LIMIT 60').all()
       send(res, 200, { logs: rows }); return true
+    }
+    if (met === 'POST' && sub === '/midia/excluir') {
+      const body = await readBody(req)
+      send(res, 200, { ok: true, removidos: apagarMidiasSemUso(Array.isArray(body?.arquivos) ? body.arquivos.slice(0, 50) : []) }); return true
     }
     if (met === 'POST' && sub.split('?')[0] === '/midia') {
       // Envio binario direto (application/octet-stream): sem base64, bem mais leve para foto de celular

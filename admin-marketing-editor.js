@@ -11,7 +11,7 @@
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  const ED = { d: null, sel: null, v: { x: 40, y: 40, z: 1 }, arm: null, drag: null, ptrs: new Map(), pinch: null, blobs: {}, seq: 0, sujo: false, ultimoCampo: null };
+  const ED = { d: null, sel: null, v: { x: 40, y: 40, z: 1 }, arm: null, drag: null, ptrs: new Map(), pinch: null, blobs: {}, lixo: new Set(), seq: 0, sujo: false, ultimoCampo: null };
 
   // ── Definicao dos nos ──────────────────────────────
   const NOME = { gatilho: 'Gatilho', texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', audio: 'Áudio', documento: 'Documento', botoes: 'Botões', lista: 'Lista', carrossel: 'Carrossel', espera: 'Espera', aguardar: 'Aguardar resposta', condicao: 'Condição', definir_var: 'Definir variável', notificar: 'Notificar atendente', pausar_robo: 'Pausar robô', chamar_fluxo: 'Chamar outro fluxo' };
@@ -219,6 +219,15 @@
       `<button style="--c:${{ g: '#22c55e', m: '#3b82f6', l: '#f97316', a: '#8b5cf6' }[CAT[t]]}" onclick="MKED.add('${t}')">${NOME[t]}</button>`).join('')).join('');
   }
 
+  // ── Arquivos descartados: saem do servidor (o servidor so apaga o que nenhum fluxo salvo usa) ──
+  const ARQ_RE = /[a-f0-9]{16}\.[a-z0-9]{2,5}/g;
+  const juntaLixo = obj => { (JSON.stringify(obj || {}).match(ARQ_RE) || []).forEach(a => ED.lixo.add(a)); };
+  async function limparLixo() {
+    if (!ED.lixo.size) return;
+    const arquivos = [...ED.lixo]; ED.lixo.clear();
+    try { await MKUI.req('POST', '/midia/excluir', { arquivos }); } catch (_) { /* limpeza e best-effort */ }
+  }
+
   // ── Abrir / fechar ─────────────────────────────────
   function abrir(draft) {
     casca();
@@ -226,7 +235,7 @@
     if (!ED.d.grafo || !ED.d.grafo.nodes) ED.d.grafo = { nodes: [{ id: 'inicio', tipo: 'gatilho', x: 60, y: 140, cfg: {} }], edges: [] };
     if (!ED.d.grafo.nodes.some(n => n.id === 'inicio')) ED.d.grafo.nodes.unshift({ id: 'inicio', tipo: 'gatilho', x: 60, y: 140, cfg: {} });
     ED.seq = Math.max(0, ...ED.d.grafo.nodes.map(n => parseInt(String(n.id).replace(/\D/g, ''), 10) || 0));
-    ED.sel = null; ED.arm = null; ED.sujo = false;
+    ED.sel = null; ED.arm = null; ED.sujo = false; ED.lixo.clear();
     $('ed-nome').value = ED.d.nome || '';
     $('mked').classList.add('on');
     document.body.style.overflow = 'hidden';
@@ -237,6 +246,7 @@
     if (!forcar && ED.sujo && !confirm('Fechar o editor? Alterações não salvas serão perdidas.')) return;
     $('mked').classList.remove('on');
     document.body.style.overflow = '';
+    limparLixo(); // uploads que nao foram salvos saem do servidor
     ED.d = null;
   }
 
@@ -525,6 +535,7 @@
     if (id === 'inicio') return;
     const g = ED.d.grafo;
     if (g.edges.some(e => e.de === id || e.para === id) && !confirm('Excluir este nó e as ligações dele?')) return;
+    juntaLixo(g.nodes.find(n => n.id === id));
     g.nodes = g.nodes.filter(n => n.id !== id);
     g.edges = g.edges.filter(e => e.de !== id && e.para !== id);
     ED.sujo = true;
@@ -795,6 +806,7 @@
     if (n.cfg.cartoes.length <= 1) { toast('err', 'O carrossel precisa de pelo menos um cartão'); return; }
     g.edges = g.edges.filter(e => !(e.de === n.id && new RegExp(`^k${k}b\\d+$`).test(e.porta)));
     g.edges.forEach(e => { const m = e.de === n.id && /^k(\d+)b(\d+)$/.exec(e.porta); if (m && +m[1] > k) e.porta = `k${+m[1] - 1}b${m[2]}`; });
+    juntaLixo(n.cfg.cartoes[k]);
     n.cfg.cartoes.splice(k, 1); reestrutura(i);
   }
   function addBotaoCartao(i, k) { const c = cfgIdx(i).cfg.cartoes[k]; if (c.botoes.length < 3) c.botoes.push({ tipo: 'resposta', titulo: '', valor: '' }); reestrutura(i); }
@@ -878,7 +890,8 @@
         if (tipo === 'imagem') file = await reduzImagem(file);
         const r = await enviarBinario(file, tipo);
         const n = cfgIdx(i), alvo = k == null ? n.cfg : n.cfg.cartoes[k];
-        alvo.midia = r.arquivo; alvo.nome = file.name;
+        if (alvo.midia) ED.lixo.add(alvo.midia); // arquivo antigo sai do servidor ao salvar
+        alvo.midia = r.arquivo; alvo.nome = file.name; ED.lixo.add(r.arquivo);
         if (n.tipo === 'audio') n.cfg.segundos = r.segundos || 0;
         ED.blobs[r.arquivo] = URL.createObjectURL(file);
         ED.sujo = true;
@@ -895,7 +908,7 @@
     limpa();
     f.click();
   }
-  function limpaMidia(i, k) { const n = cfgIdx(i), alvo = k == null ? n.cfg : n.cfg.cartoes[k]; alvo.midia = ''; alvo.nome = ''; if (n.tipo === 'audio') n.cfg.segundos = 0; ED.sujo = true; renderPainel(); atualizaNo(n.id); }
+  function limpaMidia(i, k) { const n = cfgIdx(i), alvo = k == null ? n.cfg : n.cfg.cartoes[k]; if (alvo.midia) ED.lixo.add(alvo.midia); alvo.midia = ''; alvo.nome = ''; if (n.tipo === 'audio') n.cfg.segundos = 0; ED.sujo = true; renderPainel(); atualizaNo(n.id); }
   async function blobUrl(a) {
     if (ED.blobs[a]) return ED.blobs[a];
     const r = await fetch('/api/admin/marketing/midia/' + a, { headers: adminAuthHeader() });
@@ -921,6 +934,7 @@
         catch (e) { toast('err', 'Salvo, mas não ativou: ' + e.message); }
       } else if (!manter) toast('ok', 'Fluxo salvo');
       await MKUI.recarregar(!manter);
+      await limparLixo();
       return d.id;
     } catch (e) { toast('err', e.message); return null; }
   }
