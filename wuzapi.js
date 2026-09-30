@@ -162,6 +162,35 @@ async function sendButtons(token, phone, { text, footer, buttons, image }) {
   return data?.Id || null;
 }
 
+const mapBotao = b => b.type === 'copy'
+  ? { type: 'copy', title: b.text, id: b.id, copy_code: String(b.copyCode || '') }
+  : b.type === 'url'
+    ? { type: 'cta_url', title: b.text, id: b.id, url: String(b.url || '') }
+    : b.type === 'call'
+      ? { type: 'cta_call', title: b.text, id: b.id, phone_number: String(b.phone || '') }
+      : { type: 'reply', title: b.text, id: b.id };
+
+// Carrossel nativo. Depende da sua WuzAPI ter o endpoint (padrao /chat/send/carousel; troque com WUZAPI_CAROUSEL_PATH).
+// Se a API nao tiver, lanca erro (status 404/405) e o chamador cai para o envio dos cartoes em sequencia.
+async function sendCarousel(token, phone, { text, footer, cards }) {
+  const data = await wzFetch(process.env.WUZAPI_CAROUSEL_PATH || '/chat/send/carousel', {
+    method: 'POST',
+    token,
+    body: {
+      Phone: phone,
+      Body: text || undefined,
+      Footer: footer && footer.trim() ? footer : undefined,
+      Cards: cards.map(c => ({
+        Image: c.image || undefined,
+        Body: c.text,
+        Footer: c.footer && c.footer.trim() ? c.footer : undefined,
+        Buttons: c.buttons.map(mapBotao)
+      }))
+    }
+  });
+  return data?.Id || null;
+}
+
 async function sendList(token, phone, { title, text, footer, buttonText, sections }) {
   const data = await wzFetch('/chat/send/list', {
     method: 'POST',
@@ -190,6 +219,13 @@ async function sendPoll(token, phone, { question, options }) {
 // media: '' (digitando...) ou 'audio' (gravando audio...). state: 'composing' | 'paused'
 async function sendPresence(token, phone, media = '', state = 'composing') {
   return wzFetch('/chat/presence', { method: 'POST', token, body: { Phone: phone, State: state, Media: media } });
+}
+
+// Agenda do WhatsApp conectado: { "5585999999999@s.whatsapp.net": { FullName, FirstName, PushName, BusinessName, Found } }
+async function getContacts(token) {
+  let data = await wzFetch('/user/contacts', { token });
+  if (typeof data === 'string') { try { data = JSON.parse(data); } catch { data = {}; } }
+  return data && typeof data === 'object' ? data : {};
 }
 
 // ==================== Midia (video, audio, documento) ====================
@@ -257,9 +293,11 @@ module.exports = {
   sendText,
   sendImage,
   sendButtons,
+  sendCarousel,
   sendList,
   sendPoll,
   sendPresence,
+  getContacts,
   sendVideo,
   sendAudio,
   sendDocument,

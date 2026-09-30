@@ -360,6 +360,8 @@ function normalizeWuzapi(body) {
     phone,
     fromMe: !!info.IsFromMe,
     id: info.ID,
+    // nome que a pessoa usa no perfil do WhatsApp (so vale em mensagem recebida; em fromMe e o seu)
+    pushName: info.IsFromMe ? '' : String(info.PushName || '').trim(),
     text: textFrom(message),
     choiceId: choiceFrom(message),
     hasImage: !!message.imageMessage
@@ -903,6 +905,7 @@ module.exports = {
   wuzToken,
   rememberSent,
   pausar: pause,
+  notificar: notifyAtendente,
   tenantByPhone,
   config: cfg,
   handleEvolution: body => handleIncoming(normalizeEvolution(body)),

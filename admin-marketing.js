@@ -130,7 +130,6 @@
       </div>
       <div id="mk-body"></div>
 
-      <div class="mk-ov" id="mk-ov-edit"><div class="mk-box" id="mk-edit-box"></div></div>
       <div class="mk-ov" id="mk-ov-small"><div class="mk-box sm" id="mk-small-box"></div></div>`;
   }
 
@@ -189,7 +188,7 @@
     return `Quando a mensagem ${modo}: ` + (g.palavras || []).map(p => `<b>${esc(p)}</b>`).join(', ');
   }
 
-  const TIPO_NOME = { texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', audio: 'Áudio', documento: 'Documento', botoes: 'Botões', lista: 'Lista', espera: 'Espera' };
+  const TIPO_NOME = { texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', audio: 'Áudio', documento: 'Documento', botoes: 'Botões', lista: 'Lista', carrossel: 'Carrossel', espera: 'Espera', aguardar: 'Aguardar', condicao: 'Condição', definir_var: 'Variável', notificar: 'Notificar', pausar_robo: 'Pausar robô', chamar_fluxo: 'Outro fluxo' };
 
   function renderFluxos() {
     const el = $('mk-body');
@@ -199,7 +198,8 @@
       return;
     }
     el.innerHTML = '<div class="mk-grid">' + MK.fluxos.map(f => {
-      const tipos = [...new Set((f.passos || []).map(p => TIPO_NOME[p.tipo]))];
+      const nos = ((f.grafo && f.grafo.nodes) || []).filter(n => n.tipo !== 'gatilho');
+      const tipos = [...new Set(nos.map(n => TIPO_NOME[n.tipo]))];
       return `
       <div class="mk-flow ${f.ativo ? '' : 'off'}">
         <div class="mk-flow-top">
@@ -210,7 +210,7 @@
           </label>
         </div>
         <div class="mk-meta">${resumoGatilho(f)}</div>
-        <div class="mk-chips">${(f.passos || []).length ? `<span class="mk-chip">${f.passos.length} passo(s)</span>` : '<span class="mk-chip">Sem passos</span>'}${tipos.map(t => `<span class="mk-chip">${t}</span>`).join('')}</div>
+        <div class="mk-chips">${nos.length ? `<span class="mk-chip">${nos.length} nó(s)</span>` : '<span class="mk-chip">Vazio</span>'}${tipos.map(t => `<span class="mk-chip">${t}</span>`).join('')}</div>
         <div class="mk-meta">Executado <b>${f.execucoes}</b> vez(es)${f.ultima_execucao ? ' · última em ' + esc(f.ultima_execucao) + ' (UTC)' : ''}</div>
         <div class="mk-actions">
           <button class="btn bp bsm" onclick="MKUI.editar(${f.id})">Editar</button>
@@ -368,38 +368,75 @@
     const el = $('mk-body');
     if (!el || MK.tab !== 'logs') return;
     if (!MK.logs.length) { el.innerHTML = '<div class="mk-empty">Nenhuma execução registrada ainda.</div>'; return; }
-    const origem = { palavra: 'Palavra-chave', botao: 'Clique em botão', disparo: 'Disparo', teste: 'Teste', meu_envio: 'Digitado por mim' };
+    const origem = { palavra: 'Palavra-chave', botao: 'Clique em botão', disparo: 'Disparo', teste: 'Teste', resposta: 'Resposta do cliente', tempo_limite: 'Sem resposta (tempo)', meu_envio: 'Digitado por mim' };
     el.innerHTML = '<div class="mk-tw"><table class="mk-tbl"><thead><tr><th>Quando (UTC)</th><th>Fluxo</th><th>Contato</th><th>Origem</th><th>Resultado</th></tr></thead><tbody>' +
       MK.logs.map(l => `<tr><td>${esc(l.created_at)}</td><td>${esc(l.fluxo || '#' + l.flow_id)}</td><td>${esc(l.telefone)}</td><td>${esc(origem[l.origem] || l.origem)}</td>
         <td><span class="mk-st ${l.status === 'ok' ? 'ok' : 'err'}">${l.status === 'ok' ? 'Enviado' : 'Erro'}</span>${l.erro ? `<div class="form-hint">${esc(l.erro)}</div>` : ''}</td></tr>`).join('') +
       '</tbody></table></div>';
   }
 
-  // ═══ EDITOR DE FLUXO ═══════════════════════════════
+  // ═══ NOVO / EDITAR (o editor visual fica em admin-marketing-editor.js) ═══
+  const G = (nodes, edges) => ({ nodes: [{ id: 'inicio', tipo: 'gatilho', x: 60, y: 140, cfg: {} }, ...nodes], edges });
   const novoDraft = () => ({
     id: null, nome: '',
     gatilho: { tipo: 'palavra', palavras: [], modo: 'contem', publico: 'todos' },
     opcoes: { presenca: true, ignorar_pausa: false, pausar_robo: false, aceita_meu_envio: false, cooldown: 30 },
-    passos: [{ tipo: 'texto', texto: '{{saudacao}}, {{primeiro_nome|tudo bem}}! Como posso ajudar?' }]
+    grafo: G([{ id: 'n1', tipo: 'texto', x: 380, y: 140, cfg: { texto: '{{saudacao}}, {{primeiro_nome|tudo bem}}! Como posso ajudar?' } }],
+      [{ de: 'inicio', porta: 'out', para: 'n1' }])
   });
-
-  // Modelos prontos: comandos rapidos (palavra exata, funcionam tambem quando VOCE digita na conversa)
-  const comando = (nome, palavra, passos) => () => {
+  const comando = (nome, palavra, no) => () => {
     const d = novoDraft();
     d.nome = nome;
     d.gatilho = { tipo: 'palavra', palavras: [palavra], modo: 'exata', publico: 'todos' };
     d.opcoes = { presenca: true, ignorar_pausa: true, pausar_robo: false, aceita_meu_envio: true, cooldown: 15 };
-    d.passos = passos;
+    d.grafo = G([{ id: 'n1', x: 380, y: 140, ...no }], [{ de: 'inicio', porta: 'out', para: 'n1' }]);
+    return d;
+  };
+  const saberMais = () => {
+    const d = novoDraft();
+    d.nome = 'Saber mais (exemplo com ramificação)';
+    d.gatilho = { tipo: 'palavra', palavras: ['oi', 'olá'], modo: 'exata', publico: 'todos' };
+    d.grafo = G([
+      { id: 'n1', tipo: 'botoes', x: 380, y: 120, cfg: { texto: '{{saudacao}}, {{primeiro_nome|tudo bem}}! Quer conhecer nosso sistema?', rodape: '', midia: '', botoes: [{ tipo: 'resposta', titulo: 'Saber mais', valor: 'saber mais' }, { tipo: 'resposta', titulo: 'Falar com atendente', valor: 'atendente' }] } },
+      { id: 'n2', tipo: 'texto', x: 780, y: 40, cfg: { texto: 'O sistema organiza seus pedidos, cardápio e entregas em um só lugar. Vou te mostrar como funciona.' } },
+      { id: 'n3', tipo: 'espera', x: 1140, y: 40, cfg: { segundos: 3 } },
+      { id: 'n4', tipo: 'botoes', x: 1480, y: 40, cfg: { texto: 'Veja uma demonstração:', rodape: '', midia: '', botoes: [{ tipo: 'link', titulo: 'Abrir demonstração', valor: '{{link_demo}}' }] } },
+      { id: 'n5', tipo: 'notificar', x: 780, y: 380, cfg: { texto: 'Cliente pediu atendente humano.' } },
+      { id: 'n6', tipo: 'texto', x: 1140, y: 380, cfg: { texto: 'Certo, já avisei a equipe. Em instantes alguém fala com você.' } }
+    ], [
+      { de: 'inicio', porta: 'out', para: 'n1' },
+      { de: 'n1', porta: 'b0', para: 'n2' }, { de: 'n2', porta: 'out', para: 'n3' }, { de: 'n3', porta: 'out', para: 'n4' },
+      { de: 'n1', porta: 'b1', para: 'n5' }, { de: 'n5', porta: 'out', para: 'n6' }
+    ]);
+    return d;
+  };
+  const carrossel = () => {
+    const d = novoDraft();
+    d.nome = 'Catálogo em carrossel';
+    d.gatilho = { tipo: 'palavra', palavras: ['catalogo', 'planos'], modo: 'contem', publico: 'todos' };
+    const cartao = (t, botoes) => ({ midia: '', nome: '', texto: t, rodape: '', botoes });
+    d.grafo = G([
+      { id: 'n1', tipo: 'carrossel', x: 380, y: 120, cfg: { intervalo: 2, cartoes: [
+        cartao('*Plano Básico*\nPedidos, cardápio e entregas.', [{ tipo: 'resposta', titulo: 'Quero o básico', valor: '' }, { tipo: 'link', titulo: 'Ver detalhes', valor: '{{link_demo}}' }]),
+        cartao('*Plano Completo*\nTudo do básico, mais impressão e relatórios.', [{ tipo: 'resposta', titulo: 'Quero o completo', valor: '' }])
+      ] } },
+      { id: 'n2', tipo: 'texto', x: 820, y: 40, cfg: { texto: 'Ótima escolha! Já vou te passar os próximos passos do plano básico.' } },
+      { id: 'n3', tipo: 'texto', x: 820, y: 300, cfg: { texto: 'Ótima escolha! Já vou te passar os próximos passos do plano completo.' } }
+    ], [
+      { de: 'inicio', porta: 'out', para: 'n1' }, { de: 'n1', porta: 'k0b0', para: 'n2' }, { de: 'n1', porta: 'k1b0', para: 'n3' }
+    ]);
     return d;
   };
   const MODELOS = [
     ['Em branco', 'Começar do zero, com um texto de boas-vindas.', () => novoDraft()],
+    ['Catálogo em carrossel', 'Vários cartões em sequência, cada um com imagem, texto e botões que seguem caminhos diferentes.', carrossel],
+    ['Botão "Saber mais" com ramificação', 'Exemplo pronto: cada botão segue por um caminho diferente. Use como base para montar seus próprios caminhos.', saberMais],
     ['Comando /pix', 'Envia a chave Pix (CNPJ) com o botão "Copiar chave Pix". Funciona quando o cliente digita /pix ou quando você digita na conversa.',
-      comando('Comando /pix', '/pix', [{ tipo: 'botoes', texto: '*Pagamento via Pix*\n\n*Chave Pix (CNPJ):*\n{{pix}}\n\nToque no botão abaixo para *copiar a chave* e cole no app do seu banco.\n\nDepois de pagar, é só mandar o comprovante por aqui.', rodape: '', midia: '', botoes: [{ tipo: 'copiar', titulo: 'Copiar chave Pix', valor: '{{pix_chave}}', fluxo: null }] }])],
+      comando('Comando /pix', '/pix', { tipo: 'botoes', cfg: { texto: '*Pagamento via Pix*\n\n*Chave Pix (CNPJ):*\n{{pix}}\n\nToque no botão abaixo para *copiar a chave* e cole no app do seu banco.\n\nDepois de pagar, é só mandar o comprovante por aqui.', rodape: '', midia: '', botoes: [{ tipo: 'copiar', titulo: 'Copiar chave Pix', valor: '{{pix_chave}}' }] } })],
     ['Comando de texto (ex: /horario)', 'Responde com um texto fixo quando alguém digitar a palavra. Troque a palavra e o texto.',
-      comando('Comando /horario', '/horario', [{ tipo: 'texto', texto: 'Nosso atendimento é de segunda a sexta, das 8h às 18h.' }])],
+      comando('Comando /horario', '/horario', { tipo: 'texto', cfg: { texto: 'Nosso atendimento é de segunda a sexta, das 8h às 18h.' } })],
     ['Comando com link (ex: /site)', 'Envia uma mensagem com botão que abre um link.',
-      comando('Comando /site', '/site', [{ tipo: 'botoes', texto: 'Acesse nosso site:', rodape: '', midia: '', botoes: [{ tipo: 'link', titulo: 'Abrir site', valor: 'https://', fluxo: null }] }])]
+      comando('Comando /site', '/site', { tipo: 'botoes', cfg: { texto: 'Acesse nosso site:', rodape: '', midia: '', botoes: [{ tipo: 'link', titulo: 'Abrir site', valor: 'https://' }] } })]
   ];
   function novo() {
     const semPix = MK.status && MK.status.pix === false;
@@ -411,360 +448,20 @@
         ${semPix ? '<div class="mk-alert" style="margin:10px 0 0">A chave Pix (CNPJ) ainda não está cadastrada. Cadastre em Saques PIX, card "WhatsApp de Suporte e Vendas", para o modelo /pix funcionar.</div>' : ''}
       </div>`);
   }
-  function modelo(i) { fecharSmall(); MK.draft = MODELOS[i][2](); abrirEditor(); }
+  function modelo(i) { fecharSmall(); window.MKED.abrir(MODELOS[i][2]()); }
   function editar(id) {
     const f = MK.fluxos.find(x => x.id === id);
-    if (!f) return;
-    MK.draft = JSON.parse(JSON.stringify(f));
-    abrirEditor();
+    if (f) window.MKED.abrir(f);
   }
-
-  function abrirEditor() {
-    renderEditor();
-    $('mk-ov-edit').classList.add('on');
-    document.body.style.overflow = 'hidden';
-  }
-  function fecharEditor() {
-    if (!confirm('Fechar o editor? Alterações não salvas serão perdidas.')) return;
-    $('mk-ov-edit').classList.remove('on');
-    document.body.style.overflow = '';
-    MK.draft = null;
-  }
-
-  const sel = (v, opts) => opts.map(([val, txt]) => `<option value="${val}" ${String(v) === String(val) ? 'selected' : ''}>${txt}</option>`).join('');
-  const inp = (k, v, ph, extra = '') => `<input class="minput" data-k="${k}" value="${esc(v)}" placeholder="${esc(ph || '')}" oninput="MKUI.in(this)" ${extra}>`;
-  const txa = (k, v, ph) => `<textarea class="minput mk-ta" data-k="${k}" placeholder="${esc(ph || '')}" oninput="MKUI.in(this)" onfocus="MKUI.foco(this)">${esc(v)}</textarea>`;
-
-  const VARS = ['primeiro_nome', 'nome', 'loja', 'saudacao', 'pix', 'pix_chave', 'telefone', 'link_demo'];
-  function chipsVars() {
-    return '<div class="mk-vars">' + VARS.map(v => `<span class="mk-var" onclick="MKUI.inserirVar('${v}')" title="Inserir no último campo de texto">{{${v}}}</span>`).join('') + '</div>';
-  }
-
-  function outrosFluxos() { return MK.fluxos.filter(f => f.id !== (MK.draft && MK.draft.id)); }
-  function optFluxos(v) {
-    return `<option value="">Nenhum (só enviar a palavra)</option>` + outrosFluxos().map(f => `<option value="${f.id}" ${String(v) === String(f.id) ? 'selected' : ''}>Abrir fluxo: ${esc(f.nome)}</option>`).join('');
-  }
-
-  function campoMidia(i, p, tipo) {
-    const tem = p.midia && !/^https?:/i.test(p.midia);
-    const accept = { imagem: '.jpg,.jpeg,.png,.webp', video: '.mp4,.mov,.3gp,.webm', audio: '.mp3,.ogg,.opus,.m4a,.aac,.wav,.webm', documento: '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip' }[tipo];
-    let prev = '';
-    if (tem) {
-      if (tipo === 'imagem') prev = `<img class="mk-media" data-blob="${esc(p.midia)}">`;
-      if (tipo === 'video') prev = `<video class="mk-media" controls data-blob="${esc(p.midia)}"></video>`;
-      if (tipo === 'audio') prev = `<audio controls data-blob="${esc(p.midia)}" style="margin-top:6px;max-width:100%"></audio>`;
-    }
-    return `
-      <div class="mk-file">
-        <button class="btn bg2 bsm" onclick="MKUI.arquivo(${i},'${tipo}','${accept}')">${p.midia ? 'Trocar arquivo' : 'Escolher arquivo'}</button>
-        <span class="mk-file-name">${tem ? esc(p.nome || p.midia) : (p.midia ? '' : 'Nenhum arquivo')}</span>
-        ${tem ? `<button class="mk-mini del" title="Remover" onclick="MKUI.limparMidia(${i})">×</button>` : ''}
-      </div>
-      ${tem ? '' : `<input class="minput" data-k="passos.${i}.midia" value="${esc(p.midia)}" placeholder="ou cole um link público https://..." oninput="MKUI.in(this)">`}
-      ${prev}`;
-  }
-
-  function editorPasso(p, i) {
-    const n = MK.draft.passos.length;
-    const tools = `<div class="mk-step-tools">
-      <button class="mk-mini" title="Subir" onclick="MKUI.mover(${i},-1)" ${i === 0 ? 'disabled' : ''}>↑</button>
-      <button class="mk-mini" title="Descer" onclick="MKUI.mover(${i},1)" ${i === n - 1 ? 'disabled' : ''}>↓</button>
-      <button class="mk-mini del" title="Remover passo" onclick="MKUI.remover(${i})">×</button></div>`;
-    let corpo = '';
-    switch (p.tipo) {
-      case 'texto':
-        corpo = txa(`passos.${i}.texto`, p.texto, 'Escreva a mensagem. Use *negrito* e _itálico_.') + chipsVars(); break;
-      case 'imagem': case 'video':
-        corpo = campoMidia(i, p, p.tipo) + `<label class="form-label" style="margin-top:8px">Legenda</label>` + txa(`passos.${i}.legenda`, p.legenda, 'Opcional'); break;
-      case 'audio':
-        corpo = campoMidia(i, p, 'audio') + `
-          <label class="mk-check"><input type="checkbox" data-k="passos.${i}.gravado" ${p.gravado !== false ? 'checked' : ''} onchange="MKUI.in(this)"> <span>Enviar como mensagem de voz gravada na hora (aparece "gravando áudio..." antes de chegar, com o ícone de microfone)</span></label>`; break;
-      case 'documento':
-        corpo = campoMidia(i, p, 'documento') + `<div class="mk-row"><div>${inp(`passos.${i}.nome`, p.nome, 'Nome do arquivo (ex: cardapio.pdf)')}</div></div>
-          <label class="form-label" style="margin-top:8px">Legenda</label>` + txa(`passos.${i}.legenda`, p.legenda, 'Opcional'); break;
-      case 'espera':
-        corpo = `<div class="mk-row"><div><label class="form-label">Esperar (segundos)</label>${inp(`passos.${i}.segundos`, p.segundos, '3', 'type="number" min="1" max="120"')}</div></div>
-          <div class="form-hint">Pausa antes do próximo passo. Útil para dar tempo de ler entre uma mensagem e outra.</div>`; break;
-      case 'botoes':
-        corpo = `
-          <label class="form-label">Texto da mensagem</label>${txa(`passos.${i}.texto`, p.texto, 'Ex: Qual opção você prefere?')}${chipsVars()}
-          <div class="mk-row" style="margin-top:8px">
-            <div><label class="form-label">Rodapé <span style="font-weight:400;text-transform:none">(opcional)</span></label>${inp(`passos.${i}.rodape`, p.rodape, '', 'maxlength="60"')}</div>
-          </div>
-          <label class="form-label" style="margin-top:8px">Imagem no topo <span style="font-weight:400;text-transform:none">(opcional)</span></label>${campoMidia(i, { ...p, midia: p.midia }, 'imagem')}
-          <div class="mk-sec" style="margin-top:12px">Botões (máximo 3)</div>
-          ${(p.botoes || []).map((b, j) => editorBotao(i, b, j)).join('')}
-          ${(p.botoes || []).length < 3 ? `<button class="btn bg2 bsm" onclick="MKUI.addBotao(${i})">Adicionar botão</button>` : ''}`; break;
-      case 'lista':
-        corpo = `
-          <div class="mk-row"><div><label class="form-label">Título</label>${inp(`passos.${i}.titulo`, p.titulo, '', 'maxlength="60"')}</div>
-          <div><label class="form-label">Texto do botão que abre a lista</label>${inp(`passos.${i}.botao_texto`, p.botao_texto, 'Ver opções', 'maxlength="20"')}</div></div>
-          <label class="form-label" style="margin-top:8px">Texto da mensagem</label>${txa(`passos.${i}.texto`, p.texto, 'Ex: Escolha uma das opções')}${chipsVars()}
-          <label class="form-label" style="margin-top:8px">Rodapé <span style="font-weight:400;text-transform:none">(opcional)</span></label>${inp(`passos.${i}.rodape`, p.rodape, '', 'maxlength="60"')}
-          <div class="mk-sec" style="margin-top:12px">Seções e linhas (máximo 10 linhas no total)</div>
-          ${(p.secoes || []).map((s, si) => `
-            <div class="mk-sub">
-              <div style="display:flex;gap:6px;margin-bottom:8px">${inp(`passos.${i}.secoes.${si}.titulo`, s.titulo, 'Título da seção', 'maxlength="24"')}
-                <button class="mk-mini del" title="Remover seção" onclick="MKUI.rmSecao(${i},${si})">×</button></div>
-              ${(s.linhas || []).map((l, li) => `
-                <div class="mk-sub" style="background:var(--s2)">
-                  <div class="mk-row">
-                    <div>${inp(`passos.${i}.secoes.${si}.linhas.${li}.titulo`, l.titulo, 'Título da linha', 'maxlength="24"')}</div>
-                    <div>${inp(`passos.${i}.secoes.${si}.linhas.${li}.descricao`, l.descricao, 'Descrição (opcional)', 'maxlength="72"')}</div>
-                  </div>
-                  <div class="mk-row" style="margin-top:6px">
-                    <div>${inp(`passos.${i}.secoes.${si}.linhas.${li}.valor`, l.valor, 'Palavra enviada ao clicar')}</div>
-                    <div><select class="minput" data-k="passos.${i}.secoes.${si}.linhas.${li}.fluxo" onchange="MKUI.in(this)">${optFluxos(l.fluxo)}</select></div>
-                  </div>
-                  <div style="text-align:right;margin-top:6px"><button class="btn bd bsm" onclick="MKUI.rmLinha(${i},${si},${li})">Remover linha</button></div>
-                </div>`).join('')}
-              <button class="btn bg2 bsm" onclick="MKUI.addLinha(${i},${si})">Adicionar linha</button>
-            </div>`).join('')}
-          <button class="btn bg2 bsm" onclick="MKUI.addSecao(${i})">Adicionar seção</button>`; break;
-    }
-    return `<div class="mk-step"><div class="mk-step-head"><span class="mk-step-tag">${i + 1}. ${TIPO_NOME[p.tipo]}</span>${tools}</div>${corpo}</div>`;
-  }
-
-  function editorBotao(i, b, j) {
-    const ph = { resposta: 'Palavra enviada ao clicar (ex: quero)', link: 'https://seusite.com.br', copiar: 'Texto que será copiado (ex: {{pix_chave}})', ligar: 'Telefone com DDD (ex: 85991234567)' }[b.tipo];
-    return `<div class="mk-sub">
-      <div class="mk-row">
-        <div><label class="form-label">Tipo</label>
-          <select class="minput" data-k="passos.${i}.botoes.${j}.tipo" onchange="MKUI.in(this,true)">${sel(b.tipo, [['resposta', 'Resposta (palavra)'], ['link', 'Abrir link'], ['copiar', 'Copiar texto'], ['ligar', 'Ligar']])}</select></div>
-        <div><label class="form-label">Título do botão</label>${inp(`passos.${i}.botoes.${j}.titulo`, b.titulo, 'Até 20 letras', 'maxlength="20"')}</div>
-      </div>
-      <div class="mk-row" style="margin-top:6px">
-        <div><label class="form-label">${b.tipo === 'resposta' ? 'Palavra enviada' : b.tipo === 'link' ? 'Link' : b.tipo === 'copiar' ? 'Texto a copiar' : 'Telefone'}</label>${inp(`passos.${i}.botoes.${j}.valor`, b.valor, ph)}</div>
-        ${b.tipo === 'resposta' ? `<div><label class="form-label">Ao clicar</label><select class="minput" data-k="passos.${i}.botoes.${j}.fluxo" onchange="MKUI.in(this)">${optFluxos(b.fluxo)}</select></div>` : '<div></div>'}
-      </div>
-      <div style="text-align:right;margin-top:6px"><button class="btn bd bsm" onclick="MKUI.rmBotao(${i},${j})">Remover botão</button></div>
-    </div>`;
-  }
-
-  function renderEditor() {
-    const d = MK.draft;
-    const g = d.gatilho, o = d.opcoes;
-    $('mk-edit-box').innerHTML = `
-      <div class="mk-box-head">
-        <div class="mk-box-title">${d.id ? 'Editar fluxo' : 'Novo fluxo'}</div>
-        <button class="mk-mini" title="Fechar" onclick="MKUI.fechar()">×</button>
-      </div>
-      <div class="mk-box-body">
-        <div class="mk-edit">
-          <div>
-            <div class="mk-sec">Identificação</div>
-            <div class="form-group"><label class="form-label">Nome do fluxo</label>${inp('nome', d.nome, 'Ex: Promoção de setembro', 'maxlength="80"')}</div>
-
-            <div class="mk-sec">Gatilho</div>
-            <div class="form-group"><label class="form-label">Quando este fluxo começa</label>
-              <select class="minput" data-k="gatilho.tipo" onchange="MKUI.in(this,'gatilho')">${sel(g.tipo, [['palavra', 'Quando alguém enviar uma palavra-chave (ou clicar em um botão com ela)'], ['manual', 'Somente por disparo manual para uma lista de contatos']])}</select></div>
-            <div id="mk-gat">${blocoGatilho()}</div>
-
-            <div class="mk-sec">Passos do fluxo</div>
-            <div id="mk-steps">${d.passos.map(editorPasso).join('') || '<div class="mk-empty" style="padding:18px">Sem passos. Adicione o primeiro abaixo.</div>'}</div>
-            <div class="mk-add">
-              ${Object.keys(TIPO_NOME).map(t => `<button class="btn bg2 bsm" onclick="MKUI.addPasso('${t}')">+ ${TIPO_NOME[t]}</button>`).join('')}
-            </div>
-          </div>
-
-          <div class="mk-prev-wrap">
-            <div class="mk-sec">Pré-visualização</div>
-            <div class="mk-phone"><div class="mk-phone-top">Cliente (exemplo: Maria Souza)</div><div class="mk-chat" id="mk-prev"></div></div>
-            <div class="form-hint" style="margin-top:8px">Aproximação de como as mensagens chegam. Botões e listas nativos dependem da versão do WhatsApp do cliente.</div>
-          </div>
-        </div>
-      </div>
-      <div class="mk-box-foot">
-        <button class="btn bg2" onclick="MKUI.fechar()">Cancelar</button>
-        <button class="btn bg2" onclick="MKUI.salvar(false)">Salvar</button>
-        <button class="btn bp" onclick="MKUI.salvar(true)">Salvar e ativar</button>
-      </div>`;
-    preview();
-    carregarBlobs();
-  }
-
-  function blocoGatilho() {
-    const g = MK.draft.gatilho, o = MK.draft.opcoes;
-    const palavras = g.tipo === 'palavra' ? `
-      <div class="form-group"><label class="form-label">Palavras-chave (uma por linha)</label>
-        <textarea class="minput mk-ta" data-k="gatilho.palavras" placeholder="promoção&#10;cardápio&#10;/pix" oninput="MKUI.in(this)">${esc((g.palavras || []).join('\n'))}</textarea>
-        <div class="form-hint">Sem diferença entre maiúsculas, minúsculas e acentos. Um botão de "resposta" com a mesma palavra também aciona este fluxo.</div></div>
-      <div class="mk-row">
-        <div class="form-group"><label class="form-label">Como comparar</label>
-          <select class="minput" data-k="gatilho.modo" onchange="MKUI.in(this)">${sel(g.modo, [['contem', 'A mensagem contém a palavra'], ['exata', 'A mensagem é exatamente a palavra'], ['inicia', 'A mensagem começa com a palavra']])}</select></div>
-        <div class="form-group"><label class="form-label">Quem pode acionar</label>
-          <select class="minput" data-k="gatilho.publico" onchange="MKUI.in(this)">${sel(g.publico, [['todos', 'Qualquer pessoa'], ['clientes', 'Só clientes cadastrados'], ['nao_clientes', 'Só quem não é cliente']])}</select></div>
-      </div>
-      <div class="form-group"><label class="form-label">Esperar antes de responder a mesma pessoa de novo (segundos)</label>${inp('opcoes.cooldown', o.cooldown, '30', 'type="number" min="0"')}</div>
-      <label class="mk-check"><input type="checkbox" data-k="opcoes.ignorar_pausa" ${o.ignorar_pausa ? 'checked' : ''} onchange="MKUI.in(this)"> <span>Responder mesmo quando eu assumi a conversa pelo celular</span></label>
-      <label class="mk-check"><input type="checkbox" data-k="opcoes.aceita_meu_envio" ${o.aceita_meu_envio ? 'checked' : ''} onchange="MKUI.in(this)"> <span>Também disparar quando <b>eu</b> digitar a palavra na conversa (só palavra exata, envia o fluxo para o cliente daquela conversa)</span></label>
-      <label class="mk-check"><input type="checkbox" data-k="opcoes.pausar_robo" ${o.pausar_robo ? 'checked' : ''} onchange="MKUI.in(this)"> <span>Pausar o robô de atendimento nessa conversa depois do fluxo</span></label>` : '';
-    return palavras + `<label class="mk-check"><input type="checkbox" data-k="opcoes.presenca" ${o.presenca !== false ? 'checked' : ''} onchange="MKUI.in(this)"> <span>Simular "digitando..." e "gravando áudio..." antes de cada mensagem</span></label>`;
-  }
-
-  // ── Edicao do rascunho ─────────────────────────────
-  let _ultimoCampo = null;
-  function foco(el) { _ultimoCampo = el; }
-
-  function setPath(obj, path, val) {
-    const ks = path.split('.');
-    let o = obj;
-    for (let n = 0; n < ks.length - 1; n++) o = o[ks[n]];
-    o[ks[ks.length - 1]] = val;
-  }
-
-  function entrada(el, re) {
-    const k = el.dataset.k;
-    let v = el.type === 'checkbox' ? el.checked : el.value;
-    if (k === 'gatilho.palavras') v = String(v).split(/[\n,;]+/).map(x => x.trim()).filter(Boolean);
-    if (/\.fluxo$/.test(k)) v = v ? parseInt(v, 10) : null;
-    setPath(MK.draft, k, v);
-    if (re === 'gatilho') { $('mk-gat').innerHTML = blocoGatilho(); }
-    else if (re === true) { $('mk-steps').innerHTML = MK.draft.passos.map(editorPasso).join(''); carregarBlobs(); }
-    preview();
-  }
-
-  function inserirVar(nome) {
-    const el = _ultimoCampo;
-    if (!el || !document.body.contains(el)) { toast('err', 'Clique primeiro no campo de texto onde quer inserir'); return; }
-    const ini = el.selectionStart ?? el.value.length, fim = el.selectionEnd ?? el.value.length;
-    el.value = el.value.slice(0, ini) + `{{${nome}}}` + el.value.slice(fim);
-    el.focus();
-    el.selectionStart = el.selectionEnd = ini + nome.length + 4;
-    entrada(el);
-  }
-
-  function refazPassos() { $('mk-steps').innerHTML = MK.draft.passos.map(editorPasso).join('') || '<div class="mk-empty" style="padding:18px">Sem passos. Adicione o primeiro abaixo.</div>'; preview(); carregarBlobs(); }
-
-  function addPasso(tipo) {
-    const base = {
-      texto: { texto: '' }, imagem: { midia: '', nome: '', legenda: '' }, video: { midia: '', nome: '', legenda: '' },
-      audio: { midia: '', nome: '', gravado: true, segundos: 0 }, documento: { midia: '', nome: '', legenda: '' },
-      espera: { segundos: 3 },
-      botoes: { texto: '', rodape: '', midia: '', botoes: [{ tipo: 'resposta', titulo: '', valor: '', fluxo: null }] },
-      lista: { titulo: '', texto: '', rodape: '', botao_texto: 'Ver opções', secoes: [{ titulo: 'Opções', linhas: [{ titulo: '', descricao: '', valor: '', fluxo: null }] }] }
-    }[tipo];
-    MK.draft.passos.push({ tipo, ...base });
-    refazPassos();
-  }
-  function remover(i) { MK.draft.passos.splice(i, 1); refazPassos(); }
-  function mover(i, d) {
-    const j = i + d, p = MK.draft.passos;
-    if (j < 0 || j >= p.length) return;
-    [p[i], p[j]] = [p[j], p[i]];
-    refazPassos();
-  }
-  function addBotao(i) { MK.draft.passos[i].botoes.push({ tipo: 'resposta', titulo: '', valor: '', fluxo: null }); refazPassos(); }
-  function rmBotao(i, j) { MK.draft.passos[i].botoes.splice(j, 1); refazPassos(); }
-  function addSecao(i) { MK.draft.passos[i].secoes.push({ titulo: 'Opções', linhas: [{ titulo: '', descricao: '', valor: '', fluxo: null }] }); refazPassos(); }
-  function rmSecao(i, s) { MK.draft.passos[i].secoes.splice(s, 1); refazPassos(); }
-  function addLinha(i, s) {
-    const total = MK.draft.passos[i].secoes.reduce((n, x) => n + x.linhas.length, 0);
-    if (total >= 10) { toast('err', 'A lista aceita no máximo 10 linhas no total'); return; }
-    MK.draft.passos[i].secoes[s].linhas.push({ titulo: '', descricao: '', valor: '', fluxo: null });
-    refazPassos();
-  }
-  function rmLinha(i, s, l) { MK.draft.passos[i].secoes[s].linhas.splice(l, 1); refazPassos(); }
-  function limparMidia(i) { const p = MK.draft.passos[i]; p.midia = ''; p.nome = ''; if (p.tipo === 'audio') p.segundos = 0; refazPassos(); }
-
-  // ── Upload de midia ────────────────────────────────
-  function arquivo(i, tipo, accept) {
-    const inpF = document.createElement('input');
-    inpF.type = 'file'; inpF.accept = accept;
-    inpF.onchange = () => {
-      const f = inpF.files[0];
-      if (!f) return;
-      const tipoUp = tipo === 'botoes' ? 'imagem' : tipo;
-      const rd = new FileReader();
-      toast('ok', 'Enviando arquivo...');
-      rd.onload = async () => {
-        try {
-          const r = await req('POST', '/midia', { nome: f.name, tipo: tipoUp, dados: rd.result });
-          const p = MK.draft.passos[i];
-          p.midia = r.arquivo; p.nome = f.name;
-          if (p.tipo === 'audio') p.segundos = r.segundos || 0;
-          MK.blobs[r.arquivo] = URL.createObjectURL(f);
-          if (r.aviso) toast('err', r.aviso); else toast('ok', r.convertido ? 'Áudio enviado e convertido para mensagem de voz' : 'Arquivo enviado');
-          refazPassos();
-        } catch (e) { toast('err', e.message); }
-      };
-      rd.readAsDataURL(f);
-    };
-    inpF.click();
-  }
-
-  async function blobUrl(arq) {
-    if (MK.blobs[arq]) return MK.blobs[arq];
-    const r = await fetch('/api/admin/marketing/midia/' + arq, { headers: adminAuthHeader() });
-    if (!r.ok) throw new Error('sem arquivo');
-    return (MK.blobs[arq] = URL.createObjectURL(await r.blob()));
-  }
-  function carregarBlobs() {
-    document.querySelectorAll('#mk-ov-edit [data-blob]').forEach(async el => {
-      if (el.src) return;
-      try { el.src = await blobUrl(el.dataset.blob); } catch (_) {}
-    });
-  }
-
-  // ── Pre-visualizacao ───────────────────────────────
-  function fmt(t) {
-    const vars = { nome: 'Maria Souza', primeiro_nome: 'Maria', loja: 'Pizzaria Bom Sabor', saudacao: 'Bom dia', telefone: '5585991234567', pix: '12.345.678/0001-90', pix_chave: '12345678000190', link_demo: 'https://...' };
-    let s = String(t || '').replace(/\{\{\s*([a-z_]+)\s*(?:\|([^}]*))?\}\}/gi, (_, k, pad) => vars[k.toLowerCase()] || (pad || '').trim());
-    s = esc(s).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/_([^_\n]+)_/g, '<i>$1</i>');
-    return s;
-  }
-  function preview() {
-    const el = $('mk-prev');
-    if (!el || !MK.draft) return;
-    const midia = (p, tag) => {
-      if (!p.midia) return `<div style="opacity:.6">[${TIPO_NOME[p.tipo]} sem arquivo]</div>`;
-      if (/^https?:/i.test(p.midia)) return tag === 'img' ? `<img src="${esc(p.midia)}">` : `<div>[${TIPO_NOME[p.tipo]}: link]</div>`;
-      if (tag === 'img') return `<img data-blob="${esc(p.midia)}">`;
-      if (tag === 'video') return `<video controls data-blob="${esc(p.midia)}"></video>`;
-      if (tag === 'audio') return `<audio controls data-blob="${esc(p.midia)}"></audio>`;
-      return `<div>[Arquivo: ${esc(p.nome || p.midia)}]</div>`;
-    };
-    el.innerHTML = MK.draft.passos.map(p => {
-      switch (p.tipo) {
-        case 'texto': return `<div class="mk-b">${fmt(p.texto) || '<i style="opacity:.5">mensagem vazia</i>'}</div>`;
-        case 'imagem': return `<div class="mk-b">${midia(p, 'img')}${fmt(p.legenda)}</div>`;
-        case 'video': return `<div class="mk-b">${midia(p, 'video')}${fmt(p.legenda)}</div>`;
-        case 'audio': return `<div class="mk-b">${midia(p, 'audio')}<small>${p.gravado !== false ? 'Mensagem de voz' : 'Arquivo de áudio'}</small></div>`;
-        case 'documento': return `<div class="mk-b">[Documento] ${esc(p.nome || p.midia || 'sem arquivo')}<br>${fmt(p.legenda)}</div>`;
-        case 'espera': return `<div class="mk-wait">aguarda ${esc(p.segundos)}s</div>`;
-        case 'botoes': return `<div class="mk-b">${p.midia ? midia({ ...p, tipo: 'imagem' }, 'img') : ''}${fmt(p.texto) || '<i style="opacity:.5">mensagem vazia</i>'}${p.rodape ? `<small>${esc(p.rodape)}</small>` : ''}${(p.botoes || []).map(b => `<span class="mk-bbtn">${{ link: '&#8599; ', copiar: '&#10063; ', ligar: '&#9990; ', resposta: '' }[b.tipo]}${esc(b.titulo || 'Botão')}</span>`).join('')}</div>`;
-        case 'lista': return `<div class="mk-b"><b>${esc(p.titulo)}</b>${p.titulo ? '<br>' : ''}${fmt(p.texto)}${p.rodape ? `<small>${esc(p.rodape)}</small>` : ''}<span class="mk-bbtn">&#9776; ${esc(p.botao_texto || 'Ver opções')}</span></div>`;
-      }
-      return '';
-    }).join('') || '<div class="mk-wait">sem passos</div>';
-    carregarBlobs();
-  }
-
-  // ── Salvar ─────────────────────────────────────────
-  async function salvar(ativar) {
-    const d = MK.draft;
-    try {
-      const r = await req('POST', '/fluxos', d);
-      const id = r.fluxo.id;
-      if (ativar) {
-        try { await req('POST', `/fluxos/${id}/ativar`); toast('ok', 'Fluxo salvo e ativado'); }
-        catch (e) { toast('err', 'Salvo, mas não ativou: ' + e.message); }
-      } else {
-        toast('ok', 'Fluxo salvo');
-      }
-      $('mk-ov-edit').classList.remove('on');
-      document.body.style.overflow = '';
-      MK.draft = null;
-      await carregarFluxos();
-      aba('fluxos');
-    } catch (e) { toast('err', e.message); }
+  async function recarregar(render) {
+    await carregarFluxos();
+    if (render !== false && MK.tab === 'fluxos') renderFluxos();
   }
 
   // ── API publica da aba ─────────────────────────────
   window.MKUI = {
-    init, aba, novo, modelo, editar, fechar: fecharEditor, salvar, ativar, duplicar, excluir,
+    init, aba, novo, modelo, editar, ativar, duplicar, excluir,
     testar, enviarTeste, disparar, dispPub, dispPrevia, confirmarDisparo, disp, fecharSmall,
-    in: entrada, foco, inserirVar, addPasso, remover, mover, addBotao, rmBotao, addSecao, rmSecao, addLinha, rmLinha,
-    arquivo, limparMidia
+    req, fluxos: () => MK.fluxos, recarregar
   };
 })();
