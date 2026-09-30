@@ -869,9 +869,24 @@ function validarEntrada(tipo, texto) {
 }
 
 // Executa um no. Retorna { porta } para seguir, ou { fim: true } para parar este caminho.
+// Guarda as opcoes do ultimo menu enviado: se o WhatsApp entregar o clique so como texto (sem o id do botao),
+// o titulo do botao ainda leva para a ramificacao certa.
+const menus = new Map()
+function lembrarMenu(flow, g, no, tel) {
+  const c = no.cfg || {}, ops = []
+  const add = (titulo, porta) => { if (titulo && g.tem(no.id, porta)) ops.push({ t: norm(titulo), porta }) }
+  if (no.tipo === 'botoes') (c.botoes || []).forEach((b, j) => { if (b.tipo === 'resposta') add(b.titulo, 'b' + j) })
+  else if (no.tipo === 'lista') { let i = 0; for (const s of c.secoes || []) for (const l of s.linhas || []) add(l.titulo, 'l' + (i++)) }
+  else if (no.tipo === 'carrossel') (c.cartoes || []).forEach((k, i) => (k.botoes || []).forEach((b, j) => { if (b.tipo === 'resposta') add(b.titulo, `k${i}b${j}`) }))
+  else return
+  if (ops.length) { menus.set(tel, { flowId: flow.id, noId: no.id, ops, at: Date.now() }); if (menus.size > 3000) menus.delete(menus.keys().next().value) }
+}
+const cliqueVisto = new Map()
+
 async function executarNo(flow, g, no, tel, ctx, prof) {
   const c = no.cfg || {}
   if (TIPOS_MSG.includes(no.tipo)) {
+    lembrarMenu(flow, g, no, tel)
     await executarPasso({ tipo: no.tipo, ...c }, tel, ctx.vars, {
       presenca: ctx.presenca, idBase: `mkt_g_${flow.id}_${no.id}`, temAresta: porta => g.tem(no.id, porta)
     })
@@ -1070,14 +1085,28 @@ function onMessage(m, { fromMe = false } = {}) {
     }
 
     // 1) Clique em botao/linha de lista que tem seta no grafo: segue a ramificacao
-    const clique = /^mkt_g_(\d+)_([a-z0-9]+)_(?:(k\d+)_)?([bl]\d+)$/i.exec(String(m.choiceId || ''))
-    if (clique && !fromMe) {
-      const flow = fluxoVivo(Number(clique[1]), tel)
-      if (!flow) return false
-      if (m.paused && !flow.opcoes?.ignorar_pausa) return false
-      enfileirar(tel, () => retomarClique(flow, tel, clique[2], (clique[3] || '') + clique[4], m.pushName || ''))
-        .catch(e => D.log?.('⚠️', `Marketing: ramificação do fluxo "${flow.nome}" falhou (${tel}): ${e.message}`))
-      return true
+    // (vale tambem quando VOCE toca no botao pelo proprio celular da conexao: chega como fromMe)
+    let clique = /^mkt_g_(\d+)_([a-z0-9]+)_(?:(k\d+)_)?([bl]\d+)$/i.exec(String(m.choiceId || ''))
+    let alvo = clique ? { flowId: Number(clique[1]), noId: clique[2], porta: (clique[3] || '') + clique[4] } : null
+    if (!alvo && m.text && !OPTOUT_RE.test(texto)) {
+      // clique que chegou so como texto (sem id): casa pelo titulo do ultimo menu enviado (ate 24 h)
+      const mn = menus.get(tel)
+      const op = mn && Date.now() - mn.at < 24 * 3600 * 1000 && mn.ops.find(o => o.t === norm(m.text))
+      if (op) alvo = { flowId: mn.flowId, noId: mn.noId, porta: op.porta }
+    }
+    if (alvo) {
+      // o mesmo toque pode chegar duas vezes (evento seu e do contato): ignora repeticao em 5 s
+      const ck = `${tel}:${alvo.flowId}:${alvo.noId}:${alvo.porta}`
+      if (Date.now() - (cliqueVisto.get(ck) || 0) < 5000) return true
+      const flow = fluxoVivo(alvo.flowId, tel)
+      if (!flow) { if (clique) return false }
+      else {
+        cliqueVisto.set(ck, Date.now()); if (cliqueVisto.size > 2000) cliqueVisto.delete(cliqueVisto.keys().next().value)
+        if (m.paused && !flow.opcoes?.ignorar_pausa) return false
+        enfileirar(tel, () => retomarClique(flow, tel, alvo.noId, alvo.porta, m.pushName || ''))
+          .catch(e => D.log?.('⚠️', `Marketing: ramificação do fluxo "${flow.nome}" falhou (${tel}): ${e.message}`))
+        return true
+      }
     }
 
     // 2) Estava aguardando a resposta do cliente
