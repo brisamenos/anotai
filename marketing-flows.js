@@ -228,12 +228,29 @@ async function duracaoSegundos(file) {
 }
 
 // Salva o arquivo enviado pelo painel. Audio vira OGG/Opus (formato das mensagens de voz do WhatsApp)
-async function salvarMidia({ nome, dados, tipo }) {
+function lerBinario(req, limite) {
+  return new Promise((ok, err) => {
+    const partes = []; let total = 0
+    req.on('data', c => {
+      total += c.length
+      if (total > limite) { err(new Error('Arquivo grande demais')); req.destroy(); return }
+      partes.push(c)
+    })
+    req.on('end', () => ok(Buffer.concat(partes)))
+    req.on('error', err)
+  })
+}
+
+async function salvarMidia({ nome, dados, tipo, buffer }) {
   const cfgTipo = MIDIA_TIPOS[tipo]
   if (!cfgTipo) throw new Error('Tipo de mídia inválido')
-  const m = /^data:[^;,]*(?:;[^,]*)?;base64,([\s\S]+)$/.exec(String(dados || ''))
-  if (!m) throw new Error('Arquivo inválido')
-  const buf = Buffer.from(m[1], 'base64')
+  let buf
+  if (buffer) buf = buffer
+  else {
+    const m = /^data:[^;,]*(?:;[^,]*)?;base64,([\s\S]+)$/.exec(String(dados || ''))
+    if (!m) throw new Error('Arquivo inválido')
+    buf = Buffer.from(m[1], 'base64')
+  }
   if (!buf.length) throw new Error('Arquivo vazio')
   if (buf.length > cfgTipo.max) throw new Error(`Arquivo grande demais (máximo ${Math.round(cfgTipo.max / 1048576)} MB para ${tipo})`)
   const ext = path.extname(String(nome || '')).slice(1).toLowerCase()
@@ -1302,7 +1319,13 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
         : D.db.prepare('SELECT l.*, f.nome AS fluxo FROM mkt_logs l LEFT JOIN mkt_flows f ON f.id=l.flow_id ORDER BY l.id DESC LIMIT 60').all()
       send(res, 200, { logs: rows }); return true
     }
-    if (met === 'POST' && sub === '/midia') {
+    if (met === 'POST' && sub.split('?')[0] === '/midia') {
+      // Envio binario direto (application/octet-stream): sem base64, bem mais leve para foto de celular
+      if (/octet-stream/i.test(req.headers['content-type'] || '')) {
+        const q = new URL(req.url, 'http://x').searchParams
+        const buffer = await lerBinario(req, 40 * 1024 * 1024)
+        send(res, 200, { ok: true, ...(await salvarMidia({ nome: q.get('nome'), tipo: q.get('tipo'), buffer })) }); return true
+      }
       const body = await readBody(req, 60 * 1024 * 1024)
       send(res, 200, { ok: true, ...(await salvarMidia(body || {})) }); return true
     }

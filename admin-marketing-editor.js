@@ -821,19 +821,39 @@
   }
 
   // ── Midia ──────────────────────────────────────────
-  // Reduz foto grande do celular (max 1600px, JPEG) antes de enviar: sobe mais rapido e nao estoura limite de tamanho
+  // Reduz foto grande do celular (max 1280px, JPEG) antes de enviar: sobe mais rapido e nao estoura limite de tamanho
   async function reduzImagem(file) {
-    if (file.size < 1.2 * 1048576 || !window.createImageBitmap) return file;
+    if (file.size < 250 * 1024 || !window.createImageBitmap) return file;
     try {
       const bmp = await createImageBitmap(file);
-      const esc = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+      const esc = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
       const cv = document.createElement('canvas');
       cv.width = Math.round(bmp.width * esc); cv.height = Math.round(bmp.height * esc);
       cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
-      const blob = await new Promise(ok => cv.toBlob(ok, 'image/jpeg', 0.85));
+      const blob = await new Promise(ok => cv.toBlob(ok, 'image/jpeg', 0.82));
       if (!blob || blob.size >= file.size) return file;
       return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
     } catch (_) { return file; }
+  }
+  // Envia o arquivo cru (sem base64) com barra de progresso
+  function enviarBinario(file, tipo) {
+    return new Promise((ok, no) => {
+      const x = new XMLHttpRequest();
+      x.open('POST', '/api/admin/marketing/midia?tipo=' + encodeURIComponent(tipo) + '&nome=' + encodeURIComponent(file.name));
+      const h = adminAuthHeader();
+      Object.keys(h).forEach(k => { if (k.toLowerCase() !== 'content-type') x.setRequestHeader(k, h[k]); });
+      x.setRequestHeader('Content-Type', 'application/octet-stream');
+      x.timeout = 120000;
+      x.upload.onprogress = ev => { if (ev.lengthComputable) statusUpload(`Enviando ${file.name}... ${Math.round(ev.loaded / ev.total * 100)}%`); };
+      x.onload = () => {
+        let d = {}; try { d = JSON.parse(x.responseText); } catch (_) {}
+        if (x.status >= 200 && x.status < 300) return ok(d);
+        no(new Error(d.error || (x.status === 502 || x.status === 504 ? 'o servidor não respondeu (' + x.status + '). Tente uma imagem menor ou de novo em instantes' : 'HTTP ' + x.status)));
+      };
+      x.onerror = () => no(new Error('sem conexão com o servidor'));
+      x.ontimeout = () => no(new Error('o envio demorou demais'));
+      x.send(file);
+    });
   }
   const lerArquivo = f => new Promise((ok, no) => { const rd = new FileReader(); rd.onload = () => ok(rd.result); rd.onerror = () => no(new Error('Não consegui ler o arquivo')); rd.readAsDataURL(f); });
   function statusUpload(msg, erro) {
@@ -854,8 +874,7 @@
         statusUpload('Enviando ' + file.name + '...');
         toast('ok', 'Enviando arquivo...');
         if (tipo === 'imagem') file = await reduzImagem(file);
-        const dados = await lerArquivo(file);
-        const r = await MKUI.req('POST', '/midia', { nome: file.name, tipo, dados });
+        const r = await enviarBinario(file, tipo);
         const n = cfgIdx(i), alvo = k == null ? n.cfg : n.cfg.cartoes[k];
         alvo.midia = r.arquivo; alvo.nome = file.name;
         if (n.tipo === 'audio') n.cfg.segundos = r.segundos || 0;
