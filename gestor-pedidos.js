@@ -8,6 +8,30 @@ function _escHtml(v) {
   }[c]));
 }
 
+// ── Observação do item em LISTA (tela) ─────────────────────────────
+// Antes os adicionais apareciam numa linha só ("Adicionais: A, B · Massa: C"),
+// difícil de ler no cartão do pedido. Usa o mesmo leitor da impressão
+// (_parseObs, em gestor-relatorios.js): cada grupo vira um título e cada
+// adicional uma linha. Se o leitor não estiver carregado, mostra como antes.
+function _obsListaTela(raw) {
+  if (!raw) return '';
+  const esc = (typeof _escHtml === 'function') ? _escHtml : (v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+  if (typeof _parseObs !== 'function') return '📝 ' + esc(raw);
+  const p = _parseObs(raw);
+  const it = t => '<div style="padding-left:10px;font-weight:500">• ' + esc(t) + '</div>';
+  const tit = t => '<div style="font-weight:700;margin-top:2px">' + esc(t) + '</div>';
+  let h = '';
+  if (p.meioMeio) {
+    h += tit('Meio a meio');
+    if (p.meioMeio.toLowerCase() !== 'meio a meio') h += it(p.meioMeio);
+  }
+  if (p.kitItens.length) h += tit('Contém:') + p.kitItens.map(it).join('');
+  if (p.cortes.length)   h += tit('Cortes:') + p.cortes.map(it).join('');
+  p.grupos.forEach(g => { h += tit(g.nome + ':') + g.itens.map(it).join(''); });
+  if (p.obsLivre) h += '<div style="margin-top:2px">📝 ' + esc(p.obsLivre) + '</div>';
+  return h || ('📝 ' + esc(raw));
+}
+
 // NAV
 // ─────────────────────────────────────────
 function nav(id) {
@@ -241,7 +265,13 @@ function renderKanban() {
     } else {
       col.innerHTML = filtered.map(o => {
         const itemStr = o.items.map(i => i.qty + 'x ' + i.name).join(', ');
-        const obsStr = o.items.filter(i => i.obs).map(i => '📝 ' + _escHtml(i.obs)).join(' · ');
+        // Adicionais em lista. Com mais de um item com observação, mostra o nome do item acima.
+        const _itensObs = o.items.filter(i => i.obs);
+        const obsStr = _itensObs.map((i, k) =>
+          '<div' + (k ? ' style="margin-top:5px;padding-top:5px;border-top:1px dashed rgba(196,149,106,.3)"' : '') + '>' +
+            (_itensObs.length > 1 ? '<div style="font-weight:800">' + (i.qty || 1) + 'x ' + _escHtml(i.name) + '</div>' : '') +
+            _obsListaTela(i.obs) +
+          '</div>').join('');
 
         // ── Mesa em produção: lista de itens com botão de "pronto" individual ──
         const itemsHtml = (o._isMesa && st === 'producao')
@@ -837,7 +867,7 @@ function openOrderDetail(id) {
           <div class="od-item-name">${item.name}</div>
           ${itemStatus !== 'active' && itemStatus !== 'cancelado' ? `<span style="font-size:10px;color:var(--muted);font-weight:600">${itemStatus.charAt(0).toUpperCase() + itemStatus.slice(1)}</span>` : ''}
         </div>
-        ${item.obs ? `<div class="od-item-obs">📝 ${_escHtml(item.obs)}</div>` : ''}
+        ${item.obs ? `<div class="od-item-obs">${_obsListaTela(item.obs)}</div>` : ''}
         ${Array.isArray(item.extras) && item.extras.length ? `<div class="od-item-obs">➕ ${item.extras.join(', ')}</div>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:6px">
@@ -2881,7 +2911,7 @@ function noRenderCart() {
       <div style="flex:1;min-width:0">
         <div style="font-size:12.5px;font-weight:600;line-height:1.3;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:1px">R$ ${parseFloat(c.price).toFixed(2).replace('.', ',')} cada</div>
-        ${c.obs ? `<div style="font-size:10.5px;color:var(--accent);margin-top:2px;line-height:1.3;white-space:normal;word-break:break-word">${c.obs.replace(/</g,'&lt;')}</div>` : ''}
+        ${c.obs ? `<div style="font-size:10.5px;color:var(--accent);margin-top:2px;line-height:1.3;white-space:normal;word-break:break-word">${_obsListaTela(c.obs)}</div>` : ''}
       </div>
       ${canEdit ? `<button onclick="noEditarItemCarrinho(${idx})" title="Editar adicionais" style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(99,102,241,.35);background:rgba(99,102,241,.1);color:#818cf8;font-size:12px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0">✏️</button>` : ''}
       <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
