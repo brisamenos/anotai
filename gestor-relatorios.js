@@ -2639,15 +2639,12 @@ async function loadPrintConfigServer() {
     [['print-nome', _printNome], ['print-sub', _printSub], ['print-rodape', _printRodape]].forEach(([id, v]) => {
       const el = document.getElementById(id); if (el) el.value = v;
     });
-    // Electron: sobrescreve o nome guardado no app com o desta loja
+    // Electron: sobrescreve SÓ o nome/subtítulo/rodapé guardados no app com os
+    // desta loja. Não manda largura do papel, impressora nem fonte: esses são
+    // do computador, e reenviá-los a cada carregamento podia trocar a largura
+    // (58/80 mm) configurada no app e desalinhar o cupom.
     if (window.ElectronPrint?.saveConfig) {
-      window.ElectronPrint.saveConfig({
-        nome: _printNome, sub: _printSub, rodape: _printRodape,
-        fontSize: _printFontSize, paperWidth: (_printFormat === '58mm') ? 58 : 80,
-        printer: _printPrinter, printer_caixa: _printPrinter, printer_cozinha: _printPrinterCozinha,
-        printSetoresCategoria: _getPrintSetoresCategoria(), printViaMode: _printViaMode,
-        printFormat: _printFormat, printMode: _printMode,
-      }).catch(() => {});
+      window.ElectronPrint.saveConfig({ nome: _printNome, sub: _printSub, rodape: _printRodape }).catch(() => {});
     }
     // Restaura impressoras e modelos do servidor
     if (Array.isArray(cfg.impressoras) && cfg.impressoras.length) {
@@ -3379,7 +3376,14 @@ function _parseObs(rawObs) {
       const rest = secao.replace(/^Meio a meio/i, '').replace(/^\s*·\s*/, '').trim();
       // Separa o que é meio a meio do que é grupo extra (depois de outro · que tenha :)
       // Na prática meio a meio só tem 1 valor: "Calabresa + Marguerita"
-      out.meioMeio = rest || 'meio a meio';
+      // O garçom manda os adicionais na MESMA seção ("Meio a meio · Adicionais: X · Massa: Y").
+      // Antes tudo virava texto do meio a meio e os adicionais sumiam do cupom.
+      const _sobraMeio = [];
+      rest.split(' · ').map(p => p.trim()).filter(Boolean).forEach(p => {
+        const g = tentarGrupo(p);
+        if (g) out.grupos.push(g); else _sobraMeio.push(p);
+      });
+      out.meioMeio = _sobraMeio.join(' · ') || 'meio a meio';
       continue;
     }
 
@@ -5055,7 +5059,9 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo, cascadeOpt
   // 1️⃣ Electron — usa printHtml para enviar HTML + impressora específica do job
   if (window.ElectronPrint) {
     try {
-      const pw = fmt === '58mm' ? 48 : 72;
+      // O app espera a largura do PAPEL (58 ou 80). Antes ia 48/72 (área útil):
+      // o app não reconhecia 48 como bobina de 58 e montava a página de 80 mm.
+      const pw = fmt === '58mm' ? 58 : 80;
       const wrappedHtml = _wrapTicketHtml(html, cfg ? cfg.fontSize : 13);
 
       // Respeita o tipo do job para escolher a impressora correta
@@ -5682,7 +5688,7 @@ function salvarImpressora() {
   // localStorage deste navegador/computador e não aparece em outra
   // máquina (ex: cozinha x balcão) nem sobrevive a um recarregamento
   // de página, que puxa a lista "oficial" do servidor e sobrescreve.
-  if (typeof _syncPrintConfigServer === 'function') _syncPrintConfigServer();
+  // (a sincronização é feita logo abaixo, DEPOIS de gravar o formato do papel)
 
   // Sincroniza formato do papel globalmente
   const pw = largura <= 32 ? 58 : 80;
@@ -5693,6 +5699,10 @@ function salvarImpressora() {
   if (fmtSel) fmtSel.value = fmt;
   _printPrinter = printerName;
   localStorage.setItem('printPrinter', printerName);
+  // Só agora sincroniza: antes a chamada vinha ANTES de gravar o formato, e o
+  // servidor ficava com o formato antigo (ex.: 80mm numa impressora de 58mm).
+  // Ao recarregar, esse valor antigo voltava e o cupom saía largo/deslocado.
+  if (typeof _syncPrintConfigServer === 'function') _syncPrintConfigServer();
 
   if (isElectron) {
     window.ElectronPrint.saveConfig({ printer: printerName, paperWidth: pw, printFormat: fmt }).catch(() => {});
@@ -6089,7 +6099,7 @@ async function _printPorComputador(order, ticket, cfg, fmt, opts = {}) {
 
   if (!meus.length && !incluirRecibo) return;
 
-  const pw = fmt === '58mm' ? 48 : 72;
+  const pw = fmt === '58mm' ? 58 : 80; // largura do PAPEL, que é o que o app espera
   const imprimir = async (html) => {
     const r = await window.ElectronPrint.printHtml(_wrapTicketHtml(html, cfg ? cfg.fontSize : 13), {
       printer: impressora, paperWidth: pw, landscape: false, scaleFactor: 100,

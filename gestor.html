@@ -3654,7 +3654,7 @@ Use no seu próximo pedido.</textarea>
           </div>
           <div>
             <label class="form-label">Formato do papel</label>
-            <select class="form-input" id="print-format-select" onchange="_printFormat=this.value;localStorage.setItem('printFormat',this.value);renderPrintPreview()">
+            <select class="form-input" id="print-format-select" onchange="_printFormat=this.value;localStorage.setItem('printFormat',this.value);if(typeof _syncPrintConfigServer==='function')_syncPrintConfigServer();renderPrintPreview()">
               <option value="80mm">Térmica 80mm (48 col)</option>
               <option value="58mm">Térmica 58mm (32 col)</option>
             </select>

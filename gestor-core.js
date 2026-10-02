@@ -73,13 +73,16 @@ window._limparConfigImpressao = function (tenantId) {
 // Origem desconhecida: instalações antigas (ex.: Electron já usado por outra
 // loja ANTES de existir a marcação de loja) guardam nome/modelos de outra loja.
 // Roda uma vez por loja neste computador, depois que o servidor respondeu.
-// Mantém só o que é do COMPUTADOR (impressora por PC, id do PC, modo PC).
+// Mantém só o que é do COMPUTADOR (impressora por PC, id do PC, modo PC) e
+// as MARGENS (printMarginH/printMarginV): elas são o ajuste físico da
+// impressora deste computador e não ficam salvas no servidor — apagá-las
+// fazia a margem voltar ao padrão e o cupom sair deslocado.
 window._limparConfigImpressaoDesconhecida = function () {
   [
     'printPrinter', 'printPrinterCozinha', 'printViaMode', 'printMode', 'printTarget',
     'printSetoresCategoria', 'printOverridesItem', 'printItensIndustrializados',
     'printNome', 'printSub', 'printRodape',
-    'printFormat', 'printFontSize', 'printMarginV', 'printMarginH', 'printBebidaSolo',
+    'printFormat', 'printFontSize', 'printBebidaSolo',
     'bebidaProntaKanban', 'printConfig', 'printTempoEntrega', 'printTempoRetirada',
     'anotai_modelos', 'anotai_impressoras'
   ].forEach(k => localStorage.removeItem(k));
