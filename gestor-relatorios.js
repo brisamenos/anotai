@@ -2522,11 +2522,26 @@ function _printOrderType(order) {
   return 'delivery';
 }
 
+// ── Garante que o localStorage de impressão é DESTA loja ──
+// O localStorage é do navegador, não do login. Se outra loja foi aberta neste
+// navegador (outra aba, ou troca de login), os valores dela estariam aqui e
+// seriam gravados na loja errada. Retorna false quando isso aconteceu: o
+// localStorage foi limpo e a memória zerada; quem chamou NÃO deve gravar,
+// e sim recarregar do servidor.
+function _garantirLojaImpressao(tid) {
+  if (!tid || typeof window._limparConfigImpressao !== 'function') return true;
+  if (!window._limparConfigImpressao(tid)) return true;
+  _printNome = ''; _printSub = ''; _printRodape = '';
+  _impressoras = []; _modelos = [];
+  return false;
+}
+
 // ── Salva config de impressão no servidor (sincroniza entre dispositivos) ──
 async function savePrintConfigServer(cfg) {
   try {
     const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null
     if (!tid) return
+    if (!_garantirLojaImpressao(tid)) { await loadPrintConfigServer(); return }
     // Flag da loja "impressão por computador" vai junto em qualquer salvamento
     cfg = { ...(cfg || {}), printModoPC: localStorage.getItem('printModoPC') === '1' }
     await window.AppAPI.from('store_config').update({ print_config: JSON.stringify(cfg) }).eq('tenant_id', tid)
@@ -2540,6 +2555,8 @@ async function savePrintConfigServer(cfg) {
 // Agora qualquer mudança nas impressoras é refletida no banco automaticamente.
 async function _syncPrintConfigServer() {
   try {
+    const _tidSync = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null;
+    if (!_garantirLojaImpressao(_tidSync)) { await loadPrintConfigServer(); return; }
     const viaMode = _normalizePrintViaMode(localStorage.getItem('printViaMode') || _printViaMode);
     _printViaMode = viaMode;
     localStorage.setItem('printViaMode', viaMode);
@@ -2574,8 +2591,19 @@ async function loadPrintConfigServer() {
   try {
     const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null
     if (!tid) return
+    _garantirLojaImpressao(tid) // se outra loja usou o navegador, descarta o que era dela antes de carregar
     const { data } = await window.AppAPI.from('store_config').select('print_config').eq('tenant_id', tid).single()
-    if (!data?.print_config) return
+    if (!data) return
+    // Primeira vez que esta loja carrega a config NESTE computador (inclui
+    // Electron instalado/usado antes por outra loja): o que está guardado
+    // localmente tem origem desconhecida e pode ser de outra loja. O servidor
+    // vale; o local é descartado.
+    if (localStorage.getItem('printConfigTenantV2') !== String(tid)) {
+      if (typeof window._limparConfigImpressaoDesconhecida === 'function') window._limparConfigImpressaoDesconhecida();
+      _printNome = ''; _printSub = ''; _printRodape = ''; _impressoras = []; _modelos = [];
+      localStorage.setItem('printConfigTenantV2', String(tid));
+    }
+    if (!data.print_config) return
     const cfg = JSON.parse(data.print_config)
     if (cfg.printMode)    { _printMode = cfg.printMode; window._printMode = cfg.printMode; localStorage.setItem('printMode', cfg.printMode) }
     if (cfg.printModoPC !== undefined) localStorage.setItem('printModoPC', cfg.printModoPC ? '1' : '0')
@@ -2604,17 +2632,22 @@ async function loadPrintConfigServer() {
       _printItensIndustrializados = cfg.printItensIndustrializados;
       _savePrintItensIndustrializados(false);
     }
-    if (cfg.printNome)   {
-      _printNome = cfg.printNome; localStorage.setItem('printNome', cfg.printNome);
-      const el = document.getElementById('print-nome'); if (el) el.value = cfg.printNome;
-    }
-    if (cfg.printSub)    {
-      _printSub = cfg.printSub; localStorage.setItem('printSub', cfg.printSub);
-      const el = document.getElementById('print-sub'); if (el) el.value = cfg.printSub;
-    }
-    if (cfg.printRodape) {
-      _printRodape = cfg.printRodape; localStorage.setItem('printRodape', cfg.printRodape);
-      const el = document.getElementById('print-rodape'); if (el) el.value = cfg.printRodape;
+    // Nome/subtítulo/rodapé: o servidor é a fonte da verdade. Se a loja não tem
+    // valor salvo, fica vazio — nunca sobra o valor guardado de outra loja.
+    _printNome = cfg.printNome || ''; _printSub = cfg.printSub || ''; _printRodape = cfg.printRodape || '';
+    localStorage.setItem('printNome', _printNome); localStorage.setItem('printSub', _printSub); localStorage.setItem('printRodape', _printRodape);
+    [['print-nome', _printNome], ['print-sub', _printSub], ['print-rodape', _printRodape]].forEach(([id, v]) => {
+      const el = document.getElementById(id); if (el) el.value = v;
+    });
+    // Electron: sobrescreve o nome guardado no app com o desta loja
+    if (window.ElectronPrint?.saveConfig) {
+      window.ElectronPrint.saveConfig({
+        nome: _printNome, sub: _printSub, rodape: _printRodape,
+        fontSize: _printFontSize, paperWidth: (_printFormat === '58mm') ? 58 : 80,
+        printer: _printPrinter, printer_caixa: _printPrinter, printer_cozinha: _printPrinterCozinha,
+        printSetoresCategoria: _getPrintSetoresCategoria(), printViaMode: _printViaMode,
+        printFormat: _printFormat, printMode: _printMode,
+      }).catch(() => {});
     }
     // Restaura impressoras e modelos do servidor
     if (Array.isArray(cfg.impressoras) && cfg.impressoras.length) {
@@ -5371,6 +5404,11 @@ async function salvarConfigImpressao() {
   // Salva no servidor para sincronizar com outros dispositivos
   try {
     const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null
+    if (tid && !_garantirLojaImpressao(tid)) {
+      await loadPrintConfigServer()
+      sbToast('warn', 'Outra loja foi aberta neste navegador. Configuração recarregada: revise e salve de novo.')
+      return
+    }
     if (tid) {
       await window.AppAPI.from('store_config')
         .update({ print_config: JSON.stringify(payload) })

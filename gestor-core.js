@@ -46,21 +46,50 @@
 // pré-lido) — lendo o tenant_id direto da sessão, porque _verificarSessao()
 // só roda no fim do arquivo e a essa altura o printMode abaixo já teria
 // pego o valor antigo do navegador.
+// Também limpa os MODELOS e IMPRESSORAS (anotai_modelos / anotai_impressoras):
+// cada modelo guarda o nome do estabelecimento (nome_estab), então eles
+// carregavam o nome da loja anterior para a loja nova.
+// Exposta em window para ser chamada de novo na hora de salvar/sincronizar:
+// com duas lojas abertas em abas diferentes do mesmo navegador, o
+// localStorage é compartilhado e a aba mais antiga gravaria os valores da outra.
+window._limparConfigImpressao = function (tenantId) {
+  const ultimoTenant = localStorage.getItem('printConfigTenantId');
+  let limpou = false;
+  if (ultimoTenant && ultimoTenant !== tenantId) {
+    [
+      'printPrinter', 'printPrinterCozinha', 'printViaMode', 'printMode', 'printTarget',
+      'printSetoresCategoria', 'printOverridesItem', 'printItensIndustrializados',
+      'printNome', 'printSub', 'printRodape',
+      'printFormat', 'printFontSize', 'printMarginV', 'printMarginH', 'printBebidaSolo',
+      'bebidaProntaKanban', 'printModoPC', 'printPCConfig', 'printPCImpressos', 'printConfig',
+      'printTempoEntrega', 'printTempoRetirada',
+      'anotai_modelos', 'anotai_impressoras'
+    ].forEach(k => localStorage.removeItem(k));
+    limpou = true;
+  }
+  localStorage.setItem('printConfigTenantId', tenantId);
+  return limpou;
+};
+// Origem desconhecida: instalações antigas (ex.: Electron já usado por outra
+// loja ANTES de existir a marcação de loja) guardam nome/modelos de outra loja.
+// Roda uma vez por loja neste computador, depois que o servidor respondeu.
+// Mantém só o que é do COMPUTADOR (impressora por PC, id do PC, modo PC).
+window._limparConfigImpressaoDesconhecida = function () {
+  [
+    'printPrinter', 'printPrinterCozinha', 'printViaMode', 'printMode', 'printTarget',
+    'printSetoresCategoria', 'printOverridesItem', 'printItensIndustrializados',
+    'printNome', 'printSub', 'printRodape',
+    'printFormat', 'printFontSize', 'printMarginV', 'printMarginH', 'printBebidaSolo',
+    'bebidaProntaKanban', 'printConfig', 'printTempoEntrega', 'printTempoRetirada',
+    'anotai_modelos', 'anotai_impressoras'
+  ].forEach(k => localStorage.removeItem(k));
+};
 (function _limparConfigImpressaoSeTrocouDeLoja() {
   try {
     const raw = sessionStorage.getItem('sys_session');
     const tenantId = raw ? (JSON.parse(raw).tenant_id || '') : '';
     if (!tenantId) return;
-    const ultimoTenant = localStorage.getItem('printConfigTenantId');
-    if (ultimoTenant && ultimoTenant !== tenantId) {
-      [
-        'printPrinter', 'printPrinterCozinha', 'printViaMode', 'printMode', 'printTarget',
-        'printSetoresCategoria', 'printOverridesItem', 'printNome', 'printSub', 'printRodape',
-        'printFormat', 'printFontSize', 'printMarginV', 'printMarginH', 'printBebidaSolo',
-        'printTempoEntrega', 'printTempoRetirada'
-      ].forEach(k => localStorage.removeItem(k));
-    }
-    localStorage.setItem('printConfigTenantId', tenantId);
+    window._limparConfigImpressao(tenantId);
   } catch (e) { console.warn('[gestor-core] limpar config impressao:', e?.message || e); }
 })();
 
