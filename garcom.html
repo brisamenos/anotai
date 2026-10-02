@@ -2106,8 +2106,21 @@ function _garcomObsLista(raw, pad) {
     if (b.trim()) a.push(b.trim()); return a; };
   const row = (t, st) => `<div style="${st || ''}">${t}</div>`;
   let h = '';
+  // Nomes reais dos grupos do cardápio: aceita grupo com pontuação ou nome longo
+  let conhecidos = [];
+  try {
+    const set = new Set();
+    (typeof allItems !== 'undefined' && Array.isArray(allItems) ? allItems : []).forEach(it => (Array.isArray(it.custom_groups) ? it.custom_groups : []).forEach(g => { const n = String((g && (g.nome || g.name)) || '').trim(); if (n) set.add(n); }));
+    conhecidos = [...set].sort((a, b) => b.length - a.length);
+  } catch (e) {}
   String(raw).split(' | ').forEach(sec => sec.split(' · ').forEach(parte => {
     parte = parte.trim(); if (!parte) return;
+    const nomeC = conhecidos.find(n => parte.toLowerCase().startsWith(n.toLowerCase() + ':'));
+    if (nomeC) {
+      h += row(esc(nomeC) + (/[?!:.]$/.test(nomeC) ? '' : ':'), 'font-weight:bold;margin-top:2px');
+      splitVirg(parte.substring(nomeC.length + 1).trim()).forEach(x => { h += row('• ' + esc(x), 'padding-left:10px'); });
+      return;
+    }
     const m = parte.match(/^([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 \-\/&+.]{0,28}):\s*(.+)$/);
     if (m && m[1].trim().split(/\s+/).length <= 4) {
       h += row(esc(m[1].trim()) + ':', 'font-weight:bold;margin-top:2px');

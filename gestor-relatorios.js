@@ -3325,9 +3325,31 @@ window._loadItensIndustrializados = _loadItensIndustrializados;
 //     grupos:     [{ nome:'Adicionais', itens:['Bacon (+R$ 3,00)', 'Queijo'] }, ...]
 //     obsLivre:   'observação digitada pelo cliente'
 //   }
-function _parseObs(rawObs) {
+// Nomes dos grupos de adicionais cadastrados no cardápio (do maior para o menor).
+// O leitor abaixo só reconhecia nome de grupo "simples" (letras e números, até
+// 4 palavras). Grupo com pontuação ou nome longo — "Deseja borda?", "Turbine
+// seu açaí!", "Escolha até 8 sabores (grátis)" — caía como observação e saía
+// tudo numa linha só. Com os nomes reais do cardápio, qualquer grupo vira lista.
+function _printNomesGruposConhecidos() {
+  try {
+    const src = (typeof items !== 'undefined' && Array.isArray(items)) ? items : [];
+    const set = new Set();
+    src.forEach(it => {
+      let cg = it && (it.customGroups || it.custom_groups);
+      if (typeof cg === 'string') { try { cg = JSON.parse(cg); } catch (e) { cg = []; } }
+      (Array.isArray(cg) ? cg : []).forEach(g => {
+        const n = String((g && (g.nome || g.name)) || '').trim();
+        if (n) set.add(n);
+      });
+    });
+    return [...set].sort((a, b) => b.length - a.length);
+  } catch (e) { return []; }
+}
+
+function _parseObs(rawObs, nomesConhecidos) {
   const out = { kitItens: [], meioMeio: '', cortes: [], grupos: [], obsLivre: '' };
   if (!rawObs || typeof rawObs !== 'string') return out;
+  const _conhecidos = Array.isArray(nomesConhecidos) ? nomesConhecidos : _printNomesGruposConhecidos();
 
   // Helper: split por vírgula respeitando parênteses
   const splitVirg = (valor) => {
@@ -3350,7 +3372,17 @@ function _parseObs(rawObs) {
   // Tenta extrair grupo "Nome: valores" se o nome tiver até 30 chars e for
   // composto só de letras/espaços (rejeita "atenção: lembrar", "pode entregar:").
   // Lista branca expandida pra grupos comuns (acentos PT-BR).
+  // Grupo cujo nome existe no cardápio: aceita qualquer nome (com "?", "!", "()", longo...)
+  const grupoConhecido = (texto) => {
+    const t = String(texto || '').trim(), tl = t.toLowerCase();
+    for (const n of _conhecidos) {
+      if (tl.startsWith(n.toLowerCase() + ':')) return { nome: n, itens: splitVirg(t.substring(n.length + 1).trim()) };
+    }
+    return null;
+  };
   const tentarGrupo = (texto) => {
+    const conhecido = grupoConhecido(texto);
+    if (conhecido) return conhecido;
     const colonIdx = texto.indexOf(':');
     if (colonIdx <= 0 || colonIdx >= 30) return null;
     const nomeRaw = texto.substring(0, colonIdx).trim();
@@ -3411,6 +3443,9 @@ function _parseObs(rawObs) {
     // Mix: tenta classificar cada parte
     let obsAccum = [];
     for (const parte of partes) {
+      // Grupo do cardápio vem antes do teste de corte (um grupo pode começar com número)
+      const gc = grupoConhecido(parte);
+      if (gc) { out.grupos.push(gc); continue; }
       // Corte ("500g Patinho")
       if (/^\d+\s*(g|kg|un|pç|pc|ml|l)\b/i.test(parte)) {
         out.cortes.push(parte);
@@ -3445,7 +3480,7 @@ function _obsListaHtml(rawObs, esc, pad) {
   if (p.meioMeio) h += L('MEIO A MEIO: ' + esc(p.meioMeio), 'font-weight:bold');
   if (p.kitItens.length) h += L('CONTÉM:', 'font-weight:bold') + p.kitItens.map(it).join('');
   if (p.cortes.length) h += L('CORTES:', 'font-weight:bold') + p.cortes.map(it).join('');
-  p.grupos.forEach(g => { h += L(esc(g.nome) + ':', 'font-weight:bold;margin-top:2px') + g.itens.map(it).join(''); });
+  p.grupos.forEach(g => { h += L(esc(g.nome) + (/[?!:.]$/.test(g.nome) ? '' : ':'), 'font-weight:bold;margin-top:2px') + g.itens.map(it).join(''); });
   if (p.obsLivre) h += L('OBS: ' + esc(p.obsLivre), 'font-weight:bold;margin-top:2px');
   if (!h) return '';
   return `<div style="padding-left:${pad == null ? 8 : pad}px;font-size:0.9em;word-break:break-word">${h}</div>`;
@@ -3646,7 +3681,7 @@ function _buildTicketHtml(order, cfg) {
     if (parsed.grupos.length) {
       const linhasGrupos = parsed.grupos.map(g =>
         D('padding-left:18px;margin-top:1px',
-          D('font-weight:bold;font-size:0.9em', g.nome + ':') +
+          D('font-weight:bold;font-size:0.9em', g.nome + (/[?!:.]$/.test(g.nome) ? '' : ':')) +
           g.itens.map(it => D('padding-left:10px;font-size:0.9em', '• ' + it)).join('')
         )
       ).join('');
@@ -3876,7 +3911,7 @@ function _buildTicketHtml(order, cfg) {
       if (parsed.grupos.length) {
         const linhasGrupos = parsed.grupos.map(g =>
           D('margin-top:2px',
-            D('font-weight:bold;text-transform:uppercase;font-size:0.9em', '› ' + g.nome + ':') +
+            D('font-weight:bold;text-transform:uppercase;font-size:0.9em', '› ' + g.nome + (/[?!:.]$/.test(g.nome) ? '' : ':')) +
             g.itens.map(it => D('padding-left:10px;font-size:0.95em', '• ' + it)).join('')
           )
         ).join('');
@@ -4295,7 +4330,7 @@ function _buildEscPos(order, cfg, cols = 32) {
     if (parsed.grupos.length) {
       parsed.grupos.forEach(g => {
         bytes(0x1B, 0x45, 0x01);
-        push('    ' + g.nome + ':\n');
+        push('    ' + g.nome + (/[?!:.]$/.test(g.nome) ? '' : ':') + '\n');
         bytes(0x1B, 0x45, 0x00);
         g.itens.forEach(it => {
           _wrapText(it, cols, '      - ').forEach(l => push(l + '\n'));

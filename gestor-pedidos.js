@@ -27,7 +27,7 @@ function _obsListaTela(raw) {
   }
   if (p.kitItens.length) h += tit('Contém:') + p.kitItens.map(it).join('');
   if (p.cortes.length)   h += tit('Cortes:') + p.cortes.map(it).join('');
-  p.grupos.forEach(g => { h += tit(g.nome + ':') + g.itens.map(it).join(''); });
+  p.grupos.forEach(g => { h += tit(g.nome + (/[?!:.]$/.test(g.nome) ? '' : ':')) + g.itens.map(it).join(''); });
   if (p.obsLivre) h += '<div style="margin-top:2px">📝 ' + esc(p.obsLivre) + '</div>';
   return h || ('📝 ' + esc(raw));
 }
@@ -2333,15 +2333,20 @@ function noAbrirModalPizza(item) {
             const nome = op.nome || op.name || '';
             const preco = parseFloat(op.preco || op.price || 0);
             const precoLabel = preco > 0 ? ` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.',',')}</span>` : '';
+            const optMax = isSingle ? 0 : (parseInt(op.max) || 0);
+            const grpMax = isSingle ? 0 : (parseInt(g.max) || 0);
+            const maxLabel = optMax > 0 ? ` <span style="color:var(--muted);font-size:11px">(até ${optMax})</span>` : '';
             return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer" onclick="noToggleOpc(this)">
-              <input type="${inputType}" name="no-pizza-grp-${gi}" value="${oi}" data-grp="${gi}" data-idx="${oi}" data-nome="${nome.replace(/"/g,'&quot;')}" data-preco="${preco}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
-              <span style="font-size:13px;font-weight:500;flex:1">${nome}${precoLabel}</span>
+              <input type="${inputType}" name="no-pizza-grp-${gi}" value="${oi}" data-grp="${gi}" data-idx="${oi}" data-nome="${nome.replace(/"/g,'&quot;')}" data-preco="${preco}" data-max="${optMax}" data-gmax="${grpMax}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+              <span style="font-size:13px;font-weight:500;flex:1">${nome}${precoLabel}${maxLabel}</span>
+              ${isSingle ? '' : _noOpcQtyHtml()}
             </label>`;
           }).join('')}
         </div>
       </div>`;
     }).join('');
   }
+  bg._grupos = pizzaGrupos;
   bg.querySelectorAll('.no-pizza-half-opt').forEach(opt => {
     opt.addEventListener('click', () => {
       _noPizzaHalf = {
@@ -2422,6 +2427,11 @@ function noPizzaAtualizarTotal() {
     }
   }
 
+  // Soma os adicionais marcados (preço unitário x quantidade escolhida)
+  document.querySelectorAll('#modal-no-pizza-bg #no-pizza-grupos-wrap input:checked').forEach(inp => {
+    preco += (parseFloat(inp.dataset.preco) || 0) * _noOpcQtyDe(inp);
+  });
+
   totalEl.textContent = 'R$ ' + preco.toFixed(2).replace('.', ',');
   btn.disabled = !podeAdd;
   btn.style.opacity = podeAdd ? '1' : '.45';
@@ -2454,10 +2464,15 @@ function noPizzaAdicionar() {
     inputs.forEach(inp => {
       const nome = inp.dataset.nome || '';
       const preco = parseFloat(inp.dataset.preco) || 0;
-      gruposExtra += preco;
-      if (nome) gruposDesc.push(nome + (preco > 0 ? ` (+R$ ${preco.toFixed(2).replace('.',',')})` : ''));
-      gruposSel.push({ nome, preco, qty: 1 });
+      const q = _noOpcQtyDe(inp);
+      gruposExtra += preco * q;
+      gruposSel.push({ nome, preco, qty: q });
     });
+    // Mesmo formato do restante do sistema ("Grupo: 10x Opção (+R$ 2,00), Outra"),
+    // para a impressão conseguir listar os adicionais por grupo.
+    const wrapGrp = bg2.querySelector('#no-pizza-grupos-wrap');
+    const fmtGrp = wrapGrp ? _noFmtObsAdicionais(wrapGrp, bg2._grupos || [], '') : '';
+    if (fmtGrp) gruposDesc.push(fmtGrp);
   }
 
   let nome, preco, obsCart;
@@ -2545,9 +2560,14 @@ function noAbrirModalAdicionais(item, grupos, isKg, editCtx) {
       const preco = parseFloat(op?.preco || op?.price || 0);
       const icon = op?.icon ? `<img src="${op.icon}" style="width:22px;height:22px;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'">` : '';
       const precoLabel = preco > 0 ? ` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.', ',')}</span>` : '';
+      // Limites do cadastro (iguais aos do cardápio do cliente): por adicional e total do grupo
+      const optMax = isMulti ? (parseInt(op?.max) || 0) : 0;
+      const grpMax = isMulti ? (parseInt(g.max) || 0) : 0;
+      const maxLabel = optMax > 0 ? ` <span style="color:var(--muted);font-size:11px">(até ${optMax})</span>` : '';
       return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer" onclick="noToggleOpc(this)">
-            <input type="${inputType}" name="no-grp-${gi}" value="${oi}" data-grp="${gi}" data-idx="${oi}" data-nome="${nome.replace(/"/g, '&quot;')}" data-preco="${preco}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
-            ${icon}<span style="font-size:13px;font-weight:500;flex:1">${nome}${precoLabel}</span>
+            <input type="${inputType}" name="no-grp-${gi}" value="${oi}" data-grp="${gi}" data-idx="${oi}" data-nome="${nome.replace(/"/g, '&quot;')}" data-preco="${preco}" data-max="${optMax}" data-gmax="${grpMax}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+            ${icon}<span style="font-size:13px;font-weight:500;flex:1">${nome}${precoLabel}${maxLabel}</span>
+            ${isMulti ? _noOpcQtyHtml() : ''}
           </label>`;
     }).join('')}
       </div>
@@ -2621,6 +2641,8 @@ function noAbrirModalAdicionais(item, grupos, isKg, editCtx) {
         inp.checked = true;
         const lbl = inp.closest('label');
         if (lbl) { lbl.style.borderColor = 'var(--accent)'; lbl.style.background = 'rgba(var(--accent-rgb,249,115,22),.08)'; }
+        if (inp.type === 'checkbox') inp.dataset.qty = Math.max(1, parseInt(s.qty) || 1);
+        _noOpcQtySync(inp);
       }
     });
   }
@@ -2641,6 +2663,14 @@ function noToggleOpc(label) {
     inp.closest('label').style.borderColor = 'var(--accent)';
     inp.closest('label').style.background = 'rgba(var(--accent-rgb,249,115,22),.08)';
   } else {
+    // Total máximo do grupo (mesma regra do cardápio do cliente)
+    if (inp.checked) {
+      const gmax = parseInt(inp.dataset.gmax) || 0;
+      if (gmax > 1 && _noGrupoTotal(inp) > gmax) {
+        inp.checked = false;
+        sbToast('err', `Máximo de ${gmax} no total para este grupo`);
+      }
+    }
     if (inp.checked) {
       label.style.borderColor = 'var(--accent)';
       label.style.background = 'rgba(var(--accent-rgb,249,115,22),.08)';
@@ -2648,9 +2678,67 @@ function noToggleOpc(label) {
       label.style.borderColor = 'var(--border)';
       label.style.background = 'var(--surface2)';
     }
+    _noOpcQtySync(inp);
   }
+  _noOpcAtualizarTotais();
+}
+
+// ── Quantidade por adicional no "Novo pedido" (igual ao + e − do cardápio do cliente) ──
+function _noOpcQtyHtml() {
+  const b = 'width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:16px;font-weight:700;line-height:1;cursor:pointer;padding:0;font-family:inherit';
+  return `<span class="no-opc-qty" onclick="event.preventDefault();event.stopPropagation()" style="display:none;align-items:center;gap:6px;flex-shrink:0;cursor:default">
+              <button type="button" onclick="noOpcQty(event,this,-1)" style="${b}">−</button>
+              <span class="no-opc-qty-num" style="min-width:22px;text-align:center;font-size:13px;font-weight:800">1</span>
+              <button type="button" onclick="noOpcQty(event,this,1)" style="${b}">+</button>
+            </span>`;
+}
+
+// Quantidade escolhida de um adicional (1 quando o modal não tem + e −)
+function _noOpcQtyDe(inp) {
+  if (!inp || inp.type !== 'checkbox') return 1;
+  return Math.max(1, parseInt(inp.dataset.qty) || 1);
+}
+
+// Soma das quantidades marcadas no mesmo grupo do adicional
+function _noGrupoTotal(inp) {
+  const raiz = inp.closest('#modal-no-adicionais-bg, #modal-no-pizza-bg') || document;
+  let tot = 0;
+  raiz.querySelectorAll('input:checked').forEach(o => {
+    if (o.name === inp.name) tot += _noOpcQtyDe(o);
+  });
+  return tot;
+}
+
+// Mostra o + e − só no adicional marcado; ao desmarcar, a quantidade volta para 1
+function _noOpcQtySync(inp) {
+  const box = inp.closest('label')?.querySelector('.no-opc-qty');
+  if (!box) return;
+  if (!inp.checked) inp.dataset.qty = 1;
+  box.style.display = inp.checked ? 'inline-flex' : 'none';
+  const num = box.querySelector('.no-opc-qty-num');
+  if (num) num.textContent = _noOpcQtyDe(inp);
+}
+
+function _noOpcAtualizarTotais() {
   const modal = document.getElementById('modal-no-adicionais-bg');
   if (modal?._item) noAtualizarTotalModal(modal._item, modal._isKg);
+  if (document.getElementById('modal-no-pizza-bg') && typeof noPizzaAtualizarTotal === 'function') noPizzaAtualizarTotal();
+}
+
+function noOpcQty(ev, btn, delta) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  const inp = btn.closest('label')?.querySelector('input');
+  if (!inp || !inp.checked) return;
+  const atual = _noOpcQtyDe(inp);
+  if (delta > 0) {
+    const gmax = parseInt(inp.dataset.gmax) || 0;
+    const max  = parseInt(inp.dataset.max) || 0;
+    if (gmax > 1 && _noGrupoTotal(inp) >= gmax) { sbToast('err', `Máximo de ${gmax} no total para este grupo`); return; }
+    if (max > 0 && atual >= max) { sbToast('err', `Máximo de ${max} para ${inp.dataset.nome || 'este adicional'}`); return; }
+  }
+  inp.dataset.qty = Math.max(1, atual + delta);
+  _noOpcQtySync(inp);
+  _noOpcAtualizarTotais();
 }
 
 function noModalQty(d) {
@@ -2665,7 +2753,7 @@ function noAtualizarTotalModal(item, isKg) {
   const qty = window._noModalQtyVal || 1;
   let extra = 0;
   document.querySelectorAll('#modal-no-adicionais-bg input:checked').forEach(inp => {
-    extra += parseFloat(inp.dataset.preco || 0);
+    extra += parseFloat(inp.dataset.preco || 0) * _noOpcQtyDe(inp);
   });
   let basePrice = parseFloat(item.price || 0) + extra;
   if (isKg) {
@@ -2699,7 +2787,10 @@ function _noFmtObsAdicionais(modalEl, grupos, obsLivre) {
     const opcNome = inp.dataset.nome || '';
     if (!opcNome) return;
     const preco   = parseFloat(inp.dataset.preco || 0);
-    const opcLbl  = preco > 0 ? `${opcNome} (+R$ ${preco.toFixed(2).replace('.',',')})` : opcNome;
+    // "10x Nome (+R$ 2,00)" — mesmo texto que o cardápio do cliente gera (preço unitário)
+    const q       = typeof _noOpcQtyDe === 'function' ? _noOpcQtyDe(inp) : 1;
+    const qPrefix = q > 1 ? `${q}x ` : '';
+    const opcLbl  = qPrefix + (preco > 0 ? `${opcNome} (+R$ ${preco.toFixed(2).replace('.',',')})` : opcNome);
     if (!porGrupo.has(gi)) porGrupo.set(gi, { nome: grpNome, opcoes: [] });
     porGrupo.get(gi).opcoes.push(opcLbl);
   });
@@ -2725,8 +2816,9 @@ function noConfirmarAdicionais(itemId) {
   let extra = 0;
   const sel = [];
   modal.querySelectorAll('input:checked').forEach(inp => {
-    extra += parseFloat(inp.dataset.preco || 0);
-    sel.push({ grp: parseInt(inp.dataset.grp), idx: parseInt(inp.dataset.idx) });
+    const q = _noOpcQtyDe(inp);
+    extra += parseFloat(inp.dataset.preco || 0) * q;
+    sel.push({ grp: parseInt(inp.dataset.grp), idx: parseInt(inp.dataset.idx), qty: q });
   });
 
   let price = parseFloat(item.price || 0) + extra;
