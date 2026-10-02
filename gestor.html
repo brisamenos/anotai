@@ -6666,6 +6666,18 @@ Use no seu próximo pedido.</textarea>
 .grp-opt-max{width:60px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 6px;color:var(--text);font-size:12.5px;outline:none;text-align:center}
 .grp-opt-price{width:80px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;color:var(--text);font-size:12.5px;outline:none;text-align:right}
 .grp-opt-del{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 4px;flex-shrink:0}
+/* Celular: a linha da opção não cabia (nome + preço + máx + dias + pausa + excluir) e os
+   botões de pausar/excluir saíam da tela. O nome ocupa a 1ª linha inteira e os demais
+   campos e botões ficam na 2ª linha. */
+.grp-opt-name{min-width:0}
+@media(max-width:640px){
+  .grp-opt-row{padding-bottom:8px;margin-bottom:8px;border-bottom:1px dashed var(--border)}
+  .grp-opt-row-main{flex-wrap:wrap;gap:6px}
+  .grp-opt-name{flex:1 1 100%}
+  .grp-opt-price,.grp-opt-max{flex:1 1 0;width:auto;min-width:0}
+  .grp-opt-row-main .grp-opt-dias-btn,.grp-opt-row-main .grp-opt-pause{width:40px !important;height:40px !important}
+  .grp-opt-del{width:40px;height:40px;font-size:22px;padding:0}
+}
 .grp-opt-dias-panel{display:flex;gap:3px;margin-top:6px;padding-left:2px}
 .grp-opt-dias-panel .dp{width:22px;height:22px;font-size:9px}
 .grp-add-opt{background:none;border:1px dashed var(--border);border-radius:7px;padding:6px 10px;color:var(--muted);font-size:12px;cursor:pointer;width:100%;transition:all .15s}
