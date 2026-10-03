@@ -1,0 +1,441 @@
+{
+  "versao": 1,
+  "geral": {
+    "titulo_pagina": "EstimaFood Delivery — Saia do papel. Modernize seu delivery.",
+    "descricao_pagina": "Sistema de delivery completo para açaiterias, hamburguerias, pizzarias e restaurantes. Cardápio digital próprio, pedidos no WhatsApp, sem taxas abusivas. R$ {preco}.",
+    "whatsapp": "5588981841517",
+    "mensagem_whatsapp": "Olá, vim pelo site da EstimaFood e gostaria de receber mais informações sobre o gestor de pedidos.",
+    "botao_topo": "Quero saber mais",
+    "botao_celular": "Chamar no WhatsApp",
+    "rodape": "**EstimaFood Delivery** · Brasil · © 2026 · Todos os direitos reservados"
+  },
+  "precos": {
+    "atual": "99,90",
+    "de": "149,90"
+  },
+  "camadas": [
+    {
+      "id": "hero",
+      "tipo": "hero",
+      "visivel": true,
+      "dados": {
+        "selo": "Disponível para todo o Brasil",
+        "titulo1": "Saia do papel.",
+        "titulo_destaque": "Modernize",
+        "titulo2": "seu delivery hoje.",
+        "texto": "Cardápio digital próprio, pedidos automáticos no WhatsApp e **PIX direto na sua conta** — sem comissão por pedido, sem taxa abusiva, com a sua marca no lugar de honra.",
+        "botao1": "Falar no WhatsApp",
+        "botao2": "Ver como funciona",
+        "numeros": [
+          {
+            "valor": "R$ {preco}",
+            "rotulo": "Aproveite!"
+          },
+          {
+            "valor": "0%",
+            "rotulo": "comissão por pedido"
+          },
+          {
+            "valor": "100%",
+            "rotulo": "cliente seu"
+          }
+        ],
+        "flutuante_titulo": "+R$ 4.000/mês",
+        "flutuante_texto": "economia média",
+        "imagens": [
+          {
+            "url": "assets/cardapio-lorys-screen.png",
+            "alt": "Lory's Burger - cardápio"
+          },
+          {
+            "url": "assets/cardapio-burger-screen.png",
+            "alt": "Cardápio de hambúrgueres"
+          },
+          {
+            "url": "assets/cardapio-acai-screen.png",
+            "alt": "Cardápio Açaí da Lory"
+          }
+        ]
+      }
+    },
+    {
+      "id": "teste",
+      "tipo": "teste",
+      "visivel": true,
+      "dados": {
+        "tag": "Teste grátis",
+        "titulo": "Teste o EstimaFood por *{dias} dias*. De graça.",
+        "texto": "Crie sua conta agora e use o sistema completo na sua loja: cardápio digital, painel de pedidos e impressão. Sem cartão de crédito.",
+        "botao": "Criar minha conta grátis",
+        "miudo": "Vamos te chamar no WhatsApp para ajudar no teste.",
+        "chamada": "Testar grátis por {dias} dias",
+        "chamada_curta": "Testar grátis",
+        "nota_hero": "Sem cartão de crédito. Sua conta fica pronta em 1 minuto.",
+        "barra": "Teste grátis por {dias} dias, sem cartão de crédito.",
+        "barra_botao": "Criar conta grátis",
+        "comanda_topo": "Sistema de delivery",
+        "comanda_titulo": "Pedido de teste",
+        "itens": [
+          "Cardápio digital com sua marca",
+          "Painel de pedidos em tempo real",
+          "Pedidos pelo WhatsApp",
+          "PIX direto na sua conta",
+          "Impressão automática dos pedidos"
+        ],
+        "comanda_pe": "Válido por {dias} dias · sem cartão · sem compromisso",
+        "dias_rotulo": "{dias} dias",
+        "sucesso_titulo": "Sua conta está pronta.",
+        "sucesso_texto": "Entre no painel com o e-mail e a senha que você acabou de criar."
+      }
+    },
+    {
+      "id": "demo",
+      "tipo": "demo",
+      "visivel": true,
+      "dados": {
+        "tag": "Demonstração geral",
+        "titulo": "Veja o *gestor de pedidos* funcionando de verdade.",
+        "texto": "Uma visão completa do painel: pedido chegando, organização por etapa, produção acompanhando status e loja controlando a operação com clareza.",
+        "pontos": [
+          "Pedidos em tempo real",
+          "Kanban de produção",
+          "Controle do gestor"
+        ],
+        "video": "RMTYf_eiGO0",
+        "video_titulo": "Assistir demonstração",
+        "video_sub": "Gestor de pedidos EstimaFood",
+        "video_legenda": "Demonstração completa do painel"
+      }
+    },
+    {
+      "id": "faixa",
+      "tipo": "faixa",
+      "visivel": true,
+      "dados": {
+        "itens": [
+          "Cardápio digital",
+          "WhatsApp automático",
+          "PIX integrado",
+          "Sem comissão",
+          "Cliente é seu",
+          "Suporte humano"
+        ]
+      }
+    },
+    {
+      "id": "problema",
+      "tipo": "problema",
+      "visivel": true,
+      "dados": {
+        "tag": "O problema",
+        "titulo": "Ainda anotando pedido *na mão?*",
+        "texto": "Esse processo atrasa o atendimento, aumenta os erros e **faz você perder oportunidades de venda** todo dia.",
+        "cards": [
+          {
+            "icone": "relogio",
+            "titulo": "Mais demora",
+            "texto": "Pedido escrito à mão, repetido pra cozinha, conferido de novo. O cliente espera e desiste."
+          },
+          {
+            "icone": "conversa",
+            "titulo": "Mais confusão",
+            "texto": "Anotação ilegível, troca de pedido, sabor errado. Cada erro é um cliente que não volta."
+          },
+          {
+            "icone": "grafico",
+            "titulo": "Menos controle",
+            "texto": "Sem histórico, sem relatório, sem dados. Você gere no escuro e não sabe o que vende mais."
+          }
+        ]
+      }
+    },
+    {
+      "id": "escolha",
+      "tipo": "escolha",
+      "visivel": true,
+      "dados": {
+        "tag": "A escolha",
+        "titulo": "Do papel *para o digital*.",
+        "texto": "Modernize seu atendimento e receba pedidos com mais **organização, rapidez e controle.**",
+        "antes_rotulo": "Como é hoje",
+        "antes_titulo": "Plataforma com taxa\nou caderno na mão",
+        "antes_itens": [
+          "Comissão de 20% a 30% por pedido",
+          "Cliente pertence à plataforma — você não tem o WhatsApp dele",
+          "Regras e taxas mudam sem aviso",
+          "Cardápio limitado e padronizado",
+          "Cupom e desconto saem do seu lucro",
+          "Concorre com vizinho dentro do mesmo app",
+          "Suporte por chatbot automático"
+        ],
+        "depois_rotulo": "Com o EstimaFood",
+        "depois_titulo": "Seu próprio sistema,\nsuas próprias regras",
+        "depois_itens": [
+          "Mensalidade fixa — sem comissão por pedido",
+          "Cliente é seu, com WhatsApp e histórico de compras",
+          "Você define preço, prazo e área de entrega",
+          "Cardápio totalmente livre e visual",
+          "Cupons e fidelidade controlados por você",
+          "Cardápio próprio, sem concorrente no meio",
+          "Suporte humano para todo o Brasil"
+        ]
+      }
+    },
+    {
+      "id": "recursos",
+      "tipo": "recursos",
+      "visivel": true,
+      "dados": {
+        "tag": "Recursos",
+        "titulo": "Tudo o que você precisa, *nada que você não use.*",
+        "texto": "Um sistema completo de delivery pensado pra quem quer crescer com autonomia e praticidade.",
+        "cards": [
+          {
+            "icone": "celular",
+            "titulo": "Cardápio digital profissional",
+            "texto": "Bonito, rápido, com sua marca. Categorias, fotos, adicionais, pizza meio a meio e observações por item."
+          },
+          {
+            "icone": "link",
+            "titulo": "Link próprio pra divulgar",
+            "texto": "Sua URL personalizada. Coloca no Instagram, no Google, na embalagem. Cliente abre direto no celular."
+          },
+          {
+            "icone": "conversa",
+            "titulo": "Pedidos no WhatsApp",
+            "texto": "Pedido chega formatado pronto pra produção. Cliente é avisado em cada etapa, automaticamente."
+          },
+          {
+            "icone": "grafico",
+            "titulo": "Mais controle do negócio",
+            "texto": "Relatórios de vendas, produtos mais pedidos, ticket médio. Você decide com base em dados."
+          },
+          {
+            "icone": "cartao",
+            "titulo": "PIX direto na sua conta",
+            "texto": "Sem intermediário, sem prazo de repasse. QR Code gerado no fechamento e o dinheiro cai na hora."
+          },
+          {
+            "icone": "casa",
+            "titulo": "Personalizado pra você",
+            "texto": "Com a identidade do seu negócio: cor, logo, fotos. Sua marca brilha, não some no feed."
+          }
+        ]
+      }
+    },
+    {
+      "id": "como-funciona",
+      "tipo": "como-funciona",
+      "visivel": true,
+      "dados": {
+        "tag": "Como funciona",
+        "titulo": "Um cardápio que parece *um app de verdade.*",
+        "texto": "Seu cliente abre o link no celular e tem a mesma experiência de um iFood — só que esse cardápio é seu. Bonito, rápido, com fotos e categorias, e pedido fechando direto no WhatsApp com PIX gerado na hora.",
+        "itens": [
+          {
+            "titulo": "Funciona pra qualquer segmento.",
+            "texto": "Hamburgueria, açaiteria, pizzaria, marmita, açougue, sushi — o sistema se adapta."
+          },
+          {
+            "titulo": "Pedido cai automático no painel.",
+            "texto": "Você imprime, prepara e entrega. Tudo organizado por kanban."
+          },
+          {
+            "titulo": "Sem instalar nada.",
+            "texto": "Cliente abre o link no navegador. Funciona em qualquer celular."
+          }
+        ],
+        "imagens": [
+          {
+            "url": "assets/cardapio-acai-screen.png",
+            "alt": "Cardápio Açaí da Lory"
+          },
+          {
+            "url": "assets/cardapio-lorys-screen.png",
+            "alt": "Cardápio Lory's Burger"
+          },
+          {
+            "url": "assets/cardapio-burger-screen.png",
+            "alt": "Lista de hambúrgueres"
+          }
+        ]
+      }
+    },
+    {
+      "id": "gestor",
+      "tipo": "gestor",
+      "visivel": true,
+      "dados": {
+        "tag": "Painel do gestor",
+        "titulo": "Pedido entrou. *Sua operação acompanha tudo.*",
+        "texto": "Do WhatsApp para o painel, do painel para a produção. O EstimaFood organiza pedido, status, entrega, caixa e histórico para sua equipe trabalhar com clareza.",
+        "pontos": [
+          "Pedidos separados por etapa, com filtro por balcão, delivery e mesa.",
+          "Status em tempo real para acompanhar produção, entrega e pagamento.",
+          "Caixa, relatórios e histórico para decidir com dados, não no escuro."
+        ],
+        "flutuante_rotulo": "Operação ao vivo",
+        "flutuante_titulo": "Pedido novo cai organizado, pronto para produzir.",
+        "flutuante_texto": "WhatsApp + painel + impressão",
+        "passos": [
+          {
+            "titulo": "1. Cliente pede",
+            "texto": "Cardápio próprio no celular."
+          },
+          {
+            "titulo": "2. Equipe acompanha",
+            "texto": "Status e produção no painel."
+          },
+          {
+            "titulo": "3. Loja controla",
+            "texto": "Caixa, entrega e histórico."
+          }
+        ],
+        "videos_tag": "Apresentação do gestor",
+        "videos_titulo": "Veja o sistema *rodando na prática.*",
+        "videos_texto": "Do pedido entrando ao acompanhamento da produção, os vídeos mostram a experiência real que a equipe usa no dia a dia para vender, organizar e entregar melhor.",
+        "videos_selos": [
+          "Pedidos ao vivo",
+          "Painel intuitivo",
+          "Controle na mão"
+        ],
+        "videos": [
+          {
+            "video": "TLKI03_7mO8",
+            "legenda": "Fluxo do gestor"
+          },
+          {
+            "video": "llK20bUdByk",
+            "legenda": "Operação em ação"
+          }
+        ]
+      }
+    },
+    {
+      "id": "conta",
+      "tipo": "conta",
+      "visivel": true,
+      "dados": {
+        "tag": "A conta na ponta do lápis",
+        "titulo": "Quanto você está *doando* de graça hoje?",
+        "texto": "Simulação real para quem fatura **R$ 20 mil por mês** em pedidos delivery.",
+        "a_rotulo": "Plataforma com taxa",
+        "a_linhas": [
+          {
+            "nome": "Faturamento mensal",
+            "valor": "R$ 20.000"
+          },
+          {
+            "nome": "Comissão (~20%)",
+            "valor": "– R$ 4.000"
+          },
+          {
+            "nome": "Taxa de repasse / cartão",
+            "valor": "– R$ 400"
+          }
+        ],
+        "a_total_rotulo": "Você perde",
+        "a_total_valor": "R$ 4.400",
+        "b_rotulo": "EstimaFood Delivery",
+        "b_linhas": [
+          {
+            "nome": "Faturamento mensal",
+            "valor": "R$ 20.000"
+          },
+          {
+            "nome": "PIX direto na sua conta",
+            "valor": "R$ 0"
+          }
+        ],
+        "b_total_rotulo": "Fica com você",
+        "b_total_valor": "R$ 19.950",
+        "conclusao_titulo": "A diferença paga *um funcionário*. Por mês.",
+        "conclusao_texto": "No ano, isso vira mais de R$ 48.000 que continuam no seu caixa em vez de financiar quem te cobra taxa abusiva."
+      }
+    },
+    {
+      "id": "oferta",
+      "tipo": "oferta",
+      "visivel": true,
+      "dados": {
+        "selo": "Vagas\nlimitadas\n· Brasil ·",
+        "tag": "★ Promoção de lançamento",
+        "titulo": "Comece hoje. *Pague menos que um almoço* no primeiro mês.",
+        "preco_de": "de R$ {preco_de}",
+        "periodo": "no primeiro mês",
+        "periodo_sub": "depois mensalidade fixa — sem comissão por pedido",
+        "itens": [
+          "Cardápio digital com sua marca",
+          "Pedidos automáticos no WhatsApp",
+          "PIX direto na sua conta",
+          "Painel do gestor + impressão",
+          "Cupons, fidelidade e indicações",
+          "Suporte humano local",
+          "Setup e migração com a gente",
+          "Sem fidelidade, cancela quando quiser"
+        ],
+        "botao": "Quero garantir minha vaga",
+        "nota": "A oferta R$ {preco} vale apenas para as primeiras lojas cadastradas em todo o Brasil."
+      }
+    },
+    {
+      "id": "faq",
+      "tipo": "faq",
+      "visivel": true,
+      "dados": {
+        "tag": "Dúvidas comuns",
+        "titulo": "Respondendo o que você *provavelmente está pensando.*",
+        "itens": [
+          {
+            "pergunta": "Funciona pro meu segmento? (hambúrguer, açaí, pizza, marmita, açougue…)",
+            "resposta": "Funciona. O sistema foi desenhado pra adaptar fluxos diferentes: hamburgueria com adicionais, pizzaria com meio a meio, açougue com peso variável, açaiteria com complementos por nível, marmitaria com kit semanal. Se opera com delivery, opera aqui."
+          },
+          {
+            "pergunta": "Preciso instalar alguma coisa? Funciona em celular antigo?",
+            "resposta": "Nada de instalar app. Seu cliente abre o link no navegador (Chrome, Safari) e funciona em qualquer celular. Pro seu gestor, basta um navegador também — pode ser pelo notebook, tablet ou celular."
+          },
+          {
+            "pergunta": "E o WhatsApp? Preciso ter um número novo?",
+            "resposta": "Você usa um número dedicado pra loja (recomendamos um chip separado do pessoal). A gente conecta esse número no sistema, e ele responde automático, envia status dos pedidos e mantém o histórico organizado por cliente."
+          },
+          {
+            "pergunta": "Como funciona o PIX? O dinheiro vem pra mim mesmo?",
+            "resposta": "Sim, 100% direto. Você cadastra suas chaves PIX no painel e o QR Code é gerado em cada pedido. O cliente paga, e o valor cai na SUA conta na hora. Não passamos pelo seu dinheiro — nem temos como."
+          },
+          {
+            "pergunta": "Tem fidelidade ou multa de cancelamento?",
+            "resposta": "Não. Você paga mês a mês. Se quiser sair, sai. Nenhuma multa, nenhum contrato amarrado. Confiamos que o sistema vale a pena pelo que entrega, não por trava jurídica."
+          },
+          {
+            "pergunta": "Depois do primeiro mês promocional, quanto fica?",
+            "resposta": "Mensalidade fixa, sem percentual por pedido. Quando a gente conversar, eu te passo o valor exato do plano que combina com o tamanho da sua operação. Mesmo no plano cheio, geralmente cabe no que você gasta em uma única semana de taxa de plataforma."
+          },
+          {
+            "pergunta": "Vocês ajudam a montar o cardápio e migrar?",
+            "resposta": "Ajudamos sim. Setup e migração estão incluídos. Você manda fotos e descrições (ou a gente extrai do seu cardápio atual), montamos a estrutura, configuramos pagamento, área de entrega e treinamos sua equipe."
+          }
+        ]
+      }
+    },
+    {
+      "id": "contato",
+      "tipo": "contato",
+      "visivel": true,
+      "dados": {
+        "tag": "Fale com a gente",
+        "titulo": "Quer *saber mais?*",
+        "texto": "Fale com a nossa equipe e descubra como ter seu próprio sistema de delivery. Sem enrolação, sem vendedor robô. Demonstração ao vivo em 10 minutos.",
+        "botao": "Chame agora no WhatsApp",
+        "segmentos": [
+          "Hamburguerias",
+          "Açaiterias",
+          "Pizzarias",
+          "Restaurantes",
+          "Marmitarias",
+          "Açougues"
+        ],
+        "nota": "Atendimento para todo o Brasil · Resposta em até 30 minutos em horário comercial"
+      }
+    }
+  ]
+}

@@ -223,6 +223,7 @@ th{
   background:var(--surface2)!important;border-bottom:1px solid var(--pf-line)!important;padding:11px 14px!important;white-space:nowrap;
 }
 td{font-size:13.5px!important;padding:13px 14px!important;border-bottom:1px solid var(--pf-line);font-variant-numeric:tabular-nums}
+tbody td{border-color:var(--pf-line)}  /* gestor.css fixa uma cor clara aqui; no tema escuro virava linha branca */
 tr:last-child > td{border-bottom:0}
 th:first-child,td:first-child{padding-left:20px!important}
 th:last-child,td:last-child{padding-right:20px!important}
@@ -543,4 +544,73 @@ tbody tr:hover{background:var(--surface2)}
   .qpill{border-left:0!important;border-top:1px solid var(--pf-line)!important;padding:12px 0 0!important;min-width:0!important;flex:1 1 30%}
   .cat-actions .sw select{max-width:110px}
   .saq-forma{flex-wrap:wrap}
+}
+
+/* ── 32. Estoque ────────────────────────────────────────────────────── */
+/* aviso do que está acabando: a única área colorida da tela */
+.est-alerta{border:1px solid rgba(217,119,6,.32);background:rgba(245,158,11,.09);border-radius:var(--pf-r-m);padding:16px 18px;margin-bottom:20px}
+.est-alerta-title{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:750;color:var(--text);margin-bottom:12px}
+.est-alerta-title svg{color:var(--pf-warn);flex-shrink:0}
+.est-alerta-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.est-alerta-item{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);border:1px solid var(--pf-line);border-radius:10px;padding:10px 12px}
+.est-alerta-nome{font-size:13.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.est-alerta-sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+
+.est-filtros{display:inline-flex;border:1px solid var(--pf-line-strong);border-radius:var(--pf-r-s);overflow:hidden;background:var(--surface)}
+.est-filtros button{padding:0 14px;min-height:36px;font-size:12.5px;font-weight:650;border:0;border-left:1px solid var(--pf-line);background:none;color:var(--muted);cursor:pointer;white-space:nowrap}
+.est-filtros button:first-child{border-left:0}
+.est-filtros button:hover{color:var(--text)}
+.est-filtros button.on{background:var(--accent-dim);color:var(--accent)}
+.est-filtros button:focus-visible,.est-link:focus-visible,.est-resumo-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+.est-nome{font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.est-sub{font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.4}
+.est-qty{font-size:16px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+.est-qty span{font-size:12.5px;font-weight:600;color:var(--muted)}
+.est-qty.warn{color:var(--pf-warn)}
+.est-qty.bad{color:var(--pf-bad)}
+.est-bar{height:5px;border-radius:99px;background:var(--surface2);overflow:hidden;margin-top:7px;max-width:150px}
+.est-bar > i{display:block;height:100%;border-radius:99px;background:var(--pf-ok)}
+.est-bar.warn > i{background:var(--pf-warn)}
+.est-bar.bad > i{background:var(--pf-bad)}
+.est-link{background:none;border:0;padding:0;font:inherit;font-weight:650;color:var(--accent);cursor:pointer}
+.est-link:hover{text-decoration:underline}
+
+.est-ficha-add{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:10px;align-items:end}
+.est-ficha-add .btn{min-height:40px}
+.est-resumo-row{width:100%;background:none;border:0;border-bottom:1px solid var(--pf-line);text-align:left;cursor:pointer;font:inherit;color:inherit}
+.est-resumo-row:last-child{border-bottom:0}
+
+.est-vinculo{border-top:1px solid var(--pf-line);margin-top:6px;padding-top:14px}
+.est-vinculo-title{font-size:13.5px;font-weight:750;color:var(--text)}
+
+#est-side-badge{background:#c27a00!important;color:#fff!important}
+
+/* aviso de item acabando: aparece em qualquer tela, no canto de cima */
+#est-avisos{position:fixed;top:68px;right:20px;z-index:9000;display:flex;flex-direction:column;gap:8px;width:min(400px,calc(100vw - 24px));pointer-events:none}
+.est-aviso{pointer-events:auto;display:flex;align-items:center;gap:12px;background:var(--surface);color:var(--text);border:1px solid var(--pf-line-strong);border-left:4px solid var(--pf-warn);border-radius:var(--pf-r-m);box-shadow:var(--pf-shadow-pop);padding:12px 12px 12px 14px;animation:estAvisoIn .22s ease-out}
+.est-aviso.bad{border-left-color:var(--pf-bad)}
+.est-aviso-ico{color:var(--pf-warn);flex-shrink:0;display:flex}
+.est-aviso.bad .est-aviso-ico{color:var(--pf-bad)}
+.est-aviso-txt{flex:1;min-width:0}
+.est-aviso-txt b{display:block;font-size:13.5px;font-weight:750;line-height:1.3}
+.est-aviso-txt span{display:block;font-size:12.5px;color:var(--muted);margin-top:2px}
+.est-aviso-x{width:26px;height:26px;border:0;background:none;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;border-radius:6px;flex-shrink:0}
+.est-aviso-x:hover{color:var(--text);background:var(--surface2)}
+@keyframes estAvisoIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.est-aviso{animation:none}}
+@media print{#est-avisos{display:none!important}}
+
+@media(max-width:900px){
+  .est-ficha-add{grid-template-columns:1fr}
+  .est-filtros{width:100%}
+  .est-filtros button{flex:1;padding:0 8px}
+  #page-estoque .gz-head-actions{width:100%}
+  #page-estoque .gz-head-actions .btn{flex:1;justify-content:center}
+  #est-avisos{top:60px;right:12px}
+  /* no celular a tabela rola de lado em vez de espremer o nome do item */
+  #estoque-list table{min-width:820px}
+  #estoque-list td:first-child{min-width:210px}
+  #est-mov-list table{min-width:740px}
+  #est-mov-list td:nth-child(2){min-width:160px}
 }

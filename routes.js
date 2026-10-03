@@ -16,6 +16,7 @@ const { buildOrderTrackingMessage } = require('./order-message')
 const { phoneLookupArgs, phoneLookupSql, phonesMatch, phoneDigitsSql } = require('./phone-utils')
 const _svBot = require('./suporte-vendas-bot') // WhatsApp de Suporte e Vendas (WuzAPI ou Evolution)
 const _mkt = require('./marketing-flows') // Marketing: fluxos de mensagens e disparos (WuzAPI)
+const _site = require('./site-admin') // Site institucional editável pelo admin + contas de teste grátis
 const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (como sempre foi) ou WuzAPI (alternativa leve)
 
 // ── Helper: notifica cliente quando PIX é confirmado (online ou manual) ──────
@@ -357,6 +358,8 @@ function _svBotInit(ctx) {
     marketing: _mkt
   })
   _mkt.init({ db: ctx.db, log: ctx.log, bot: _svBot, uploadsDir: ctx.UPLOADS_DIR })
+  _site.init({ db: ctx.db, log: ctx.log, marcarDirty: ctx.marcarDirty, fazerBackup: ctx.fazerBackup, hashPassword: ctx.hashPassword, verifyPassword: ctx.verifyPassword,
+    clientIp: ctx.clientIp, linkCardapioTenant: ctx.linkCardapioTenant, uploadsDir: ctx.UPLOADS_DIR, bot: _svBot })
 }
 
 let _tenantWaPronto = false
@@ -9226,6 +9229,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
   }
 
   // ── Marketing: fluxos de mensagens e disparos (painel admin) ──
+  // Site institucional (conteúdo editável) e contas de teste grátis — site-admin.js
+  if (upath.startsWith('/api/site/') || upath === '/api/admin/site' || upath.startsWith('/api/admin/site/') ||
+      upath === '/api/admin/testes' || upath.startsWith('/api/admin/testes/')) {
+    return _site.api(req, res, { upath, send, readBody, validarSessaoAdmin })
+  }
+
   if (upath === '/api/admin/marketing' || upath.startsWith('/api/admin/marketing/')) {
     return _mkt.api(req, res, { upath, send, readBody, validarSessaoAdmin })
   }

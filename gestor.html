@@ -344,7 +344,7 @@ function temaToggleRapido() {
   <div class="sidebar-group" id="sg-suprimentos">
   <button class="si" id="sn-estoque" onclick="nav('estoque')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="9" width="12" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="2" width="12" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><circle cx="5" cy="4.5" r="1" fill="currentColor"/><circle cx="5" cy="11.5" r="1" fill="currentColor"/></svg>
-    Controle de estoque
+    Controle de estoque <span class="sbc" id="est-side-badge" style="display:none" title="Itens para repor"></span>
   </button>
   <button class="si" id="sn-fornecedores" onclick="nav('fornecedores')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>
@@ -2430,69 +2430,128 @@ Use no seu próximo pedido.</textarea>
 <div class="page" id="page-estoque">
   <div class="gz-page-head">
     <div>
-      <div class="gz-page-title">Controle de Estoque</div>
-      <div class="gz-page-sub">Ingredientes e movimentações em tempo real</div>
+      <div class="gz-page-title">Controle de estoque</div>
+      <div class="gz-page-sub">Ingredientes e produtos de revenda, com baixa automática a cada venda</div>
     </div>
     <div class="gz-head-actions">
-      <button class="btn bg" onclick="openModal('modal-add-ingrediente')">
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        Novo ingrediente
+      <button class="btn bg" onclick="estAbrirSaida()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Registrar saída
       </button>
-      <button class="btn bp" onclick="openModal('modal-estoque')">
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 13V3M3 8l5-5 5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <button class="btn bg" onclick="estAbrirEntrada()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Registrar entrada
       </button>
-      <button class="btn bd" onclick="openModal('modal-saida-estoque')">
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 3v10M3 8l5 5 5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        Registrar saída
+      <button class="btn bp" onclick="estAbrirNovo()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        Novo item
       </button>
     </div>
   </div>
 
-  <!-- Stats -->
   <div class="gz-stats-grid">
     <div class="gz-stat-card" style="--sc:#3b82f6">
       <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v1m18 0v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8m18 0H3m5 4h8"/></svg></div>
-      <div class="gz-stat-val" id="est-stat-total">0</div><div class="gz-stat-lbl">Ingredientes</div>
+      <div class="gz-stat-val" id="est-stat-total">0</div><div class="gz-stat-lbl">Itens no estoque</div>
     </div>
-    <div class="gz-stat-card" style="--sc:#ef4444">
+    <div class="gz-stat-card" style="--sc:#d97706">
       <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg></div>
-      <div class="gz-stat-val" id="est-stat-baixo" style="color:#ef4444">0</div><div class="gz-stat-lbl">Estoque baixo</div>
+      <div class="gz-stat-val" id="est-stat-baixo">0</div><div class="gz-stat-lbl">Para repor</div>
     </div>
     <div class="gz-stat-card" style="--sc:#22c55e">
       <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></div>
-      <div class="gz-stat-val" id="est-stat-valor">R$0</div><div class="gz-stat-lbl">Valor em estoque</div>
+      <div class="gz-stat-val" id="est-stat-valor">R$ 0,00</div><div class="gz-stat-lbl">Valor em estoque</div>
     </div>
     <div class="gz-stat-card" style="--sc:#8b5cf6">
-      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div>
-      <div class="gz-stat-val" id="est-stat-entradas">0</div><div class="gz-stat-lbl">Mov. hoje</div>
+      <div class="gz-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg></div>
+      <div class="gz-stat-val" id="est-stat-entradas">0</div><div class="gz-stat-lbl">Movimentações hoje</div>
     </div>
   </div>
 
-  <!-- Busca -->
-  <div class="sbox" style="margin-bottom:14px;max-width:300px">
-    <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-    <input id="est-search" placeholder="Buscar ingrediente..." oninput="renderEstoque()" style="width:220px">
+  <!-- Aviso: o que está acabando (só aparece quando há algo para repor) -->
+  <div id="est-alerta"></div>
+
+  <div class="pf-tabs" data-group="estoque" role="tablist">
+    <button class="pf-tab on" role="tab" data-tab="itens" onclick="pfTab(this,'itens')">Itens</button>
+    <button class="pf-tab" role="tab" data-tab="ficha" onclick="pfTab(this,'ficha')">Ficha técnica</button>
+    <button class="pf-tab" role="tab" data-tab="movs" onclick="pfTab(this,'movs');estCarregarMovs()">Movimentações</button>
   </div>
 
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-      <div>
-        <div style="font-size:13px;font-weight:800;color:var(--text)">Ficha tecnica</div>
-        <div style="font-size:11.5px;color:var(--muted)">Receita de consumo por produto</div>
+  <!-- Itens -->
+  <div class="pf-panel on" data-group="estoque" data-panel="itens">
+    <div class="pf-toolbar" style="align-items:center">
+      <div class="pf-search pf-grow" style="max-width:340px">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <input class="form-input" id="est-search" placeholder="Buscar item" oninput="renderEstoque()" aria-label="Buscar item do estoque">
       </div>
-      <div class="sw" style="min-width:240px;flex:1;max-width:420px"><select class="form-input" id="est-receita-item" style="width:100%" onchange="renderReceitaEstoque()"></select></div>
+      <div class="est-filtros" id="est-filtros" role="group" aria-label="Filtrar itens">
+        <button class="on" data-filtro="todos" onclick="estFiltrar('todos')">Todos</button>
+        <button data-filtro="repor" onclick="estFiltrar('repor')">Para repor</button>
+        <button data-filtro="sem-vinculo" onclick="estFiltrar('sem-vinculo')">Sem baixa automática</button>
+      </div>
+      <span class="pf-count" id="est-count" style="margin-left:auto"></span>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;align-items:end;margin-bottom:12px">
-      <div class="form-row" style="margin:0"><label class="form-label">Ingrediente</label><div class="sw" style="width:100%"><select class="form-input" id="est-receita-ingrediente" style="width:100%"></select></div></div>
-      <div class="form-row" style="margin:0"><label class="form-label">Qtd por item</label><input class="form-input" id="est-receita-qty" type="number" min="0.001" step="0.001" placeholder="Ex: 0.15"></div>
-      <button class="btn bp" onclick="saveReceitaEstoque()" style="justify-content:center;height:38px">Adicionar</button>
-    </div>
-    <div id="est-receita-list"></div>
+    <div id="estoque-list"></div>
   </div>
 
-  <!-- Lista -->
-  <div id="estoque-list"></div>
+  <!-- Ficha técnica -->
+  <div class="pf-panel" data-group="estoque" data-panel="ficha">
+    <div class="pf-grid-2" style="align-items:start">
+      <div class="pf-card">
+        <div class="pf-card-head" style="margin-bottom:14px">
+          <div>
+            <div class="pf-card-title">O que cada venda consome</div>
+            <div class="pf-card-sub">Escolha um produto do cardápio e diga o que sai do estoque quando ele é vendido</div>
+          </div>
+        </div>
+        <div class="pf-field" style="margin-bottom:14px">
+          <label class="form-label" for="est-receita-item">Produto do cardápio</label>
+          <div class="sw" style="width:100%"><select class="form-input" id="est-receita-item" style="width:100%" onchange="renderReceitaEstoque()"></select></div>
+        </div>
+        <div id="est-receita-list" style="margin-bottom:14px"></div>
+        <div class="est-ficha-add">
+          <div class="pf-field">
+            <label class="form-label" for="est-receita-ingrediente">Item do estoque</label>
+            <div class="sw" style="width:100%"><select class="form-input" id="est-receita-ingrediente" style="width:100%" onchange="estFichaUnidade()"></select></div>
+          </div>
+          <div class="pf-field">
+            <label class="form-label" for="est-receita-qty">Quantidade por venda <span id="est-receita-un" style="font-weight:500;color:var(--muted)"></span></label>
+            <input class="form-input" id="est-receita-qty" type="number" min="0" step="any" inputmode="decimal" placeholder="Ex.: 1">
+          </div>
+          <button class="btn bp" onclick="saveReceitaEstoque()" style="justify-content:center">Vincular</button>
+        </div>
+        <div class="pf-help">Use a mesma unidade do item: se a muçarela está em kg e a pizza leva 150 g, informe 0,15. Para produto de revenda, como refrigerante, é 1.</div>
+      </div>
+
+      <div>
+        <div class="pf-note" style="margin-bottom:14px">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 7.2v3.6M8 5.1v.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <div>
+            <b style="display:block;margin-bottom:3px">Quando o estoque baixa</b>
+            Pedido de delivery, retirada e balcão: quando entra em preparo. Comanda de mesa: assim que o item é lançado. Se o pedido ou o item for cancelado, a quantidade volta para o estoque. O vínculo vale para as vendas feitas depois que ele é criado.
+          </div>
+        </div>
+        <div class="pf-card pf-flush">
+          <div class="pf-card-head">
+            <div>
+              <div class="pf-card-title">Produtos com baixa automática</div>
+              <div class="pf-card-sub">Clique em um produto para abrir a ficha dele</div>
+            </div>
+          </div>
+          <div id="est-receita-resumo"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Movimentações -->
+  <div class="pf-panel" data-group="estoque" data-panel="movs">
+    <div class="pf-toolbar" style="align-items:center">
+      <div class="sw" style="min-width:220px;max-width:320px;flex:1"><select class="form-input" id="est-mov-filtro" style="width:100%" onchange="estCarregarMovs()" aria-label="Filtrar movimentações por item"><option value="">Todos os itens</option></select></div>
+      <span class="pf-count" id="est-mov-count" style="margin-left:auto"></span>
+    </div>
+    <div id="est-mov-list"></div>
+  </div>
 </div>
 
 <!-- MEU DESEMPENHO -->
@@ -5425,15 +5484,15 @@ Use no seu próximo pedido.</textarea>
 </div>
 
 <!-- Estoque -->
-<!-- Modal Novo Ingrediente -->
+<!-- Novo item de estoque -->
 <div class="modal-bg" id="modal-add-ingrediente">
-  <div class="modal" style="max-width:420px">
-    <button class="modal-close" onclick="closeModal('modal-add-ingrediente')"></button>
-    <h2>Novo Ingrediente</h2>
+  <div class="modal" style="max-width:460px">
+    <button class="modal-close" onclick="closeModal('modal-add-ingrediente')" aria-label="Fechar"></button>
+    <h2>Novo item de estoque</h2>
     <div class="form-row-2">
-      <div class="form-row"><label class="form-label">Nome</label><input class="form-input" id="ing-nome" placeholder="Ex: Pão de hambúrguer"></div>
-      <div class="form-row"><label class="form-label">Unidade</label>
-        <div class="sw" style="width:100%"><select class="form-input" id="ing-unit" style="width:100%">
+      <div class="form-row"><label class="form-label" for="ing-nome">Nome</label><input class="form-input" id="ing-nome" placeholder="Ex.: Coca-Cola lata 350 ml"></div>
+      <div class="form-row"><label class="form-label" for="ing-unit">Unidade</label>
+        <div class="sw" style="width:100%"><select class="form-input" id="ing-unit" style="width:100%" onchange="estNovoUnidade()">
           <option value="un">un (unidades)</option>
           <option value="kg">kg (quilos)</option>
           <option value="g">g (gramas)</option>
@@ -5445,71 +5504,96 @@ Use no seu próximo pedido.</textarea>
       </div>
     </div>
     <div class="form-row-2">
-      <div class="form-row"><label class="form-label">Quantidade inicial</label><input class="form-input" id="ing-qty" type="number" min="0" placeholder="0"></div>
-      <div class="form-row"><label class="form-label">Estoque mínimo (alerta)</label><input class="form-input" id="ing-min" type="number" min="0" placeholder="Ex: 10"></div>
+      <div class="form-row"><label class="form-label" for="ing-qty">Quantidade que você tem hoje</label><input class="form-input" id="ing-qty" type="number" min="0" step="any" inputmode="decimal" placeholder="Ex.: 48"></div>
+      <div class="form-row"><label class="form-label" for="ing-min">Avisar quando chegar em</label><input class="form-input" id="ing-min" type="number" min="0" step="any" inputmode="decimal" placeholder="Ex.: 12"></div>
     </div>
-    <div class="form-row"><label class="form-label">Custo unitário (R$)</label><input class="form-input" id="ing-custo" type="number" step="0.01" min="0" placeholder="0,00"></div>
-    <div style="display:flex;gap:8px;margin-top:4px">
+    <div class="form-row"><label class="form-label" for="ing-custo">Custo por unidade (R$) <span style="font-weight:500;color:var(--muted)">opcional</span></label><input class="form-input" id="ing-custo" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0,00"></div>
+
+    <div class="est-vinculo">
+      <div class="est-vinculo-title">Baixa automática</div>
+      <div class="pf-help" style="margin:2px 0 10px">Escolha o produto do cardápio que usa este item. A cada venda dele, o estoque diminui sozinho. Dá para vincular mais produtos depois, na aba Ficha técnica.</div>
+      <div class="form-row-2" style="margin-bottom:0">
+        <div class="form-row" style="margin-bottom:0"><label class="form-label" for="ing-produto">Produto do cardápio</label>
+          <div class="sw" style="width:100%"><select class="form-input" id="ing-produto" style="width:100%"><option value="">Nenhum por enquanto</option></select></div>
+        </div>
+        <div class="form-row" style="margin-bottom:0"><label class="form-label" for="ing-produto-qty">Quantidade por venda <span id="ing-produto-un" style="font-weight:500;color:var(--muted)">(un)</span></label><input class="form-input" id="ing-produto-qty" type="number" min="0" step="any" inputmode="decimal" value="1"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-add-ingrediente')">Cancelar</button>
-      <button class="btn bp" style="flex:1;justify-content:center" onclick="saveIngrediente()">Salvar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="saveIngrediente()">Salvar item</button>
     </div>
   </div>
 </div>
 
-<!-- Modal Registrar Entrada -->
+<!-- Registrar entrada -->
 <div class="modal-bg" id="modal-estoque">
   <div class="modal" style="max-width:420px">
-    <button class="modal-close" onclick="closeModal('modal-estoque')"></button>
-    <h2>Registrar Entrada</h2>
-    <div class="form-row"><label class="form-label">Ingrediente</label>
-      <div class="sw" style="width:100%"><select class="form-input" id="est-sel-ingrediente" style="width:100%"><option value="">Selecione...</option></select></div>
+    <button class="modal-close" onclick="closeModal('modal-estoque')" aria-label="Fechar"></button>
+    <h2>Registrar entrada</h2>
+    <div class="form-row"><label class="form-label" for="est-sel-ingrediente">Item</label>
+      <div class="sw" style="width:100%"><select class="form-input" id="est-sel-ingrediente" style="width:100%"><option value="">Selecione</option></select></div>
     </div>
     <div class="form-row-2">
-      <div class="form-row"><label class="form-label">Quantidade</label><input class="form-input" id="est-qty-entrada" type="number" min="1" placeholder="Ex: 100"></div>
-      <div class="form-row"><label class="form-label">Custo total (R$)</label><input class="form-input" id="est-custo-entrada" type="number" step="0.01" min="0" placeholder="0,00"></div>
+      <div class="form-row"><label class="form-label" for="est-qty-entrada">Quantidade que chegou</label><input class="form-input" id="est-qty-entrada" type="number" min="0" step="any" inputmode="decimal" placeholder="Ex.: 24"></div>
+      <div class="form-row"><label class="form-label" for="est-custo-entrada">Valor total da compra (R$)</label><input class="form-input" id="est-custo-entrada" type="number" step="0.01" min="0" inputmode="decimal" placeholder="Opcional"></div>
     </div>
-    <div class="form-row"><label class="form-label">Observação (opcional)</label><input class="form-input" id="est-obs-entrada" placeholder="Ex: Nota fiscal 123"></div>
+    <div class="form-row"><label class="form-label" for="est-obs-entrada">Observação <span style="font-weight:500;color:var(--muted)">opcional</span></label><input class="form-input" id="est-obs-entrada" placeholder="Ex.: Nota fiscal 123"></div>
     <div style="display:flex;gap:8px;margin-top:4px">
       <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-estoque')">Cancelar</button>
-      <button class="btn bp" style="flex:1;justify-content:center" onclick="registrarEntrada()">Registrar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="registrarEntrada()">Registrar entrada</button>
     </div>
   </div>
 </div>
 
-<!-- Modal Registrar Saída (novo) -->
+<!-- Registrar saída -->
 <div class="modal-bg" id="modal-saida-estoque">
   <div class="modal" style="max-width:420px">
-    <button class="modal-close" onclick="closeModal('modal-saida-estoque')"></button>
-    <h2>Registrar Saída ↓</h2>
-    <div class="form-row"><label class="form-label">Ingrediente</label>
-      <div class="sw" style="width:100%"><select class="form-input" id="est-sel-saida" style="width:100%" onchange="estAtualizarDisponivel()"><option value="">Selecione...</option></select></div>
+    <button class="modal-close" onclick="closeModal('modal-saida-estoque')" aria-label="Fechar"></button>
+    <h2>Registrar saída</h2>
+    <div class="pf-help" style="margin:-4px 0 14px">Para o que saiu sem ser por venda: perda, vencimento, consumo interno.</div>
+    <div class="form-row"><label class="form-label" for="est-sel-saida">Item</label>
+      <div class="sw" style="width:100%"><select class="form-input" id="est-sel-saida" style="width:100%" onchange="estAtualizarDisponivel()"><option value="">Selecione</option></select></div>
     </div>
-    <div id="est-saida-info" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.15);border-radius:9px;font-size:12px;color:var(--muted)">
-      Disponível: <strong id="est-saida-disponivel" style="color:var(--text)">—</strong>
-    </div>
-    <div class="form-row"><label class="form-label">Quantidade a retirar</label><input class="form-input" id="est-qty-saida" type="number" min="0.001" step="0.001" placeholder="Ex: 5"></div>
-    <div class="form-row"><label class="form-label">Motivo (opcional)</label><input class="form-input" id="est-motivo-saida" placeholder="Ex: Uso na produção, Vencimento..."></div>
+    <div id="est-saida-info" class="pf-help" style="display:none;margin:-6px 0 12px">Disponível: <strong id="est-saida-disponivel" style="color:var(--text)">—</strong></div>
+    <div class="form-row"><label class="form-label" for="est-qty-saida">Quantidade a retirar</label><input class="form-input" id="est-qty-saida" type="number" min="0" step="any" inputmode="decimal" placeholder="Ex.: 5"></div>
+    <div class="form-row"><label class="form-label" for="est-motivo-saida">Motivo <span style="font-weight:500;color:var(--muted)">opcional</span></label><input class="form-input" id="est-motivo-saida" placeholder="Ex.: Vencimento"></div>
     <div style="display:flex;gap:8px;margin-top:4px">
       <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-saida-estoque')">Cancelar</button>
-      <button class="btn bd" style="flex:1;justify-content:center" onclick="registrarSaida()">↓ Registrar saída</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="registrarSaida()">Registrar saída</button>
     </div>
   </div>
 </div>
 
-<!-- Modal Editar Ingrediente -->
+<!-- Editar item de estoque -->
 <div class="modal-bg" id="modal-edit-ingrediente">
-  <div class="modal" style="max-width:420px">
-    <button class="modal-close" onclick="closeModal('modal-edit-ingrediente')"></button>
-    <h2>Editar Ingrediente</h2>
+  <div class="modal" style="max-width:460px">
+    <button class="modal-close" onclick="closeModal('modal-edit-ingrediente')" aria-label="Fechar"></button>
+    <h2>Editar item</h2>
     <input type="hidden" id="edit-ing-id">
-    <div class="form-row"><label class="form-label">Nome</label><input class="form-input" id="edit-ing-nome" placeholder="Nome do ingrediente"></div>
     <div class="form-row-2">
-      <div class="form-row"><label class="form-label">Quantidade atual</label><input class="form-input" id="edit-ing-qty" type="number" min="0"></div>
-      <div class="form-row"><label class="form-label">Estoque mínimo</label><input class="form-input" id="edit-ing-min" type="number" min="0"></div>
+      <div class="form-row"><label class="form-label" for="edit-ing-nome">Nome</label><input class="form-input" id="edit-ing-nome" placeholder="Nome do item"></div>
+      <div class="form-row"><label class="form-label" for="edit-ing-unit">Unidade</label>
+        <div class="sw" style="width:100%"><select class="form-input" id="edit-ing-unit" style="width:100%">
+          <option value="un">un (unidades)</option>
+          <option value="kg">kg (quilos)</option>
+          <option value="g">g (gramas)</option>
+          <option value="L">L (litros)</option>
+          <option value="ml">ml (mililitros)</option>
+          <option value="cx">cx (caixas)</option>
+          <option value="pct">pct (pacotes)</option>
+        </select></div>
+      </div>
     </div>
-    <div class="form-row"><label class="form-label">Custo unitário (R$)</label><input class="form-input" id="edit-ing-custo" type="number" step="0.01" min="0"></div>
+    <div class="form-row-2">
+      <div class="form-row"><label class="form-label" for="edit-ing-qty">Quantidade em estoque</label><input class="form-input" id="edit-ing-qty" type="number" min="0" step="any" inputmode="decimal"></div>
+      <div class="form-row"><label class="form-label" for="edit-ing-min">Avisar quando chegar em</label><input class="form-input" id="edit-ing-min" type="number" min="0" step="any" inputmode="decimal"></div>
+    </div>
+    <div class="pf-help" style="margin:-6px 0 12px">Mudar a quantidade aqui registra um ajuste de contagem no histórico.</div>
+    <div class="form-row"><label class="form-label" for="edit-ing-custo">Custo por unidade (R$)</label><input class="form-input" id="edit-ing-custo" type="number" step="0.01" min="0" inputmode="decimal"></div>
     <div style="display:flex;gap:8px;margin-top:4px">
-      <button class="btn bd" style="padding:7px 12px" onclick="deleteIngrediente()">️</button>
+      <button class="btn bd" onclick="deleteIngrediente()">Excluir</button>
       <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-edit-ingrediente')">Cancelar</button>
       <button class="btn bp" style="flex:1;justify-content:center" onclick="saveEditIngrediente()">Salvar</button>
     </div>
@@ -7474,51 +7558,6 @@ Use no seu próximo pedido.</textarea>
     if(dy > 60 && document.getElementById('m-mais').style.display !== 'none'){ mClose(); }
   }, {passive:true});
 
-  /* Injeta função registrarSaida (nova — não existe no gestor-relatorios.js) */
-  window.estAtualizarDisponivel = function(){
-    var id = parseInt(document.getElementById('est-sel-saida').value);
-    var info = document.getElementById('est-saida-info');
-    var el   = document.getElementById('est-saida-disponivel');
-    if(!id){ if(info) info.style.display='none'; return; }
-    var item = typeof estoqueItems !== 'undefined' ? estoqueItems.find(function(x){ return x.id===id; }) : null;
-    if(el)   el.textContent = item ? item.qty + ' ' + item.unit : '—';
-    if(info) info.style.display = '';
-  };
-
-  window.registrarSaida = async function(){
-    var id  = parseInt(document.getElementById('est-sel-saida').value);
-    var qty = parseFloat(document.getElementById('est-qty-saida').value.replace(',','.'));
-    var mot = document.getElementById('est-motivo-saida').value;
-    if(!id)         { sbToast('err','Selecione o ingrediente'); return; }
-    if(!qty||qty<=0){ sbToast('err','Informe a quantidade'); return; }
-    var item = typeof estoqueItems !== 'undefined' ? estoqueItems.find(function(x){ return x.id===id; }) : null;
-    if(!item) return;
-    if(qty > item.qty){ sbToast('err','Quantidade maior que o disponível (' + item.qty + ' ' + item.unit + ')'); return; }
-    var newQty = parseFloat((item.qty - qty).toFixed(4));
-    sbLoading(true);
-    var res = await sb.from('estoque').update({ qty: newQty, updated_at: new Date().toISOString() }).eq('id', id);
-    sbLoading(false);
-    if(res.error){ sbToast('err','Erro ao registrar saída'); return; }
-    item.qty = newQty; item.updated_at = new Date().toISOString();
-    closeModal('modal-saida-estoque');
-    document.getElementById('est-qty-saida').value   = '';
-    document.getElementById('est-motivo-saida').value = '';
-    if(typeof renderEstoque === 'function') renderEstoque();
-    sbToast('ok', '↓ ' + qty + ' ' + item.unit + ' de ' + item.name + ' removido do estoque');
-  };
-
-  /* Popular select saída quando modal abrir */
-  document.addEventListener('click', function(e){
-    if(e.target && e.target.getAttribute && e.target.getAttribute('onclick') && e.target.getAttribute('onclick').includes('modal-saida-estoque')){
-      setTimeout(function(){
-        var sel = document.getElementById('est-sel-saida');
-        if(!sel || typeof estoqueItems === 'undefined') return;
-        sel.innerHTML = '<option value="">Selecione...</option>' +
-          estoqueItems.map(function(e){ return '<option value="'+e.id+'">'+e.name+' ('+e.qty+' '+e.unit+')</option>'; }).join('');
-      }, 100);
-    }
-  });
-
 })();
 </script>
 
@@ -7976,7 +8015,7 @@ function _escapeAttr(s) {
 }
 </style>
 <!-- Padrão visual do gestor (fontes, cabeçalhos, cartões, tabelas) — sempre por último -->
-<link rel="stylesheet" href="/gestor-pro.css?v=7">
+<link rel="stylesheet" href="/gestor-pro.css?v=8">
 
 </body>
 </html>

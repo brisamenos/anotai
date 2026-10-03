@@ -1277,6 +1277,10 @@ const MIGRATIONS = [
     `ALTER TABLE customers ADD COLUMN last_bairro TEXT` },
   { version:89, description:'pedido mínimo também na retirada (chave liga/desliga no gestor, desligada por padrão)', up:
     `ALTER TABLE store_config ADD COLUMN pedido_minimo_retirada INTEGER DEFAULT 0` },
+  { version:90, description:'estoque: guarda quantas unidades do produto cada baixa cobriu (permite ajustar a baixa quando o pedido muda ou é cancelado) e a data da última alteração', up:[
+    `ALTER TABLE estoque_movimentos ADD COLUMN prod_qty REAL DEFAULT 0`,
+    `ALTER TABLE estoque_movimentos ADD COLUMN updated_at TEXT`
+  ] },
 ]
 
 function runMigrations() {
@@ -2470,7 +2474,7 @@ const TABLE_COLS = {
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','fornecedor_id','updated_at'],
   estoque_receitas: ['id','tenant_id','item_id','estoque_id','qty','unit','ativo','created_at','updated_at'],
-  estoque_movimentos: ['id','tenant_id','estoque_id','order_id','item_id','tipo','qty','saldo_antes','saldo_depois','origem','note','created_at'],
+  estoque_movimentos: ['id','tenant_id','estoque_id','order_id','item_id','tipo','qty','prod_qty','saldo_antes','saldo_depois','origem','note','created_at','updated_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
   customers:    ['id','tenant_id','name','phone','addr','orders_count','total_spent','last_order_at','email','birthday','senha_hash','cashback_saldo','created_at'],
   customer_enderecos: ['id','tenant_id','customer_id','label','cep','rua','numero','bairro','complemento','referencia','is_default','created_at'],
@@ -4324,7 +4328,12 @@ function chatNotifyOrderStatus(tid, order, oldStatus, newStatus) {
   })
 }
 
-const STATUS_BAIXA_ESTOQUE = new Set(['producao','pronto','saiu','entregue','finalizado'])
+// Pedido nesses status já consumiu o estoque. 'mesa_aberta' entra aqui porque a
+// comanda de mesa fica aberta durante todo o atendimento: sem isso a bebida só
+// saía do estoque quando a mesa pagava a conta.
+const STATUS_BAIXA_ESTOQUE = new Set(['producao','pronto','saiu','entregue','finalizado','mesa_aberta'])
+// Pedido cancelado devolve ao estoque o que já tinha sido baixado por ele.
+const STATUS_DEVOLVE_ESTOQUE = new Set(['cancelado'])
 
 function _estoqueNum(v, fallback = 0) {
   const n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : parseFloat(v)
@@ -4348,7 +4357,7 @@ function _parseOrderItemsEstoque(items) {
 function _estoqueNormName(v) {
   return String(v || '')
     .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -4361,110 +4370,262 @@ function _orderItemProductId(item) {
   return n > 0 ? n : null
 }
 
-function aplicarBaixaEstoquePedido(tid, order, origem = 'pedido') {
-  if (!tid || !order?.id || !STATUS_BAIXA_ESTOQUE.has(String(order.status || ''))) {
-    return { baixados: 0, ignorado: true }
-  }
-  try {
-    const rawItems = _parseOrderItemsEstoque(order.items)
-      .filter(i => i && !i.cancelado && i.status !== 'cancelado' && i.item_status !== 'cancelado')
-    if (!rawItems.length) return { baixados: 0 }
+// Datas do SQLite vêm como 'YYYY-MM-DD HH:MM:SS' em UTC; as do navegador, em ISO.
+function _estoqueMs(v) {
+  const s = String(v || '').trim()
+  if (!s) return 0
+  const t = Date.parse(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s) ? s.replace(' ', 'T') + 'Z' : s)
+  return Number.isFinite(t) ? t : 0
+}
 
-    const qtyByProduct = new Map()
-    const qtyByName = new Map()
-    for (const item of rawItems) {
-      const qty = _estoqueNum(item.qty ?? item.quantity ?? item.qtd ?? 1, 1)
-      if (!(qty > 0)) continue
-      const productId = _orderItemProductId(item)
-      if (productId) {
-        qtyByProduct.set(productId, _estoqueRound((qtyByProduct.get(productId) || 0) + qty))
+// Unidades de cada produto que o pedido tem agora (sem os itens cancelados).
+// Pizza meio a meio chega como "Sabor A / Sabor B": conta metade para cada sabor.
+function _estoqueLinhasDoPedido(tid, order) {
+  const rawItems = _parseOrderItemsEstoque(order.items)
+    .filter(i => i && !i.cancelado && i.status !== 'cancelado' && i.item_status !== 'cancelado')
+  if (!rawItems.length) return []
+  const orderMs = _estoqueMs(order.created_at)
+  let nameToId = null
+  const idPorNome = (nome) => {
+    if (!nameToId) {
+      nameToId = new Map()
+      for (const p of db.prepare('SELECT id,name FROM menu_items WHERE tenant_id=?').all(tid)) {
+        const key = _estoqueNormName(p.name)
+        if (key) nameToId.set(key, nameToId.has(key) ? null : p.id)
+      }
+    }
+    return nameToId.get(_estoqueNormName(nome)) || null
+  }
+  const linhas = []
+  for (const item of rawItems) {
+    const qty = _estoqueNum(item.qty ?? item.quantity ?? item.qtd ?? 1, 1)
+    if (!(qty > 0)) continue
+    const ms = _estoqueMs(item.added_at) || orderMs
+    const nome = String(item.name || item.nome || '')
+    if (nome.includes(' / ')) {
+      const partes = nome.split(' / ').map(p => p.trim()).filter(Boolean)
+      const ids = partes.map(idPorNome)
+      if (partes.length > 1 && ids.every(Boolean)) {
+        for (const pid of ids) linhas.push({ productId: pid, qty: qty / partes.length, ms })
         continue
       }
-      const nameKey = _estoqueNormName(item.name || item.nome)
-      if (nameKey) qtyByName.set(nameKey, _estoqueRound((qtyByName.get(nameKey) || 0) + qty))
     }
+    const productId = _orderItemProductId(item) || idPorNome(nome)
+    if (productId) linhas.push({ productId, qty, ms })
+  }
+  return linhas
+}
 
-    if (qtyByName.size) {
-      const products = db.prepare('SELECT id,name FROM menu_items WHERE tenant_id=?').all(tid)
-      const nameToId = new Map()
-      for (const p of products) {
-        const key = _estoqueNormName(p.name)
-        if (!key) continue
-        if (nameToId.has(key)) nameToId.set(key, null)
-        else nameToId.set(key, p.id)
-      }
-      for (const [nameKey, qty] of qtyByName) {
-        const productId = nameToId.get(nameKey)
-        if (productId) qtyByProduct.set(productId, _estoqueRound((qtyByProduct.get(productId) || 0) + qty))
-      }
-    }
+// Deixa o estoque de acordo com o que o pedido tem AGORA. Pode ser chamada
+// quantas vezes for preciso para o mesmo pedido: ela compara o que já foi
+// baixado com o que o pedido pede e lança só a diferença.
+//   - item acrescentado depois (comanda de mesa, "adicionar item") -> baixa o que faltava
+//   - item cancelado ou retirado                                  -> devolve
+//   - pedido cancelado                                            -> devolve tudo
+// Cada pedido tem no máximo uma linha de 'saida' e uma de 'estorno' por
+// ingrediente/produto (é o que a UNIQUE da tabela permite); prod_qty guarda
+// quantas unidades do produto a linha cobre.
+function aplicarBaixaEstoquePedido(tid, order, origem = 'pedido') {
+  if (!tid || !order?.id) return { baixados: 0, ignorado: true }
+  const status = String(order.status || '')
+  const consome = STATUS_BAIXA_ESTOQUE.has(status)
+  const devolve = STATUS_DEVOLVE_ESTOQUE.has(status)
+  if (!consome && !devolve) return { baixados: 0, ignorado: true }
+  try {
+    const existentes = db.prepare(
+      "SELECT * FROM estoque_movimentos WHERE tenant_id=? AND order_id=? AND tipo IN ('saida','estorno')"
+    ).all(tid, order.id)
+    if (devolve && !existentes.length) return { baixados: 0 }
 
-    const productIds = [...qtyByProduct.keys()].filter(Boolean)
-    if (!productIds.length) return { baixados: 0 }
-
-    const placeholders = productIds.map(() => '?').join(',')
-    const receitas = db.prepare(`
-      SELECT r.item_id, r.estoque_id, r.qty, r.unit, e.name AS estoque_name
+    const linhas = consome ? _estoqueLinhasDoPedido(tid, order) : []
+    const productIds = [...new Set(linhas.map(l => l.productId))]
+    const receitas = productIds.length ? db.prepare(`
+      SELECT r.item_id, r.estoque_id, r.qty, r.created_at
       FROM estoque_receitas r
       JOIN estoque e ON e.id = r.estoque_id AND e.tenant_id = r.tenant_id
       WHERE r.tenant_id=? AND r.ativo=1 AND COALESCE(r.qty,0) > 0
-        AND r.item_id IN (${placeholders})
-    `).all(tid, ...productIds)
-    if (!receitas.length) return { baixados: 0 }
+        AND r.item_id IN (${productIds.map(() => '?').join(',')})
+    `).all(tid, ...productIds) : []
+    if (!receitas.length && !existentes.length) return { baixados: 0 }
 
-    const movimentos = []
-    for (const r of receitas) {
-      const productQty = qtyByProduct.get(r.item_id) || 0
-      const consumo = _estoqueRound(productQty * _estoqueNum(r.qty))
-      if (!(consumo > 0)) continue
-      movimentos.push({
-        tenant_id: tid,
-        estoque_id: r.estoque_id,
-        order_id: order.id,
-        item_id: r.item_id,
-        tipo: 'saida',
-        qty: consumo,
-        origem: origem || 'pedido',
-        note: `Pedido #${numeroPedidoChat(order, { fallback: true }) || order.id}`
-      })
+    const estados = new Map()
+    const estado = (estoqueId, itemId) => {
+      const k = `${estoqueId}:${itemId == null ? '' : itemId}`
+      if (!estados.has(k)) estados.set(k, { estoque_id: estoqueId, item_id: itemId == null ? null : itemId, saida: null, estorno: null, receita: null })
+      return estados.get(k)
     }
-    if (!movimentos.length) return { baixados: 0 }
+    for (const m of existentes) estado(m.estoque_id, m.item_id)[m.tipo] = m
+    for (const r of receitas) estado(r.estoque_id, r.item_id).receita = r
+
+    const numPedido = numeroPedidoChat(order, { fallback: true }) || order.id
+    const ajustes = []
+    for (const s of estados.values()) {
+      const fichaQty = s.receita ? _estoqueNum(s.receita.qty) : 0
+      const saidaQty = s.saida ? _estoqueNum(s.saida.qty) : 0
+      const estornoQty = s.estorno ? _estoqueNum(s.estorno.qty) : 0
+      const netQty = _estoqueRound(saidaQty - estornoQty)
+      const linhasProd = linhas.filter(l => l.productId === s.item_id)
+      const totalUn = _estoqueRound(linhasProd.reduce((a, l) => a + l.qty, 0))
+
+      // Baixas lançadas antes de existir prod_qty: deduz as unidades pela ficha.
+      let saidaUn = s.saida ? _estoqueNum(s.saida.prod_qty) : 0
+      const saidaAntiga = !!s.saida && !(saidaUn > 0) && saidaQty > 0
+      if (saidaAntiga) saidaUn = fichaQty > 0 ? _estoqueRound(saidaQty / fichaQty) : (totalUn || 1)
+      const estornoUn = s.estorno ? _estoqueNum(s.estorno.prod_qty) : 0
+      const netUn = _estoqueRound(saidaUn - estornoUn)
+
+      let wantUn = 0
+      if (consome) {
+        if (s.receita) {
+          // O vínculo vale para o que foi vendido depois que ele foi criado:
+          // ligar um produto ao estoque não desconta as vendas antigas.
+          const desde = _estoqueMs(s.receita.created_at)
+          const novasUn = _estoqueRound(linhasProd.reduce((a, l) => a + ((!desde || !l.ms || l.ms >= desde - 1000) ? l.qty : 0), 0))
+          wantUn = s.saida ? Math.max(novasUn, Math.min(netUn, totalUn)) : novasUn
+        } else {
+          // A ficha foi removida depois da baixa: só resta devolver o que sair do pedido.
+          wantUn = Math.min(netUn, totalUn)
+        }
+      }
+      const deltaUn = _estoqueRound(wantUn - netUn)
+      if (deltaUn > 0 && fichaQty > 0) {
+        ajustes.push({ s, tipo: 'saida', un: deltaUn, qty: _estoqueRound(deltaUn * fichaQty), saidaUn, saidaAntiga,
+          note: `Pedido #${numPedido}` })
+      } else if (deltaUn < 0) {
+        const porUn = netUn > 0 ? netQty / netUn : fichaQty
+        const qty = wantUn <= 0 ? netQty : _estoqueRound(-deltaUn * porUn)
+        if (qty > 0) ajustes.push({ s, tipo: 'estorno', un: _estoqueRound(-deltaUn), qty, saidaUn, saidaAntiga,
+          note: devolve ? `Pedido #${numPedido} cancelado` : `Pedido #${numPedido}: item retirado` })
+      }
+    }
+    if (!ajustes.length) return { baixados: 0 }
 
     const tx = db.transaction((rows) => {
       const stockStmt = db.prepare('SELECT id,qty FROM estoque WHERE id=? AND tenant_id=?')
       const updateStmt = db.prepare("UPDATE estoque SET qty=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?")
-      const insertStmt = db.prepare(`INSERT OR IGNORE INTO estoque_movimentos
-        (tenant_id, estoque_id, order_id, item_id, tipo, qty, saldo_antes, saldo_depois, origem, note)
-        VALUES (?,?,?,?,?,?,?,?,?,?)`)
-      const updatedStocks = []
-      const newMovs = []
-      for (const m of rows) {
-        const stock = stockStmt.get(m.estoque_id, m.tenant_id)
+      const insertStmt = db.prepare(`INSERT INTO estoque_movimentos
+        (tenant_id, estoque_id, order_id, item_id, tipo, qty, prod_qty, saldo_antes, saldo_depois, origem, note, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`)
+      const somaStmt = db.prepare(`UPDATE estoque_movimentos
+        SET qty=?, prod_qty=?, saldo_antes=?, saldo_depois=?, origem=?, note=?, updated_at=datetime('now') WHERE id=?`)
+      const unStmt = db.prepare('UPDATE estoque_movimentos SET prod_qty=? WHERE id=?')
+      const stocks = new Map()
+      const movs = []
+      let baixados = 0, devolvidos = 0
+      for (const a of rows) {
+        const stock = stockStmt.get(a.s.estoque_id, tid)
         if (!stock) continue
         const before = _estoqueRound(stock.qty)
-        const after = _estoqueRound(before - m.qty)
-        const ins = insertStmt.run(m.tenant_id, m.estoque_id, m.order_id, m.item_id, m.tipo, m.qty, before, after, m.origem, m.note)
-        if (!ins.changes) continue
-        updateStmt.run(after, m.estoque_id, m.tenant_id)
-        const updated = db.prepare('SELECT * FROM estoque WHERE id=? AND tenant_id=?').get(m.estoque_id, m.tenant_id)
-        const mov = db.prepare('SELECT * FROM estoque_movimentos WHERE id=?').get(ins.lastInsertRowid)
-        if (updated) updatedStocks.push(updated)
-        if (mov) newMovs.push(mov)
+        const after = _estoqueRound(a.tipo === 'saida' ? before - a.qty : before + a.qty)
+        const atual = a.s[a.tipo]
+        let movId
+        if (atual) {
+          const unAtual = a.tipo === 'saida' ? a.saidaUn : _estoqueNum(atual.prod_qty)
+          somaStmt.run(_estoqueRound(_estoqueNum(atual.qty) + a.qty), _estoqueRound(unAtual + a.un), before, after, origem || 'pedido', a.note, atual.id)
+          movId = atual.id
+        } else {
+          movId = insertStmt.run(tid, a.s.estoque_id, order.id, a.s.item_id, a.tipo, a.qty, a.un, before, after, origem || 'pedido', a.note).lastInsertRowid
+        }
+        // linha antiga de saída sem prod_qty: grava as unidades deduzidas para as próximas contas
+        if (a.tipo === 'estorno' && a.saidaAntiga && a.s.saida) unStmt.run(a.saidaUn, a.s.saida.id)
+        updateStmt.run(after, a.s.estoque_id, tid)
+        stocks.set(a.s.estoque_id, true)
+        movs.push({ id: movId, novo: !atual })
+        if (a.tipo === 'saida') baixados++; else devolvidos++
       }
-      return { updatedStocks, newMovs }
+      return {
+        baixados, devolvidos,
+        updatedStocks: [...stocks.keys()].map(id => db.prepare('SELECT * FROM estoque WHERE id=? AND tenant_id=?').get(id, tid)).filter(Boolean),
+        movs: movs.map(m => ({ row: db.prepare('SELECT * FROM estoque_movimentos WHERE id=?').get(m.id), novo: m.novo })).filter(m => m.row)
+      }
     })
 
-    const result = tx(movimentos)
-    if (result.newMovs.length) {
+    const result = tx(ajustes)
+    if (result.movs.length) {
       marcarDirty()
       for (const stock of result.updatedStocks) emit(tid, 'estoque', parseRow('estoque', stock), 'UPDATE')
-      for (const mov of result.newMovs) emit(tid, 'estoque_movimentos', parseRow('estoque_movimentos', mov), 'INSERT')
+      for (const m of result.movs) emit(tid, 'estoque_movimentos', parseRow('estoque_movimentos', m.row), m.novo ? 'INSERT' : 'UPDATE')
     }
-    return { baixados: result.newMovs.length }
+    return { baixados: result.baixados, devolvidos: result.devolvidos }
   } catch(e) {
-    log('âš ï¸', 'Baixa automatica de estoque falhou:', e.message)
+    log('⚠️', 'Baixa automatica de estoque falhou:', e.message)
     return { baixados: 0, error: e.message }
   }
+}
+
+// Entrada, saída e ajuste feitos à mão pelo gestor. A conta é feita aqui, em
+// cima do saldo que está no banco (e não do que a tela tinha na memória), para
+// não atropelar uma baixa de pedido que tenha chegado no mesmo instante.
+function estoqueMovimentarManual(tid, body) {
+  const estoqueId = parseInt(body.estoque_id, 10)
+  const tipo = String(body.tipo || '')
+  if (!estoqueId) return { status: 400, error: 'Selecione o item' }
+  if (!['entrada', 'saida', 'ajuste'].includes(tipo)) return { status: 400, error: 'Tipo de movimentação inválido' }
+  const stock = db.prepare('SELECT * FROM estoque WHERE id=? AND tenant_id=?').get(estoqueId, tid)
+  if (!stock) return { status: 404, error: 'Item não encontrado' }
+  const before = _estoqueRound(stock.qty)
+  let after, qty, cost = _estoqueNum(stock.cost)
+  if (tipo === 'ajuste') {
+    const novo = _estoqueNum(body.novo_saldo, NaN)
+    if (!Number.isFinite(novo) || novo < 0) return { status: 400, error: 'Informe a quantidade contada' }
+    after = _estoqueRound(novo)
+    qty = _estoqueRound(Math.abs(after - before))
+    if (!(qty > 0)) return { status: 200, ok: true, estoque: parseRow('estoque', stock), movimento: null }
+  } else {
+    qty = _estoqueRound(_estoqueNum(body.qty))
+    if (!(qty > 0)) return { status: 400, error: 'Informe a quantidade' }
+    if (tipo === 'saida' && qty > before) return { status: 400, error: `Quantidade maior que o disponível (${before} ${stock.unit || ''})`.trim() }
+    after = _estoqueRound(tipo === 'entrada' ? before + qty : before - qty)
+    const custoTotal = _estoqueNum(body.custo_total)
+    if (tipo === 'entrada' && custoTotal > 0) cost = Math.round((custoTotal / qty) * 10000) / 10000
+  }
+  const note = String(body.note || '').trim().slice(0, 200) || null
+  const movId = db.transaction(() => {
+    db.prepare("UPDATE estoque SET qty=?, cost=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?").run(after, cost, estoqueId, tid)
+    return db.prepare(`INSERT INTO estoque_movimentos
+      (tenant_id, estoque_id, order_id, item_id, tipo, qty, prod_qty, saldo_antes, saldo_depois, origem, note, updated_at)
+      VALUES (?,?,NULL,NULL,?,?,0,?,?,'manual',?,datetime('now'))`).run(tid, estoqueId, tipo, qty, before, after, note).lastInsertRowid
+  })()
+  const updated = db.prepare('SELECT * FROM estoque WHERE id=? AND tenant_id=?').get(estoqueId, tid)
+  const mov = db.prepare('SELECT * FROM estoque_movimentos WHERE id=?').get(movId)
+  marcarDirty()
+  emit(tid, 'estoque', parseRow('estoque', updated), 'UPDATE')
+  emit(tid, 'estoque_movimentos', parseRow('estoque_movimentos', mov), 'INSERT')
+  return { status: 200, ok: true, estoque: parseRow('estoque', updated), movimento: parseRow('estoque_movimentos', mov) }
+}
+
+// Histórico das movimentações + ritmo de saída por venda nos últimos 7 dias
+// (é o que permite a tela dizer "dura cerca de N dias").
+function estoqueListarMovimentos(tid, params) {
+  const limit = Math.min(Math.max(parseInt(params.get('limit') || '150', 10) || 150, 1), 500)
+  const estoqueId = parseInt(params.get('estoque_id') || '0', 10) || 0
+  const movimentos = db.prepare(`
+    SELECT m.id, m.estoque_id, m.order_id, m.item_id, m.tipo, m.qty, m.saldo_antes, m.saldo_depois, m.origem, m.note,
+           COALESCE(m.updated_at, m.created_at) AS quando,
+           e.name AS estoque_nome, e.unit, mi.name AS produto
+    FROM estoque_movimentos m
+    LEFT JOIN estoque e ON e.id = m.estoque_id AND e.tenant_id = m.tenant_id
+    LEFT JOIN menu_items mi ON mi.id = m.item_id AND mi.tenant_id = m.tenant_id
+    WHERE m.tenant_id=? ${estoqueId ? 'AND m.estoque_id=?' : ''}
+    ORDER BY COALESCE(m.updated_at, m.created_at) DESC, m.id DESC
+    LIMIT ?
+  `).all(...(estoqueId ? [tid, estoqueId, limit] : [tid, limit]))
+  const consumo = db.prepare(`
+    SELECT estoque_id,
+           SUM(CASE tipo WHEN 'saida' THEN qty WHEN 'estorno' THEN -qty ELSE 0 END) AS qtd,
+           MIN(created_at) AS desde
+    FROM estoque_movimentos
+    WHERE tenant_id=? AND tipo IN ('saida','estorno') AND COALESCE(origem,'') <> 'manual'
+      AND created_at >= datetime('now','-7 days')
+    GROUP BY estoque_id
+  `).all(tid)
+  let hoje = 0
+  const desdeMs = _estoqueMs(params.get('hoje_desde'))
+  if (desdeMs) {
+    const corte = new Date(desdeMs).toISOString().replace('T', ' ').slice(0, 19)
+    hoje = db.prepare('SELECT COUNT(*) AS c FROM estoque_movimentos WHERE tenant_id=? AND COALESCE(updated_at, created_at) >= ?').get(tid, corte).c
+  }
+  return { movimentos, consumo, hoje }
 }
 
 async function handleOrderStatus(req, res) {
@@ -7871,6 +8032,16 @@ function _handleStoreLogo(req, res, upath) {
   return true
 }
 
+// O que a rota de arquivos estáticos (no fim do servidor) se recusa a entregar.
+// Uploads não passam por ela: saem por /uploads/, direto da pasta de uploads.
+const _ESTATICO_BLOQUEADO = new RegExp([
+  '(^|/)(data|\\.dev-data|node_modules|\\.git)(/|$)',
+  '\\.(db|db-wal|db-shm|sqlite|sqlite3|sql|log|env|bak)$',
+  '^/?(server|routes|site-admin|marketing-flows|suporte-vendas-bot|tenant-wa|wuzapi|order-message|phone-utils|limpar-links-externos|limpar-movimentos-cancelados)\\.js$',
+  '^/?(package|package-lock|site-padrao)\\.json$',
+  '^/?(Dockerfile|nixpacks\\.toml)$'
+].join('|'), 'i')
+
 function serveStatic(req,res,fpath,ext) {
   try {
     const etag=getEtag(fpath), isHtml=ext==='.html', isScript=['.js','.css'].includes(ext)
@@ -8203,6 +8374,22 @@ const server = http.createServer(async (req,res) => {
   if(upath==='/status'){send(res,200,{ok:true,uptime:Math.floor(process.uptime()),db:'sqlite-multitenant',version:'4.0.0',backup:fs.existsSync(BACKUP_PATH)?fs.statSync(BACKUP_PATH).mtime:null});return}
   if(req.method==='POST'&&upath==='/api/order-status'){await handleOrderStatus(req,res);return}
 
+  // ── Estoque: entrada/saída/ajuste manual e histórico ─────
+  if(upath==='/api/estoque/movimentar'||upath==='/api/estoque/movimentos'){
+    const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
+    if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    if(!validarSessaoGestor(req,tid,'estoque')){send(res,401,{error:'Sessão de gestor inválida ou expirada. Faça login novamente.'});return}
+    try{
+      if(req.method==='GET'&&upath==='/api/estoque/movimentos'){send(res,200,estoqueListarMovimentos(tid,params));return}
+      if(req.method==='POST'&&upath==='/api/estoque/movimentar'){
+        const r=estoqueMovimentarManual(tid,await readBody(req))
+        const st=r.status||200; delete r.status
+        send(res,st,r);return
+      }
+    }catch(e){log('⚠️','/api/estoque:',e.message);send(res,500,{error:'Não foi possível concluir a movimentação'});return}
+    send(res,405,{error:'Método não permitido'});return
+  }
+
   // ── Adicionais esgotados (global por tenant) ─────────────
   // Normaliza nome (lowercase + trim + sem acento) para garantir match independente de digitação
   const _normAddon = (s) => String(s||'').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -8466,7 +8653,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/manifest-cardapio','/api/pwa-install','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/fidelidade/saldo','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao','/api/favoritos','/api/favoritos/toggle'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/manifest-cardapio','/api/pwa-install','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/estoque/movimentar','/api/estoque/movimentos','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/fidelidade/saldo','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao','/api/favoritos','/api/favoritos/toggle'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/')&&!upath.startsWith('/api/store-logo/'))||upath.startsWith('/rest/v1/')){
     try {
       const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
@@ -8681,6 +8868,10 @@ const server = http.createServer(async (req,res) => {
 
   if(req.method==='GET'){
     const fname=upath==='/'?'index.html':upath.slice(1),fpath=path.join(__dirname,fname)
+    // Banco de dados, backups, código do servidor e configuração nunca saem como
+    // arquivo estático. Sem isto, /data/estima.db (o banco inteiro) e /server.js
+    // podiam ser baixados por qualquer pessoa, sem login.
+    if(_ESTATICO_BLOQUEADO.test(fname)){res.writeHead(404);res.end('Not found');return}
     if(fs.existsSync(fpath)&&!fname.includes('..')){serveStatic(req,res,fpath,path.extname(fpath));return}
   }
 

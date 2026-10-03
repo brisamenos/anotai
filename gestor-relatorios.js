@@ -10,92 +10,25 @@ function _toSQLite(d) {
 // ─────────────────────────────────────────
 // ESTOQUE
 // ─────────────────────────────────────────
-// ─────────────────────────────────────────
-// ESTOQUE — REAL
-// ─────────────────────────────────────────
-function renderEstoque() {
-  const search = (document.getElementById('est-search')?.value || '').toLowerCase();
-  const filtered = estoqueItems.filter(e => e.name.toLowerCase().includes(search));
+// Como funciona:
+//  · cada item do estoque tem uma quantidade e um ponto de aviso (min_qty);
+//  · a ficha técnica liga um produto do cardápio aos itens que ele consome;
+//  · o servidor baixa o estoque quando o pedido entra em preparo (ou na hora,
+//    em comanda de mesa) e devolve se o pedido for cancelado;
+//  · quando um item chega no ponto de aviso, aparece no topo desta tela, no
+//    contador do menu lateral e num alerta na hora, em qualquer tela.
+let _estFiltro = 'todos';
+let _estMovs = [];
+let _estConsumo = {};
+let _estMovHoje = 0;
+let _estMovsEstado = 'vazio';   // vazio | carregando | pronto | erro
+let _estMovsTimer = null;
 
-  // Stats
-  const baixo    = estoqueItems.filter(e => e.qty <= e.min_qty).length;
-  const valor    = estoqueItems.reduce((s,e) => s + (e.qty * (e.custo||0)), 0);
-  const hoje     = estoqueItems.filter(e => {
-    if (!e.updated_at) return false;
-    return new Date(e.updated_at).toDateString() === new Date().toDateString();
-  }).length;
-  const elv = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
-  elv('est-stat-total',    estoqueItems.length);
-  elv('est-stat-baixo',    baixo);
-  elv('est-stat-valor',    'R$ '+valor.toFixed(2).replace('.',','));
-  elv('est-stat-entradas', hoje);
-
-  // Popular select do modal de entrada
-  const sel = document.getElementById('est-sel-ingrediente');
-  if (sel) {
-    sel.innerHTML = '<option value="">Selecione...</option>' +
-      estoqueItems.map(e => `<option value="${e.id}">${e.name} (${e.qty} ${e.unit})</option>`).join('');
-  }
-  renderReceitaEstoque();
-
-  const list = document.getElementById('estoque-list');
-  if (!list) return;
-
-  if (!filtered.length) {
-    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Nenhum ingrediente cadastrado.<br>Clique em <strong>Novo ingrediente</strong> para começar.</div>';
-    return;
-  }
-
-  list.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
-      <table style="width:100%;border-collapse:collapse">
-        <thead>
-          <tr style="background:var(--surface2)">
-            <th style="padding:10px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Ingrediente</th>
-            <th style="padding:10px 14px;text-align:center;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Qty / Mín</th>
-            <th style="padding:10px 14px;text-align:center;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Estoque</th>
-            <th style="padding:10px 14px;text-align:right;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Custo unit.</th>
-            <th style="padding:10px 14px;text-align:right;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Valor total</th>
-            <th style="padding:10px 6px"></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${filtered.map(e => {
-            const pct = e.min_qty > 0 ? Math.min(100, (e.qty / (e.min_qty * 3)) * 100) : (e.qty > 0 ? 100 : 0);
-            const isBaixo = e.qty <= e.min_qty;
-            const isZero  = e.qty === 0;
-            const barColor = isZero ? 'var(--danger)' : isBaixo ? 'var(--accent3)' : 'var(--success)';
-            const valorTotal = (e.qty * (e.custo||0)).toFixed(2).replace('.',',');
-            return `<tr style="border-top:1px solid var(--border);transition:background .13s" onmouseenter="this.style.background='rgba(255,255,255,.02)'" onmouseleave="this.style.background=''">
-              <td style="padding:12px 14px">
-                <div style="font-weight:600;font-size:13px">${e.name}</div>
-                <div style="font-size:11px;color:var(--muted)">${e.unit}${e.updated_at ? ' · atualizado ' + new Date(e.updated_at).toLocaleDateString('pt-BR') : ''}</div>
-              </td>
-              <td style="padding:12px 14px;text-align:center">
-                <div style="font-family:'Playfair Display',sans-serif;font-size:15px;font-weight:700;color:${isZero?'var(--danger)':isBaixo?'var(--accent3)':'var(--text)'}">${e.qty}</div>
-                <div style="font-size:11px;color:var(--muted)">mín: ${e.min_qty}</div>
-              </td>
-              <td style="padding:12px 14px;min-width:120px">
-                ${isBaixo ? `<span style="font-size:9.5px;background:${isZero?'rgba(239,68,68,.15)':'rgba(245,158,11,.15)'};color:${isZero?'var(--danger)':'var(--accent3)'};padding:1px 6px;border-radius:99px;font-weight:700;display:block;margin-bottom:4px">${isZero?'⚠️ ZERADO':'⚠️ BAIXO'}</span>` : ''}
-                <div style="background:var(--surface2);border-radius:99px;height:5px;overflow:hidden">
-                  <div style="width:${pct}%;height:100%;background:${barColor};border-radius:99px"></div>
-                </div>
-              </td>
-              <td style="padding:12px 14px;text-align:right;font-size:12.5px;color:var(--muted)">
-                ${e.custo ? 'R$ '+e.custo.toFixed(2).replace('.',',') : '—'}
-              </td>
-              <td style="padding:12px 14px;text-align:right;font-size:12.5px;font-weight:600;color:var(--success)">
-                ${e.custo ? 'R$ '+valorTotal : '—'}
-              </td>
-              <td style="padding:12px 6px;text-align:right">
-                <button class="btn bg" style="font-size:11px;padding:3px 8px" onclick="openEditIngrediente(${e.id})"></button>
-              </td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>`;
-}
+const _EST_ICO = {
+  editar: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M11.2 2.3l2.5 2.5L5.6 12.9l-3.1.6.6-3.1 8.1-8.1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+  historico: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.8" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.8V8l2.2 1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  alerta: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg>'
+};
 
 function estEsc(v) {
   return String(v ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
@@ -104,6 +37,29 @@ function estEsc(v) {
 function estFmtQtd(v) {
   const n = parseFloat(v) || 0;
   return n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+}
+
+function estMoeda(v) {
+  return 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// O servidor grava datas em UTC sem fuso ('2026-10-03 04:26:45'); o navegador, em ISO.
+function estData(v) {
+  const s = String(v || '').trim();
+  if (!s) return null;
+  const d = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s) ? s.replace(' ', 'T') + 'Z' : s);
+  return isNaN(d) ? null : d;
+}
+
+function estQuando(v) {
+  const d = estData(v);
+  if (!d) return '—';
+  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const hoje = new Date();
+  const ontem = new Date(hoje.getTime() - 86400000);
+  if (d.toDateString() === hoje.toDateString()) return 'Hoje, ' + hora;
+  if (d.toDateString() === ontem.toDateString()) return 'Ontem, ' + hora;
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ', ' + hora;
 }
 
 function estProdutosReceita() {
@@ -115,155 +71,633 @@ function estReceitasLista() {
   return Array.isArray(estoqueReceitas) ? estoqueReceitas : [];
 }
 
+function estReceitasAtivas() {
+  return estReceitasLista().filter(r => r.ativo !== false && r.ativo !== 0);
+}
+
+// Zerado: acabou. Acabando: chegou no ponto de aviso definido no cadastro.
+function estZerado(e) { return (parseFloat(e.qty) || 0) <= 0; }
+function estBaixo(e) {
+  const qty = parseFloat(e.qty) || 0;
+  const min = parseFloat(e.min_qty) || 0;
+  return qty <= 0 || (min > 0 && qty <= min);
+}
+
+function estParaRepor() {
+  return estoqueItems.filter(estBaixo).sort((a, b) => (estZerado(b) - estZerado(a)) || a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+// Produtos do cardápio que consomem um item do estoque.
+function estVinculos(estoqueId) {
+  const produtos = estProdutosReceita();
+  return estReceitasAtivas()
+    .filter(r => parseInt(r.estoque_id) === parseInt(estoqueId))
+    .map(r => ({ receita: r, produto: produtos.find(p => parseInt(p.id) === parseInt(r.item_id)) }))
+    .filter(v => v.produto);
+}
+
+// Ritmo de saída por venda nos últimos 7 dias e por quantos dias o saldo dura.
+function estRitmo(e) {
+  const c = _estConsumo[e.id];
+  if (!c || !(c.qtd > 0)) return null;
+  const desde = estData(c.desde);
+  const dias = desde ? Math.min(7, Math.max(1, Math.ceil((Date.now() - desde.getTime()) / 86400000))) : 7;
+  const porDia = c.qtd / dias;
+  if (!(porDia > 0)) return null;
+  return { porDia, dura: e.qty > 0 ? e.qty / porDia : 0 };
+}
+
+function estRitmoTexto(e) {
+  const r = estRitmo(e);
+  if (!r) return '';
+  const porDia = r.porDia >= 10 ? Math.round(r.porDia) : Math.round(r.porDia * 10) / 10;
+  let dura;
+  if (r.dura <= 0) dura = '';
+  else if (r.dura < 1) dura = 'acaba hoje nesse ritmo';
+  else if (r.dura < 1.5) dura = 'dura cerca de 1 dia';
+  else dura = 'dura cerca de ' + Math.round(r.dura) + ' dias';
+  return 'Sai cerca de ' + estFmtQtd(porDia) + ' ' + estEsc(e.unit) + ' por dia' + (dura ? ' · ' + dura : '');
+}
+
+// ── Avisos (valem em qualquer tela) ───────────────────────────────────
+function estAtualizarAvisos() {
+  const n = (typeof estoqueItems !== 'undefined' ? estoqueItems : []).filter(estBaixo).length;
+  const badge = document.getElementById('est-side-badge');
+  if (badge) {
+    badge.textContent = n ? String(n) : '';
+    badge.style.display = n ? '' : 'none';
+    badge.title = n === 1 ? '1 item para repor' : n + ' itens para repor';
+  }
+}
+
+// Aviso próprio (não usa o toast comum, que só mostra uma mensagem por vez e
+// seria coberto pelo "Novo pedido" que chega junto com a baixa).
+function estAvisoAcabando(e) {
+  let box = document.getElementById('est-avisos');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'est-avisos';
+    box.setAttribute('role', 'status');
+    box.setAttribute('aria-live', 'polite');
+    document.body.appendChild(box);
+  }
+  box.querySelector('[data-est="' + e.id + '"]')?.remove();
+  while (box.children.length >= 4) box.firstElementChild.remove();
+  const zerado = estZerado(e);
+  const el = document.createElement('div');
+  el.className = 'est-aviso' + (zerado ? ' bad' : '');
+  el.dataset.est = e.id;
+  el.innerHTML = `
+    <div class="est-aviso-ico">${_EST_ICO.alerta}</div>
+    <div class="est-aviso-txt">
+      <b>${estEsc(e.name)} ${zerado ? 'acabou' : 'está acabando'}</b>
+      <span>${zerado ? 'Estoque zerado' : 'Restam ' + estFmtQtd(e.qty) + ' ' + estEsc(e.unit)}${e.min_qty > 0 ? ' · aviso em ' + estFmtQtd(e.min_qty) : ''}</span>
+    </div>
+    <button class="btn bg pf-sm" data-acao="ver">Ver estoque</button>
+    <button class="est-aviso-x" data-acao="fechar" aria-label="Fechar aviso">×</button>`;
+  el.addEventListener('click', ev => {
+    const acao = ev.target.closest('[data-acao]')?.dataset.acao;
+    if (!acao) return;
+    el.remove();
+    if (acao === 'ver' && typeof nav === 'function') { _estFiltro = 'repor'; nav('estoque'); estIrParaAba('itens'); }
+  });
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 15000);
+}
+
+// Recebe uma linha do estoque (do servidor, em tempo real ou depois de uma
+// movimentação feita aqui), guarda e avisa se ela acabou de cruzar o ponto de aviso.
+function estAplicarLinha(row) {
+  if (!row || !row.id) return;
+  const novo = {
+    id: row.id, name: row.name, unit: row.unit || 'un', qty: parseFloat(row.qty) || 0,
+    min_qty: parseFloat(row.min_qty) || 0, custo: parseFloat(row.cost) || 0,
+    updated_at: row.updated_at || null
+  };
+  const idx = estoqueItems.findIndex(e => e.id === novo.id);
+  const antes = idx >= 0 ? estoqueItems[idx] : null;
+  if (idx >= 0) estoqueItems[idx] = novo; else estoqueItems.push(novo);
+  if (antes && novo.qty < antes.qty && ((!estBaixo(antes) && estBaixo(novo)) || (!estZerado(antes) && estZerado(novo)))) estAvisoAcabando(novo);
+  estAtualizarAvisos();
+  if (estTelaAberta()) { renderEstoque(); estAgendarMovs(); }
+  else _estMovsEstado = 'vazio';
+  if (typeof estAtualizarDisponivel === 'function') estAtualizarDisponivel();
+}
+
+function estTelaAberta() {
+  return !!document.getElementById('page-estoque')?.classList.contains('on');
+}
+
+// ── Chamadas ao servidor ──────────────────────────────────────────────
+async function estApi(path, body) {
+  const headers = { 'Content-Type': 'application/json' };
+  const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || '';
+  const token = (typeof _sessao !== 'undefined' && _sessao?.token) || '';
+  if (tid) headers['x-tenant-id'] = tid;
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(path, body ? { method: 'POST', headers, body: JSON.stringify(body) } : { headers });
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) throw new Error(data.error || 'Não foi possível concluir. Tente de novo.');
+  return data;
+}
+
+async function estMovimentar(body) {
+  const data = await estApi('/api/estoque/movimentar', body);
+  if (data.estoque) estAplicarLinha(data.estoque);
+  estAgendarMovs(0);
+  return data;
+}
+
+function estAgendarMovs(ms = 700) {
+  clearTimeout(_estMovsTimer);
+  _estMovsTimer = setTimeout(() => { if (estTelaAberta()) estCarregarMovs(); else _estMovsEstado = 'vazio'; }, ms);
+}
+
+async function estCarregarMovs() {
+  const filtro = document.getElementById('est-mov-filtro')?.value || '';
+  const inicioDia = new Date(); inicioDia.setHours(0, 0, 0, 0);
+  if (_estMovsEstado === 'vazio') { _estMovsEstado = 'carregando'; renderEstMovs(); }
+  try {
+    const data = await estApi('/api/estoque/movimentos?limit=150' + (filtro ? '&estoque_id=' + encodeURIComponent(filtro) : '') +
+      '&hoje_desde=' + encodeURIComponent(inicioDia.toISOString()));
+    _estMovs = data.movimentos || [];
+    _estConsumo = {};
+    (data.consumo || []).forEach(c => { _estConsumo[c.estoque_id] = { qtd: parseFloat(c.qtd) || 0, desde: c.desde }; });
+    _estMovHoje = data.hoje || 0;
+    _estMovsEstado = 'pronto';
+  } catch (e) {
+    _estMovsEstado = 'erro';
+  }
+  if (estTelaAberta()) renderEstoque();
+}
+
+// ── Tela ──────────────────────────────────────────────────────────────
+function estFiltrar(f) {
+  _estFiltro = f;
+  renderEstoque();
+}
+
+function estIrParaAba(nome) {
+  const btn = document.querySelector('#page-estoque .pf-tab[data-tab="' + nome + '"]');
+  if (btn && typeof pfTab === 'function') pfTab(btn, nome);
+}
+
+function estOpcoesItens(vazio) {
+  return '<option value="">' + vazio + '</option>' +
+    estoqueItems.slice().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+      .map(e => `<option value="${e.id}">${estEsc(e.name)} (${estFmtQtd(e.qty)} ${estEsc(e.unit)})</option>`).join('');
+}
+
+function estPreencherSelect(id, vazio) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const atual = sel.value;
+  sel.innerHTML = estOpcoesItens(vazio);
+  if (atual && estoqueItems.some(e => String(e.id) === atual)) sel.value = atual;
+}
+
+function renderEstoque() {
+  const busca = (document.getElementById('est-search')?.value || '').toLowerCase().trim();
+  const repor = estParaRepor();
+  const semVinculo = estoqueItems.filter(e => !estVinculos(e.id).length);
+
+  if (_estMovsEstado === 'vazio' && estTelaAberta()) estCarregarMovs();
+
+  // Resumo
+  const valor = estoqueItems.reduce((s, e) => s + (Math.max(0, e.qty) * (e.custo || 0)), 0);
+  const elv = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  elv('est-stat-total', estoqueItems.length);
+  elv('est-stat-baixo', repor.length);
+  elv('est-stat-valor', estMoeda(valor));
+  elv('est-stat-entradas', _estMovHoje);
+  estAtualizarAvisos();
+
+  // Aviso do que está acabando
+  const alerta = document.getElementById('est-alerta');
+  if (alerta) {
+    alerta.innerHTML = !repor.length ? '' : `
+      <div class="est-alerta">
+        <div class="est-alerta-title">${_EST_ICO.alerta}${repor.length === 1 ? '1 item para repor' : repor.length + ' itens para repor'}</div>
+        <div class="est-alerta-list">
+          ${repor.map(e => `
+            <div class="est-alerta-item">
+              <div style="min-width:0">
+                <div class="est-alerta-nome">${estEsc(e.name)}</div>
+                <div class="est-alerta-sub">${estZerado(e) ? 'Acabou' : 'Restam ' + estFmtQtd(e.qty) + ' ' + estEsc(e.unit)}${e.min_qty > 0 ? ' · aviso em ' + estFmtQtd(e.min_qty) : ''}</div>
+              </div>
+              <button class="btn bg pf-sm" onclick="estAbrirEntrada(${e.id})">Dar entrada</button>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  // Filtros
+  document.querySelectorAll('#est-filtros button').forEach(b => b.classList.toggle('on', b.dataset.filtro === _estFiltro));
+
+  estPreencherSelect('est-sel-ingrediente', 'Selecione');
+  estPreencherSelect('est-sel-saida', 'Selecione');
+  estPreencherSelect('est-mov-filtro', 'Todos os itens');
+  renderReceitaEstoque();
+  renderEstMovs();
+
+  const list = document.getElementById('estoque-list');
+  if (!list) return;
+
+  if (!estoqueItems.length) {
+    elv('est-count', '');
+    list.innerHTML = `<div class="pf-empty">
+      <strong>Nenhum item no estoque ainda</strong>
+      Cadastre o que você quer controlar — refrigerantes, embalagens, ingredientes — e diga a partir de quantas unidades quer ser avisado.
+      <div style="margin-top:14px"><button class="btn bp" onclick="estAbrirNovo()">Novo item</button></div>
+    </div>`;
+    return;
+  }
+
+  let lista = estoqueItems.filter(e => e.name.toLowerCase().includes(busca));
+  if (_estFiltro === 'repor') lista = lista.filter(estBaixo);
+  if (_estFiltro === 'sem-vinculo') lista = lista.filter(e => !estVinculos(e.id).length);
+  lista = lista.slice().sort((a, b) => (estBaixo(b) - estBaixo(a)) || a.name.localeCompare(b.name, 'pt-BR'));
+  elv('est-count', lista.length === estoqueItems.length
+    ? (lista.length === 1 ? '1 item' : lista.length + ' itens')
+    : lista.length + ' de ' + estoqueItems.length);
+
+  if (!lista.length) {
+    const msg = _estFiltro === 'repor' ? 'Nada para repor agora.'
+      : _estFiltro === 'sem-vinculo' ? 'Todos os itens já têm baixa automática.'
+      : 'Nenhum item com esse nome.';
+    list.innerHTML = `<div class="pf-empty">${msg}</div>`;
+    return;
+  }
+
+  list.innerHTML = `
+    <div class="pf-list"><div class="pf-table-wrap"><table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left">Item</th>
+        <th style="text-align:left">Em estoque</th>
+        <th class="pf-num">Aviso em</th>
+        <th class="pf-num">Custo unit.</th>
+        <th class="pf-num">Valor</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        ${lista.map(e => {
+          const zerado = estZerado(e);
+          const baixo = estBaixo(e);
+          const tom = zerado ? 'bad' : baixo ? 'warn' : '';
+          const ref = e.min_qty > 0 ? e.min_qty * 3 : Math.max(e.qty, 1);
+          const pct = Math.max(0, Math.min(100, (e.qty / ref) * 100));
+          const vinc = estVinculos(e.id);
+          const ritmo = estRitmoTexto(e);
+          const usado = vinc.length
+            ? 'Baixa a cada venda de ' + vinc.slice(0, 2).map(v => estEsc(v.produto.name)).join(', ') + (vinc.length > 2 ? ' e mais ' + (vinc.length - 2) : '')
+            : `Sem baixa automática · <button class="est-link" onclick="estVincular(${e.id})">vincular a um produto</button>`;
+          return `<tr>
+            <td>
+              <div class="est-nome">${estEsc(e.name)}${zerado ? '<span class="pf-chip bad">Zerado</span>' : baixo ? '<span class="pf-chip warn">Acabando</span>' : ''}</div>
+              <div class="est-sub">${usado}</div>
+            </td>
+            <td style="min-width:170px">
+              <div class="est-qty ${tom}">${estFmtQtd(e.qty)} <span>${estEsc(e.unit)}</span></div>
+              <div class="est-bar ${tom}"><i style="width:${pct}%"></i></div>
+              ${ritmo ? `<div class="est-sub">${ritmo}</div>` : ''}
+            </td>
+            <td class="pf-num">${e.min_qty > 0 ? estFmtQtd(e.min_qty) + ' ' + estEsc(e.unit) : '<span style="color:var(--muted)">sem aviso</span>'}</td>
+            <td class="pf-num">${e.custo ? estMoeda(e.custo) : '—'}</td>
+            <td class="pf-num" style="font-weight:700">${e.custo ? estMoeda(Math.max(0, e.qty) * e.custo) : '—'}</td>
+            <td>
+              <div class="pf-row-actions" style="justify-content:flex-end">
+                <button class="btn bg pf-sm" onclick="estAbrirEntrada(${e.id})">Entrada</button>
+                <button class="btn bg pf-sm pf-icon" onclick="estVerHistorico(${e.id})" title="Ver movimentações" aria-label="Ver movimentações de ${estEsc(e.name)}">${_EST_ICO.historico}</button>
+                <button class="btn bg pf-sm pf-icon" onclick="openEditIngrediente(${e.id})" title="Editar" aria-label="Editar ${estEsc(e.name)}">${_EST_ICO.editar}</button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div></div>`;
+}
+
+// ── Movimentações ─────────────────────────────────────────────────────
+function estVerHistorico(id) {
+  const sel = document.getElementById('est-mov-filtro');
+  if (sel) sel.value = String(id);
+  estIrParaAba('movs');
+  estCarregarMovs();
+}
+
+function renderEstMovs() {
+  const list = document.getElementById('est-mov-list');
+  const count = document.getElementById('est-mov-count');
+  if (!list) return;
+  if (_estMovsEstado === 'carregando' || _estMovsEstado === 'vazio') {
+    if (count) count.textContent = '';
+    list.innerHTML = '<div class="pf-empty">Carregando movimentações...</div>';
+    return;
+  }
+  if (_estMovsEstado === 'erro') {
+    if (count) count.textContent = '';
+    list.innerHTML = '<div class="pf-empty"><strong>Não foi possível carregar as movimentações</strong><div style="margin-top:12px"><button class="btn bg" onclick="estCarregarMovs()">Tentar de novo</button></div></div>';
+    return;
+  }
+  if (count) count.textContent = _estMovs.length ? (_estMovs.length >= 150 ? 'Últimas 150' : (_estMovs.length === 1 ? '1 movimentação' : _estMovs.length + ' movimentações')) : '';
+  if (!_estMovs.length) {
+    list.innerHTML = '<div class="pf-empty"><strong>Nenhuma movimentação ainda</strong>Entradas, saídas e as baixas de cada venda aparecem aqui.</div>';
+    return;
+  }
+  const tipos = {
+    entrada: ['Entrada', 'ok'], estorno: ['Devolução', 'ok'], ajuste: ['Ajuste', ''],
+    venda: ['Venda', 'info'], saida: ['Saída', 'warn']
+  };
+  list.innerHTML = `
+    <div class="pf-list"><div class="pf-table-wrap"><table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left">Quando</th>
+        <th style="text-align:left">Item</th>
+        <th style="text-align:left">Tipo</th>
+        <th class="pf-num">Quantidade</th>
+        <th class="pf-num">Saldo</th>
+        <th style="text-align:left">Detalhe</th>
+      </tr></thead>
+      <tbody>
+        ${_estMovs.map(m => {
+          const manual = (m.origem || '') === 'manual';
+          const chave = m.tipo === 'saida' && !manual ? 'venda' : m.tipo;
+          const [rotulo, tom] = tipos[chave] || [m.tipo, ''];
+          const sobe = m.tipo === 'entrada' || m.tipo === 'estorno' || (m.tipo === 'ajuste' && parseFloat(m.saldo_depois) >= parseFloat(m.saldo_antes));
+          const detalhe = [m.note, m.produto].filter(Boolean).map(estEsc).join(' · ');
+          return `<tr>
+            <td style="white-space:nowrap">${estQuando(m.quando)}</td>
+            <td style="font-weight:650">${estEsc(m.estoque_nome || 'Item excluído')}</td>
+            <td><span class="pf-chip ${tom}">${rotulo}</span></td>
+            <td class="pf-num" style="font-weight:700;color:${sobe ? 'var(--pf-ok)' : 'var(--text)'}">${sobe ? '+' : '−'}${estFmtQtd(m.qty)} ${estEsc(m.unit || '')}</td>
+            <td class="pf-num">${estFmtQtd(m.saldo_depois)}</td>
+            <td style="color:var(--muted)">${detalhe || '—'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div></div>`;
+}
+
+// ── Ficha técnica ─────────────────────────────────────────────────────
+function estFichaUnidade() {
+  const id = parseInt(document.getElementById('est-receita-ingrediente')?.value || '0');
+  const ing = estoqueItems.find(e => parseInt(e.id) === id);
+  const el = document.getElementById('est-receita-un');
+  if (el) el.textContent = ing ? '(' + ing.unit + ')' : '';
+}
+
+function estAbrirFicha(produtoId) {
+  const sel = document.getElementById('est-receita-item');
+  if (sel) sel.value = String(produtoId);
+  renderReceitaEstoque();
+}
+
+function estVincular(estoqueId) {
+  estIrParaAba('ficha');
+  renderReceitaEstoque();
+  const sel = document.getElementById('est-receita-ingrediente');
+  if (sel) { sel.value = String(estoqueId); estFichaUnidade(); }
+  document.getElementById('est-receita-item')?.focus();
+}
+
 function renderReceitaEstoque() {
   const selProduto = document.getElementById('est-receita-item');
   const selIng = document.getElementById('est-receita-ingrediente');
   const list = document.getElementById('est-receita-list');
   if (!selProduto || !selIng || !list) return;
 
-  const produtos = estProdutosReceita();
+  const produtos = estProdutosReceita().slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR'));
   const prevProduto = parseInt(selProduto.value) || 0;
   const produtoIds = new Set(produtos.map(p => parseInt(p.id)));
   const produtoId = produtoIds.has(prevProduto) ? prevProduto : (produtos[0]?.id || 0);
 
   selProduto.innerHTML = produtos.length
     ? produtos.map(p => `<option value="${p.id}">${estEsc(p.name)}</option>`).join('')
-    : '<option value="">Nenhum produto</option>';
+    : '<option value="">Nenhum produto no cardápio</option>';
   if (produtoId) selProduto.value = String(produtoId);
 
+  const itens = estoqueItems.slice().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   const prevIng = parseInt(selIng.value) || 0;
-  const ingIds = new Set(estoqueItems.map(e => parseInt(e.id)));
-  const ingId = ingIds.has(prevIng) ? prevIng : (estoqueItems[0]?.id || 0);
-  selIng.innerHTML = estoqueItems.length
-    ? estoqueItems.map(e => `<option value="${e.id}">${estEsc(e.name)} (${estEsc(e.unit || 'un')})</option>`).join('')
-    : '<option value="">Nenhum ingrediente</option>';
+  const ingId = itens.some(e => parseInt(e.id) === prevIng) ? prevIng : (itens[0]?.id || 0);
+  selIng.innerHTML = itens.length
+    ? itens.map(e => `<option value="${e.id}">${estEsc(e.name)} (${estEsc(e.unit || 'un')})</option>`).join('')
+    : '<option value="">Nenhum item cadastrado</option>';
   if (ingId) selIng.value = String(ingId);
+  estFichaUnidade();
+
+  // Produtos que já têm baixa automática
+  const resumo = document.getElementById('est-receita-resumo');
+  if (resumo) {
+    const porProduto = new Map();
+    estReceitasAtivas().forEach(r => {
+      const ing = estoqueItems.find(e => parseInt(e.id) === parseInt(r.estoque_id));
+      const prod = produtos.find(p => parseInt(p.id) === parseInt(r.item_id));
+      if (!ing || !prod) return;
+      if (!porProduto.has(prod.id)) porProduto.set(prod.id, { prod, partes: [] });
+      porProduto.get(prod.id).partes.push(estFmtQtd(r.qty) + ' ' + estEsc(ing.unit) + ' de ' + estEsc(ing.name));
+    });
+    const linhas = [...porProduto.values()].sort((a, b) => String(a.prod.name).localeCompare(String(b.prod.name), 'pt-BR'));
+    resumo.innerHTML = linhas.length
+      ? linhas.map(l => `<button class="pf-row est-resumo-row" onclick="estAbrirFicha(${l.prod.id})">
+          <span class="pf-row-main"><span class="pf-row-title">${estEsc(l.prod.name)}</span><span class="pf-row-sub" style="display:block">${l.partes.join(' · ')}</span></span>
+        </button>`).join('')
+      : '<div class="pf-empty" style="border:0;box-shadow:none;padding:26px 20px">Nenhum produto vinculado ainda. Enquanto não houver vínculo, o estoque só muda pelas entradas e saídas que você registrar.</div>';
+  }
 
   if (!produtoId || !estoqueItems.length) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:10px 0">Cadastre produtos e ingredientes para montar fichas tecnicas.</div>';
+    list.innerHTML = `<div class="pf-help" style="margin:0">${!estoqueItems.length ? 'Cadastre um item no estoque para poder vincular.' : 'Cadastre produtos no cardápio para poder vincular.'}</div>`;
     return;
   }
 
-  const receitas = estReceitasLista().filter(r =>
-    parseInt(r.item_id) === parseInt(produtoId) && r.ativo !== false && r.ativo !== 0
-  );
+  const receitas = estReceitasAtivas().filter(r => parseInt(r.item_id) === parseInt(produtoId));
   if (!receitas.length) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:10px 0">Nenhum ingrediente vinculado a este produto.</div>';
+    list.innerHTML = '<div class="pf-help" style="margin:0">Este produto ainda não baixa nada do estoque.</div>';
     return;
   }
 
-  list.innerHTML = `
-    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
-      ${receitas.map(r => {
-        const ing = estoqueItems.find(e => parseInt(e.id) === parseInt(r.estoque_id));
-        return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid var(--border)">
-          <div style="min-width:0">
-            <div style="font-size:12.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${estEsc(ing?.name || 'Ingrediente')}</div>
-            <div style="font-size:11px;color:var(--muted)">Estoque: ${estFmtQtd(ing?.qty || 0)} ${estEsc(ing?.unit || r.unit || '')}</div>
-          </div>
-          <div style="font-size:12px;font-weight:800;color:var(--success);white-space:nowrap">${estFmtQtd(r.qty)} ${estEsc(r.unit || ing?.unit || '')}</div>
-          <button class="btn bd" style="font-size:11px;padding:5px 8px" onclick="deleteReceitaEstoque(${r.id})">Remover</button>
-        </div>`;
-      }).join('')}
-    </div>`;
+  list.innerHTML = `<div class="pf-list" style="box-shadow:none">
+    ${receitas.map(r => {
+      const ing = estoqueItems.find(e => parseInt(e.id) === parseInt(r.estoque_id));
+      return `<div class="pf-row" style="padding:11px 14px">
+        <div class="pf-row-main">
+          <div class="pf-row-title">${estEsc(ing?.name || 'Item')}</div>
+          <div class="pf-row-sub">Em estoque: ${estFmtQtd(ing?.qty || 0)} ${estEsc(ing?.unit || r.unit || '')}</div>
+        </div>
+        <div class="pf-row-val" style="font-size:13.5px">${estFmtQtd(r.qty)} ${estEsc(ing?.unit || r.unit || '')} por venda</div>
+        <button class="btn bg pf-sm" onclick="deleteReceitaEstoque(${r.id})">Remover</button>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+async function estSalvarVinculo(itemId, estoqueId, qty) {
+  const ing = estoqueItems.find(e => parseInt(e.id) === parseInt(estoqueId));
+  const payload = { item_id: itemId, estoque_id: estoqueId, qty, unit: ing?.unit || '', ativo: 1, updated_at: new Date().toISOString() };
+  const receitas = estReceitasLista();
+  const existing = receitas.find(r => parseInt(r.item_id) === itemId && parseInt(r.estoque_id) === estoqueId);
+  if (existing) {
+    const res = await sb.from('estoque_receitas').update(payload).eq('id', existing.id);
+    if (res.error) throw new Error(res.error.message);
+    Object.assign(existing, payload, { ativo: true });
+  } else {
+    const res = await sb.from('estoque_receitas').insert(payload).select().single();
+    if (res.error) throw new Error(res.error.message);
+    // o servidor também avisa em tempo real: não duplica se a linha já chegou por lá
+    if (!receitas.some(r => parseInt(r.id) === parseInt(res.data?.id))) receitas.push({ id: res.data?.id, ...payload, ativo: true });
+  }
 }
 
 async function saveReceitaEstoque() {
   const itemId = parseInt(document.getElementById('est-receita-item')?.value || '0');
   const estoqueId = parseInt(document.getElementById('est-receita-ingrediente')?.value || '0');
-  const qtyRaw = String(document.getElementById('est-receita-qty')?.value || '').replace(',', '.');
-  const qty = parseFloat(qtyRaw) || 0;
+  const qty = parseFloat(String(document.getElementById('est-receita-qty')?.value || '').replace(',', '.')) || 0;
   if (!itemId) { sbToast('err', 'Selecione o produto'); return; }
-  if (!estoqueId) { sbToast('err', 'Selecione o ingrediente'); return; }
-  if (!(qty > 0)) { sbToast('err', 'Informe a quantidade'); return; }
-
-  const ing = estoqueItems.find(e => parseInt(e.id) === estoqueId);
-  const payload = { item_id: itemId, estoque_id: estoqueId, qty, unit: ing?.unit || '', ativo: 1, updated_at: new Date().toISOString() };
-  const receitas = estReceitasLista();
-  let existing = receitas.find(r => parseInt(r.item_id) === itemId && parseInt(r.estoque_id) === estoqueId);
+  if (!estoqueId) { sbToast('err', 'Selecione o item do estoque'); return; }
+  if (!(qty > 0)) { sbToast('err', 'Informe a quantidade por venda'); return; }
 
   sbLoading(true);
-  let error = null;
-  let data = null;
-  if (existing) {
-    const res = await sb.from('estoque_receitas').update(payload).eq('id', existing.id);
-    error = res.error;
-  } else {
-    const res = await sb.from('estoque_receitas').insert(payload).select().single();
-    error = res.error;
-    data = res.data;
+  try {
+    await estSalvarVinculo(itemId, estoqueId, qty);
+  } catch (e) {
+    sbLoading(false);
+    sbToast('err', 'Não foi possível vincular: ' + e.message);
+    return;
   }
   sbLoading(false);
-  if (error) { sbToast('err', 'Erro ao salvar ficha: ' + error.message); return; }
-
-  if (existing) Object.assign(existing, payload, { ativo: true });
-  else receitas.push({ id: data?.id, ...payload, ativo: true });
   const input = document.getElementById('est-receita-qty');
   if (input) input.value = '';
-  renderReceitaEstoque();
-  sbToast('ok', 'Ficha tecnica atualizada!');
+  renderEstoque();
+  sbToast('ok', 'Produto vinculado ao estoque');
 }
 
 async function deleteReceitaEstoque(id) {
   const row = estReceitasLista().find(r => parseInt(r.id) === parseInt(id));
   if (!row) return;
-  if (!confirm('Remover ingrediente da ficha tecnica?')) return;
+  if (!confirm('Remover este item da ficha? As próximas vendas do produto deixam de baixar o estoque dele.')) return;
   sbLoading(true);
   const { error } = await sb.from('estoque_receitas').delete().eq('id', id);
   sbLoading(false);
-  if (error) { sbToast('err', 'Erro ao remover'); return; }
+  if (error) { sbToast('err', 'Não foi possível remover'); return; }
   estoqueReceitas = estReceitasLista().filter(r => parseInt(r.id) !== parseInt(id));
-  renderReceitaEstoque();
-  sbToast('ok', 'Ingrediente removido da ficha.');
+  renderEstoque();
+  sbToast('ok', 'Item removido da ficha');
+}
+
+// ── Cadastro ──────────────────────────────────────────────────────────
+function estNovoUnidade() {
+  const el = document.getElementById('ing-produto-un');
+  if (el) el.textContent = '(' + (document.getElementById('ing-unit')?.value || 'un') + ')';
+}
+
+function estAbrirNovo() {
+  ['ing-nome', 'ing-qty', 'ing-min', 'ing-custo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const un = document.getElementById('ing-unit'); if (un) un.value = 'un';
+  const pq = document.getElementById('ing-produto-qty'); if (pq) pq.value = '1';
+  const sel = document.getElementById('ing-produto');
+  if (sel) {
+    const produtos = estProdutosReceita().slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR'));
+    sel.innerHTML = '<option value="">Nenhum por enquanto</option>' + produtos.map(p => `<option value="${p.id}">${estEsc(p.name)}</option>`).join('');
+  }
+  estNovoUnidade();
+  openModal('modal-add-ingrediente');
+  setTimeout(() => document.getElementById('ing-nome')?.focus(), 80);
 }
 
 async function saveIngrediente() {
+  const num = id => parseFloat(String(document.getElementById(id)?.value || '').replace(',', '.')) || 0;
   const nome  = document.getElementById('ing-nome').value.trim();
   const unit  = document.getElementById('ing-unit').value;
-  const qty   = parseFloat(document.getElementById('ing-qty').value) || 0;
-  const min   = parseFloat(document.getElementById('ing-min').value) || 0;
-  const custo = parseFloat(document.getElementById('ing-custo').value) || 0;
-  if (!nome) { sbToast('err','Informe o nome do ingrediente'); return; }
+  const qty   = num('ing-qty');
+  const min   = num('ing-min');
+  const custo = num('ing-custo');
+  const produtoId = parseInt(document.getElementById('ing-produto')?.value || '0');
+  const produtoQty = num('ing-produto-qty');
+  if (!nome) { sbToast('err', 'Informe o nome do item'); return; }
+  if (estoqueItems.some(e => e.name.trim().toLowerCase() === nome.toLowerCase())) { sbToast('err', 'Já existe um item com esse nome'); return; }
+  if (produtoId && !(produtoQty > 0)) { sbToast('err', 'Informe a quantidade por venda'); return; }
+
   sbLoading(true);
+  // Cria zerado e lança o saldo inicial como movimentação, para o histórico começar certo.
   const { data, error } = await sb.from('estoque').insert({
-    name: nome, unit, qty, min_qty: min, cost: custo, updated_at: new Date().toISOString()
+    name: nome, unit, qty: 0, min_qty: min, cost: custo, updated_at: new Date().toISOString()
   }).select().single();
+  if (error) { sbLoading(false); sbToast('err', 'Não foi possível cadastrar: ' + error.message); return; }
+  estAplicarLinha(data);
+  let aviso = '';
+  try {
+    if (qty > 0) await estMovimentar({ estoque_id: data.id, tipo: 'ajuste', novo_saldo: qty, note: 'Saldo inicial' });
+  } catch (e) { aviso = ' A quantidade inicial não foi gravada: use Registrar entrada.'; }
+  try {
+    if (produtoId) await estSalvarVinculo(produtoId, parseInt(data.id), produtoQty);
+  } catch (e) { aviso += ' O vínculo com o produto não foi gravado: faça pela aba Ficha técnica.'; }
   sbLoading(false);
-  if (error) { sbToast('err','Erro ao cadastrar: '+error.message); return; }
-  estoqueItems.push({ id:data.id, name:data.name, unit:data.unit, qty:data.qty,
-    min_qty:data.min_qty, custo:parseFloat(data.cost)||0, updated_at:data.updated_at });
   closeModal('modal-add-ingrediente');
-  ['ing-nome','ing-qty','ing-min','ing-custo'].forEach(id => {
-    const el = document.getElementById(id); if(el) el.value='';
-  });
   renderEstoque();
-  sbToast('ok', `${nome} cadastrado!`);
+  sbToast(aviso ? 'err' : 'ok', aviso ? `${nome} cadastrado.${aviso}` : `${nome} cadastrado`);
+}
+
+function estAbrirEntrada(id) {
+  estPreencherSelect('est-sel-ingrediente', 'Selecione');
+  const sel = document.getElementById('est-sel-ingrediente');
+  if (sel) sel.value = id ? String(id) : '';
+  ['est-qty-entrada', 'est-custo-entrada', 'est-obs-entrada'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
+  openModal('modal-estoque');
+  setTimeout(() => document.getElementById(id ? 'est-qty-entrada' : 'est-sel-ingrediente')?.focus(), 80);
 }
 
 async function registrarEntrada() {
   const id    = parseInt(document.getElementById('est-sel-ingrediente').value);
-  const qty   = parseFloat(document.getElementById('est-qty-entrada').value) || 0;
-  const custo = parseFloat(document.getElementById('est-custo-entrada').value) || 0;
-  const obs   = document.getElementById('est-obs-entrada').value;
-  if (!id)  { sbToast('err','Selecione o ingrediente'); return; }
-  if (!qty) { sbToast('err','Informe a quantidade'); return; }
+  const qty   = parseFloat(String(document.getElementById('est-qty-entrada').value).replace(',', '.')) || 0;
+  const custo = parseFloat(String(document.getElementById('est-custo-entrada').value).replace(',', '.')) || 0;
+  const obs   = document.getElementById('est-obs-entrada').value.trim();
+  if (!id)  { sbToast('err', 'Selecione o item'); return; }
+  if (!(qty > 0)) { sbToast('err', 'Informe a quantidade que chegou'); return; }
   const item = estoqueItems.find(e => e.id === id);
   if (!item) return;
-  const newQty = item.qty + qty;
-  const custUnit = qty > 0 && custo > 0 ? custo/qty : item.custo;
   sbLoading(true);
-  const { error } = await sb.from('estoque').update({
-    qty: newQty, cost: custUnit, updated_at: new Date().toISOString()
-  }).eq('id', id);
+  try {
+    await estMovimentar({ estoque_id: id, tipo: 'entrada', qty, custo_total: custo, note: obs });
+  } catch (e) { sbLoading(false); sbToast('err', e.message); return; }
   sbLoading(false);
-  if (error) { sbToast('err','Erro ao registrar'); return; }
-  item.qty = newQty; item.custo = custUnit; item.updated_at = new Date().toISOString();
   closeModal('modal-estoque');
-  ['est-qty-entrada','est-custo-entrada','est-obs-entrada'].forEach(i => {
-    const el=document.getElementById(i); if(el) el.value='';
-  });
-  renderEstoque();
-  sbToast('ok', `+${qty} ${item.unit} de ${item.name} registrado!`);
+  sbToast('ok', `Entrada de ${estFmtQtd(qty)} ${item.unit} em ${item.name}`);
+}
+
+function estAtualizarDisponivel() {
+  const id = parseInt(document.getElementById('est-sel-saida')?.value);
+  const info = document.getElementById('est-saida-info');
+  const el = document.getElementById('est-saida-disponivel');
+  if (!id) { if (info) info.style.display = 'none'; return; }
+  const item = estoqueItems.find(x => x.id === id);
+  if (el) el.textContent = item ? estFmtQtd(item.qty) + ' ' + item.unit : '—';
+  if (info) info.style.display = '';
+}
+
+function estAbrirSaida(id) {
+  estPreencherSelect('est-sel-saida', 'Selecione');
+  const sel = document.getElementById('est-sel-saida');
+  if (sel) sel.value = id ? String(id) : '';
+  ['est-qty-saida', 'est-motivo-saida'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
+  estAtualizarDisponivel();
+  openModal('modal-saida-estoque');
+}
+
+async function registrarSaida() {
+  const id  = parseInt(document.getElementById('est-sel-saida').value);
+  const qty = parseFloat(String(document.getElementById('est-qty-saida').value).replace(',', '.')) || 0;
+  const mot = document.getElementById('est-motivo-saida').value.trim();
+  if (!id) { sbToast('err', 'Selecione o item'); return; }
+  if (!(qty > 0)) { sbToast('err', 'Informe a quantidade'); return; }
+  const item = estoqueItems.find(x => x.id === id);
+  if (!item) return;
+  sbLoading(true);
+  try {
+    await estMovimentar({ estoque_id: id, tipo: 'saida', qty, note: mot });
+  } catch (e) { sbLoading(false); sbToast('err', e.message); return; }
+  sbLoading(false);
+  closeModal('modal-saida-estoque');
+  sbToast('ok', `Saída de ${estFmtQtd(qty)} ${item.unit} de ${item.name}`);
 }
 
 function openEditIngrediente(id) {
@@ -273,42 +707,56 @@ function openEditIngrediente(id) {
   document.getElementById('edit-ing-nome').value  = e.name;
   document.getElementById('edit-ing-qty').value   = e.qty;
   document.getElementById('edit-ing-min').value   = e.min_qty;
-  document.getElementById('edit-ing-custo').value = e.custo||0;
+  document.getElementById('edit-ing-custo').value = e.custo || 0;
+  const un = document.getElementById('edit-ing-unit');
+  if (un) {
+    if (![...un.options].some(o => o.value === e.unit)) un.insertAdjacentHTML('beforeend', `<option value="${estEsc(e.unit)}">${estEsc(e.unit)}</option>`);
+    un.value = e.unit;
+  }
   openModal('modal-edit-ingrediente');
 }
 
 async function saveEditIngrediente() {
+  const num = id => parseFloat(String(document.getElementById(id)?.value || '').replace(',', '.')) || 0;
   const id    = parseInt(document.getElementById('edit-ing-id').value);
   const nome  = document.getElementById('edit-ing-nome').value.trim();
-  const qty   = parseFloat(document.getElementById('edit-ing-qty').value) || 0;
-  const min   = parseFloat(document.getElementById('edit-ing-min').value) || 0;
-  const custo = parseFloat(document.getElementById('edit-ing-custo').value) || 0;
-  if (!nome) { sbToast('err','Informe o nome'); return; }
+  const unit  = document.getElementById('edit-ing-unit')?.value || 'un';
+  const qty   = num('edit-ing-qty');
+  const min   = num('edit-ing-min');
+  const custo = num('edit-ing-custo');
+  const item = estoqueItems.find(e => e.id === id);
+  if (!item) return;
+  if (!nome) { sbToast('err', 'Informe o nome'); return; }
   sbLoading(true);
   const { error } = await sb.from('estoque').update({
-    name: nome, qty, min_qty: min, cost: custo, updated_at: new Date().toISOString()
+    name: nome, unit, min_qty: min, cost: custo, updated_at: new Date().toISOString()
   }).eq('id', id);
+  if (error) { sbLoading(false); sbToast('err', 'Não foi possível salvar'); return; }
+  estAplicarLinha({ id, name: nome, unit, qty: item.qty, min_qty: min, cost: custo, updated_at: new Date().toISOString() });
+  try {
+    if (Math.abs(qty - item.qty) > 0.00001) await estMovimentar({ estoque_id: id, tipo: 'ajuste', novo_saldo: qty, note: 'Contagem' });
+  } catch (e) { sbLoading(false); sbToast('err', e.message); return; }
   sbLoading(false);
-  if (error) { sbToast('err','Erro ao salvar'); return; }
-  const item = estoqueItems.find(e => e.id === id);
-  if (item) { item.name=nome; item.qty=qty; item.min_qty=min; item.custo=custo; item.updated_at=new Date().toISOString(); }
   closeModal('modal-edit-ingrediente');
   renderEstoque();
-  sbToast('ok', `${nome} atualizado!`);
+  sbToast('ok', `${nome} atualizado`);
 }
 
 async function deleteIngrediente() {
   const id   = parseInt(document.getElementById('edit-ing-id').value);
   const item = estoqueItems.find(e => e.id === id);
-  if (!confirm(`Excluir ${item?.name}?`)) return;
+  if (!item) return;
+  if (!confirm(`Excluir ${item.name}? O histórico e os vínculos deste item também são apagados.`)) return;
   sbLoading(true);
   const { error } = await sb.from('estoque').delete().eq('id', id);
   sbLoading(false);
-  if (error) { sbToast('err','Erro ao excluir'); return; }
+  if (error) { sbToast('err', 'Não foi possível excluir'); return; }
   estoqueItems = estoqueItems.filter(e => e.id !== id);
+  estoqueReceitas = estReceitasLista().filter(r => parseInt(r.estoque_id) !== id);
   closeModal('modal-edit-ingrediente');
   renderEstoque();
-  sbToast('ok', `${item?.name} removido!`);
+  estAgendarMovs(0);
+  sbToast('ok', `${item.name} excluído`);
 }
 
 // ─────────────────────────────────────────

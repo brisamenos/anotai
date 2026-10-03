@@ -762,6 +762,7 @@ td{padding:12px 16px;color:#dce6f7}
 <script src="/api-client.js"></script>
 <script src="/admin-marketing.js"></script>
 <script src="/admin-marketing-editor.js"></script>
+<script src="/admin-site.js?v=1"></script>
 </head>
 <body>
 <div id="toast"></div>
@@ -816,6 +817,13 @@ td{padding:12px 16px;color:#dce6f7}
       </button>
       <button class="sb-item" id="nav-marketing" onclick="navTo('marketing')">
         <span class="sb-icon"></span> Marketing
+      </button>
+      <button class="sb-item" id="nav-testes" onclick="navTo('testes')">
+        <span class="sb-icon"><svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="9" r="5"/><path d="M8 6.4V9l1.8 1.1M6.3 1.8h3.4M8 1.8V4"/></svg></span> Testes grátis
+        <span id="nav-testes-badge" style="display:none;margin-left:auto;background:var(--success);color:#fff;font-size:10.5px;font-weight:800;border-radius:99px;min-width:19px;padding:1px 6px;text-align:center"></span>
+      </button>
+      <button class="sb-item" id="nav-site" onclick="navTo('site')">
+        <span class="sb-icon"><svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.8"/><path d="M2.2 8h11.6M8 2.2c1.9 2 1.9 9.6 0 11.6M8 2.2c-1.9 2-1.9 9.6 0 11.6"/></svg></span> Site
       </button>
       <button class="sb-item" id="nav-saques" onclick="navTo('saques')">
         <span class="sb-icon"></span> Saques PIX
@@ -1261,6 +1269,10 @@ td{padding:12px 16px;color:#dce6f7}
       <!-- ════ PLANOS & LEADS ════ -->
       <!-- MARKETING (fluxos de WhatsApp) — conteudo montado por admin-marketing.js -->
       <div id="sec-marketing" style="display:none" class="sec-page"></div>
+
+      <!-- Testes grátis e editor do site: montados por admin-site.js -->
+      <div id="sec-testes" style="display:none" class="sec-page"></div>
+      <div id="sec-site" style="display:none" class="sec-page"></div>
 
       <!-- COMUNICADOS -->
       <div id="sec-comunicados" style="display:none" class="sec-page">
@@ -3232,7 +3244,7 @@ function polishAdminUI(root = document) {
 window.addEventListener('DOMContentLoaded', () => polishAdminUI());
 
 function navTo(id) {
-  ['dash','clientes','ia','backup','saques','planos','comunicados','marketing','faturamento','fiscal-uso','indicacoes','auditoria','icones','operacao'].forEach(s => {
+  ['dash','clientes','ia','backup','saques','planos','comunicados','marketing','testes','site','faturamento','fiscal-uso','indicacoes','auditoria','icones','operacao'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
     if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
@@ -3240,12 +3252,16 @@ function navTo(id) {
   const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Planos & Leads', faturamento:'Faturamento', 'fiscal-uso':'Uso NFC-e', indicacoes:'Indicações', auditoria:'Auditoria', icones:'Ícones do Açougue', operacao:'Operação ao Vivo' };
   titles.comunicados = 'Comunicados';
   titles.marketing = 'Marketing';
+  titles.testes = 'Testes grátis';
+  titles.site = 'Site';
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
   if (id==='backup')      { renderBackupList(); telegramBackupCarregar(); }
   if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); carregarCobrancaWA(); svCarregar(); conectarAdminSSE(); }
   if (id==='planos')      { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
   if (id==='marketing')   { window.MKUI && MKUI.init(); }
+  if (id==='testes')      { window.SITEUI && SITEUI.initTestes(); }
+  if (id==='site')        { window.SITEUI && SITEUI.initSite(); }
   if (id==='comunicados') { renderComunicadoTargetsAdmin(); carregarComunicadosAdmin(); }
   if (id==='faturamento') { carregarFaturamento(); }
   if (id==='fiscal-uso')  { carregarFiscalUso(); }
@@ -3700,7 +3716,9 @@ function _precoPlano(c) {
   return pre; // plano único — tudo incluso (essencial/premium/fiscal antigos caem aqui)
 }
 function calcularFinanceiro() {
-  const ativos = _clientes.filter(c => c.ativo);
+  // Conta de teste grátis ainda não paga: fica fora da receita (admin-site.js informa quais são)
+  const emTeste = (window.SITEUI && SITEUI.emTeste) || new Set();
+  const ativos = _clientes.filter(c => c.ativo && !emTeste.has(c.id));
   const mrr = ativos.reduce((s,c) => s + _precoPlano(c), 0);
   const arr = mrr * 12;
   const ticket = ativos.length ? mrr / ativos.length : 0;
@@ -3969,7 +3987,7 @@ function renderClientes() {
         <div class="manager-name">${gestor?.nome||'—'}</div>
         <div class="manager-email">${gestor?.email||c.email||'—'}</div>
       </td>
-      <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span>${(c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<div style="font-size:11px;color:var(--success);font-weight:700;margin-top:3px">R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês${c.valor_mensalidade_expira_em ? ` <span style="color:var(--warning,#b45309);font-weight:600">(até ${adminFormatDate(c.valor_mensalidade_expira_em)})</span>` : ''}</div>` : ''}</td>
+      <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span>${(window.SITEUI && SITEUI.emTeste.has(c.id)) ? ' <span class="badge bg-orange">Teste grátis</span>' : ''}${(c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<div style="font-size:11px;color:var(--success);font-weight:700;margin-top:3px">R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês${c.valor_mensalidade_expira_em ? ` <span style="color:var(--warning,#b45309);font-weight:600">(até ${adminFormatDate(c.valor_mensalidade_expira_em)})</span>` : ''}</div>` : ''}</td>
       <td><span class="badge ${(c.segmento||'restaurante')==='acougue'?'bg-orange':'bg-blue'}">${(c.segmento||'restaurante')==='acougue'?'Açougue':'Restaurante'}</span></td>
       <td style="font-size:12.5px;color:${expOk?(expSoon?'var(--orange)':'var(--text-2)'):'var(--danger)'}">${c.expires_at ? adminFormatDate(c.expires_at) : '—'}${expSoon?' ⚠️':''}</td>
       <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">● ${c.ativo?'Ativo':'Inativo'}</span></td>

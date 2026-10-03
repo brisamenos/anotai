@@ -890,6 +890,7 @@ async function loadAllData(silent = false) {
       qty:parseFloat(r.qty)||0, unit:r.unit||'', ativo:r.ativo !== false && r.ativo !== 0,
       updated_at:r.updated_at||null
     }));
+    if (typeof estAtualizarAvisos === 'function') estAtualizarAvisos();
     if (fidRes.data?.length)      fidClients    = fidRes.data.map(f => ({
       id:f.id, name:f.name, phone:f.phone||'', pts:f.pts||0,
       max:f.max_pts||_fidConfig.meta_pts||500,
@@ -1678,6 +1679,9 @@ function subscribeOrders() {
     .on('postgres_changes', {event:'*', schema:'public', table:'estoque'}, p => {
       const row = p.new || {};
       if (!row.id) return;
+      // gestor-relatorios.js cuida de guardar, redesenhar e avisar quando o item
+      // chega no ponto de reposição (o aviso vale em qualquer tela).
+      if (typeof estAplicarLinha === 'function') { estAplicarLinha(row); return; }
       const mapped = {
         id: row.id, name: row.name, unit: row.unit || 'un', qty: parseFloat(row.qty) || 0,
         min_qty: parseFloat(row.min_qty) || 0, custo: parseFloat(row.cost) || 0,
@@ -1701,6 +1705,9 @@ function subscribeOrders() {
       if (idx >= 0) estoqueReceitas[idx] = mapped;
       else estoqueReceitas.push(mapped);
       if (typeof renderReceitaEstoque === 'function') renderReceitaEstoque();
+    })
+    .on('postgres_changes', {event:'*', schema:'public', table:'estoque_movimentos'}, () => {
+      if (typeof estAgendarMovs === 'function') estAgendarMovs();
     })
     .subscribe();
 
