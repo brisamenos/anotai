@@ -2,6 +2,7 @@
 // ADMIN-MARKETING.JS — aba "Marketing" do painel admin
 // Construtor de fluxos de WhatsApp (palavra-chave, botoes, listas, midia, audio gravado)
 // e disparos em massa. Usa a API /api/admin/marketing (marketing-flows.js).
+// Importar / Exportar: pacote .zip com fluxo.json + midias (ver "IMPORTAR / EXPORTAR" abaixo).
 // Depende de helpers do admin.html: adminAuthHeader, toast, doLogout, abrirModal/fecharModal.
 // ═══════════════════════════════════════════════════════
 (function () {
@@ -105,6 +106,18 @@
 .mk-bar>i{display:block;height:100%;background:var(--accent)}
 .mk-st{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;border:1px solid var(--border);background:var(--s2)}
 .mk-st.ok{color:var(--success)}.mk-st.err{color:var(--danger)}.mk-st.run{color:var(--orange)}
+.mk-head-acoes{display:flex;gap:8px;flex-wrap:wrap}
+.mk-drop{display:block;position:relative;border:1.5px dashed var(--border);border-radius:12px;padding:22px 16px;text-align:center;cursor:pointer;background:var(--s2);color:var(--text-2);font-size:12.5px;line-height:1.55}
+.mk-drop:hover,.mk-drop.sobre,.mk-drop:focus-within{border-color:var(--accent);color:var(--text)}
+.mk-drop b{display:block;color:var(--text);font-size:13.5px;margin-bottom:2px}
+.mk-drop input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.mk-imp-resumo{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;font-size:12.5px;line-height:1.5;margin:0 0 14px}
+.mk-imp-resumo dt{color:var(--muted)}
+.mk-imp-resumo dd{margin:0;color:var(--text);word-break:break-word}
+.mk-imp-lista{margin:6px 0 0;padding-left:18px;font-size:12px;line-height:1.55}
+.mk-alert.erro{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.08)}
+.mk-imp-prog{margin-top:12px;font-size:12.5px;color:var(--text-2)}
+.mk-imp-prog .mk-bar{margin-top:7px;min-width:0}
 `;
     document.head.appendChild(st);
   }
@@ -120,7 +133,10 @@
           <div class="sec-head-title">Marketing</div>
           <div class="sec-head-sub">Monte fluxos de mensagens para o WhatsApp: respostas automáticas por palavra-chave e disparos para listas de contatos</div>
         </div>
-        <button class="btn bp" onclick="MKUI.novo()">Novo fluxo</button>
+        <div class="mk-head-acoes">
+          <button class="btn bg2" onclick="MKUI.importar()">Importar fluxo</button>
+          <button class="btn bp" onclick="MKUI.novo()">Novo fluxo</button>
+        </div>
       </div>
       <div id="mk-status"></div>
       <div class="mk-tabs">
@@ -194,7 +210,7 @@
     const el = $('mk-body');
     if (!el) return;
     if (!MK.fluxos.length) {
-      el.innerHTML = '<div class="mk-empty">Nenhum fluxo criado ainda.<br>Clique em <b>Novo fluxo</b> para montar o primeiro.</div>';
+      el.innerHTML = '<div class="mk-empty">Nenhum fluxo criado ainda.<br>Clique em <b>Novo fluxo</b> para montar o primeiro ou em <b>Importar fluxo</b> para trazer um fluxo pronto.</div>';
       return;
     }
     el.innerHTML = '<div class="mk-grid">' + MK.fluxos.map(f => {
@@ -217,6 +233,7 @@
           <button class="btn bg2 bsm" onclick="MKUI.testar(${f.id})">Testar</button>
           <button class="btn bg2 bsm" onclick="MKUI.disparar(${f.id})">Disparar</button>
           <button class="btn bg2 bsm" onclick="MKUI.duplicar(${f.id})">Duplicar</button>
+          <button class="btn bg2 bsm" onclick="MKUI.exportar(${f.id}, this)">Exportar</button>
           <button class="btn bd bsm" onclick="MKUI.excluir(${f.id})">Excluir</button>
         </div>
       </div>`;
@@ -458,10 +475,421 @@
     if (render !== false && MK.tab === 'fluxos') renderFluxos();
   }
 
+
+  // ═══ IMPORTAR / EXPORTAR ═══════════════════════════════
+  // Pacote de fluxo: um .zip com "fluxo.json" na raiz e as mídias em "midias/".
+  // Também aceita o .json solto, escolhido junto com os arquivos de mídia.
+  // fluxo.json = { formato, versao, fluxo:{nome,gatilho,opcoes,grafo}, midias:[{arquivo,nome,tipo}], parametros:[{chave,rotulo,...}] }
+  // Nos textos e links do fluxo, {{param:chave}} é trocado pelo valor informado na importação.
+  const FORMATO = 'estimafood-fluxo';
+  const ARQ_HASH = /^[a-f0-9]{16}\.[a-z0-9]{2,5}$/;
+  const EXT_TIPO = { jpg: 'imagem', jpeg: 'imagem', png: 'imagem', webp: 'imagem', mp4: 'video', mov: 'video', '3gp': 'video', webm: 'video', ogg: 'audio', opus: 'audio', mp3: 'audio', m4a: 'audio', aac: 'audio', wav: 'audio' };
+  const IMP = { itens: [], pacote: null, faltando: [], erro: '', ocupado: false, criado: null };
+
+  const base = n => String(n || '').split(/[\\/]/).pop();
+  const extDe = n => (/\.([a-z0-9]+)$/i.exec(String(n || '')) || [])[1]?.toLowerCase() || '';
+  const tipoDaMidia = (nome, tipo) => ['imagem', 'video', 'audio', 'documento'].includes(tipo) ? tipo : (EXT_TIPO[extDe(nome)] || 'documento');
+  const mb = b => b >= 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+
+  // Percorre todos os textos de um objeto (profundo), trocando cada um por fn(texto)
+  function trocarTextos(v, fn) {
+    if (typeof v === 'string') return fn(v);
+    if (Array.isArray(v)) return v.map(x => trocarTextos(x, fn));
+    if (v && typeof v === 'object') { const o = {}; for (const k of Object.keys(v)) o[k] = trocarTextos(v[k], fn); return o; }
+    return v;
+  }
+  function textosDe(v, out = []) {
+    if (typeof v === 'string') out.push(v);
+    else if (Array.isArray(v)) v.forEach(x => textosDe(x, out));
+    else if (v && typeof v === 'object') Object.values(v).forEach(x => textosDe(x, out));
+    return out;
+  }
+
+  // ── Leitura de .zip sem biblioteca (arquivos sem compressão ou com deflate) ──
+  async function lerZip(file) {
+    const fim = new DataView(await file.slice(Math.max(0, file.size - 66000)).arrayBuffer());
+    let p = -1;
+    for (let i = fim.byteLength - 22; i >= 0; i--) if (fim.getUint32(i, true) === 0x06054b50) { p = i; break; }
+    if (p < 0) throw new Error(`"${file.name}" não é um arquivo .zip válido`);
+    const total = fim.getUint16(p + 10, true), cdTam = fim.getUint32(p + 12, true), cdPos = fim.getUint32(p + 16, true);
+    if (cdPos === 0xFFFFFFFF || total === 0xFFFF) throw new Error('Pacote grande demais para importar por aqui');
+    const cd = new DataView(await file.slice(cdPos, cdPos + cdTam).arrayBuffer());
+    const dec = new TextDecoder('utf-8');
+    const itens = [];
+    let o = 0;
+    for (let n = 0; n < total && o + 46 <= cd.byteLength; n++) {
+      if (cd.getUint32(o, true) !== 0x02014b50) break;
+      const metodo = cd.getUint16(o + 10, true), comp = cd.getUint32(o + 20, true), real = cd.getUint32(o + 24, true);
+      const nl = cd.getUint16(o + 28, true), el = cd.getUint16(o + 30, true), cl = cd.getUint16(o + 32, true), pos = cd.getUint32(o + 42, true);
+      const caminho = dec.decode(new Uint8Array(cd.buffer, cd.byteOffset + o + 46, nl));
+      o += 46 + nl + el + cl;
+      if (!caminho || caminho.endsWith('/') || /(^|\/)(__MACOSX\/|\.DS_Store$|Thumbs\.db$)/.test(caminho)) continue;
+      itens.push({
+        nome: base(caminho), caminho, tamanho: real,
+        abrir: async () => {
+          const lh = new DataView(await file.slice(pos, pos + 30).arrayBuffer());
+          if (lh.byteLength < 30 || lh.getUint32(0, true) !== 0x04034b50) throw new Error(`Não consegui ler "${base(caminho)}" dentro do pacote`);
+          const ini = pos + 30 + lh.getUint16(26, true) + lh.getUint16(28, true);
+          const bruto = file.slice(ini, ini + comp);
+          if (metodo === 0) return bruto;
+          if (metodo === 8 && typeof DecompressionStream === 'function') return new Response(bruto.stream().pipeThrough(new DecompressionStream('deflate-raw'))).blob();
+          throw new Error('Este navegador não abre pacote compactado. Extraia o .zip e selecione o .json junto com as mídias.');
+        }
+      });
+    }
+    return itens;
+  }
+
+  // ── Escrita de .zip sem compressão (vídeo e imagem já são comprimidos) ──
+  let _crcTab;
+  function crc32(u8) {
+    if (!_crcTab) { _crcTab = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; _crcTab[n] = c >>> 0; } }
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < u8.length; i++) c = _crcTab[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function montarZip(arquivos) { // [{ caminho, dados: Uint8Array }]
+    const enc = new TextEncoder(), partes = [], central = [];
+    const d = new Date();
+    const hora = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const dia = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    let pos = 0;
+    for (const a of arquivos) {
+      const nome = enc.encode(a.caminho), crc = crc32(a.dados), tam = a.dados.length;
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+      lh.setUint16(10, hora, true); lh.setUint16(12, dia, true); lh.setUint32(14, crc, true); lh.setUint32(18, tam, true); lh.setUint32(22, tam, true);
+      lh.setUint16(26, nome.length, true); lh.setUint16(28, 0, true);
+      partes.push(lh, nome, a.dados);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+      ch.setUint16(12, hora, true); ch.setUint16(14, dia, true); ch.setUint32(16, crc, true); ch.setUint32(20, tam, true); ch.setUint32(24, tam, true);
+      ch.setUint16(28, nome.length, true); ch.setUint32(42, pos, true);
+      central.push(ch, nome);
+      pos += 30 + nome.length + tam;
+    }
+    const cdTam = central.reduce((n, x) => n + x.byteLength, 0);
+    const fim = new DataView(new ArrayBuffer(22));
+    fim.setUint32(0, 0x06054b50, true); fim.setUint16(8, arquivos.length, true); fim.setUint16(10, arquivos.length, true);
+    fim.setUint32(12, cdTam, true); fim.setUint32(16, pos, true);
+    return new Blob([...partes, ...central, fim], { type: 'application/zip' });
+  }
+  function baixar(blob, nome) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = nome;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+  }
+
+  // ── Exportar: gera o pacote do fluxo (json + mídias) para importar em outro painel ──
+  async function exportar(id, btn) {
+    const f = MK.fluxos.find(x => x.id === id);
+    if (!f || (btn && btn.disabled)) return;
+    const rotulo = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Exportando...'; }
+    try {
+      const grafo = JSON.parse(JSON.stringify(f.grafo || { nodes: [], edges: [] }));
+      // mídias guardadas no servidor que o fluxo usa (links http ficam como estão)
+      const midias = [], vistos = new Set(), nomes = new Set();
+      const anotar = (o, tipo) => {
+        const arq = String(o && o.midia || '');
+        if (!ARQ_HASH.test(arq) || vistos.has(arq)) return;
+        vistos.add(arq);
+        let nome = base(o.nome) || arq;
+        if (extDe(nome) !== extDe(arq)) nome = nome.replace(/\.[a-z0-9]+$/i, '') + '.' + extDe(arq);
+        for (let k = 2; nomes.has(nome.toLowerCase()); k++) nome = nome.replace(/(-\d+)?(\.[a-z0-9]+)$/i, `-${k}$2`);
+        nomes.add(nome.toLowerCase());
+        midias.push({ arquivo: arq, nome, tipo: tipoDaMidia(arq, tipo) });
+      };
+      for (const n of grafo.nodes) {
+        const c = n.cfg || {};
+        if (['imagem', 'video', 'audio', 'documento'].includes(n.tipo)) anotar(c, n.tipo);
+        if (n.tipo === 'botoes') anotar(c, 'imagem');
+        if (n.tipo === 'carrossel') (c.cartoes || []).forEach(k => anotar(k, 'imagem'));
+      }
+      const arquivos = [], semArquivo = [];
+      for (const m of midias) {
+        const r = await fetch('/api/admin/marketing/midia/' + m.arquivo, { headers: adminAuthHeader() });
+        if (!r.ok) { semArquivo.push(m.nome); continue; }
+        const dados = new Uint8Array(await r.arrayBuffer());
+        m.bytes = dados.length;
+        arquivos.push({ caminho: 'midias/' + m.nome, dados });
+      }
+      const pacote = {
+        formato: FORMATO, versao: 1, exportado_em: new Date().toISOString(),
+        fluxo: { nome: f.nome, gatilho: f.gatilho, opcoes: f.opcoes, grafo },
+        midias: midias.filter(m => m.bytes), parametros: []
+      };
+      const json = new TextEncoder().encode(JSON.stringify(pacote, null, 2));
+      const slug = String(f.nome).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'fluxo';
+      if (arquivos.length) baixar(montarZip([{ caminho: 'fluxo.json', dados: json }, ...arquivos]), `fluxo-${slug}.zip`);
+      else baixar(new Blob([json], { type: 'application/json' }), `fluxo-${slug}.json`);
+      if (semArquivo.length) toast('err', `Exportado sem ${semArquivo.length} mídia(s) que não estão mais no servidor: ${semArquivo.join(', ')}`);
+      else toast('ok', arquivos.length ? `Fluxo exportado com ${arquivos.length} mídia(s)` : 'Fluxo exportado');
+    } catch (e) { toast('err', 'Não consegui exportar: ' + e.message); }
+    if (btn) { btn.disabled = false; btn.textContent = rotulo; }
+  }
+
+  // ── Importar ───────────────────────────────────────
+  function importar() {
+    if (IMP.ocupado) return;
+    Object.assign(IMP, { itens: [], pacote: null, faltando: [], erro: '', criado: null });
+    renderImportar();
+  }
+
+  function soltar(ev, sobre) {
+    ev.preventDefault();
+    const el = $('mk-imp-drop');
+    if (el) el.classList.toggle('sobre', !!sobre);
+    if (sobre === false && ev.type === 'drop' && ev.dataTransfer) impArquivos(ev.dataTransfer.files);
+  }
+
+  async function impArquivos(lista) {
+    if (IMP.ocupado) return;
+    IMP.erro = '';
+    try {
+      for (const file of Array.from(lista || [])) {
+        const novos = /\.zip$/i.test(file.name) ? await lerZip(file) : [{ nome: file.name, caminho: file.name, tamanho: file.size, abrir: async () => file }];
+        for (const it of novos) {
+          IMP.itens = IMP.itens.filter(x => x.nome.toLowerCase() !== it.nome.toLowerCase());
+          IMP.itens.push(it);
+        }
+      }
+      await analisarPacote();
+    } catch (e) { IMP.erro = e.message; }
+    renderImportar();
+  }
+
+  // Acha o .json do fluxo entre os arquivos escolhidos e confere quais mídias vieram junto
+  async function analisarPacote() {
+    const jsons = IMP.itens.filter(x => /\.json$/i.test(x.nome));
+    let achado = null;
+    for (const it of jsons.sort((a, b) => (b.nome.toLowerCase() === 'fluxo.json') - (a.nome.toLowerCase() === 'fluxo.json'))) {
+      let d = null;
+      try { d = JSON.parse(await (await it.abrir()).text()); } catch (_) { continue; }
+      const fx = d && d.formato === FORMATO ? d.fluxo : (d && d.grafo && Array.isArray(d.grafo.nodes) ? d : null); // também aceita o fluxo "puro"
+      if (!fx || !fx.grafo || !Array.isArray(fx.grafo.nodes)) continue;
+      if (achado) throw new Error('Há mais de um fluxo entre os arquivos. Importe um fluxo por vez.');
+      achado = {
+        origem: it.nome,
+        fluxo: { nome: String(fx.nome || '').trim() || 'Fluxo importado', gatilho: fx.gatilho || {}, opcoes: fx.opcoes || {}, grafo: fx.grafo },
+        midias: (d.formato === FORMATO && Array.isArray(d.midias) ? d.midias : []).filter(m => m && ARQ_HASH.test(String(m.arquivo || '')))
+          .map(m => ({ arquivo: String(m.arquivo), nome: base(m.nome) || String(m.arquivo), tipo: tipoDaMidia(m.nome || m.arquivo, m.tipo) })),
+        parametros: (d.formato === FORMATO && Array.isArray(d.parametros) ? d.parametros : []).filter(q => q && /^[a-z][a-z0-9_]{0,29}$/i.test(String(q.chave || ''))).slice(0, 8),
+        descricao: d.formato === FORMATO ? String(d.descricao || '') : ''
+      };
+    }
+    const antes = IMP.pacote;
+    IMP.pacote = achado;
+    IMP.faltando = [];
+    if (!achado) {
+      if (IMP.itens.length) IMP.erro = jsons.length ? 'O arquivo .json escolhido não é um fluxo do Marketing.' : 'Não encontrei o arquivo do fluxo (.json). Selecione o pacote .zip, ou o .json junto com as mídias.';
+      return;
+    }
+    // valores já digitados continuam quando a pessoa só acrescenta arquivos
+    achado.valores = antes && antes.origem === achado.origem ? antes.valores : {};
+    achado.nomeEditado = antes && antes.origem === achado.origem ? antes.nomeEditado : null;
+    const porNome = new Map(IMP.itens.map(x => [x.nome.toLowerCase(), x]));
+    const noManifesto = new Set(achado.midias.map(m => m.arquivo));
+    for (const m of achado.midias) {
+      m.item = porNome.get(m.nome.toLowerCase()) || porNome.get(m.arquivo.toLowerCase()) || null;
+      if (!m.item) IMP.faltando.push(m.nome);
+    }
+    // arquivo citado no fluxo, mas fora da lista de mídias do pacote: tenta achar pelo próprio nome
+    for (const t of new Set(textosDe(achado.fluxo.grafo).filter(x => ARQ_HASH.test(x)))) {
+      if (noManifesto.has(t)) continue;
+      const item = porNome.get(t.toLowerCase()) || null;
+      achado.midias.push({ arquivo: t, nome: t, tipo: tipoDaMidia(t), item });
+      if (!item) IMP.faltando.push(t);
+    }
+    // sugestão para o endereço do site: o que estiver cadastrado em Site > Geral
+    if (achado.parametros.some(q => q.chave === 'site') && achado.valores.site === undefined) {
+      try {
+        const r = await fetch('/api/admin/site', { headers: adminAuthHeader() });
+        const u = r.ok ? String((await r.json())?.conteudo?.geral?.url_site || '').trim() : '';
+        if (u) achado.valores.site = u;
+      } catch (_) {}
+    }
+  }
+
+  function renderImportar() {
+    const pc = IMP.pacote;
+    const cab = `<div class="mk-box-head"><div class="mk-box-title">Importar fluxo</div><button class="mk-mini" onclick="MKUI.impFechar()">×</button></div>`;
+    const drop = (titulo, sub) => `
+      <label class="mk-drop" id="mk-imp-drop" ondragover="MKUI.impSoltar(event,true)" ondragleave="MKUI.impSoltar(event)" ondrop="MKUI.impSoltar(event,false)">
+        <input type="file" multiple accept=".zip,.json,video/*,image/*,audio/*,.pdf" onchange="MKUI.impArquivos(this.files);this.value=''">
+        <b>${titulo}</b>${sub}
+      </label>`;
+    const erro = IMP.erro ? `<div class="mk-alert erro" style="margin:12px 0 0">${esc(IMP.erro)}</div>` : '';
+
+    if (IMP.criado) {
+      const f = IMP.criado;
+      abrirSmall(`${cab}
+        <div class="mk-box-body">
+          <div class="mk-meta" style="font-size:13px"><b>${esc(f.nome)}</b> foi importado e está <b>desativado</b>.</div>
+          <div class="form-hint" style="margin-top:8px">Mande um teste para o seu WhatsApp, confira as mensagens e depois ligue a chave do fluxo na lista para ele começar a responder os clientes.</div>
+        </div>
+        <div class="mk-box-foot">
+          <button class="btn bg2" onclick="MKUI.impFechar()">Fechar</button>
+          <button class="btn bg2" onclick="MKUI.impFechar();MKUI.editar(${f.id})">Abrir no editor</button>
+          <button class="btn bp" onclick="MKUI.impFechar();MKUI.testar(${f.id})">Enviar teste</button>
+        </div>`);
+      return;
+    }
+
+    if (!pc) {
+      abrirSmall(`${cab}
+        <div class="mk-box-body">
+          ${drop('Escolher o arquivo do fluxo', 'Selecione o pacote <b style="display:inline;font-size:inherit">.zip</b> do fluxo. Se você tem o .json e as mídias soltos, selecione todos de uma vez.')}
+          ${erro}
+          <div class="form-hint" style="margin-top:12px">O fluxo entra desativado, com os vídeos e as imagens dele. Você confere, testa e só então ativa.</div>
+        </div>
+        <div class="mk-box-foot"><button class="btn bg2" onclick="MKUI.impFechar()">Cancelar</button></div>`);
+      return;
+    }
+
+    const nos = (pc.fluxo.grafo.nodes || []).filter(n => n && n.id !== 'inicio' && n.tipo !== 'gatilho');
+    const tipos = [...new Set(nos.map(n => TIPO_NOME[n.tipo]).filter(Boolean))];
+    const comArquivo = pc.midias.filter(m => m.item);
+    const peso = comArquivo.reduce((n, m) => n + (m.item.tamanho || 0), 0);
+    const jaExiste = MK.fluxos.some(x => x.nome.trim().toLowerCase() === (pc.nomeEditado ?? pc.fluxo.nome).trim().toLowerCase());
+    const chama = nos.some(n => n.tipo === 'chamar_fluxo');
+    const params = pc.parametros.map(q => `
+      <div class="form-group"><label class="form-label">${esc(q.rotulo || q.chave)}</label>
+        <input class="minput" id="mk-imp-p-${esc(q.chave)}" data-chave="${esc(q.chave)}" placeholder="${esc(q.exemplo || '')}" value="${esc(pc.valores[q.chave] ?? q.padrao ?? '')}" oninput="MKUI.impValor(this)">
+        ${q.ajuda ? `<div class="form-hint">${esc(q.ajuda)}</div>` : ''}</div>`).join('');
+    const avisos = [];
+    if (IMP.faltando.length) avisos.push(`<div class="mk-alert erro" style="margin:0 0 12px"><b>Faltam ${IMP.faltando.length} arquivo(s) de mídia</b> deste fluxo. Adicione os arquivos abaixo para continuar:<ul class="mk-imp-lista">${IMP.faltando.slice(0, 30).map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>`);
+    if (chama) avisos.push('<div class="mk-alert" style="margin:0 0 12px">Este fluxo chama outro fluxo. Depois de importar, abra no editor e escolha o fluxo de destino no nó "Outro fluxo".</div>');
+    if (jaExiste) avisos.push('<div class="mk-alert" style="margin:0 0 12px">Já existe um fluxo com este nome. O importado entra como um fluxo separado; troque o nome se quiser diferenciar.</div>');
+
+    abrirSmall(`${cab}
+      <div class="mk-box-body">
+        <div class="form-group"><label class="form-label">Nome do fluxo</label>
+          <input class="minput" id="mk-imp-nome" maxlength="80" value="${esc(pc.nomeEditado ?? pc.fluxo.nome)}" oninput="MKUI.impValor(this)"></div>
+        ${pc.descricao ? `<div class="form-hint" style="margin:-4px 0 12px">${esc(pc.descricao)}</div>` : ''}
+        <dl class="mk-imp-resumo">
+          <dt>Gatilho</dt><dd>${resumoGatilho(pc.fluxo)}</dd>
+          <dt>Conteúdo</dt><dd>${nos.length} nó(s)${tipos.length ? ': ' + tipos.map(esc).join(', ') : ''}</dd>
+          <dt>Mídias</dt><dd>${pc.midias.length ? `${comArquivo.length} de ${pc.midias.length} arquivo(s) prontos para enviar (${mb(peso)})` : 'Este fluxo não usa arquivos de mídia'}</dd>
+        </dl>
+        ${params}
+        ${avisos.join('')}
+        ${IMP.faltando.length ? drop('Adicionar os arquivos que faltam', 'Selecione os vídeos e as imagens que vieram com o fluxo.') : ''}
+        ${erro}
+        <div class="mk-imp-prog" id="mk-imp-prog" style="display:none"><span id="mk-imp-prog-txt"></span><div class="mk-bar"><i id="mk-imp-prog-bar" style="width:0%"></i></div></div>
+      </div>
+      <div class="mk-box-foot">
+        <button class="btn bg2" id="mk-imp-cancelar" onclick="MKUI.impFechar()">Cancelar</button>
+        <button class="btn bg2" id="mk-imp-trocar" onclick="MKUI.importar()">Escolher outro arquivo</button>
+        <button class="btn bp" id="mk-imp-ok" onclick="MKUI.impConfirmar()" ${IMP.faltando.length ? 'disabled' : ''}>Importar fluxo</button>
+      </div>`);
+  }
+
+  function impValor(input) {
+    if (!IMP.pacote) return;
+    if (input.id === 'mk-imp-nome') IMP.pacote.nomeEditado = input.value;
+    else if (input.dataset.chave) IMP.pacote.valores[input.dataset.chave] = input.value;
+  }
+  function impFechar() {
+    if (IMP.ocupado) return;
+    fecharSmall();
+  }
+
+  // Envia um arquivo de mídia cru para o servidor (com progresso)
+  function enviarMidia(blob, nome, tipo, progresso) {
+    return new Promise((ok, no) => {
+      const x = new XMLHttpRequest();
+      x.open('POST', '/api/admin/marketing/midia?tipo=' + encodeURIComponent(tipo) + '&nome=' + encodeURIComponent(nome));
+      const h = adminAuthHeader();
+      Object.keys(h).forEach(k => { if (k.toLowerCase() !== 'content-type') x.setRequestHeader(k, h[k]); });
+      x.setRequestHeader('Content-Type', 'application/octet-stream');
+      x.timeout = 300000;
+      x.upload.onprogress = ev => { if (ev.lengthComputable && progresso) progresso(ev.loaded / ev.total); };
+      x.onload = () => {
+        let d = {}; try { d = JSON.parse(x.responseText); } catch (_) {}
+        if (x.status === 401) { setTimeout(doLogout, 1500); return no(new Error('Sessão expirada')); }
+        if (x.status >= 200 && x.status < 300 && d.arquivo) return ok(d);
+        no(new Error(d.error || 'HTTP ' + x.status));
+      };
+      x.onerror = () => no(new Error('sem conexão com o servidor'));
+      x.ontimeout = () => no(new Error('o envio demorou demais'));
+      x.send(blob);
+    });
+  }
+
+  async function impConfirmar() {
+    const pc = IMP.pacote;
+    if (!pc || IMP.ocupado || IMP.faltando.length) return;
+    const falha = msg => { IMP.erro = msg; renderImportar(); };
+    const nome = String(pc.nomeEditado ?? pc.fluxo.nome).trim();
+    if (!nome) return falha('Dê um nome para o fluxo.');
+
+    // parâmetros do fluxo (ex.: endereço do site)
+    const valores = {};
+    for (const q of pc.parametros) {
+      let v = String(pc.valores[q.chave] ?? q.padrao ?? '').trim();
+      if (q.tipo === 'url' && v) {
+        if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
+        v = v.replace(/\/+$/, '');
+        if (!/^https?:\/\/[^\s/]+\.[^\s/]+\S*$/i.test(v)) return falha(`"${q.rotulo || q.chave}" precisa ser um endereço válido, por exemplo ${q.exemplo || 'https://www.seusite.com.br'}.`);
+      }
+      if (!v && q.obrigatorio !== false) return falha(`Preencha "${q.rotulo || q.chave}".`);
+      valores[q.chave] = v; pc.valores[q.chave] = v;
+    }
+
+    IMP.ocupado = true; IMP.erro = '';
+    ['mk-imp-ok', 'mk-imp-cancelar', 'mk-imp-trocar'].forEach(i => { const b = $(i); if (b) b.disabled = true; });
+    document.querySelectorAll('#mk-small-box input').forEach(i => { i.disabled = true; });
+    const prog = (txt, fr) => {
+      const w = $('mk-imp-prog'); if (!w) return;
+      w.style.display = ''; $('mk-imp-prog-txt').textContent = txt; $('mk-imp-prog-bar').style.width = Math.round(Math.min(1, fr) * 100) + '%';
+    };
+    const enviados = [];
+    try {
+      const mapa = new Map();
+      const lista = pc.midias.filter(m => m.item);
+      const pesoTotal = lista.reduce((n, m) => n + (m.item.tamanho || 1), 0) || 1;
+      let feito = 0;
+      for (let i = 0; i < lista.length; i++) {
+        const m = lista[i], rot = `Enviando mídia ${i + 1} de ${lista.length}: ${m.nome}`;
+        prog(rot, feito / pesoTotal);
+        let r;
+        try {
+          const blob = await m.item.abrir();
+          r = await enviarMidia(blob, m.nome, m.tipo, fr => prog(rot, (feito + fr * (m.item.tamanho || 1)) / pesoTotal));
+        } catch (e) { throw new Error(`Não consegui enviar "${m.nome}": ${e.message}`); }
+        enviados.push(r.arquivo);
+        mapa.set(m.arquivo, r.arquivo);
+        feito += m.item.tamanho || 1;
+      }
+      prog('Criando o fluxo...', 1);
+      const grafo = trocarTextos(pc.fluxo.grafo, t => {
+        if (mapa.has(t)) return mapa.get(t);
+        return t.replace(/\{\{\s*param:([a-z][a-z0-9_]*)\s*\}\}/gi, (tudo, k) => valores[k] !== undefined ? valores[k] : tudo);
+      });
+      // "Outro fluxo" aponta para um id que só existe no painel de origem
+      for (const n of grafo.nodes) if (n && n.tipo === 'chamar_fluxo' && n.cfg) n.cfg.fluxo = null;
+      const r = await req('POST', '/fluxos', { nome, gatilho: pc.fluxo.gatilho, opcoes: pc.fluxo.opcoes, grafo });
+      IMP.ocupado = false;
+      IMP.criado = r.fluxo;
+      await carregarFluxos();
+      if (MK.tab !== 'fluxos') aba('fluxos'); else renderFluxos();
+      toast('ok', 'Fluxo importado (fica desativado até você ativar)');
+      renderImportar();
+    } catch (e) {
+      IMP.ocupado = false;
+      // não deixa arquivo órfão no servidor (só apaga o que nenhum fluxo usa)
+      if (enviados.length) req('POST', '/midia/excluir', { arquivos: enviados }).catch(() => {});
+      falha(e.message);
+    }
+  }
+
   // ── API publica da aba ─────────────────────────────
   window.MKUI = {
     init, aba, novo, modelo, editar, ativar, duplicar, excluir,
     testar, enviarTeste, disparar, dispPub, dispPrevia, confirmarDisparo, disp, fecharSmall,
-    req, fluxos: () => MK.fluxos, recarregar
+    req, fluxos: () => MK.fluxos, recarregar,
+    importar, exportar, impArquivos, impSoltar: soltar, impValor, impFechar, impConfirmar
   };
 })();
