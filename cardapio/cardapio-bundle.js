@@ -48,6 +48,28 @@ let feeConfig     = {};
 let promoAutomatica = {};
 let selectedFaixa = 0;
 let _pedidoMinimo = 0;
+let _pedidoMinimoRetirada = false; // true = o mínimo também vale na retirada (chave do gestor, desligada por padrão)
+
+// O pedido mínimo sempre vale no delivery; na retirada só se a loja ligou a chave.
+function _pedidoMinimoAplica(tipo) {
+  if (!(_pedidoMinimo > 0)) return false;
+  return tipo === 'delivery' || (tipo === 'retirada' && _pedidoMinimoRetirada);
+}
+function _pedidoMinimoRotulo(tipo) { return tipo === 'retirada' ? 'retirada' : 'delivery'; }
+
+// Barra "Pedido mínimo para ...: R$ X" do carrinho — mostra/esconde e ajusta o texto
+function _pedidoMinimoBarra(tipo) {
+  const bar = document.getElementById('cart-minimo-bar');
+  const val = document.getElementById('cart-minimo-val');
+  if (!bar) return;
+  if (!_pedidoMinimoAplica(tipo)) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  if (val) {
+    val.textContent = 'R$ ' + fmt(_pedidoMinimo);
+    const lbl = val.previousSibling;
+    if (lbl && lbl.nodeType === 3) lbl.nodeValue = ' Pedido mínimo para ' + _pedidoMinimoRotulo(tipo) + ': ';
+  }
+}
 let _storeAddress = '';
 let _storeLat     = null;
 let _storeLng     = null;
@@ -1766,16 +1788,7 @@ function setDelivery(type) {
   }
 
   // Pedido mínimo delivery — mostra só na aba delivery
-  const minimoBar = document.getElementById('cart-minimo-bar');
-  const minimoVal = document.getElementById('cart-minimo-val');
-  if (minimoBar) {
-    if (type === 'delivery' && _pedidoMinimo > 0) {
-      minimoBar.style.display = 'flex';
-      if (minimoVal) minimoVal.textContent = 'R$ ' + fmt(_pedidoMinimo);
-    } else {
-      minimoBar.style.display = 'none';
-    }
-  }
+  _pedidoMinimoBarra(type);
   renderFaixas();
   renderGeoBlock();
   renderTotals();
@@ -1952,7 +1965,7 @@ function renderTotals() {
     else if (digitadoRaw) taxaLabel = 'Bairro não encontrado';
   }
   // Aviso de pedido mínimo
-  const minimoFalta = _pedidoMinimo > 0 && deliveryType === 'delivery' && sub < _pedidoMinimo ? _pedidoMinimo - sub : 0;
+  const minimoFalta = _pedidoMinimoAplica(deliveryType) && sub < _pedidoMinimo ? _pedidoMinimo - sub : 0;
   // Label da taxa: se cupom de frete aplicado, mostra "Grátis (cupom)" para feedback ao cliente
   const taxaTxt = isCupomFrete ? 'Grátis (cupom)' : (taxa > 0 ? 'R$ ' + fmt(taxa) : 'Grátis');
   // O desconto pode vir de um cupom digitado OU da promoção automática da
@@ -1963,7 +1976,7 @@ function renderTotals() {
   document.getElementById('totals-wrap').innerHTML = `
     ${minimoFalta > 0 ? `<div style="padding:8px 12px;margin-bottom:8px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:7px">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3M8 10v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      Faltam <strong>R$ ${fmt(minimoFalta)}</strong> para o pedido mínimo delivery (R$ ${fmt(_pedidoMinimo)})
+      Faltam <strong>R$ ${fmt(minimoFalta)}</strong> para o pedido mínimo ${deliveryType === 'retirada' ? 'de retirada' : 'delivery'} (R$ ${fmt(_pedidoMinimo)})
     </div>` : ''}
     <div class="total-row"><span>Subtotal</span><span>R$ ${fmt(sub)}</span></div>
     ${deliveryType === 'delivery' ? `<div class="total-row ${isCupomFrete?'total-disc':''}"><span>${taxaLabel}</span><span>${taxaTxt}</span></div>` : ''}
@@ -4868,11 +4881,11 @@ async function submitOrder() {
   // forma de pagamento nenhuma — imprimia "Forma de Pagamento: -" na comanda.
   if (!selectedPay) { toast('⚠️','Escolha uma forma de pagamento'); return; }
 
-  // Valida pedido mínimo para delivery
-  if (deliveryType === 'delivery' && _pedidoMinimo > 0) {
+  // Valida pedido mínimo (delivery sempre; retirada só com a chave ligada no gestor)
+  if (_pedidoMinimoAplica(deliveryType)) {
     const sub = cart.reduce((s, i) => s + (i.price * (i.qty||1)), 0);
     if (sub < _pedidoMinimo) {
-      toast('⚠️', `Pedido mínimo delivery: R$ ${fmt(_pedidoMinimo)}`);
+      toast('⚠️', `Pedido mínimo ${deliveryType === 'retirada' ? 'para retirada' : 'delivery'}: R$ ${fmt(_pedidoMinimo)}`);
       return;
     }
   }
@@ -5567,10 +5580,10 @@ async function _iniciarSubmit() {
     if (!_lojaAberta && !_pedidoAgendadoSeguro) { toast('🔴','Loja fechada');     return; } }
   if (!selectedPay) { toast('⚠️','Escolha uma forma de pagamento'); return; }
 
-  if (deliveryType === 'delivery' && _pedidoMinimo > 0) {
+  if (_pedidoMinimoAplica(deliveryType)) {
     const sub = cart.reduce((s, i) => s + (i.price * (i.qty||1)), 0);
     if (sub < _pedidoMinimo) {
-      toast('⚠️', `Pedido mínimo delivery: R$ ${fmt(_pedidoMinimo)}`);
+      toast('⚠️', `Pedido mínimo ${deliveryType === 'retirada' ? 'para retirada' : 'delivery'}: R$ ${fmt(_pedidoMinimo)}`);
       return;
     }
   }
@@ -10327,12 +10340,7 @@ function applyDeliveryInfo() {
   }
 
   // Pedido mínimo — barra no carrinho (aba delivery é o padrão)
-  const minimoBar = document.getElementById('cart-minimo-bar');
-  const minimoVal = document.getElementById('cart-minimo-val');
-  if (minimoBar && _pedidoMinimo > 0 && deliveryType === 'delivery') {
-    minimoBar.style.display = 'flex';
-    if (minimoVal) minimoVal.textContent = 'R$ ' + fmt(_pedidoMinimo);
-  }
+  if (_pedidoMinimoAplica(deliveryType)) _pedidoMinimoBarra(deliveryType);
 
   // Endereço do estabelecimento — inline elegante
   if (_storeAddress) {
@@ -10693,7 +10701,7 @@ async function init() {
       sb.from('menu_items').select('*').not('status','eq','pausado').order('sort_order', { nullsFirst: false }).order('id'),
       sb.from('categories').select('*').eq('ativo', true).order('sort_order'),
       sb.from('cupons').select('*').eq('ativo', true),
-      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,pickup_addresses,store_tempo_entrega,store_tempo_retirada,mostrar_indicacao_preparo,permitir_agendamento,promo_automatica').single(),
+      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset,pedido_minimo,pedido_minimo_retirada,store_address,store_lat,store_lng,tipos_entrega,pickup_addresses,store_tempo_entrega,store_tempo_retirada,mostrar_indicacao_preparo,permitir_agendamento,promo_automatica').single(),
       fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } }).then(r => r.ok ? r.json() : {}).catch(() => ({}))
     ]);
 
@@ -10729,6 +10737,7 @@ async function init() {
       feeConfig     = c.delivery_fee_config || {};
       promoAutomatica = c.promo_automatica || {};
       _pedidoMinimo = parseFloat(c.pedido_minimo) || 0;
+      _pedidoMinimoRetirada = c.pedido_minimo_retirada === 1 || c.pedido_minimo_retirada === true || c.pedido_minimo_retirada === '1';
       _storeAddress = c.store_address || '';
       _storeLat     = parseFloat(c.store_lat) || null;
       _storeLng     = parseFloat(c.store_lng) || null;
