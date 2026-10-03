@@ -2031,7 +2031,9 @@ async function _abrirPixRoboFatura(btn) {
     const r = await fetch('/api/gestor/fatura-pendente', { headers: { 'x-tenant-id': tid } });
     const f = r.ok ? await r.json() : null;
     if (!f || !f.qr_code) {
-      sbToast('err', 'Não encontrei uma fatura pendente pra pagar agora. Atualize a página e tente de novo.');
+      // O Pix da mensalidade só é gerado 2 dias antes do vencimento. Antes disso
+      // (o aviso aparece com 5 dias), a renovação é feita na tela Meu plano.
+      if (typeof nav === 'function') nav('meu-plano');
       return;
     }
     const fmt = v => parseFloat(v || 0).toFixed(2).replace('.', ',');

@@ -781,6 +781,7 @@ function _renovarPlanoSaas(db, tenantId, plano, meses = 1) {
   const planoNovo = ['premium','essencial','pro','fiscal'].includes(plano) ? plano : (tenant.plano || 'essencial')
   db.prepare("UPDATE tenants SET plano=?, expires_at=?, ativo=1, updated_at=datetime('now') WHERE id=?")
     .run(planoNovo, novaExpISO, tenantId)
+  _ajustarAvisoFatura(db, undefined, tenantId)   // renovou: o aviso de fatura some
   return { tenant, plano: planoNovo, expires_at: novaExpISO }
 }
 
@@ -895,7 +896,9 @@ function _upsertRoboFaturaAlert(db, sseBroadcast, tenantId, { planoNome, valorTx
     const iaG = cfgG?.ia_config ? JSON.parse(cfgG.ia_config) : {}
     const ctaWhatsapp = String(iaG.whatsapp_robo || '').replace(/\D/g, '')
     const titulo = 'Fatura chegando! 🧾'
-    const mensagem = `Sua mensalidade do plano ${planoNome} vence em ${venceEmTxt} — valor R$ ${valorTxt}. Já mandei o PIX aqui no WhatsApp, mas se preferir resolver por aqui também dá!`
+    const mensagem = valorTxt
+      ? `Sua mensalidade do plano ${planoNome} vence em ${venceEmTxt} — valor R$ ${valorTxt}. Já mandei o PIX aqui no WhatsApp, mas se preferir resolver por aqui também dá!`
+      : `Sua mensalidade do plano ${planoNome} vence em ${venceEmTxt}. Renove em Meu plano para o sistema continuar liberado.`
     const info = db.prepare(`
       INSERT INTO admin_alerts (tipo,titulo,mensagem,display_mode,bg_color,text_color,font_family,cta_label,cta_whatsapp,target_all,target_tenants,ativo,created_by,expires_at,created_at,updated_at)
       VALUES ('robo_fatura',?,?,'robo','#f59e0b','#ffffff','outfit',?,?,0,?,1,'sistema',NULL,datetime('now'),datetime('now'))
@@ -912,6 +915,79 @@ function _limparRoboFaturaAlert(db, sseBroadcast, tenantId) {
     const changed = db.prepare("DELETE FROM admin_alerts WHERE tipo='robo_fatura' AND target_tenants LIKE ?").run(`%"${tenantId}"%`)
     if (changed.changes > 0 && sseBroadcast) sseBroadcast(`admin-alerts:${tenantId}`, 'admin_alerts:REFRESH', { action: 'delete', ts: Date.now() })
   } catch(e) {}
+}
+
+// ── Regra do aviso de fatura no gestor ───────────────────────────────
+// O aviso só existe quando faltam AVISO_FATURA_DIAS dias ou menos para o
+// vencimento da loja. Renovou (por Pix, cartão, assinatura, admin, qualquer
+// caminho) = o vencimento vai para longe = o aviso some. Antes o aviso era
+// criado junto com a fatura e só saía em dois dos caminhos de pagamento, por
+// isso continuava aparecendo para quem já tinha renovado.
+const AVISO_FATURA_DIAS = 5
+let _sseAvisoRef = null
+
+// Dias que faltam para o vencimento, pela data de Brasília (0 = vence hoje,
+// negativo = já venceu). null quando a loja não tem vencimento.
+function _diasParaVencer(expiresAt) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(expiresAt || ''))
+  if (!m) return null
+  const hojeBR = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10)
+  return Math.round((Date.UTC(+m[1], +m[2] - 1, +m[3]) - Date.parse(hojeBR + 'T00:00:00Z')) / 86400000)
+}
+
+// Deixa o aviso de UMA loja de acordo com o vencimento dela. Devolve true quando
+// a loja fica com aviso. sse === null: não avisa as telas abertas (usado quando
+// a própria tela está buscando os comunicados).
+function _ajustarAvisoFatura(db, sse, tenantId) {
+  try {
+    const emitir = sse === undefined ? _sseAvisoRef : sse
+    const t = db.prepare('SELECT id, plano, ativo, expires_at FROM tenants WHERE id=?').get(tenantId)
+    const dias = t ? _diasParaVencer(t.expires_at) : null
+    const naJanela = !!t && t.ativo !== 0 && dias !== null && dias <= AVISO_FATURA_DIAS
+    const atual = db.prepare("SELECT id, mensagem FROM admin_alerts WHERE tipo='robo_fatura' AND target_tenants LIKE ? LIMIT 1").get(`%"${tenantId}"%`)
+    if (!naJanela) {
+      if (atual) _limparRoboFaturaAlert(db, emitir, tenantId)
+      return false
+    }
+    const venceEmTxt = new Date(String(t.expires_at).slice(0, 10) + 'T00:00:00').toLocaleDateString('pt-BR')
+    // Pix desta mensalidade já gerado (sai 2 dias antes do vencimento)? Então o aviso leva o valor.
+    const f = db.prepare(`SELECT plano, valor FROM faturas
+      WHERE tenant_id=? AND status='pendente' AND created_at > datetime('now','-7 days')
+      ORDER BY id DESC LIMIT 1`).get(tenantId)
+    const msgAtual = String(atual?.mensagem || '')
+    if (atual && msgAtual.includes(venceEmTxt) && (!f || msgAtual.includes('valor R$'))) return true   // já está certo
+    if (!f && !atual) {
+      // Assinatura no cartão em dia: a cobrança é automática, não precisa de lembrete antecipado
+      try { if (db.prepare("SELECT 1 FROM plano_assinaturas WHERE tenant_id=? AND status='authorized' LIMIT 1").get(tenantId)) return false } catch {}
+      // Conta em teste grátis (7 dias): o lembrete antecipado tomaria quase o teste inteiro.
+      // Continua como era: o aviso só entra junto com o Pix, 2 dias antes do fim do teste.
+      try { if (db.prepare("SELECT 1 FROM testes_gratis WHERE tenant_id=? AND status='ativo' LIMIT 1").get(tenantId)) return false } catch {}
+    }
+    _upsertRoboFaturaAlert(db, emitir, tenantId, {
+      planoNome: _planoSaasLabel(f ? f.plano : t.plano),
+      valorTxt: f ? parseFloat(f.valor).toFixed(2).replace('.', ',') : '',
+      venceEmTxt
+    })
+    return true
+  } catch (e) { return false }
+}
+
+// Passa a regra em todas as lojas (job de cobrança e botão "Sincronizar agora" do admin).
+function _ajustarAvisosFaturaDeTodos(db, sse) {
+  let comAviso = 0, removidos = 0
+  try {
+    const tinham = new Set()
+    for (const a of db.prepare("SELECT target_tenants FROM admin_alerts WHERE tipo='robo_fatura'").all()) {
+      try { (JSON.parse(a.target_tenants || '[]') || []).forEach(id => tinham.add(String(id))) } catch {}
+    }
+    const lojas = db.prepare("SELECT id FROM tenants WHERE slug NOT IN ('_admin','_global','admin')").all().map(t => String(t.id))
+    for (const id of new Set([...lojas, ...tinham])) {
+      const ficou = _ajustarAvisoFatura(db, sse, id)
+      if (ficou) comAviso++
+      else if (tinham.has(id)) removidos++
+    }
+  } catch (e) {}
+  return { comAviso, removidos }
 }
 
 // Registra na fatura se a mensagem de cobranca foi realmente entregue ao WhatsApp.
@@ -984,6 +1060,8 @@ async function _retentarLembretesNaoEntregues(ctx) {
   for (const f of pendentes) {
     const t = db.prepare('SELECT * FROM tenants WHERE id=?').get(f.tenant_id)
     if (!t || !t.ativo) continue
+    // Já renovou por outro caminho (o vencimento da loja passou do vencimento desta fatura): não cobra de novo
+    if (f.vence_em && t.expires_at && String(t.expires_at).slice(0, 10) > String(f.vence_em).slice(0, 10)) continue
     try {
       const r = await _enviarLembreteFatura(db, t, f)
       _registrarEnvioFatura(db, f.id, r.ok, r.erro)
@@ -1004,6 +1082,10 @@ function _iniciarAutoCobrancaJob(ctx) {
 
   async function tick() {
     try {
+      // Aviso de fatura no gestor: aparece quando faltam 5 dias e some para quem renovou
+      _sseAvisoRef = sseBroadcast
+      _ajustarAvisosFaturaDeTodos(db, sseBroadcast)
+
       // Só dispara em horário comercial, às 9h de Brasília — antes o job
       // rodava a cada 6h desde o boot do servidor, sem horário fixo, e
       // podia mandar a cobrança de madrugada. O intervalo ficou mais curto
@@ -1187,6 +1269,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           emit } = ctx
 
   _svBotInit(ctx); _tenantWaInit(ctx)
+  _sseAvisoRef = sseBroadcast
 
   const INDICADOR_SESSION_TTL = 8 * 60 * 60 * 1000
   const criarSessaoIndicador = (ind) => {
@@ -4267,22 +4350,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const adm = validarSessaoAdmin(req)
     if (!adm) { send(res, 401, { error: 'Sessão admin inválida' }); return true }
     try {
-      const pendentes = db.prepare(`
-        SELECT f.tenant_id, f.plano, f.valor, f.vence_em
-        FROM faturas f
-        WHERE f.status='pendente'
-          AND f.id = (SELECT MAX(f2.id) FROM faturas f2 WHERE f2.tenant_id = f.tenant_id AND f2.status='pendente')
-      `).all()
-      let criados = 0
-      for (const f of pendentes) {
-        _upsertRoboFaturaAlert(db, sseBroadcast, f.tenant_id, {
-          planoNome: _planoSaasLabel(f.plano),
-          valorTxt: parseFloat(f.valor).toFixed(2).replace('.', ','),
-          venceEmTxt: new Date(f.vence_em + 'T00:00:00').toLocaleDateString('pt-BR')
-        })
-        criados++
-      }
-      send(res, 200, { ok: true, criados })
+      // Antes criava o aviso para toda loja com fatura pendente, mesmo já renovada ou longe do
+      // vencimento. Agora aplica a regra: aviso só para quem vence em até 5 dias; o resto é removido.
+      const r = _ajustarAvisosFaturaDeTodos(db, sseBroadcast)
+      const criados = r.comAviso
+      marcarDirty()
+      send(res, 200, { ok: true, criados, removidos: r.removidos })
     } catch(e) { send(res, 500, { error: e.message }) }
     return true
   }
@@ -4428,7 +4501,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const f = db.prepare(`
       SELECT id, plano, valor, vence_em, qr_code, qr_code_base64, link_pagamento, status
       FROM faturas
-      WHERE tenant_id=? AND status='pendente'
+      WHERE tenant_id=? AND status='pendente' AND created_at > datetime('now','-7 days')
       ORDER BY id DESC LIMIT 1
     `).get(tid)
     send(res, 200, f || null)
@@ -4439,6 +4512,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'GET' && upath === '/api/gestor/comunicados') {
     const tid = getTenantId(req, params)
     if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    _ajustarAvisoFatura(db, null, tid)
     const rows = db.prepare(`
       SELECT id,tipo,titulo,mensagem,display_mode,bg_color,text_color,font_family,cta_label,cta_whatsapp,target_all,target_tenants,ativo,created_at,updated_at,expires_at
       FROM admin_alerts
@@ -7367,6 +7441,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           const plano = rowAtual.payer_name.replace('PLANO:', '')
           const novaExpISO = _dateOnlyISO(_addCalendarMonths(new Date(), 1))
           db.prepare('UPDATE tenants SET plano=?, expires_at=?, ativo=1 WHERE id=?').run(plano, novaExpISO, rowAtual.tenant_id)
+          _ajustarAvisoFatura(db, sseBroadcast, rowAtual.tenant_id)   // renovou: o aviso de fatura some
           marcarDirty()
           log('✅', `PLANO RENOVADO: ${plano} tenant=${rowAtual.tenant_id} expira=${novaExpISO}`)
         }
@@ -7430,6 +7505,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (novoStatus === 'aprovado') {
         const novaExpISO = _dateOnlyISO(_addCalendarMonths(new Date(), 1))
         db.prepare('UPDATE tenants SET plano=?, expires_at=?, ativo=1 WHERE id=?').run(plano, novaExpISO, tid)
+        _ajustarAvisoFatura(db, sseBroadcast, tid)   // renovou: o aviso de fatura some
         marcarDirty()
         log('✅', `PLANO RENOVADO (Cartao): ${plano} tenant=${tid} expira=${novaExpISO}`)
       }
