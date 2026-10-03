@@ -8054,6 +8054,22 @@ function serveStatic(req,res,fpath,ext) {
       if(ae.includes('gzip')){zlib.gzip(content,(err,buf)=>{if(err){res.writeHead(200);res.end(content);return};res.setHeader('Content-Encoding','gzip');res.setHeader('Vary','Accept-Encoding');res.writeHead(200);res.end(buf)});return}
       res.writeHead(200);res.end(content);return
     }
+    // Vídeo: atende pedido de trecho (Range). Sem isto o navegador não deixa avançar nem
+    // voltar o vídeo, e o Safari do iPhone pode se recusar a tocar.
+    if(ext==='.mp4'||ext==='.webm'){
+      const tam=fs.statSync(fpath).size
+      res.setHeader('Accept-Ranges','bytes')
+      const rg=/^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range||'').trim())
+      if(rg&&(rg[1]||rg[2])){
+        const ini=rg[1]?parseInt(rg[1],10):Math.max(0,tam-parseInt(rg[2],10))
+        const fim=(rg[1]&&rg[2])?Math.min(parseInt(rg[2],10),tam-1):tam-1
+        if(ini>fim||ini>=tam){res.setHeader('Content-Range',`bytes */${tam}`);res.writeHead(416);res.end();return}
+        res.setHeader('Content-Range',`bytes ${ini}-${fim}/${tam}`)
+        res.setHeader('Content-Length',fim-ini+1)
+        res.writeHead(206);fs.createReadStream(fpath,{start:ini,end:fim}).pipe(res);return
+      }
+      res.setHeader('Content-Length',tam)
+    }
     res.writeHead(200);fs.createReadStream(fpath).pipe(res)
   } catch{res.writeHead(404);res.end('Not found')}
 }

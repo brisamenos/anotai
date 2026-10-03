@@ -487,6 +487,11 @@ function greeting() {
   return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'
 }
 
+// Linha opcional no menu que abre um fluxo de Marketing (ex.: "Tutoriais em vídeo"), definida em Admin > Marketing
+function atalhoMarketing() {
+  try { const a = D.marketing?.atalhoMenu?.(); return a && a.id && a.title ? [a] : [] } catch { return [] }
+}
+
 async function sendMenu(phone, tenant, intro) {
   const g = cfg()
   const vendas = [
@@ -503,6 +508,7 @@ async function sendMenu(phone, tenant, intro) {
   await sendList(phone, text, '📋 Ver opções', [
     { title: '🚀 Vendas', rows: vendas },
     { title: '🛠️ Suporte', rows: [
+      ...atalhoMarketing(),
       { id: 's_chamado', title: '🆘 Abrir chamado', description: 'Problema ou dúvida no sistema' },
       { id: 's_atendente', title: '💬 Falar com atendente', description: 'Uma pessoa da equipe responde' }
     ] },
@@ -738,6 +744,12 @@ async function processMsg(phone, text, choiceId, hasImage) {
   if (!choiceId && /^\d{1,2}$/.test(text)) {
     const n = numbered.get(num55(phone))
     if (n && Date.now() - n.at < SESSION_MS) choiceId = n.options[Number(text) - 1]?.id || null
+  }
+
+  // Opcao do menu que abre um fluxo de Marketing, escolhida pelo numero (menu enviado como texto numerado)
+  if (choiceId && /^mkt_flow_\d+$/.test(choiceId)) {
+    try { if (D.marketing?.onMessage({ phone, text: '', choiceId, paused: false }, { fromMe: false })) return } catch {}
+    return sendMenu(phone, tenant)
   }
 
   // ── Chamado de suporte aguardando a descricao (texto e/ou print) ──

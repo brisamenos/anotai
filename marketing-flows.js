@@ -1253,6 +1253,51 @@ function situacaoNaoCliente() {
   return { ...c, aviso, resposta_padrao: NC_RESPOSTA }
 }
 
+// ---- Atalho no menu do robo: uma linha a mais (ex.: "Tutoriais em vídeo") que abre um fluxo ----
+const MR_TITULO = 'Tutoriais em vídeo', MR_DESCRICAO = 'Aprenda a usar o sistema'
+function lerMenuRobo() {
+  let c = {}
+  try { c = json(D.db.prepare("SELECT valor FROM mkt_config WHERE chave='menu_robo'").get()?.valor, {}) || {} } catch {}
+  return { fluxo: parseInt(c.fluxo, 10) || null, titulo: str(c.titulo, 24) || MR_TITULO, descricao: str(c.descricao, 72) || MR_DESCRICAO }
+}
+function salvarMenuRobo(b) {
+  const atual = lerMenuRobo()
+  const c = {
+    fluxo: b?.fluxo !== undefined ? (parseInt(b.fluxo, 10) || null) : atual.fluxo,
+    titulo: typeof b?.titulo === 'string' ? (str(b.titulo, 24) || MR_TITULO) : atual.titulo,
+    descricao: typeof b?.descricao === 'string' ? (str(b.descricao, 72) || MR_DESCRICAO) : atual.descricao
+  }
+  if (c.fluxo) {
+    const f = obterFluxo(c.fluxo)
+    if (!f) throw new Error('O fluxo escolhido para o menu do robô não existe')
+    const erros = problemas(f)
+    if (erros.length) throw new Error('O fluxo escolhido para o menu do robô está incompleto: ' + erros.join('; '))
+  }
+  D.db.prepare(`INSERT INTO mkt_config (chave, valor, updated_at) VALUES ('menu_robo', ?, datetime('now'))
+    ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor, updated_at=excluded.updated_at`).run(JSON.stringify(c))
+  return situacaoMenuRobo()
+}
+function situacaoMenuRobo() {
+  const c = lerMenuRobo()
+  let aviso = ''
+  if (c.fluxo) {
+    const f = obterFluxo(c.fluxo)
+    if (!f) aviso = 'O fluxo escolhido não existe mais. A opção não aparece no menu do robô.'
+    else if (!f.ativo) aviso = `O fluxo "${f.nome}" está desativado. A opção só aparece no menu do robô com o fluxo ativo.`
+  }
+  return { ...c, aviso }
+}
+// Linha extra para o menu do robo (ou null). O clique chega como "mkt_flow_<id>" e o onMessage inicia o fluxo.
+function atalhoMenu() {
+  try {
+    if (!D || D.bot.provider() !== 'wuzapi') return null
+    const c = lerMenuRobo()
+    const f = c.fluxo ? obterFluxo(c.fluxo) : null
+    if (!f || !f.ativo || problemas(f).length) return null
+    return { id: `mkt_flow_${f.id}`, title: c.titulo, description: c.descricao }
+  } catch { return null }
+}
+
 // Chamado pelo robo no momento em que ele ia mandar o menu automatico para quem NAO e cliente.
 // Retorna true se o Marketing cuidou da mensagem (o robo nao manda o menu).
 function naoCliente({ phone, text = '', choiceId = null } = {}) {
@@ -1432,12 +1477,13 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
       return true
     }
     if (met === 'GET' && sub === '/config') {
-      send(res, 200, { nao_cliente: situacaoNaoCliente() }); return true
+      send(res, 200, { nao_cliente: situacaoNaoCliente(), menu_robo: situacaoMenuRobo() }); return true
     }
     if (met === 'POST' && sub === '/config') {
       const body = await readBody(req)
-      salvarConfigNaoCliente(body?.nao_cliente || {})
-      send(res, 200, { ok: true, nao_cliente: situacaoNaoCliente() }); return true
+      if (body?.nao_cliente) salvarConfigNaoCliente(body.nao_cliente)
+      if (body?.menu_robo) salvarMenuRobo(body.menu_robo)
+      send(res, 200, { ok: true, nao_cliente: situacaoNaoCliente(), menu_robo: situacaoMenuRobo() }); return true
     }
     if (met === 'GET' && sub === '/fluxos') {
       send(res, 200, { fluxos: listarFluxos() }); return true
@@ -1524,7 +1570,7 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
 }
 
 module.exports = {
-  init, api, onMessage, naoCliente,
+  init, api, onMessage, naoCliente, atalhoMenu,
   // uteis para testes
-  _internals: { varrerTimeouts, sanitizarFluxo, sanitizarGrafo, passosParaGrafo, portasDe, problemas, casaGatilho, aplicarVars, norm, contatosDoPublico, executarFluxo, obterFluxo, salvarFluxo, criarDisparo, iniciarWorker, salvarMidia, definirAtivo, lerConfigNaoCliente, salvarConfigNaoCliente, situacaoNaoCliente }
+  _internals: { varrerTimeouts, sanitizarFluxo, sanitizarGrafo, passosParaGrafo, portasDe, problemas, casaGatilho, aplicarVars, norm, contatosDoPublico, executarFluxo, obterFluxo, salvarFluxo, criarDisparo, iniciarWorker, salvarMidia, definirAtivo, lerConfigNaoCliente, salvarConfigNaoCliente, situacaoNaoCliente, salvarMenuRobo, situacaoMenuRobo }
 }

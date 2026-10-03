@@ -19,7 +19,9 @@
     timer: null,
     ctxDisparo: null,
     nc: null,        // opção "quem não é cliente" salva no servidor (null = servidor sem esse recurso)
-    ncRascunho: null // o que está na tela e ainda não foi salvo
+    ncRascunho: null, // o que está na tela e ainda não foi salvo
+    mr: null,         // opção extra no menu do robô (ex.: Tutoriais em vídeo)
+    mrRascunho: null
   };
 
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -186,7 +188,7 @@
   async function carregarFluxos() {
     try { MK.fluxos = (await req('GET', '/fluxos')).fluxos || []; } catch (e) { toast('err', e.message); }
     // o aviso da opção "quem não é cliente" depende de o fluxo escolhido existir e estar ativo
-    if (MK.nc) { try { MK.nc = (await req('GET', '/config')).nao_cliente || MK.nc; } catch (_) {} }
+    if (MK.nc) { try { const c = await req('GET', '/config'); MK.nc = c.nao_cliente || MK.nc; MK.mr = c.menu_robo || MK.mr; } catch (_) {} }
   }
   async function carregarDisparos(silencioso) {
     try { MK.disparos = (await req('GET', '/disparos')).disparos || []; } catch (e) { if (!silencioso) toast('err', e.message); }
@@ -219,10 +221,10 @@
     const el = $('mk-body');
     if (!el) return;
     if (!MK.fluxos.length) {
-      el.innerHTML = htmlNaoCliente() + '<div class="mk-empty">Nenhum fluxo criado ainda.<br>Clique em <b>Novo fluxo</b> para montar o primeiro ou em <b>Importar fluxo</b> para trazer um fluxo pronto.</div>';
+      el.innerHTML = htmlNaoCliente() + htmlMenuRobo() + '<div class="mk-empty">Nenhum fluxo criado ainda.<br>Clique em <b>Novo fluxo</b> para montar o primeiro ou em <b>Importar fluxo</b> para trazer um fluxo pronto.</div>';
       return;
     }
-    el.innerHTML = htmlNaoCliente() + '<div class="mk-grid">' + MK.fluxos.map(f => {
+    el.innerHTML = htmlNaoCliente() + htmlMenuRobo() + '<div class="mk-grid">' + MK.fluxos.map(f => {
       const nos = ((f.grafo && f.grafo.nodes) || []).filter(n => n.tipo !== 'gatilho');
       const tipos = [...new Set(nos.map(n => TIPO_NOME[n.tipo]))];
       return `
@@ -251,8 +253,8 @@
 
   // ── Quem não é cliente: o que responder no lugar do menu automático do robô ──
   async function carregarNaoCliente() {
-    try { MK.nc = (await req('GET', '/config')).nao_cliente || null; } catch (_) { MK.nc = null; }
-    MK.ncRascunho = null;
+    try { const c = await req('GET', '/config'); MK.nc = c.nao_cliente || null; MK.mr = c.menu_robo || null; } catch (_) { MK.nc = null; MK.mr = null; }
+    MK.ncRascunho = null; MK.mrRascunho = null;
   }
   function htmlNaoCliente() {
     if (!MK.nc) return '';
@@ -312,6 +314,54 @@
     try {
       MK.nc = (await req('POST', '/config', { nao_cliente: c })).nao_cliente;
       MK.ncRascunho = null;
+      toast('ok', 'Opção salva');
+    } catch (e) { toast('err', e.message); }
+    if (MK.tab === 'fluxos') renderFluxos();
+  }
+
+  // ── Opção extra no menu do robô (abre um fluxo, ex.: tutoriais em vídeo) ──
+  function htmlMenuRobo() {
+    if (!MK.mr) return '';
+    const c = MK.mrRascunho || MK.mr;
+    const mudou = !!MK.mrRascunho && ['fluxo', 'titulo', 'descricao'].some(k => String(MK.mrRascunho[k] ?? '') !== String(MK.mr[k] ?? ''));
+    const opFluxo = '<option value="">Não mostrar</option>' + MK.fluxos.map(f =>
+      `<option value="${f.id}" ${Number(c.fluxo) === f.id ? 'selected' : ''}>${esc(f.nome)}${f.ativo ? '' : ' (desativado)'}</option>`).join('');
+    const escolhido = MK.fluxos.find(f => f.id === Number(c.fluxo));
+    let aviso = '';
+    if (escolhido && !escolhido.ativo) aviso = 'Este fluxo está desativado. A opção só aparece no menu do robô com o fluxo ativo.';
+    else if (c.fluxo && !mudou && MK.mr.aviso) aviso = MK.mr.aviso;
+    return `
+      <div class="mk-nc" id="mk-mr">
+        <div class="mk-nc-t">Opção extra no menu do robô</div>
+        <div class="mk-meta">Acrescenta uma linha na parte de Suporte do menu automático do robô. Quando a pessoa toca nela, o fluxo escolhido começa. Use para os tutoriais em vídeo.</div>
+        <div class="mk-nc-campos">
+          <div class="form-group"><label class="form-label">Fluxo que a opção abre</label>
+            <select class="minput" id="mk-mr-fluxo" onchange="MKUI.mrMudou(true)">${opFluxo}</select></div>
+          <div class="form-group" style="${c.fluxo ? '' : 'display:none'}"><label class="form-label">Nome da opção</label>
+            <input class="minput" id="mk-mr-titulo" maxlength="24" value="${esc(c.titulo ?? '')}" oninput="MKUI.mrMudou()"></div>
+          <div class="form-group" style="${c.fluxo ? '' : 'display:none'}"><label class="form-label">Descrição</label>
+            <input class="minput" id="mk-mr-descricao" maxlength="72" value="${esc(c.descricao ?? '')}" oninput="MKUI.mrMudou()"></div>
+        </div>
+        ${aviso ? `<div class="mk-alert" style="margin:12px 0 0">${esc(aviso)}</div>` : ''}
+        <div class="mk-nc-pe">
+          <button class="btn bp bsm" id="mk-mr-salvar" onclick="MKUI.mrSalvar()" ${mudou ? '' : 'disabled'}>Salvar</button>
+          <span class="form-hint" id="mk-mr-estado">${mudou ? 'Alteração ainda não salva' : ''}</span>
+        </div>
+      </div>`;
+  }
+  function mrMudou(redesenhar) {
+    if (!MK.mr || !$('mk-mr-fluxo')) return;
+    MK.mrRascunho = { fluxo: parseInt($('mk-mr-fluxo').value, 10) || null, titulo: $('mk-mr-titulo').value, descricao: $('mk-mr-descricao').value };
+    if (redesenhar) { if (MK.tab === 'fluxos') renderFluxos(); return; }
+    const b = $('mk-mr-salvar'); if (b) b.disabled = false;
+    const e = $('mk-mr-estado'); if (e) e.textContent = 'Alteração ainda não salva';
+  }
+  async function mrSalvar() {
+    if (!MK.mr) return;
+    mrMudou();
+    try {
+      MK.mr = (await req('POST', '/config', { menu_robo: MK.mrRascunho })).menu_robo;
+      MK.mrRascunho = null;
       toast('ok', 'Opção salva');
     } catch (e) { toast('err', e.message); }
     if (MK.tab === 'fluxos') renderFluxos();
@@ -968,6 +1018,6 @@
     testar, enviarTeste, disparar, dispPub, dispPrevia, confirmarDisparo, disp, fecharSmall,
     req, fluxos: () => MK.fluxos, recarregar,
     importar, exportar, impArquivos, impSoltar: soltar, impValor, impFechar, impConfirmar,
-    ncMudou, ncSalvar
+    ncMudou, ncSalvar, mrMudou, mrSalvar
   };
 })();
