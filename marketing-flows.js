@@ -80,6 +80,10 @@ function init(deps) {
       updated_at TEXT DEFAULT (datetime('now'))
     );
   `)
+  D.db.exec(`
+    CREATE TABLE IF NOT EXISTS mkt_config (chave TEXT PRIMARY KEY, valor TEXT, updated_at TEXT DEFAULT (datetime('now')));
+    CREATE INDEX IF NOT EXISTS idx_mkt_logs_tel ON mkt_logs(telefone, flow_id);
+  `)
   try {
     D.db.prepare("DELETE FROM mkt_logs WHERE created_at < datetime('now','-90 day')").run()
     D.db.prepare("DELETE FROM mkt_sessoes WHERE updated_at < datetime('now','-7 day')").run()
@@ -1109,6 +1113,7 @@ function onMessage(m, { fromMe = false } = {}) {
   try {
     if (!D || !m?.phone) return false
     const tel = n55(m.phone)
+    if (!fromMe && m.pushName) { nomesPush.set(tel, m.pushName); if (nomesPush.size > 5000) nomesPush.delete(nomesPush.keys().next().value) }
     const texto = norm(m.choiceId || m.text)
     if (!texto && !m.choiceId) return false
     if (m.hasImage && !m.text && !m.choiceId) return false
@@ -1191,6 +1196,101 @@ function onMessage(m, { fromMe = false } = {}) {
     return true
   } catch (e) {
     D.log?.('⚠️', `Marketing onMessage: ${e.message}`)
+    return false
+  }
+}
+
+// ==================== Quem nao e cliente: o que responder no lugar do menu do robo ====================
+// O robo de Suporte e Vendas manda um menu automatico para qualquer mensagem que nenhum fluxo pegou.
+// Aqui o admin escolhe o que acontece quando quem escreveu NAO e cliente cadastrado:
+//   menu     -> o robo responde com o menu dele (comportamento de sempre; padrao)
+//   fluxo    -> comeca o fluxo escolhido; se a pessoa ja recebeu o fluxo nas ultimas 12 h e digitou algo,
+//               o atendente e avisado e ela recebe uma resposta curta (sem recomecar o fluxo)
+//   silencio -> o robo nao manda o menu
+// Quem digita "menu" ou fala de suporte/financeiro continua recebendo o menu do robo (cliente em outro numero).
+const NC_RESPOSTA = 'Recebi a sua mensagem e já avisei a nossa equipe. Enquanto isso, você pode continuar pelos botões acima.'
+const NC_PEDE_MENU = /^(menu|inicio)\b|\b(suporte|chamado|fatura|boleto|financeiro|mensalidade|segunda via|2a via|comprovante)\b/
+const NC_JANELA_H = 12
+const ncAvisos = new Map() // telefone -> ultimo aviso ao atendente
+
+function lerConfigNaoCliente() {
+  let c = {}
+  try { c = json(D.db.prepare("SELECT valor FROM mkt_config WHERE chave='nao_cliente'").get()?.valor, {}) || {} } catch {}
+  return {
+    modo: ['fluxo', 'silencio'].includes(c.modo) ? c.modo : 'menu',
+    fluxo: parseInt(c.fluxo, 10) || null,
+    resposta: typeof c.resposta === 'string' ? c.resposta : NC_RESPOSTA
+  }
+}
+
+function salvarConfigNaoCliente(b) {
+  const atual = lerConfigNaoCliente()
+  const c = {
+    modo: ['menu', 'fluxo', 'silencio'].includes(b?.modo) ? b.modo : atual.modo,
+    fluxo: b?.fluxo !== undefined ? (parseInt(b.fluxo, 10) || null) : atual.fluxo,
+    resposta: typeof b?.resposta === 'string' ? str(b.resposta, 600) : atual.resposta
+  }
+  if (c.modo === 'fluxo') {
+    const f = c.fluxo ? obterFluxo(c.fluxo) : null
+    if (!f) throw new Error('Escolha o fluxo que o contato vai receber')
+    const erros = problemas(f)
+    if (erros.length) throw new Error('O fluxo escolhido está incompleto: ' + erros.join('; '))
+  }
+  D.db.prepare(`INSERT INTO mkt_config (chave, valor, updated_at) VALUES ('nao_cliente', ?, datetime('now'))
+    ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor, updated_at=excluded.updated_at`).run(JSON.stringify(c))
+  return lerConfigNaoCliente()
+}
+
+// Situacao da configuracao para o painel (o fluxo escolhido pode ter sido desativado ou excluido depois)
+function situacaoNaoCliente() {
+  const c = lerConfigNaoCliente()
+  let aviso = ''
+  if (c.modo === 'fluxo') {
+    const f = c.fluxo ? obterFluxo(c.fluxo) : null
+    if (!f) aviso = 'O fluxo escolhido não existe mais. Enquanto isso, quem não é cliente recebe o menu do robô.'
+    else if (!f.ativo) aviso = `O fluxo "${f.nome}" está desativado. Enquanto isso, quem não é cliente recebe o menu do robô.`
+  }
+  return { ...c, aviso, resposta_padrao: NC_RESPOSTA }
+}
+
+// Chamado pelo robo no momento em que ele ia mandar o menu automatico para quem NAO e cliente.
+// Retorna true se o Marketing cuidou da mensagem (o robo nao manda o menu).
+function naoCliente({ phone, text = '', choiceId = null } = {}) {
+  try {
+    if (!D || !phone) return false
+    const c = lerConfigNaoCliente()
+    if (c.modo === 'menu') return false
+    const tel = n55(phone)
+    const t = norm(text)
+    if (!choiceId && NC_PEDE_MENU.test(t)) return false
+    if (c.modo === 'silencio') return true
+
+    if (D.bot.provider() !== 'wuzapi') return false
+    const flow = c.fluxo ? obterFluxo(c.fluxo) : null
+    if (!flow || !flow.ativo || problemas(flow).length) return false // fluxo indisponivel: o robo responde como sempre
+    if (emExecucao.has(tel)) return true
+
+    const recente = D.db.prepare(`SELECT 1 FROM mkt_logs WHERE flow_id=? AND telefone=? AND origem<>'teste'
+      AND created_at >= datetime('now','-${NC_JANELA_H} hours') LIMIT 1`).get(flow.id, tel)
+    if (!recente) {
+      enfileirar(tel, () => executarFluxo(flow, tel, { origem: 'boas_vindas', pushName: nomesPush.get(tel) || '' }))
+        .catch(e => D.log?.('⚠️', `Marketing: fluxo "${flow.nome}" (não cliente) falhou (${tel}): ${e.message}`))
+      return true
+    }
+
+    // Ja recebeu o fluxo e agora digitou: uma pessoa precisa responder. Um aviso a cada 10 min por contato.
+    if (choiceId || !t) return true
+    if (Date.now() - (ncAvisos.get(tel) || 0) < 10 * 60 * 1000) return true
+    ncAvisos.set(tel, Date.now())
+    if (ncAvisos.size > 3000) ncAvisos.delete(ncAvisos.keys().next().value)
+    const nome = nomesPush.get(tel) || ''
+    D.bot.notificar(`Fluxo "${flow.nome}": o contato escreveu uma mensagem.\nNome: ${nome || 'não informado'}\nWhatsApp: ${tel}\nMensagem: ${String(text).trim().slice(0, 400)}`)
+      .catch(e => D.log?.('⚠️', `Marketing: aviso ao atendente falhou: ${e.message}`))
+    const resposta = aplicarVars(c.resposta, montarVars(tel, { nome }))
+    if (resposta) D.bot.wuzRun(tel, (tk, to) => wuzapi.sendText(tk, to, resposta)).then(enviou).catch(() => {})
+    return true
+  } catch (e) {
+    D.log?.('⚠️', `Marketing naoCliente: ${e.message}`)
     return false
   }
 }
@@ -1331,6 +1431,14 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
       send(res, 200, { canal: st.provider, conectado: st.status === 'connected', status: st.status, ffmpeg: temFfmpeg(), pix: !!D.bot.config().cobranca_pix_chave })
       return true
     }
+    if (met === 'GET' && sub === '/config') {
+      send(res, 200, { nao_cliente: situacaoNaoCliente() }); return true
+    }
+    if (met === 'POST' && sub === '/config') {
+      const body = await readBody(req)
+      salvarConfigNaoCliente(body?.nao_cliente || {})
+      send(res, 200, { ok: true, nao_cliente: situacaoNaoCliente() }); return true
+    }
     if (met === 'GET' && sub === '/fluxos') {
       send(res, 200, { fluxos: listarFluxos() }); return true
     }
@@ -1416,7 +1524,7 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
 }
 
 module.exports = {
-  init, api, onMessage,
+  init, api, onMessage, naoCliente,
   // uteis para testes
-  _internals: { varrerTimeouts, sanitizarFluxo, sanitizarGrafo, passosParaGrafo, portasDe, problemas, casaGatilho, aplicarVars, norm, contatosDoPublico, executarFluxo, obterFluxo, salvarFluxo, criarDisparo, iniciarWorker, salvarMidia }
+  _internals: { varrerTimeouts, sanitizarFluxo, sanitizarGrafo, passosParaGrafo, portasDe, problemas, casaGatilho, aplicarVars, norm, contatosDoPublico, executarFluxo, obterFluxo, salvarFluxo, criarDisparo, iniciarWorker, salvarMidia, definirAtivo, lerConfigNaoCliente, salvarConfigNaoCliente, situacaoNaoCliente }
 }

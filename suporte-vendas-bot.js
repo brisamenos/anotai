@@ -722,6 +722,13 @@ async function enviarPixChave(phone, { manual = false } = {}) {
 
 // ==================== Processamento ====================
 
+// No lugar do menu automatico, quem NAO e cliente pode receber um fluxo de Marketing (ou nada),
+// conforme a opcao salva em Admin > Marketing > Fluxos. Cliente cadastrado sempre recebe o menu.
+function marketingAssume(phone, tenant, text, choiceId) {
+  if (tenant || typeof D.marketing?.naoCliente !== 'function') return false
+  try { return !!D.marketing.naoCliente({ phone, text, choiceId }) } catch { return false }
+}
+
 async function processMsg(phone, text, choiceId, hasImage) {
   let st = getState(phone)
   const tenant = tenantByPhone(phone)
@@ -764,6 +771,8 @@ async function processMsg(phone, text, choiceId, hasImage) {
   // ── Menu: saudacao, "menu", sessao nova ou botao Menu ──
   const isGreeting = /^(oi+|ol[aá]+|bom dia|boa tarde|boa noite|menu|in[ií]cio|come[cç]ar|hey|opa|e a[ií])\b/.test(txt)
   if (choiceId === 'menu' || (!choiceId && (isGreeting || !st))) {
+    // Quem nao e cliente: o Marketing pode assumir no lugar do menu (Admin > Marketing > Fluxos)
+    if (choiceId !== 'menu' && marketingAssume(phone, tenant, text, choiceId)) return
     return sendMenu(phone, tenant)
   }
 
@@ -867,6 +876,7 @@ async function processMsg(phone, text, choiceId, hasImage) {
   }
 
   // Texto solto que nao se encaixa em nenhuma etapa → mostra o menu
+  if (marketingAssume(phone, tenant, text, choiceId)) return
   return sendMenu(phone, tenant, 'Não entendi muito bem 🤔 Escolha uma das opções:')
 }
 

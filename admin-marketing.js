@@ -17,7 +17,9 @@
     draft: null,
     blobs: {},
     timer: null,
-    ctxDisparo: null
+    ctxDisparo: null,
+    nc: null,        // opção "quem não é cliente" salva no servidor (null = servidor sem esse recurso)
+    ncRascunho: null // o que está na tela e ainda não foi salvo
   };
 
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -107,6 +109,11 @@
 .mk-st{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;border:1px solid var(--border);background:var(--s2)}
 .mk-st.ok{color:var(--success)}.mk-st.err{color:var(--danger)}.mk-st.run{color:var(--orange)}
 .mk-head-acoes{display:flex;gap:8px;flex-wrap:wrap}
+.mk-nc{background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px}
+.mk-nc-t{font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:15px;margin-bottom:3px}
+.mk-nc-campos{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:12px}
+.mk-nc-campos .form-group{margin:0}
+.mk-nc-pe{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px}
 .mk-drop{display:block;position:relative;border:1.5px dashed var(--border);border-radius:12px;padding:22px 16px;text-align:center;cursor:pointer;background:var(--s2);color:var(--text-2);font-size:12.5px;line-height:1.55}
 .mk-drop:hover,.mk-drop.sobre,.mk-drop:focus-within{border-color:var(--accent);color:var(--text)}
 .mk-drop b{display:block;color:var(--text);font-size:13.5px;margin-bottom:2px}
@@ -153,7 +160,7 @@
   async function init() {
     injetarCss();
     shell();
-    await Promise.all([carregarStatus(), carregarFluxos()]);
+    await Promise.all([carregarStatus(), carregarFluxos(), carregarNaoCliente()]);
     aba(MK.tab);
     clearInterval(MK.timer);
     MK.timer = setInterval(() => {
@@ -178,6 +185,8 @@
 
   async function carregarFluxos() {
     try { MK.fluxos = (await req('GET', '/fluxos')).fluxos || []; } catch (e) { toast('err', e.message); }
+    // o aviso da opção "quem não é cliente" depende de o fluxo escolhido existir e estar ativo
+    if (MK.nc) { try { MK.nc = (await req('GET', '/config')).nao_cliente || MK.nc; } catch (_) {} }
   }
   async function carregarDisparos(silencioso) {
     try { MK.disparos = (await req('GET', '/disparos')).disparos || []; } catch (e) { if (!silencioso) toast('err', e.message); }
@@ -210,10 +219,10 @@
     const el = $('mk-body');
     if (!el) return;
     if (!MK.fluxos.length) {
-      el.innerHTML = '<div class="mk-empty">Nenhum fluxo criado ainda.<br>Clique em <b>Novo fluxo</b> para montar o primeiro ou em <b>Importar fluxo</b> para trazer um fluxo pronto.</div>';
+      el.innerHTML = htmlNaoCliente() + '<div class="mk-empty">Nenhum fluxo criado ainda.<br>Clique em <b>Novo fluxo</b> para montar o primeiro ou em <b>Importar fluxo</b> para trazer um fluxo pronto.</div>';
       return;
     }
-    el.innerHTML = '<div class="mk-grid">' + MK.fluxos.map(f => {
+    el.innerHTML = htmlNaoCliente() + '<div class="mk-grid">' + MK.fluxos.map(f => {
       const nos = ((f.grafo && f.grafo.nodes) || []).filter(n => n.tipo !== 'gatilho');
       const tipos = [...new Set(nos.map(n => TIPO_NOME[n.tipo]))];
       return `
@@ -238,6 +247,74 @@
         </div>
       </div>`;
     }).join('') + '</div>';
+  }
+
+  // ── Quem não é cliente: o que responder no lugar do menu automático do robô ──
+  async function carregarNaoCliente() {
+    try { MK.nc = (await req('GET', '/config')).nao_cliente || null; } catch (_) { MK.nc = null; }
+    MK.ncRascunho = null;
+  }
+  function htmlNaoCliente() {
+    if (!MK.nc) return '';
+    const c = MK.ncRascunho || MK.nc;
+    const mudou = !!MK.ncRascunho && ['modo', 'fluxo', 'resposta'].some(k => String(MK.ncRascunho[k] ?? '') !== String(MK.nc[k] ?? ''));
+    const opModo = [['menu', 'Recebe o menu do robô (como é hoje)'], ['fluxo', 'Recebe um fluxo'], ['silencio', 'Não recebe resposta automática']]
+      .map(([v, t]) => `<option value="${v}" ${c.modo === v ? 'selected' : ''}>${t}</option>`).join('');
+    const opFluxo = '<option value="">Escolha o fluxo</option>' + MK.fluxos.map(f =>
+      `<option value="${f.id}" ${Number(c.fluxo) === f.id ? 'selected' : ''}>${esc(f.nome)}${f.ativo ? '' : ' (desativado)'}</option>`).join('');
+    const escolhido = MK.fluxos.find(f => f.id === Number(c.fluxo));
+    let aviso = '';
+    if (c.modo === 'fluxo' && escolhido && !escolhido.ativo) aviso = 'Este fluxo está desativado. Enquanto ele não for ativado, quem não é cliente continua recebendo o menu do robô.';
+    else if (c.modo === 'fluxo' && !mudou && MK.nc.aviso) aviso = MK.nc.aviso;
+    const dica = {
+      menu: 'O robô de atendimento responde com o menu de Vendas, Suporte e Financeiro.',
+      fluxo: 'O fluxo começa na primeira mensagem, mesmo sem palavra-chave. Ele só recomeça para a mesma pessoa depois de 12 horas.',
+      silencio: 'O robô não manda o menu. Só os fluxos por palavra-chave respondem.'
+    }[c.modo];
+    return `
+      <div class="mk-nc" id="mk-nc">
+        <div class="mk-nc-t">Quem ainda não é cliente e manda mensagem</div>
+        <div class="mk-meta">Vale para as mensagens que nenhum fluxo por palavra-chave pegou, como um "oi" ou uma pergunta digitada. Cliente cadastrado continua recebendo o menu do robô, e quem digitar <b>menu</b> também.</div>
+        <div class="mk-nc-campos">
+          <div class="form-group"><label class="form-label">O que ele recebe</label>
+            <select class="minput" id="mk-nc-modo" onchange="MKUI.ncMudou(true)">${opModo}</select></div>
+          <div class="form-group" style="${c.modo === 'fluxo' ? '' : 'display:none'}"><label class="form-label">Fluxo</label>
+            <select class="minput" id="mk-nc-fluxo" onchange="MKUI.ncMudou(true)">${opFluxo}</select></div>
+        </div>
+        <div class="form-hint" style="margin-top:8px">${dica}</div>
+        <div class="form-group" style="margin:12px 0 0;${c.modo === 'fluxo' ? '' : 'display:none'}"><label class="form-label">Se ele digitar uma mensagem depois de já ter recebido o fluxo</label>
+          <textarea class="minput mk-ta" id="mk-nc-resposta" maxlength="600" style="min-height:58px" oninput="MKUI.ncMudou()">${esc(c.resposta ?? '')}</textarea>
+          <div class="form-hint">A equipe é avisada no WhatsApp do atendente, com a mensagem dele, e ele recebe esta resposta. Em branco, só a equipe é avisada.</div></div>
+        ${aviso ? `<div class="mk-alert" style="margin:12px 0 0">${esc(aviso)}</div>` : ''}
+        <div class="mk-nc-pe">
+          <button class="btn bp bsm" id="mk-nc-salvar" onclick="MKUI.ncSalvar()" ${mudou ? '' : 'disabled'}>Salvar</button>
+          <span class="form-hint" id="mk-nc-estado">${mudou ? 'Alteração ainda não salva' : ''}</span>
+        </div>
+      </div>`;
+  }
+  // Guarda o que está na tela; redesenha só quando muda a opção (os campos visíveis dependem dela)
+  function ncMudou(redesenhar) {
+    if (!MK.nc || !$('mk-nc-modo')) return;
+    MK.ncRascunho = {
+      modo: $('mk-nc-modo').value,
+      fluxo: parseInt($('mk-nc-fluxo').value, 10) || null,
+      resposta: $('mk-nc-resposta').value
+    };
+    if (redesenhar) { if (MK.tab === 'fluxos') renderFluxos(); return; }
+    const b = $('mk-nc-salvar'); if (b) b.disabled = false;
+    const e = $('mk-nc-estado'); if (e) e.textContent = 'Alteração ainda não salva';
+  }
+  async function ncSalvar() {
+    if (!MK.nc) return;
+    ncMudou();
+    const c = MK.ncRascunho;
+    if (c.modo === 'fluxo' && !c.fluxo) { toast('err', 'Escolha o fluxo que o contato vai receber'); return; }
+    try {
+      MK.nc = (await req('POST', '/config', { nao_cliente: c })).nao_cliente;
+      MK.ncRascunho = null;
+      toast('ok', 'Opção salva');
+    } catch (e) { toast('err', e.message); }
+    if (MK.tab === 'fluxos') renderFluxos();
   }
 
   async function ativar(id, input) {
@@ -385,7 +462,7 @@
     const el = $('mk-body');
     if (!el || MK.tab !== 'logs') return;
     if (!MK.logs.length) { el.innerHTML = '<div class="mk-empty">Nenhuma execução registrada ainda.</div>'; return; }
-    const origem = { palavra: 'Palavra-chave', botao: 'Clique em botão', disparo: 'Disparo', teste: 'Teste', resposta: 'Resposta do cliente', tempo_limite: 'Sem resposta (tempo)', meu_envio: 'Digitado por mim' };
+    const origem = { palavra: 'Palavra-chave', botao: 'Clique em botão', disparo: 'Disparo', teste: 'Teste', resposta: 'Resposta do cliente', tempo_limite: 'Sem resposta (tempo)', meu_envio: 'Digitado por mim', boas_vindas: 'Mensagem de quem não é cliente' };
     el.innerHTML = '<div class="mk-tw"><table class="mk-tbl"><thead><tr><th>Quando (UTC)</th><th>Fluxo</th><th>Contato</th><th>Origem</th><th>Resultado</th></tr></thead><tbody>' +
       MK.logs.map(l => `<tr><td>${esc(l.created_at)}</td><td>${esc(l.fluxo || '#' + l.flow_id)}</td><td>${esc(l.telefone)}</td><td>${esc(origem[l.origem] || l.origem)}</td>
         <td><span class="mk-st ${l.status === 'ok' ? 'ok' : 'err'}">${l.status === 'ok' ? 'Enviado' : 'Erro'}</span>${l.erro ? `<div class="form-hint">${esc(l.erro)}</div>` : ''}</td></tr>`).join('') +
@@ -890,6 +967,7 @@
     init, aba, novo, modelo, editar, ativar, duplicar, excluir,
     testar, enviarTeste, disparar, dispPub, dispPrevia, confirmarDisparo, disp, fecharSmall,
     req, fluxos: () => MK.fluxos, recarregar,
-    importar, exportar, impArquivos, impSoltar: soltar, impValor, impFechar, impConfirmar
+    importar, exportar, impArquivos, impSoltar: soltar, impValor, impFechar, impConfirmar,
+    ncMudou, ncSalvar
   };
 })();
