@@ -921,11 +921,24 @@ function renderGestor(){
     const cl=document.getElementById('cat-list');
     if(!cl) return;
     if(!categories.length){
-      cl.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">Nenhuma categoria ainda.<br>Clique em <strong style="color:var(--accent)">Nova categoria</strong> para começar.</div>';
+      cl.innerHTML='<div class="pf-empty"><strong>Nenhuma categoria ainda</strong>Use o botão Nova categoria para começar o cardápio.</div>';
       return;
     }
+    // Busca do cabeçalho: mostra só categorias/itens que combinam e abre as categorias sozinha
+    const _nb = t => String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const _q = _nb(window._gestorBusca).trim();
+    let _achou = 0;
     cl.innerHTML=categories.map((cat,idx)=>{
-      const catItems=items.filter(i=>i.catKey===cat.name||i.cat===cat.name);
+      let catItems=items.filter(i=>i.catKey===cat.name||i.cat===cat.name);
+      let aberta = cat.open;
+      if (_q) {
+        const catBate = _nb(cat.label).includes(_q);
+        const filtrados = catItems.filter(i => _nb(i.name).includes(_q));
+        if (!catBate && !filtrados.length) return '';
+        if (!catBate) catItems = filtrados;
+        aberta = true;
+      }
+      _achou++;
       return `
       ${cat.promo?'<div class="cat-promo-banner">promo</div>':''}
       <div class="cat-row" draggable="true" data-cat-id="${cat.id}"
@@ -940,11 +953,11 @@ function renderGestor(){
             <span class="cat-badge">${catItems.length} ite${catItems.length===1?'m':'ns'}</span>
           </div>
           <div class="cat-actions">
-            <div class="sw"><select onclick="event.stopPropagation()" style="font-size:11.5px;padding:4px 22px 4px 9px" onchange="handleCatAction(${cat.id},this.value,this)"><option value="">Ações ▾</option><option value="edit">Editar</option><option value="duplicate">Duplicar</option><option value="pause">Pausar todos os itens</option><option value="unpause">Despausar todos os itens</option><option value="delete">Excluir</option></select></div>
-            <div class="cat-toggle${cat.open?' open':''}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="sw"><select onclick="event.stopPropagation()" style="font-size:11.5px;padding:4px 22px 4px 9px" onchange="handleCatAction(${cat.id},this.value,this)"><option value="">Ações</option><option value="edit">Editar</option><option value="duplicate">Duplicar</option><option value="pause">Pausar todos os itens</option><option value="unpause">Despausar todos os itens</option><option value="delete">Excluir</option></select></div>
+            <div class="cat-toggle${aberta?' open':''}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           </div>
         </div>
-        ${cat.open?`<div class="cat-items">
+        ${aberta?`<div class="cat-items">
           ${catItems.map(item=>`
             <div class="cat-item-row" data-id="${item.id}" draggable="true" ondragstart="itemDragStart(event,${item.id})" ondragover="itemDragOver(event)" ondrop="itemDrop(event,${item.id})" ondragend="itemDragEnd(event)" onclick="openEditItem(+this.dataset.id)">
               <span class="cat-drag" style="cursor:grab;padding:0 6px 0 2px;opacity:.35;flex-shrink:0;font-size:16px;align-self:center" onmousedown="event.stopPropagation()" title="Arrastar para reordenar">⠿</span>
@@ -957,7 +970,7 @@ function renderGestor(){
                 <div class="cat-item-price">R$ ${item.price.toFixed(2).replace('.',',')}${item.itemType==='kg'?'<span style="font-size:10px;color:var(--muted)">/kg</span>':''} · ${item.status==='active'?'<span style="color:var(--success)">Disponível</span>':item.status==='esgotado'?'<span style="color:var(--danger)">Esgotado</span>':'<span style="color:var(--accent3)">Pausado</span>'}</div>
               </div>
               <div style="display:flex;gap:4px;flex-shrink:0;align-items:center">
-                <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();duplicateItem(+this.dataset.id)" title="Duplicar item">⎘</button>
+                <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();duplicateItem(+this.dataset.id)" title="Duplicar item" aria-label="Duplicar item"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 3.5v-.5a1 1 0 0 0-1-1H3.5a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1H4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
                 <button class="stbadge-mini ${scClass(item.status)}" data-id="${item.id}" onclick="event.stopPropagation();quickToggleStatus(+this.dataset.id,this)" title="Alterar disponibilidade">${_statusIcon(item.status)}</button>
                 <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();openEditItem(+this.dataset.id)">Editar</button>
               </div>
@@ -965,13 +978,16 @@ function renderGestor(){
           `).join('')}
           <div class="cat-add" data-cat="${cat.name.replace(/"/g,'&quot;')}" onclick="openAddItemModal(this.dataset.cat)">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-            Adicionar Item
+            Adicionar item
           </div>
         </div>`:''}
       </div>`;
     }).join('');
+    if (_q && !_achou) cl.innerHTML = '<div class="pf-empty"><strong>Nada encontrado</strong>Nenhuma categoria ou item combina com a busca.</div>';
   } catch(e) { console.error('renderGestor error:', e); }
 }
+
+function gestorBuscar(q){ window._gestorBusca = q || ''; renderGestor(); }
 
 function toggleCat(id){
   const cat=categories.find(c=>c.id===id);
@@ -991,7 +1007,7 @@ function _catPrinterOptionsHtml(current) {
   const printers = typeof window._printAvailablePrinters === 'function'
     ? window._printAvailablePrinters()
     : [];
-  const opts = [`<option value="" ${current ? '' : 'selected'}>Cozinha padrÃ£o</option>`];
+  const opts = [`<option value="" ${current ? '' : 'selected'}>Cozinha padrão</option>`];
   printers.forEach(p => {
     const value = String(p.value || '').trim();
     if (!value) return;

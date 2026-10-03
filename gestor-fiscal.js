@@ -243,8 +243,8 @@
       if (typeof sbLoading === 'function') sbLoading(true);
       fiscalConfig = await fiscalApi('/api/fiscal/config', { method: 'POST', body });
       fiscalRenderConfig();
-      fiscalAlert('ok', 'Configuracao fiscal salva.');
-      if (typeof sbToast === 'function') sbToast('ok', 'Configuracao fiscal salva');
+      fiscalAlert('ok', 'Configuração fiscal salva.');
+      if (typeof sbToast === 'function') sbToast('ok', 'Configuração fiscal salva');
     } catch (e) {
       fiscalAlert('err', e.message);
       if (typeof sbToast === 'function') sbToast('err', e.message);
@@ -297,7 +297,7 @@
       await fiscalLoadNotas();
       const filtroMsg = pagamento ? ` Filtro: ${fiscalPagamentoLabel(pagamento)}.` : '';
       fiscalAlert(r.erros?.length ? 'err' : 'ok', `${r.emitidas?.length || 0} NFC-e processada(s). ${r.erros?.length || 0} erro(s).${filtroMsg}`);
-      if (typeof sbToast === 'function') sbToast(r.erros?.length ? 'err' : 'ok', 'Emissao de pendentes concluida');
+      if (typeof sbToast === 'function') sbToast(r.erros?.length ? 'err' : 'ok', 'Emissão de pendentes concluída');
     } catch (e) {
       fiscalAlert('err', e.message);
       if (typeof sbToast === 'function') sbToast('err', e.message);

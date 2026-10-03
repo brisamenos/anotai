@@ -713,7 +713,7 @@ async function temaAplicarModo(key) {
     if (res?.error) throw new Error(res.error.message || 'Falha ao salvar');
     sbToast('ok', `${tema.nome} ativado e salvo!`);
   } catch(e) {
-    sbToast('err', `${tema.nome} aplicado neste dispositivo, mas nao foi salvo no banco.`);
+    sbToast('err', `${tema.nome} aplicado neste dispositivo, mas não foi salvo no banco.`);
   } finally {
     temaSetBusy(false);
     temaUpdateCardSelection();

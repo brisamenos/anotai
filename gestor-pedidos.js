@@ -34,7 +34,75 @@ function _obsListaTela(raw) {
 
 // NAV
 // ─────────────────────────────────────────
+// ── Itens recolhidos do menu lateral (Gestor de cardápio, Marketing) ──
+// Ficam fechados; abrem quando o gestor clica no item pai, ou sozinhos
+// quando a tela aberta é uma das de dentro.
+function sideSubToggle(id, force) {
+  const box = document.getElementById(id);
+  if (!box) return;
+  const open = typeof force === 'boolean' ? force : !box.classList.contains('open');
+  box.classList.toggle('open', open);
+  const pai = document.querySelector('.si-parent[aria-controls="' + id + '"]');
+  if (pai) pai.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function _sideSubSync(sn) {
+  const dentro = sn && sn.closest ? sn.closest('.si-sub') : null;
+  document.querySelectorAll('.si-parent').forEach(p => p.classList.remove('has-on'));
+  document.querySelectorAll('.si-sub').forEach(box => { if (box !== dentro) sideSubToggle(box.id, false); });
+  if (!dentro) return;
+  sideSubToggle(dentro.id, true);
+  const pai = document.querySelector('.si-parent[aria-controls="' + dentro.id + '"]');
+  if (pai) pai.classList.add('has-on');
+}
+
+// Abas dentro de uma tela: <div class="pf-tabs" data-group="x"> + <div class="pf-panel" data-group="x" data-panel="nome">
+function pfTab(btn, nome) {
+  const barra = btn.closest('.pf-tabs');
+  const grupo = barra ? barra.dataset.group : '';
+  const raiz = btn.closest('.page') || document;
+  if (barra) barra.querySelectorAll('.pf-tab').forEach(b => { b.classList.toggle('on', b === btn); b.setAttribute('aria-selected', b === btn ? 'true' : 'false'); });
+  raiz.querySelectorAll('.pf-panel[data-group="' + grupo + '"]').forEach(pn => pn.classList.toggle('on', pn.dataset.panel === nome));
+}
+
+// Busca do menu lateral: filtra os itens pelo nome; Enter abre o primeiro.
+function sideSearch(q, abrir) {
+  const sb_ = document.querySelector('.sidebar');
+  if (!sb_) return;
+  const norm = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const termo = norm(q);
+  sb_.classList.toggle('pf-searching', !!termo);
+  let primeiro = null;
+  sb_.querySelectorAll('.si').forEach(b => {
+    const bate = !termo || norm(b.textContent).includes(termo);
+    b.classList.toggle('pf-nomatch', !bate);
+    if (bate && termo && !primeiro && !b.matches('#sn-marketing')) primeiro = b;
+  });
+  sb_.querySelectorAll('.shead').forEach(h => {
+    const grupo = h.nextElementSibling;
+    const tem = !termo || (grupo && grupo.querySelector('.si:not(.pf-nomatch)'));
+    h.classList.toggle('pf-nomatch', !tem);
+  });
+  // o item pai aparece quando algum filho combina
+  sb_.querySelectorAll('.si-sub').forEach(box => {
+    const pai = sb_.querySelector('.si-parent[aria-controls="' + box.id + '"]');
+    if (pai && termo && box.querySelector('.si:not(.pf-nomatch)')) pai.classList.remove('pf-nomatch');
+  });
+  if (abrir && primeiro) {
+    primeiro.click();
+    const inp = sb_.querySelector('.sidebar-search input');
+    if (inp) { inp.value = ''; inp.blur(); }
+    sideSearch('');
+  }
+}
+
 function nav(id) {
+  // A taxa de entrega agora é uma aba dentro de Entregas
+  if (id === 'taxa') {
+    nav('entregas');
+    if (typeof entShowTab === 'function' && document.getElementById('page-entregas')?.classList.contains('on')) entShowTab('taxa');
+    return;
+  }
   if (typeof billingGateNav === 'function' && billingGateNav(id)) return;
   // ── Bloqueio do Robô para plano Pro ──────────────────
   if (id === 'robo') {
@@ -53,6 +121,7 @@ function nav(id) {
   const _mainEl = document.querySelector('.main'); if (_mainEl) _mainEl.scrollTop = 0;
   const sn = document.getElementById('sn-' + id);
   if (sn) sn.classList.add('on');
+  _sideSubSync(sn);
   closeNotif();
   if (id === 'pedidos') renderKanban();
   if (id === 'entregas' && typeof renderEntregas === 'function') renderEntregas();
@@ -65,9 +134,9 @@ function nav(id) {
   if (id === 'pdv-balcao') renderPDVBalcao();
   if (id === 'robo') {
     evoCarregarInstancia().then(() => {
-      evoCheckStatus();   // vai atualizar QR/conectado porque naAbaRobo=true agora
+      // decide qual conexão mostrar e atualiza QR/conectado (naAbaRobo=true agora)
+      if (typeof waProviderInit === 'function') waProviderInit(); else evoCheckStatus();
     });
-    initChat();
   }
   if (id === 'qrcode') renderQR();
   if (id === 'cupom') { renderCupons(); loadCashbackConfig(); loadStampConfig(); loadPromoAutoConfig(); }
@@ -202,7 +271,7 @@ function renderPendingPaymentsAlert() {
       <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Eles ficam fora do Kanban ate o pagamento confirmar, mas continuam no historico.</div>
       <div>${items}</div>
     </div>
-    <button class="btn bg" style="font-size:11px;padding:5px 10px" onclick="nav('historico');document.getElementById('hist-status').value='';histFiltrar()">Ver historico</button>
+    <button class="btn bg" style="font-size:11px;padding:5px 10px" onclick="nav('historico');document.getElementById('hist-status').value='';histFiltrar()">Ver histórico</button>
   </div>`;
 }
 
@@ -673,12 +742,12 @@ function _pedidoObsComKit(item, obs) {
 async function abrirChatPedidoWA(id) {
   const o = _pedidoWaFindOrder(id);
   if (!o) {
-    if (typeof sbToast === 'function') sbToast('err', 'Pedido nao encontrado.');
+    if (typeof sbToast === 'function') sbToast('err', 'Pedido não encontrado.');
     return;
   }
   const number = _pedidoWaNumber(o.phone);
   if (!number || number.length < 12) {
-    if (typeof sbToast === 'function') sbToast('err', 'Pedido sem telefone valido.');
+    if (typeof sbToast === 'function') sbToast('err', 'Pedido sem telefone válido.');
     return;
   }
 
@@ -690,11 +759,11 @@ async function abrirChatPedidoWA(id) {
     ? EVO.instance
     : (document.getElementById('evo-instance')?.value || '').trim();
   if (!inst) {
-    if (typeof sbToast === 'function') sbToast('err', 'Configure a instancia da Evolution API no Robo WA.');
+    if (typeof sbToast === 'function') sbToast('err', 'Conecte o WhatsApp da loja em Robô WhatsApp, aba Conexão.');
     return;
   }
   if (typeof waOpenConv !== 'function') {
-    if (typeof sbToast === 'function') sbToast('err', 'Chat WhatsApp ainda nao carregou.');
+    if (typeof sbToast === 'function') sbToast('err', 'Chat WhatsApp ainda não carregou.');
     return;
   }
 
@@ -1092,7 +1161,7 @@ function odRenderStatusTimeline(order, historyRows, loading = false, fallbackNot
 
   box.innerHTML = `
     <div class="od-timeline-box">
-      <div class="od-timeline-title">Historico do pedido</div>
+      <div class="od-timeline-title">Histórico do pedido</div>
       <div class="od-timeline-list">
         ${rows.map(r => {
           const status = r.new_status || r.status || 'criado';
@@ -1749,7 +1818,7 @@ async function _odConfirmarItemExistente(itemId) {
   // Calcula só o extra de preço (a string formatada vem do helper _noFmtObsAdicionais)
   let extra = 0;
   modal.querySelectorAll('input:checked').forEach(inp => {
-    extra += parseFloat(inp.dataset.preco || 0);
+    extra += parseFloat(inp.dataset.preco || 0) * _noOpcQtyDe(inp);
   });
 
   let price    = parseFloat(it.price || 0) + extra;
@@ -2701,7 +2770,7 @@ function _noOpcQtyDe(inp) {
 
 // Soma das quantidades marcadas no mesmo grupo do adicional
 function _noGrupoTotal(inp) {
-  const raiz = inp.closest('#modal-no-adicionais-bg, #modal-no-pizza-bg') || document;
+  const raiz = inp.closest('#modal-no-adicionais-bg, #modal-no-pizza-bg, #pdvb-modal-item-bg, #pdv-modal-item-bg') || document;
   let tot = 0;
   raiz.querySelectorAll('input:checked').forEach(o => {
     if (o.name === inp.name) tot += _noOpcQtyDe(o);
@@ -2723,6 +2792,9 @@ function _noOpcAtualizarTotais() {
   const modal = document.getElementById('modal-no-adicionais-bg');
   if (modal?._item) noAtualizarTotalModal(modal._item, modal._isKg);
   if (document.getElementById('modal-no-pizza-bg') && typeof noPizzaAtualizarTotal === 'function') noPizzaAtualizarTotal();
+  // PDV do balcão / "adicionar item" e PDV da mesa usam os mesmos + e −
+  if (document.getElementById('pdvb-modal-item-bg') && typeof pdvbAtualizarTotal === 'function') pdvbAtualizarTotal();
+  if (document.getElementById('pdv-modal-item-bg') && typeof pdvAtualizarTotal === 'function') pdvAtualizarTotal();
 }
 
 function noOpcQty(ev, btn, delta) {
@@ -3044,6 +3116,7 @@ function noRenderCart() {
 let _noFeeConfig = null;            // { tipo: 'fixo'|'por_bairro'|'por_km', valor, bairros, faixas, bairros_bloqueados }
 let _noTaxaManualOverride = false;  // true se o usuário editou o campo de taxa manualmente
 let _noPedidoMinimo = 0;            // valor mínimo de pedido para delivery (vem de store_config.pedido_minimo)
+let _noPedidoMinimoRetirada = false; // true = o mínimo também vale na retirada (store_config.pedido_minimo_retirada)
 
 // Carrega delivery_fee_config + pedido_minimo do banco
 async function _noCarregarFeeConfig() {
@@ -3052,11 +3125,12 @@ async function _noCarregarFeeConfig() {
     _noFeeConfig = _taxaConfig;
   }
   try {
-    const { data } = await sb.from('store_config').select('delivery_fee_config,pedido_minimo').single();
+    const { data } = await sb.from('store_config').select('delivery_fee_config,pedido_minimo,pedido_minimo_retirada').single();
     if (!_noFeeConfig || !_noFeeConfig.tipo) {
       _noFeeConfig = data?.delivery_fee_config || { tipo: 'fixo', valor: 0 };
     }
     _noPedidoMinimo = parseFloat(data?.pedido_minimo) || 0;
+    _noPedidoMinimoRetirada = data?.pedido_minimo_retirada === 1 || data?.pedido_minimo_retirada === true || data?.pedido_minimo_retirada === '1';
   } catch (e) {
     if (!_noFeeConfig) _noFeeConfig = { tipo: 'fixo', valor: 0 };
   }
@@ -3409,6 +3483,13 @@ async function createOrder() {
   } else {
     addr = 'Retirada no balcão';
     taxa = 0;
+
+    // Pedido mínimo na retirada — só quando a chave está ligada no cardápio público
+    const subtotalRet = _noCart.reduce((s, c) => s + c.price * c.qty, 0);
+    if (_noPedidoMinimoRetirada && _noPedidoMinimo > 0 && subtotalRet < _noPedidoMinimo) {
+      const ok = confirm(`Pedido abaixo do mínimo de retirada (R$ ${_noPedidoMinimo.toFixed(2).replace('.',',')}).\nSubtotal atual: R$ ${subtotalRet.toFixed(2).replace('.',',')}.\n\nCriar mesmo assim?`);
+      if (!ok) { window._pdvCriandoPedido = false; return; }
+    }
   }
 
   // ── Troco (só relevante se pagamento = Dinheiro) ──

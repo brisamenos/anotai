@@ -274,8 +274,8 @@ async function renderTaxaPage() {
     if (locStatus) {
       const hasLoc = data?.store_lat && data?.store_lng;
       locStatus.textContent = hasLoc
-        ? `✅ Localização configurada (${parseFloat(data.store_lat).toFixed(4)}, ${parseFloat(data.store_lng).toFixed(4)})`
-        : '⚠️ Localização ainda não configurada — os clientes verão as faixas mas sem cálculo automático.';
+        ? `Localização da loja configurada (${parseFloat(data.store_lat).toFixed(4)}, ${parseFloat(data.store_lng).toFixed(4)}).`
+        : 'Localização ainda não configurada: os clientes verão as faixas, mas sem cálculo automático.';
       locStatus.style.color = hasLoc ? '#16a34a' : '#b45309';
     }
   } catch(e) {
@@ -1891,11 +1891,13 @@ function initSidebarState() {
   // Carrega instância salva e verifica conexão já no boot da página
   // (não espera o usuário clicar na aba Robô)
   evoCarregarInstancia().then(() => {
-    if (EVO.instance) evoCheckStatus();
+    if (typeof waStatusRefresh === 'function') waStatusRefresh();
+    else if (EVO.instance) evoCheckStatus();
   });
 }
 
 // Polling de reconexão — mantém o badge do topnav atualizado a cada 30s
 setInterval(() => {
-  if (EVO.instance) evoCheckStatus();
+  if (typeof waStatusRefresh === 'function') waStatusRefresh();
+  else if (EVO.instance) evoCheckStatus();
 }, 30000);

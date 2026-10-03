@@ -259,13 +259,14 @@ function _renderPixOnlineToggle(ativo) {
   const card   = document.getElementById('card-pix-online');
   const manual = document.getElementById('pix-manual-config-wrap');
   if (btn) {
-    btn.textContent = ativo ? 'Online ✓' : 'Manual';
-    btn.className   = 'btn ' + (ativo ? 'bp' : 'bd');
+    btn.textContent = ativo ? 'Ligado' : 'Desligado';
+    btn.className   = 'btn ' + (ativo ? 'bp' : 'bg');
+    btn.title       = ativo ? 'Clique para desligar o PIX online' : 'Clique para ligar o PIX online';
   }
   if (status) status.textContent = ativo
-    ? 'PIX Online ativo — QR Code via Mercado Pago'
-    : 'Modo manual — cliente recebe a chave PIX pelo WhatsApp';
-  if (card)  card.style.borderColor = ativo ? 'rgba(34,197,94,.35)' : 'rgba(249,115,22,.35)';
+    ? 'Ligado: o cliente paga pelo QR Code na hora de fechar o pedido'
+    : 'Desligado: o cliente recebe a chave PIX pelo WhatsApp (recebimento manual)';
+  if (card)  card.style.borderColor = ativo ? 'rgba(31,157,87,.35)' : '';
   if (manual) manual.style.display  = ativo ? 'none' : '';
 }
 
@@ -297,16 +298,16 @@ function _renderCartaoOnlineToggle(ativo, disponivel) {
   const card   = document.getElementById('card-cartao-online');
   if (!disponivel) {
     if (btn)    { btn.textContent = 'Indisponível'; btn.className = 'btn bg'; btn.disabled = true; }
-    if (status) status.textContent = 'Não disponível — aguardando habilitação pelo suporte';
+    if (status) status.textContent = 'Ainda não disponível: aguardando a habilitação pelo suporte';
     return;
   }
   if (btn) {
-    btn.textContent = ativo ? 'Ativado' : 'Desativado';
-    btn.className   = 'btn ' + (ativo ? 'bp' : 'bd');
+    btn.textContent = ativo ? 'Ligado' : 'Desligado';
+    btn.className   = 'btn ' + (ativo ? 'bp' : 'bg');
     btn.disabled    = false;
   }
-  if (status) status.textContent = ativo ? 'Ativo — clientes podem pagar com cartão online' : 'Inativo — cartão não aparece no cardápio';
-  if (card)  card.style.borderColor = ativo ? 'rgba(59,130,246,.35)' : 'var(--border)';
+  if (status) status.textContent = ativo ? 'Ligado: o cliente pode pagar com cartão no cardápio' : 'Desligado: o cartão não aparece no cardápio';
+  if (card)  card.style.borderColor = ativo ? 'rgba(31,157,87,.35)' : '';
 }
 
 async function carregarConfigPixGestor() {
@@ -394,8 +395,8 @@ async function carregarCarteira() {
     if (se('crt-total'))       se('crt-total').textContent       = _fmtR(cart.total_recebido);
     if (se('crt-sacado'))      se('crt-sacado').textContent      = _fmtR(cart.total_sacado);
     if (se('crt-npag'))        se('crt-npag').textContent        = cart.total_pagamentos || 0;
-    if (se('crt-pix-count'))   se('crt-pix-count').textContent   = (cart.pix_count || 0) + ' pagtos';
-    if (se('crt-cartao-count'))se('crt-cartao-count').textContent= (cart.cartao_count || 0) + ' pagtos';
+    if (se('crt-pix-count'))   se('crt-pix-count').textContent   = String(cart.pix_count || 0);
+    if (se('crt-cartao-count'))se('crt-cartao-count').textContent= String(cart.cartao_count || 0);
     if (se('crt-pix-total'))   se('crt-pix-total').textContent   = _fmtR(cart.pix_recebido);
     if (se('crt-cartao-total'))se('crt-cartao-total').textContent = _fmtR(cart.cartao_recebido);
 
@@ -461,12 +462,12 @@ function _renderMpProprio(d) {
   const badge = se('mp-proprio-badge');
   if (badge) {
     if (ativo) {
-      badge.textContent = '● Sua conta';
+      badge.textContent = 'Sua conta';
       badge.style.background = 'rgba(34,197,94,.12)';
       badge.style.color      = '#16a34a';
       badge.style.borderColor = 'rgba(34,197,94,.30)';
     } else {
-      badge.textContent = '● Conta da plataforma';
+      badge.textContent = 'Conta da plataforma';
       badge.style.background = 'rgba(99,102,241,.10)';
       badge.style.color      = '#6366f1';
       badge.style.borderColor = 'rgba(99,102,241,.25)';
@@ -610,8 +611,8 @@ function _renderSaqueHistorico(saques) {
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px">
       <div>
         <div style="font-weight:600;font-size:13px">${_fmtR(s.valor_liquido)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${s.pix_key_tipo?.toUpperCase()}: ${s.pix_key} · ${new Date(s.created_at).toLocaleDateString('pt-BR')}</div>
-        ${s.obs_admin ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${s.obs_admin}</div>` : ''}
+        <div style="font-size:12.5px;color:var(--muted);margin-top:2px">${s.pix_key_tipo?.toUpperCase()}: ${s.pix_key} · ${new Date(s.created_at).toLocaleDateString('pt-BR')}</div>
+        ${s.obs_admin ? `<div style="font-size:12.5px;color:var(--muted);margin-top:2px">${s.obs_admin}</div>` : ''}
       </div>
       <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;${badge[s.status]||badge.pendente}">${label[s.status]||s.status}</span>
     </div>`).join('');
@@ -625,12 +626,12 @@ function _renderPixHistorico(pagamentos) {
   el.innerHTML = pagamentos.map(p => `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px">
       <div>
-        <div style="font-weight:600;font-size:13px">${_fmtR(p.valor)} <span style="font-weight:400;color:var(--muted);font-size:12px">→ líquido ${_fmtR(p.valor_liquido)}</span></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${p.payer_name||'—'} · Pedido #${_orderNum(p.order_id||0)} · ${new Date(p.created_at).toLocaleDateString('pt-BR')}</div>
+        <div style="font-weight:600;font-size:13px">${_fmtR(p.valor)} <span style="font-weight:500;color:var(--muted);font-size:12.5px">líquido ${_fmtR(p.valor_liquido)}</span></div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:2px">${p.payer_name||'—'} · Pedido #${_orderNum(p.order_id||0)} · ${new Date(p.created_at).toLocaleDateString('pt-BR')}</div>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;${badge[p.status]||badge.pendente}" id="pix-status-${p.mp_payment_id}">${p.status}</span>
-        ${p.status==='pendente' ? `<button onclick="_verificarPixAgora('${p.mp_payment_id}', this)" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap">🔄 Verificar agora</button>` : ''}
+        ${p.status==='pendente' ? `<button onclick="_verificarPixAgora('${p.mp_payment_id}', this)" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap">Verificar agora</button>` : ''}
       </div>
     </div>`).join('');
 }
@@ -675,8 +676,8 @@ function _renderCartaoHistorico(pagamentos) {
     return `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px">
       <div>
-        <div style="font-weight:600;font-size:13px">${_fmtR(p.valor)} <span style="font-weight:400;color:var(--muted);font-size:12px">→ líquido ${_fmtR(liq)}</span></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">
+        <div style="font-weight:600;font-size:13px">${_fmtR(p.valor)} <span style="font-weight:500;color:var(--muted);font-size:12.5px">líquido ${_fmtR(liq)}</span></div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:2px">
           ${p.payer_name||'—'} · Pedido #${_orderNum(p.order_id||0)} ·
           ${p.payment_method_id ? p.payment_method_id.charAt(0).toUpperCase()+p.payment_method_id.slice(1) : 'Cartão'}
           ${p.last_four_digits ? '••••'+p.last_four_digits : ''} ·

@@ -52,31 +52,40 @@ async function _histBuscar() {
 
     if (!list) return;
     if (!_histData.length) {
-      list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Nenhum pedido encontrado</div>';
+      list.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--muted);font-size:13.5px"><strong style="display:block;color:var(--text);font-size:14.5px;margin-bottom:4px">Nenhum pedido encontrado</strong>Tente outro período ou limpe a busca.</div>';
       return;
     }
 
     const statusMap = {
-      analise:'⏳ Análise', producao:'👨‍🍳 Produção', pronto:'✅ Pronto',
-      entregue:'📦 Entregue', finalizado:'✅ Finalizado', cancelado:'❌ Cancelado',
-      mesa_aberta:'🍽️ Mesa aberta', aguardando_pix:'💠 Aguard. PIX', aguardando_cartao:'Aguard. cartao'
+      analise:'Em análise', producao:'Em produção', pronto:'Pronto',
+      entregue:'Entregue', finalizado:'Finalizado', cancelado:'Cancelado',
+      mesa_aberta:'Mesa aberta', aguardando_pix:'Aguardando PIX', aguardando_cartao:'Aguardando cartão'
     };
-    const statusColor = {
-      analise:'var(--accent3)', producao:'var(--accent)', pronto:'var(--success)',
-      entregue:'var(--success)', finalizado:'var(--success)', cancelado:'var(--danger)',
-      mesa_aberta:'var(--purple)', aguardando_pix:'var(--accent3)', aguardando_cartao:'var(--accent3)'
+    // cor da etiqueta: ok (verde), warn (amarelo), bad (vermelho), info (azul)
+    const statusTom = {
+      analise:'warn', producao:'info', pronto:'ok', entregue:'ok', finalizado:'ok', cancelado:'bad',
+      mesa_aberta:'info', aguardando_pix:'warn', aguardando_cartao:'warn'
     };
+    const pagNome = v => {
+      const k = String(v || '').toLowerCase().trim();
+      const mapa = { pix:'PIX', pix_manual:'PIX (manual)', pix_online:'PIX online', dinheiro:'Dinheiro', cartao:'Cartão', credito:'Crédito', debito:'Débito', mesa:'Na mesa', cartao_online:'Cartão online' };
+      if (!k) return '—';
+      return mapa[k] || (String(v).charAt(0).toUpperCase() + String(v).slice(1));
+    };
+    const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    const icoPrint = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="4" y="2" width="8" height="3.5" rx=".8" stroke="currentColor" stroke-width="1.4"/><rect x="4" y="10" width="8" height="4" rx=".8" stroke="currentColor" stroke-width="1.4"/><path d="M4 11.5H3a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/></svg>';
+    const icoLixo = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4.5V3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1.5M4.5 4.5l.6 8.1a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-    list.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
-      <thead><tr style="background:var(--surface2);text-align:left">
-        <th style="padding:10px 12px;font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">#</th>
-        <th style="padding:10px 12px;font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Cliente</th>
-        <th style="padding:10px 12px;font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Itens</th>
-        <th style="padding:10px 12px;font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Total</th>
-        <th style="padding:10px 12px;font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Pag.</th>
-        <th style="padding:10px 12px;font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Status</th>
-        <th style="padding:10px 12px;font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Data</th>
-        <th style="padding:10px 6px"></th>
+    list.innerHTML = `<div class="pf-table-wrap"><table>
+      <thead><tr>
+        <th style="text-align:left">Pedido</th>
+        <th style="text-align:left">Cliente</th>
+        <th style="text-align:left">Itens</th>
+        <th class="pf-num">Total</th>
+        <th style="text-align:left">Pagamento</th>
+        <th style="text-align:left">Situação</th>
+        <th style="text-align:left">Data</th>
+        <th></th>
       </tr></thead><tbody>
       ${_histData.map(o => {
         const items = Array.isArray(o.items) ? o.items : [];
@@ -88,18 +97,18 @@ async function _histBuscar() {
         // força a exibição no fuso de Brasília independente do dispositivo.
         const dt = o.created_at ? new Date(o.created_at.replace(' ', 'T') + 'Z').toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}) : '';
         const num = o.order_num || o.id;
-        return `<tr style="border-top:1px solid var(--border)" onmouseenter="this.style.background='rgba(255,255,255,.02)'" onmouseleave="this.style.background=''">
-          <td style="padding:10px 12px;font-weight:700;color:var(--accent)">#${num}</td>
-          <td style="padding:10px 12px"><div style="font-weight:600">${o.client||'—'}</div><div style="font-size:11px;color:var(--muted)">${o.phone||''}</div>${o.mesa_num?`<div style="font-size:11px;color:var(--purple)">Mesa ${o.mesa_num}</div>`:''}</td>
-          <td style="padding:10px 12px;max-width:220px"><div style="font-size:11.5px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${itensStr}">${itensStr||'—'}</div></td>
-          <td style="padding:10px 12px;font-weight:700;color:var(--success)">${_money(parseFloat(o.total||0)+parseFloat(o.taxa||0))}</td>
-          <td style="padding:10px 12px;font-size:11.5px">${o.pag||'—'}</td>
-          <td style="padding:10px 12px"><span style="font-size:10.5px;padding:2px 8px;border-radius:99px;font-weight:600;background:${statusColor[o.status]||'var(--muted)'}18;color:${statusColor[o.status]||'var(--muted)'};border:1px solid ${statusColor[o.status]||'var(--muted)'}30">${statusMap[o.status]||o.status}</span></td>
-          <td style="padding:10px 12px;font-size:11.5px;color:var(--muted);white-space:nowrap">${dt}</td>
-          <td style="padding:10px 6px;white-space:nowrap">
-            <button class="btn bg" style="font-size:10.5px;padding:3px 8px" onclick="histDetalhe(${o.id})">Ver</button>
-            <button class="btn bg" style="font-size:10.5px;padding:3px 8px" title="Imprimir novamente" onclick="histReimprimir(${o.id})">🖨️</button>
-            <button class="btn bg" style="font-size:10.5px;padding:3px 8px;color:var(--danger);border-color:rgba(239,68,68,.35)" title="Excluir pedido (irreversível)" onclick="histExcluir(${o.id})">🗑️</button>
+        return `<tr>
+          <td style="font-weight:750;color:var(--accent);white-space:nowrap">#${num}</td>
+          <td><div style="font-weight:650">${esc(o.client||'—')}</div><div style="font-size:12.5px;color:var(--muted)">${o.mesa_num ? 'Mesa ' + esc(o.mesa_num) : esc(o.phone||'')}</div></td>
+          <td style="max-width:260px"><div style="font-size:13px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(itensStr)}">${esc(itensStr)||'—'}</div></td>
+          <td class="pf-num" style="font-weight:750;white-space:nowrap">${_money(parseFloat(o.total||0)+parseFloat(o.taxa||0))}</td>
+          <td style="white-space:nowrap">${esc(pagNome(o.pag))}</td>
+          <td><span class="pf-chip ${statusTom[o.status]||''}">${statusMap[o.status]||esc(o.status)}</span></td>
+          <td style="color:var(--muted);white-space:nowrap">${dt}</td>
+          <td style="white-space:nowrap;text-align:right">
+            <button class="btn bg pf-sm" onclick="histDetalhe(${o.id})">Ver</button>
+            <button class="btn bg pf-sm pf-icon" title="Imprimir de novo" aria-label="Imprimir de novo" onclick="histReimprimir(${o.id})">${icoPrint}</button>
+            <button class="btn bd pf-sm pf-icon" title="Excluir pedido (não dá para desfazer)" aria-label="Excluir pedido" onclick="histExcluir(${o.id})">${icoLixo}</button>
           </td>
         </tr>`;
       }).join('')}
@@ -256,10 +265,17 @@ function histDetalhe(id) {
 // ─────────────────────────────────────────
 let fornecedoresCache = [];
 
+const _PF_ICO = {
+  editar: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M11.2 2.3l2.5 2.5L5.6 12.9l-3.1.6.6-3.1 8.1-8.1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+  excluir: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4.5V3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1.5M4.5 4.5l.6 8.1a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  ok: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.3l3.3 3.2L13 4.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+};
+const _pfEsc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
 async function renderFornecedores() {
   const list = document.getElementById('forn-list');
   if (!list) return;
-  list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:13px">Carregando...</div>';
+  list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:13.5px">Carregando...</div>';
 
   try {
     const { data } = await sb.from('fornecedores').select('*').order('nome');
@@ -270,20 +286,24 @@ async function renderFornecedores() {
   if (elTotal) elTotal.textContent = fornecedoresCache.length;
 
   if (!fornecedoresCache.length) {
-    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Nenhum fornecedor cadastrado.<br>Clique em <strong>+ Novo fornecedor</strong>.</div>';
+    list.className = '';
+    list.innerHTML = '<div class="pf-empty"><strong>Nenhum fornecedor cadastrado</strong>Use o botão Novo fornecedor para começar.</div>';
     return;
   }
 
+  list.className = 'pf-list';
   list.innerHTML = fornecedoresCache.map(f => `
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:14px">
-      <div style="width:38px;height:38px;border-radius:50%;background:rgba(59,130,246,.12);border:1.5px solid rgba(59,130,246,.25);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:var(--accent);flex-shrink:0">${(f.nome||'?')[0].toUpperCase()}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:13.5px">${f.nome}</div>
-        <div style="font-size:11.5px;color:var(--muted)">${[f.telefone,f.email,f.cnpj].filter(Boolean).join(' · ')||'Sem contato'}</div>
-        ${f.obs?`<div style="font-size:11px;color:var(--muted2);margin-top:2px">${f.obs}</div>`:''}
+    <div class="pf-row">
+      <div class="pf-avatar">${_pfEsc((f.nome||'?')[0].toUpperCase())}</div>
+      <div class="pf-row-main">
+        <div class="pf-row-title">${_pfEsc(f.nome)}</div>
+        <div class="pf-row-sub">${[f.telefone,f.email,f.cnpj].filter(Boolean).map(_pfEsc).join(', ')||'Sem contato cadastrado'}</div>
+        ${f.obs?`<div class="pf-row-sub">${_pfEsc(f.obs)}</div>`:''}
       </div>
-      <button class="btn bg" style="font-size:11px;padding:4px 10px" onclick="editFornecedor(${f.id})">✏️</button>
-      <button class="btn bd" style="font-size:11px;padding:4px 8px" onclick="deleteFornecedor(${f.id})">🗑</button>
+      <div class="pf-row-actions">
+        <button class="btn bg pf-sm pf-icon" title="Editar" aria-label="Editar fornecedor" onclick="editFornecedor(${f.id})">${_PF_ICO.editar}</button>
+        <button class="btn bd pf-sm pf-icon" title="Excluir" aria-label="Excluir fornecedor" onclick="deleteFornecedor(${f.id})">${_PF_ICO.excluir}</button>
+      </div>
     </div>`).join('');
 }
 
@@ -292,7 +312,7 @@ function openAddFornecedor() {
   ['forn-nome','forn-contato','forn-telefone','forn-email','forn-cnpj','forn-endereco','forn-obs'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';
   });
-  document.getElementById('modal-forn-title').textContent = 'Novo Fornecedor';
+  document.getElementById('modal-forn-title').textContent = 'Novo fornecedor';
   openModal('modal-fornecedor');
 }
 
@@ -307,7 +327,7 @@ function editFornecedor(id) {
   document.getElementById('forn-cnpj').value = f.cnpj || '';
   document.getElementById('forn-endereco').value = f.endereco || '';
   document.getElementById('forn-obs').value = f.obs || '';
-  document.getElementById('modal-forn-title').textContent = 'Editar Fornecedor';
+  document.getElementById('modal-forn-title').textContent = 'Editar fornecedor';
   openModal('modal-fornecedor');
 }
 
@@ -354,7 +374,7 @@ let contasPagarCache = [];
 async function renderContasPagar() {
   const list = document.getElementById('cp-list');
   if (!list) return;
-  list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:13px">Carregando...</div>';
+  list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:13.5px">Carregando...</div>';
 
   try {
     const { data } = await sb.from('contas_pagar').select('*').order('vencimento');
@@ -383,34 +403,34 @@ async function renderContasPagar() {
   else if (filtro === 'pago') filtered = contasPagarCache.filter(c => c.status === 'pago');
 
   if (!filtered.length) {
-    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Nenhuma conta encontrada.</div>';
+    list.className = '';
+    list.innerHTML = filtro === 'todos'
+      ? '<div class="pf-empty"><strong>Nenhuma conta cadastrada</strong>Use o botão Nova conta para lançar aluguel, fornecedores e outras despesas.</div>'
+      : '<div class="pf-empty"><strong>Nenhuma conta neste filtro</strong>Troque o filtro acima para ver as demais.</div>';
     return;
   }
 
-  const catIcons = { aluguel:'🏠', salario:'👷', fornecedor:'📦', agua:'💧', luz:'💡', internet:'🌐', gas:'🔥', marketing:'📢', manutencao:'🔧', impostos:'📋', outros:'📌' };
+  const catNome = { aluguel:'Aluguel', salario:'Salários', fornecedor:'Fornecedores', agua:'Água', luz:'Energia', internet:'Internet', gas:'Gás', marketing:'Marketing', manutencao:'Manutenção', impostos:'Impostos', outros:'Outros' };
 
+  list.className = 'pf-list';
   list.innerHTML = filtered.map(c => {
     const vencida = c.status === 'pendente' && c.vencimento < hoje;
+    const paga = c.status === 'pago';
     const fornNome = c.fornecedor_id ? (fornecedoresCache.find(f => f.id === c.fornecedor_id)?.nome || '') : '';
     const dtVenc = c.vencimento ? new Date(c.vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '';
-    const icon = catIcons[c.categoria] || '📌';
-    return `<div style="background:var(--surface2);border:1px solid ${vencida?'rgba(239,68,68,.35)':'var(--border)'};border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:14px;${vencida?'border-left:3px solid var(--danger)':''}">
-      <div style="font-size:22px;flex-shrink:0">${icon}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:13px">${c.descricao}</div>
-        <div style="font-size:11.5px;color:var(--muted)">${c.categoria||'outros'} ${fornNome?'· '+fornNome:''} ${c.recorrente?'· 🔄 Recorrente':''}</div>
-        <div style="font-size:11px;color:${vencida?'var(--danger)':'var(--muted)'};margin-top:2px">${vencida?'⚠️ Vencida em ':'Vence em '}${dtVenc}</div>
+    const detalhes = [catNome[c.categoria] || _pfEsc(c.categoria || 'Outros'), _pfEsc(fornNome), c.recorrente ? 'Recorrente' : ''].filter(Boolean).join(', ');
+    const chip = paga ? '<span class="pf-chip ok">Paga</span>' : vencida ? '<span class="pf-chip bad">Vencida</span>' : '<span class="pf-chip warn">Pendente</span>';
+    return `<div class="pf-row"${vencida ? ' style="box-shadow:inset 3px 0 0 var(--pf-bad)"' : ''}>
+      <div class="pf-row-main">
+        <div class="pf-row-title">${_pfEsc(c.descricao)} ${chip}</div>
+        <div class="pf-row-sub">${detalhes}</div>
+        <div class="pf-row-sub"${vencida ? ' style="color:var(--pf-bad);font-weight:650"' : ''}>${paga ? 'Vencimento em ' : vencida ? 'Venceu em ' : 'Vence em '}${dtVenc}</div>
       </div>
-      <div style="text-align:right;flex-shrink:0">
-        <div style="font-size:15px;font-weight:800;color:${c.status==='pago'?'var(--success)':'var(--danger)'}">${_money(c.valor)}</div>
-        <div style="font-size:10.5px;color:${c.status==='pago'?'var(--success)':'var(--muted)'}">
-          ${c.status==='pago'?'✅ Pago':'⏳ Pendente'}
-        </div>
-      </div>
-      <div style="display:flex;gap:4px;flex-shrink:0">
-        ${c.status==='pendente'?`<button class="btn bg" style="font-size:10.5px;padding:4px 8px" onclick="marcarContaPaga(${c.id})">✅</button>`:''}
-        <button class="btn bg" style="font-size:10.5px;padding:4px 8px" onclick="editConta(${c.id})">✏️</button>
-        <button class="btn bd" style="font-size:10.5px;padding:4px 6px" onclick="deleteConta(${c.id})">🗑</button>
+      <div class="pf-row-val">${_money(c.valor)}</div>
+      <div class="pf-row-actions">
+        ${c.status==='pendente'?`<button class="btn bg pf-sm" title="Marcar como paga" onclick="marcarContaPaga(${c.id})">${_PF_ICO.ok} Paga</button>`:''}
+        <button class="btn bg pf-sm pf-icon" title="Editar" aria-label="Editar conta" onclick="editConta(${c.id})">${_PF_ICO.editar}</button>
+        <button class="btn bd pf-sm pf-icon" title="Excluir" aria-label="Excluir conta" onclick="deleteConta(${c.id})">${_PF_ICO.excluir}</button>
       </div>
     </div>`;
   }).join('');
@@ -425,7 +445,7 @@ function openAddConta() {
   document.getElementById('ctp-fornecedor').value = '';
   document.getElementById('ctp-recorrente').checked = false;
   document.getElementById('ctp-recorrencia-wrap').style.display = 'none';
-  document.getElementById('modal-cp-title').textContent = 'Nova Conta a Pagar';
+  document.getElementById('modal-cp-title').textContent = 'Nova conta a pagar';
   _populateFornSelect();
   openModal('modal-conta-pagar');
 }
@@ -449,7 +469,7 @@ function editConta(id) {
   document.getElementById('ctp-recorrente').checked = !!c.recorrente;
   document.getElementById('ctp-recorrencia-wrap').style.display = c.recorrente ? '' : 'none';
   if (c.recorrencia) document.getElementById('ctp-recorrencia').value = c.recorrencia;
-  document.getElementById('modal-cp-title').textContent = 'Editar Conta';
+  document.getElementById('modal-cp-title').textContent = 'Editar conta';
   _populateFornSelect();
   if (c.fornecedor_id) document.getElementById('ctp-fornecedor').value = c.fornecedor_id;
   openModal('modal-conta-pagar');
@@ -589,40 +609,24 @@ async function renderDRE() {
     const maxCat = Math.max(...Object.values(catMap), 1);
 
     container.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
-        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:16px;text-align:center">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">RECEITA BRUTA</div>
-          <div style="font-size:22px;font-weight:800;color:var(--success)">${_money(receita)}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">${validos.length} pedidos</div>
-        </div>
-        <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:12px;padding:16px;text-align:center">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">DESPESAS TOTAIS</div>
-          <div style="font-size:22px;font-weight:800;color:var(--danger)">${_money(despesasTotal)}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">Pagas no período</div>
-        </div>
-        <div style="background:${lucro>=0?'rgba(59,130,246,.08)':'rgba(239,68,68,.08)'};border:1px solid ${lucro>=0?'rgba(59,130,246,.2)':'rgba(239,68,68,.2)'};border-radius:12px;padding:16px;text-align:center">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">LUCRO LÍQUIDO</div>
-          <div style="font-size:22px;font-weight:800;color:${lucro>=0?'var(--accent)':'var(--danger)'}">${_money(lucro)}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">Margem: ${margem}%</div>
-        </div>
-        <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:16px;text-align:center">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">CONTAS PENDENTES</div>
-          <div style="font-size:22px;font-weight:800;color:var(--accent3)">${_money(contasPend)}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">A vencer no período</div>
-        </div>
+      <div class="sg">
+        <div class="sc" style="--ca:var(--success)"><div class="sl">Receita bruta</div><div class="sv">${_money(receita)}</div><div class="str">${validos.length} ${validos.length === 1 ? 'pedido' : 'pedidos'}</div></div>
+        <div class="sc" style="--ca:var(--danger)"><div class="sl">Despesas totais</div><div class="sv">${_money(despesasTotal)}</div><div class="str">Pagas no período</div></div>
+        <div class="sc" style="--ca:${lucro>=0?'var(--accent)':'var(--danger)'}"><div class="sl">Lucro líquido</div><div class="sv" style="color:${lucro>=0?'var(--text)':'var(--danger)'}">${_money(lucro)}</div><div class="str">Margem de ${margem}%</div></div>
+        <div class="sc" style="--ca:var(--accent3)"><div class="sl">Contas pendentes</div><div class="sv">${_money(contasPend)}</div><div class="str">A vencer no período</div></div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div class="card" style="padding:18px">
-          <div style="font-size:13px;font-weight:700;margin-bottom:14px">📊 Demonstrativo</div>
+          <div class="card-title" style="margin-bottom:14px">Demonstrativo</div>
           <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="font-weight:600;color:var(--success)">( + ) Receita bruta</span><span style="font-weight:700;color:var(--success)">${_money(receita)}</span></div>
           <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="font-weight:600;color:var(--danger)">( − ) Saídas do caixa</span><span style="color:var(--danger)">- ${_money(saidasMov)}</span></div>
           <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="font-weight:600;color:var(--danger)">( − ) Contas pagas</span><span style="color:var(--danger)">- ${_money(contasPagas)}</span></div>
-          <div style="display:flex;justify-content:space-between;padding:12px 0;border-top:2px solid var(--border);margin-top:4px"><span style="font-weight:800;font-size:14px">= LUCRO LÍQUIDO</span><span style="font-weight:800;font-size:14px;color:${lucro>=0?'var(--accent)':'var(--danger)'}">${_money(lucro)}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:12px 0;border-top:2px solid var(--border);margin-top:4px"><span style="font-weight:800;font-size:14px">= Lucro líquido</span><span style="font-weight:800;font-size:14px;color:${lucro>=0?'var(--accent)':'var(--danger)'}">${_money(lucro)}</span></div>
         </div>
 
         <div class="card" style="padding:18px">
-          <div style="font-size:13px;font-weight:700;margin-bottom:14px">📋 Despesas por Categoria</div>
+          <div class="card-title" style="margin-bottom:14px">Despesas por categoria</div>
           ${Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([k,v]) => `
             <div style="margin-bottom:12px">
               <div style="display:flex;justify-content:space-between;margin-bottom:4px">

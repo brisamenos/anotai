@@ -2026,7 +2026,6 @@ async function renderMeuPlano() {
     ];
     const extraPremium = [
       { svg:'<rect x="3" y="5" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="9" r="1" fill="currentColor"/><circle cx="10" cy="9" r="1" fill="currentColor"/><path d="M6 5V3.5M10 5V3.5M6 3.5H10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>', label:'Agente IA no WhatsApp', destaque: true },
-      { svg:'<path d="M2 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5l-3 2V4z" stroke="currentColor" stroke-width="1.4"/><path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>', label:'Simulador do robô', destaque: true },
     ];
     const recursos = isPremium ? [...recursosPro, ...extraPremium] : recursosPro;
     if (elRecursos) {
@@ -2155,7 +2154,7 @@ async function cancelarAssinaturaPlano() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Erro ao cancelar assinatura');
-    sbToast('ok', 'Pagamento automatico cancelado.');
+    sbToast('ok', 'Pagamento automático cancelado.');
     _assinaturaPlanoAtual = null;
     renderAssinaturaPlano(null);
   } catch(e) {
@@ -2220,7 +2219,7 @@ async function iniciarPagamentoPlano() {
       if (data.qr_code_base64) {
         document.getElementById('pix-qr-img').innerHTML = `<img src="data:image/png;base64,${data.qr_code_base64}" style="width:200px;height:200px">`;
       } else {
-        document.getElementById('pix-qr-img').innerHTML = '<div style="color:var(--muted);font-size:12px">QR Code nao disponivel.<br>Use o codigo PIX abaixo.</div>';
+        document.getElementById('pix-qr-img').innerHTML = '<div style="color:var(--muted);font-size:12px">QR Code não disponível.<br>Use o código PIX abaixo.</div>';
       }
       
       document.getElementById('modal-pag-pix-plano').classList.add('on');
@@ -2239,7 +2238,7 @@ async function iniciarPagamentoPlano() {
     if (lbl) lbl.textContent = _cartaoPlanoModo === 'assinatura' ? 'Pagamento automatico' : 'Pagamento via Cartao';
     if (info) info.style.display = _cartaoPlanoModo === 'assinatura' ? 'block' : 'none';
     if (btnCartao) btnCartao.innerHTML = _cartaoPlanoModo === 'assinatura'
-      ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Ativar automatico'
+      ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Ativar automático'
       : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Pagar agora';
     document.getElementById('modal-pag-cartao-plano').classList.add('on');
   }
@@ -2278,9 +2277,9 @@ function iniciarPollingPixPlano(mpId) {
 
 function copiarPixPlano() {
   const code = document.getElementById('pix-plano-code').value;
-  if (!code) { sbToast('err', 'Codigo PIX nao disponivel'); return; }
+  if (!code) { sbToast('err', 'Código PIX não disponível'); return; }
   navigator.clipboard.writeText(code).then(() => {
-    sbToast('ok', 'Codigo PIX copiado!');
+    sbToast('ok', 'Código PIX copiado!');
     const btn = document.getElementById('btn-copiar-pix-plano');
     if (btn) { btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Copiado!'; }
   });
@@ -2343,13 +2342,13 @@ async function processarPagamentoCartao() {
   const cpf = document.getElementById('cartao-cpf').value.replace(/\D/g, '');
   const email = (document.getElementById('cartao-email')?.value || '').trim();
   
-  if (!numero || numero.length < 13) { sbToast('err', 'Numero do cartao invalido'); return; }
+  if (!numero || numero.length < 13) { sbToast('err', 'Número do cartão inválido'); return; }
   if (!validade || validade.length < 5) { sbToast('err', 'Validade invalida'); return; }
-  if (!cvv || cvv.length < 3) { sbToast('err', 'CVV invalido'); return; }
-  if (!nome) { sbToast('err', 'Nome no cartao obrigatorio'); return; }
-  if (!cpf || cpf.length < 11) { sbToast('err', 'CPF invalido'); return; }
+  if (!cvv || cvv.length < 3) { sbToast('err', 'CVV inválido'); return; }
+  if (!nome) { sbToast('err', 'Nome no cartão obrigatório'); return; }
+  if (!cpf || cpf.length < 11) { sbToast('err', 'CPF inválido'); return; }
   if (_cartaoPlanoModo === 'assinatura' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    sbToast('err', 'Informe um e-mail valido para ativar o pagamento automatico');
+    sbToast('err', 'Informe um e-mail válido para ativar o pagamento automático');
     return;
   }
   
@@ -2408,7 +2407,7 @@ async function processarPagamentoCartao() {
       renderMeuPlano();
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Ativar automatico';
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Ativar automático';
       }
       return;
     }
@@ -2430,7 +2429,7 @@ async function processarPagamentoCartao() {
   if (btn) {
     btn.disabled = false;
     btn.innerHTML = _cartaoPlanoModo === 'assinatura'
-      ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Ativar automatico'
+      ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Ativar automático'
       : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Pagar agora';
   }
 }
@@ -2891,7 +2890,7 @@ function _printResolveCategoryPrinter(item) {
 }
 
 function _printPrinterOptionsHtml(currentVal, extraPrinters) {
-  const opts = ['<option value="">Cozinha padrao</option>'];
+  const opts = ['<option value="">Cozinha padrão</option>'];
   _printAvailablePrinters(extraPrinters).forEach(p => {
     const sel = p.value === currentVal ? ' selected' : '';
     opts.push(`<option value="${_printHtmlEscape(p.value)}"${sel}>${_printHtmlEscape(p.label)}</option>`);
@@ -3151,7 +3150,7 @@ function _printItemOptionsHtml(currentVal, extraPrinters) {
     opts.push(`<option value="${_printHtmlEscape(p.value)}"${sel}>${_printHtmlEscape(p.label)}</option>`);
   });
   const blockedSel = currentVal === PRINT_ITEM_BLOQUEADO ? ' selected' : '';
-  opts.push(`<option value="${PRINT_ITEM_BLOQUEADO}"${blockedSel}>Nao imprimir (bloquear)</option>`);
+  opts.push(`<option value="${PRINT_ITEM_BLOQUEADO}"${blockedSel}>Não imprimir (bloquear)</option>`);
   return opts.join('');
 }
 

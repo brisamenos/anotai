@@ -1275,6 +1275,8 @@ const MIGRATIONS = [
   ]},
   { version:88, description:'último bairro do cliente (pedido por voz reaproveita endereço salvo pra calcular taxa sem perguntar de novo)', up:
     `ALTER TABLE customers ADD COLUMN last_bairro TEXT` },
+  { version:89, description:'pedido mínimo também na retirada (chave liga/desliga no gestor, desligada por padrão)', up:
+    `ALTER TABLE store_config ADD COLUMN pedido_minimo_retirada INTEGER DEFAULT 0` },
 ]
 
 function runMigrations() {
@@ -2458,7 +2460,7 @@ agendarResetDiarioPedidos()
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca','voz_ativo'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento','tablet_splash_bg_url','promo_automatica'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','pedido_minimo_retirada','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento','tablet_splash_bg_url','promo_automatica'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','image_url','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','video_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','hide_price','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],

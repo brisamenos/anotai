@@ -110,21 +110,32 @@ function renderCaixa() {
   const entradas=movimentos.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+m.val,0);
   const saidas=movimentos.filter(m=>m.tipo==='saida').reduce((s,m)=>s+m.val,0);
   const saldo=entradas-saidas;
-  document.getElementById('cx-saldo').textContent='R$'+saldo.toFixed(2).replace('.',',');
-  document.getElementById('cx-entradas').textContent='R$'+entradas.toFixed(2).replace('.',',');
-  document.getElementById('cx-saidas').textContent='R$'+saidas.toFixed(2).replace('.',',');
-  document.getElementById('cx-movs').textContent=movimentos.length;
-  document.getElementById('cx-list').innerHTML=movimentos.slice().reverse().map(m=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px">
-      <div style="width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;background:${m.tipo==='entrada'?'rgba(34,197,94,.12)':'rgba(239,68,68,.12)'}">
-        ${m.tipo==='entrada'?'<svg width=&quot;14&quot; height=&quot;14&quot; viewBox=&quot;0 0 16 16&quot; fill=&quot;none&quot; style=&quot;display:inline-block;vertical-align:middle;flex-shrink:0&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;><path d=&quot;M8 13V3M3 8l5-5 5 5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>':'<svg width=&quot;14&quot; height=&quot;14&quot; viewBox=&quot;0 0 16 16&quot; fill=&quot;none&quot; style=&quot;display:inline-block;vertical-align:middle;flex-shrink:0&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;><path d=&quot;M8 3v10M3 8l5 5 5-5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>'}
-      </div>
-      <div style="flex:1"><div style="font-size:12.5px;font-weight:600">${m.desc}</div><div style="font-size:11px;color:var(--muted)">${m.pag} • ${m.time}</div></div>
-      <div style="font-size:13.5px;font-weight:700;color:${m.tipo==='entrada'?'var(--success)':'var(--danger)'}">${m.tipo==='entrada'?'+':'-'}R$${m.val.toFixed(2).replace('.',',')}</div>
-    </div>`).join('');
+  const _rs = v => 'R$ ' + (parseFloat(v) || 0).toFixed(2).replace('.', ',');
+  const _e = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const elSaldo = document.getElementById('cx-saldo');
+  elSaldo.textContent = _rs(saldo);
+  elSaldo.style.color = saldo < 0 ? 'var(--danger)' : '';
+  document.getElementById('cx-entradas').textContent = _rs(entradas);
+  document.getElementById('cx-saidas').textContent = _rs(saidas);
+  document.getElementById('cx-movs').textContent = movimentos.length;
+  const _seta = cima => `<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="${cima ? 'M8 13V3M3.5 7.5L8 3l4.5 4.5' : 'M8 3v10M3.5 8.5L8 13l4.5-4.5'}" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  document.getElementById('cx-list').innerHTML = movimentos.length
+    ? movimentos.slice().reverse().map(m => {
+        const ent = m.tipo === 'entrada';
+        return `
+    <div class="pf-row">
+      <div class="pf-avatar" style="border-radius:9px;background:${ent ? 'rgba(31,157,87,.11)' : 'rgba(217,58,30,.09)'};color:${ent ? 'var(--pf-ok)' : 'var(--pf-bad)'}">${_seta(ent)}</div>
+      <div class="pf-row-main"><div class="pf-row-title">${_e(m.desc)}</div><div class="pf-row-sub">${_e(m.pag || '')}${m.pag && m.time ? ', ' : ''}${_e(m.time || '')}</div></div>
+      <div class="pf-row-val" style="color:${ent ? 'var(--pf-ok)' : 'var(--pf-bad)'}">${ent ? '+' : '−'} ${_rs(m.val)}</div>
+    </div>`;
+      }).join('')
+    : '<div style="padding:44px 20px;text-align:center;color:var(--muted);font-size:13.5px"><strong style="display:block;color:var(--text);font-size:14.5px;margin-bottom:4px">Nenhuma movimentação hoje</strong>As vendas e os registros manuais aparecem aqui.</div>';
   const pags={};
   movimentos.filter(m=>m.tipo==='entrada').forEach(m=>{pags[m.pag]=(pags[m.pag]||0)+m.val;});
-  document.getElementById('cx-pagamentos').innerHTML=Object.entries(pags).map(([p,v])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">${p}</span><span style="font-weight:600">R$${v.toFixed(2).replace('.',',')}</span></div>`).join('');
+  const linhasPag = Object.entries(pags);
+  document.getElementById('cx-pagamentos').innerHTML = linhasPag.length
+    ? linhasPag.map(([p,v])=>`<div class="cx-mini-row"><span>${_e(p)}</span><b>${_rs(v)}</b></div>`).join('')
+    : '<div class="cx-mini-vazio">Nenhuma entrada ainda</div>';
 }
 
 async function addMovimento() {
@@ -161,8 +172,7 @@ async function addMovimentoModal() {
 
 function updateCxLabel(){
   const tipo=document.querySelector('input[name="cx-tipo"]:checked').value;
-  document.getElementById('lbl-entrada').style.borderColor=tipo==='entrada'?'var(--success)':'var(--border)';
-  document.getElementById('lbl-saida').style.borderColor=tipo==='saida'?'var(--danger)':'var(--border)';
+  // o destaque da opção marcada vem do CSS (.pf-choice:has(input:checked))
 }
 
 // ─────────────────────────────────────────
@@ -623,9 +633,15 @@ function _pdvbAbrirModalItem(it, grupos, isKg) {
           const preco  = parseFloat(op.preco||op.price||0);
           const icon   = _iconEl(op.icon || op.image || '', 22);
           const pLabel = preco>0?` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.',',')}</span>`:'';
+          // Quantidade por adicional (+ e −) com os limites do cadastro, igual ao cardápio do cliente
+          const temQty = !isSingle && typeof _noOpcQtyHtml === 'function';
+          const optMax = temQty ? (parseInt(op?.max) || 0) : 0;
+          const grpMax = temQty ? (parseInt(g.max) || 0) : 0;
+          const mLabel = optMax>0?` <span style="color:var(--muted);font-size:11px">(até ${optMax})</span>`:'';
           return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;cursor:pointer;transition:all .15s" onclick="pdvbToggleOpc(this)">
-            <input type="${inputType}" name="pdvb-grp-${gi}" data-grp="${gi}" data-idx="${oi}" data-nome="${(nome+'').replace(/"/g,'&quot;')}" data-preco="${preco}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
-            ${icon}<span style="font-size:13px;font-weight:500;flex:1">${nome}${pLabel}</span>
+            <input type="${inputType}" name="pdvb-grp-${gi}" data-grp="${gi}" data-idx="${oi}" data-nome="${(nome+'').replace(/"/g,'&quot;')}" data-preco="${preco}" data-max="${optMax}" data-gmax="${grpMax}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+            ${icon}<span style="font-size:13px;font-weight:500;flex:1">${nome}${pLabel}${mLabel}</span>
+            ${temQty ? _noOpcQtyHtml() : ''}
           </label>`;
         }).join('')}
       </div>
@@ -700,7 +716,15 @@ function pdvbToggleOpc(label) {
     label.style.borderColor = 'var(--accent)';
     label.style.background  = 'rgba(var(--accent-rgb,249,115,22),.08)';
   } else {
-    inp.checked = !inp.checked;
+    // O próprio navegador marca/desmarca o checkbox (tanto no clique no texto quanto
+    // direto no quadradinho) — aqui só conferimos o limite e pintamos o estado atual.
+    if (inp.checked && typeof _noGrupoTotal === 'function') {
+      const gmax = parseInt(inp.dataset.gmax) || 0;
+      if (gmax > 1 && _noGrupoTotal(inp) > gmax) {
+        inp.checked = false;
+        sbToast('err', `Máximo de ${gmax} no total para este grupo`);
+      }
+    }
     if (inp.checked) {
       label.style.borderColor = 'var(--accent)';
       label.style.background  = 'rgba(var(--accent-rgb,249,115,22),.08)';
@@ -708,6 +732,7 @@ function pdvbToggleOpc(label) {
       label.style.borderColor = 'var(--border)';
       label.style.background  = 'var(--surface2)';
     }
+    if (typeof _noOpcQtySync === 'function') _noOpcQtySync(inp);
   }
   pdvbAtualizarTotal();
 }
@@ -733,7 +758,7 @@ function pdvbAtualizarTotal() {
   const qty = window._pdvbQty || 1;
   let extra = 0;
   document.querySelectorAll('#pdvb-modal-item-bg input:checked').forEach(inp => {
-    extra += parseFloat(inp.dataset.preco || 0);
+    extra += parseFloat(inp.dataset.preco || 0) * (typeof _noOpcQtyDe === 'function' ? _noOpcQtyDe(inp) : 1);
   });
   let basePrice = parseFloat(it.price||0) + extra;
   if (isKg) {
@@ -761,7 +786,8 @@ function _pdvbConfirmar(itemId) {
   const porGrupo = new Map(); // gi → { nome, opcoes:[] }
   document.querySelectorAll('#pdvb-modal-item-bg input:checked').forEach(inp => {
     const preco = parseFloat(inp.dataset.preco || 0);
-    extra += preco;
+    const q = typeof _noOpcQtyDe === 'function' ? _noOpcQtyDe(inp) : 1;
+    extra += preco * q;
     const gi = parseInt(inp.dataset.grp);
     if (isNaN(gi)) return;
     const g = grupos[gi];
@@ -776,9 +802,9 @@ function _pdvbConfirmar(itemId) {
     );
     const opcNome = inp.dataset.nome || '';
     if (!opcNome) return;
-    const opcLabel = preco > 0
+    const opcLabel = (q > 1 ? `${q}x ` : '') + (preco > 0
       ? `${opcNome} (+R$ ${preco.toFixed(2).replace('.',',')})`
-      : opcNome;
+      : opcNome);
     if (!porGrupo.has(gi)) porGrupo.set(gi, { nome: grpNome, opcoes: [] });
     porGrupo.get(gi).opcoes.push(opcLabel);
   });
@@ -1082,7 +1108,7 @@ async function carregarHistoricoMesas() {
   const elGarcom = document.getElementById('cx-relatorio-garcom');
   if (!el) return;
 
-  el.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Carregando...</div>';
+  el.innerHTML = '<div class="cx-mini-vazio">Carregando...</div>';
 
   try {
     const hoje = new Date();
@@ -1097,19 +1123,16 @@ async function carregarHistoricoMesas() {
       .order('created_at', { ascending: false });
 
     if (!movs?.length) {
-      el.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Nenhuma mesa fechada hoje</div>';
-      if (elGarcom) elGarcom.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Sem dados</div>';
+      el.innerHTML = '<div class="cx-mini-vazio">Nenhuma mesa fechada hoje</div>';
+      if (elGarcom) elGarcom.innerHTML = '<div class="cx-mini-vazio">Nenhuma venda de garçom hoje</div>';
       return;
     }
 
     // Renderiza histórico de mesas
     el.innerHTML = movs.map(m => `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
-        <div>
-          <div style="font-size:12.5px;font-weight:600">${m.description}</div>
-          <div style="font-size:11px;color:var(--muted)">${m.pag} · ${m.time}</div>
-        </div>
-        <div style="font-size:13px;font-weight:700;color:var(--success)">R$ ${parseFloat(m.val||0).toFixed(2).replace('.',',')}</div>
+      <div class="cx-mini-row">
+        <span><b style="display:block;color:var(--text)">${m.description}</b>${m.pag || ''}${m.pag && m.time ? ', ' : ''}${m.time || ''}</span>
+        <b>R$ ${parseFloat(m.val||0).toFixed(2).replace('.',',')}</b>
       </div>`).join('');
 
     // Relatório por garçom
@@ -1132,19 +1155,16 @@ async function carregarHistoricoMesas() {
       const garcons = Object.entries(garcomMap).sort((a, b) => b[1].total - a[1].total);
 
       if (!garcons.length) {
-        elGarcom.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Sem dados</div>';
+        elGarcom.innerHTML = '<div class="cx-mini-vazio">Nenhuma venda de garçom hoje</div>';
       } else {
         elGarcom.innerHTML = garcons.map(([nome, d]) => `
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
-            <div>
-              <div style="font-size:12.5px;font-weight:600">👨‍💼 ${nome}</div>
-              <div style="font-size:11px;color:var(--muted)">${d.mesas} pedido(s)</div>
-            </div>
-            <div style="font-size:13px;font-weight:700;color:var(--accent3)">R$ ${d.total.toFixed(2).replace('.',',')}</div>
+          <div class="cx-mini-row">
+            <span><b style="display:block;color:var(--text)">${nome}</b>${d.mesas} ${d.mesas === 1 ? 'pedido' : 'pedidos'}</span>
+            <b>R$ ${d.total.toFixed(2).replace('.',',')}</b>
           </div>`).join('');
       }
     }
   } catch(e) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--red);text-align:center;padding:8px">Erro ao carregar</div>';
+    el.innerHTML = '<div class="cx-mini-vazio" style="color:var(--danger)">Não foi possível carregar. Clique em Atualizar.</div>';
   }
 }

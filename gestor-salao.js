@@ -249,9 +249,15 @@ function _pdvAbrirModalItem(it, grupos, isKg) {
       const preco = parseFloat(op?.preco || op?.price || 0);
       const icon = op.icon ? `<span style="font-size:16px">${op.icon}</span>` : '';
       const pLabel = preco > 0 ? ` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.', ',')}</span>` : '';
+      // Quantidade por adicional (+ e −) com os limites do cadastro, igual ao cardápio do cliente
+      const temQty = isMulti && typeof _noOpcQtyHtml === 'function';
+      const optMax = temQty ? (parseInt(op?.max) || 0) : 0;
+      const grpMax = temQty ? (parseInt(g.max) || 0) : 0;
+      const mLabel = optMax > 0 ? ` <span style="color:var(--muted);font-size:11px">(até ${optMax})</span>` : '';
       return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;cursor:pointer" onclick="pdvToggleOpc(this)">
-            <input type="${isMulti ? 'checkbox' : 'radio'}" name="pdv-grp-${gi}" data-grp="${gi}" data-nome="${(nome + '').replace(/"/g, '&quot;')}" data-preco="${preco}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
-            ${icon}<span style="font-size:13px;font-weight:500;flex:1">${nome}${pLabel}</span>
+            <input type="${isMulti ? 'checkbox' : 'radio'}" name="pdv-grp-${gi}" data-grp="${gi}" data-nome="${(nome + '').replace(/"/g, '&quot;')}" data-preco="${preco}" data-max="${optMax}" data-gmax="${grpMax}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+            ${icon}<span style="font-size:13px;font-weight:500;flex:1">${nome}${pLabel}${mLabel}</span>
+            ${temQty ? _noOpcQtyHtml() : ''}
           </label>`;
     }).join('')}
       </div>
@@ -326,8 +332,17 @@ function pdvToggleOpc(label) {
     label.style.borderColor = 'var(--accent)';
     label.style.background = 'rgba(var(--accent-rgb,249,115,22),.08)';
   } else {
+    // Total máximo do grupo (mesma regra do cardápio do cliente)
+    if (inp.checked && typeof _noGrupoTotal === 'function') {
+      const gmax = parseInt(inp.dataset.gmax) || 0;
+      if (gmax > 1 && _noGrupoTotal(inp) > gmax) {
+        inp.checked = false;
+        sbToast('err', `Máximo de ${gmax} no total para este grupo`);
+      }
+    }
     label.style.borderColor = inp.checked ? 'var(--accent)' : 'var(--border)';
     label.style.background = inp.checked ? 'rgba(var(--accent-rgb,249,115,22),.08)' : 'var(--surface2)';
+    if (typeof _noOpcQtySync === 'function') _noOpcQtySync(inp);
   }
   pdvAtualizarTotal();
 }
@@ -352,7 +367,7 @@ function pdvAtualizarTotal() {
   const qty = window._pdvQty || 1;
   let extra = 0;
   document.querySelectorAll('#pdv-modal-item-bg input:checked').forEach(inp => {
-    extra += parseFloat(inp.dataset.preco || 0);
+    extra += parseFloat(inp.dataset.preco || 0) * (typeof _noOpcQtyDe === 'function' ? _noOpcQtyDe(inp) : 1);
   });
   let price = parseFloat(it.price || 0) + extra;
   if (isKg) {
@@ -373,10 +388,17 @@ function _pdvConfirmar(itemId) {
   let extra = 0;
   const opcs = [];
   document.querySelectorAll('#pdv-modal-item-bg input:checked').forEach(inp => {
-    extra += parseFloat(inp.dataset.preco || 0);
-    opcs.push(inp.dataset.nome);
+    const q = typeof _noOpcQtyDe === 'function' ? _noOpcQtyDe(inp) : 1;
+    extra += parseFloat(inp.dataset.preco || 0) * q;
+    opcs.push((q > 1 ? `${q}x ` : '') + inp.dataset.nome);
   });
-  let obs = [opcs.join(', '), document.getElementById('pdv-obs-input')?.value.trim()].filter(Boolean).join(' | ');
+  // Adicionais no mesmo formato do restante do sistema ("Grupo: 10x Opção (+R$ 2,00), Outra"),
+  // para a impressão listar um por linha embaixo do nome do grupo.
+  const _grpsModal = Array.isArray(modal._grupos) ? modal._grupos : [];
+  const _adicTxt = (typeof _noFmtObsAdicionais === 'function' && _grpsModal.length)
+    ? _noFmtObsAdicionais(modal, _grpsModal, '')
+    : opcs.join(', ');
+  let obs = [_adicTxt, document.getElementById('pdv-obs-input')?.value.trim()].filter(Boolean).join(' | ');
   if (typeof _pedidoObsComKit === 'function') obs = _pedidoObsComKit(it, obs);
   let price = parseFloat(it.price || 0) + extra;
   let name = it.name;
@@ -749,8 +771,8 @@ function renderMesaCard(t, orders) {
   // Total da sessão atual sem duplicar comanda nem pedidos entregues
   const total = (comanda ? parseFloat(comanda.total || 0) : 0) + totalOutrosPedidos;
   const statusLabel = isWaiting
-    ? '<span style="font-size:11px;font-weight:700;color:var(--accent3)">⏳ Aguardando pagamento</span>'
-    : '<span style="font-size:11px;font-weight:700;color:var(--accent)">🔵 Ocupada</span>';
+    ? '<span class="pf-chip warn">Aguardando pagamento</span>'
+    : '<span class="pf-chip info">Ocupada</span>';
 
   const ordersHtml = comanda
     ? (() => {
@@ -762,16 +784,15 @@ function renderMesaCard(t, orders) {
         };
         const renderGrupoSalao = (key, itens) => {
           if (!itens.length) return '';
-          const icon = { producao:'🍳', pronto:'✅', entregue:'🟢' }[key];
           const lbl  = { producao:'Em preparo', pronto:'Pronto', entregue:'Entregue' }[key];
           const rows = itens.map(i =>
             `<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">
-              <span>${i.drink?'🥤':'🍴'} ${i.qty}× ${i.name}${i.cliente_nome ? ` <span style="font-size:9px;background:rgba(34,197,94,.12);color:var(--green);padding:1px 5px;border-radius:4px;font-weight:700">${_salaoEscape(i.cliente_nome)}</span>` : ''}</span>
+              <span>${i.qty}× ${i.name}${i.cliente_nome ? ` <span style="font-size:9px;background:rgba(34,197,94,.12);color:var(--green);padding:1px 5px;border-radius:4px;font-weight:700">${_salaoEscape(i.cliente_nome)}</span>` : ''}</span>
               <span style="color:var(--accent3)">R$ ${((i.price||0)*(i.qty||1)).toFixed(2).replace('.',',')}</span>
             </div>`
           ).join('');
           return `<div style="margin-bottom:6px">
-            <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:3px">${icon} ${lbl.toUpperCase()}</div>
+            <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:3px">${lbl}</div>
             ${rows}
           </div>`;
         };
@@ -779,7 +800,7 @@ function renderMesaCard(t, orders) {
           + renderGrupoSalao('pronto', grupos.pronto)
           + renderGrupoSalao('entregue', grupos.entregue);
         return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:7px">
-          <div style="font-size:10.5px;color:var(--muted);margin-bottom:6px">📋 Comanda #${_orderNum(comanda.id, comanda.order_num)}</div>
+          <div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px">Comanda #${_orderNum(comanda.id, comanda.order_num)}</div>
           ${html || '<div style="font-size:12px;color:var(--muted)">Sem itens ativos</div>'}
         </div>`;
       })()
@@ -806,7 +827,7 @@ function renderMesaCard(t, orders) {
         });
         const rows = Object.values(itemMap).map(i =>
           `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)">
-              <span>${i.drink ? '🥤' : '🍴'} ${i.qty}× ${i.name}</span>
+              <span>${i.qty}× ${i.name}</span>
               <span style="color:var(--accent3);font-weight:600">R$ ${i.total.toFixed(2).replace('.', ',')}</span>
             </div>`
         ).join('');
@@ -817,28 +838,28 @@ function renderMesaCard(t, orders) {
           return `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:10px 0">Consumo registrado</div>`;
         }
         return `<div style="background:var(--surface2);border:1px solid rgba(245,158,11,.2);border-radius:9px;padding:10px 12px;margin-bottom:4px">
-            <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">🧾 Resumo do consumo</div>
+            <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Resumo do consumo</div>
             ${rows}
           </div>`;
       })()
     : orders.length
     ? orders.map(o => {
       const items = _parseItems(o.items);
-      const itemStr = items.filter(i => i.item_status !== 'cancelado').map(i => `${i.drink ? '🥤' : '🍴'} ${i.qty}× ${i.name}`).join('  ');
+      const itemStr = items.filter(i => i.item_status !== 'cancelado').map(i => `${i.qty}× ${i.name}`).join(', ');
       const isNew = o.status === 'analise';
       const isProd = o.status === 'producao';
       const isRdy = o.status === 'pronto';
       const stColor = isNew ? 'var(--orange)' : isProd ? 'var(--accent)' : 'var(--success)';
-      const stLabel = isNew ? '🆕 Novo' : isProd ? '🍳 Preparando' : '✅ Pronto';
+      const stLabel = isNew ? 'Novo' : isProd ? 'Preparando' : 'Pronto';
       let btns = '';
       if (isNew) {
         btns = `<div style="display:flex;gap:5px;margin-top:7px">
-            <button class="oc-btn oc-btn-ok" onclick="mesaAdvanceOrder(${o.id})">✔ Confirmar</button>
-            <button class="oc-btn oc-btn-no" onclick="mesaCancelOrder(${o.id})">✕ Cancelar</button>
+            <button class="oc-btn oc-btn-ok" onclick="mesaAdvanceOrder(${o.id})">Confirmar</button>
+            <button class="oc-btn oc-btn-no" onclick="mesaCancelOrder(${o.id})">Cancelar</button>
           </div>`;
       } else if (isProd || isRdy) {
         btns = `<div style="margin-top:7px">
-            <button class="oc-btn oc-btn-ok" style="width:100%" onclick="mesaServOrder(${o.id})">✓ Entregue</button>
+            <button class="oc-btn oc-btn-ok" style="width:100%" onclick="mesaServOrder(${o.id})">Marcar entregue</button>
           </div>`;
       }
       return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:7px">
@@ -870,26 +891,18 @@ function renderMesaCard(t, orders) {
   }
 
   const actionBtn = isWaiting
-    ? `<div style="display:flex;gap:8px;margin-top:4px">
-        <button onclick="gestorAbrirDetalheMesa(${t.num})" style="flex:1;padding:11px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer">📋 Detalhes</button>
-        <button onclick="openRegistrarPagamento(${t.num})" style="flex:2;padding:11px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
-        💰 Receber — R$ ${displayTotal.toFixed(2).replace('.', ',')}
-      </button>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:6px">
-        <button onclick="reabrirMesa(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid rgba(59,130,246,.4);background:rgba(59,130,246,.08);color:#93c5fd;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">↩️ Reabrir mesa</button>
-        <button onclick="cancelarMesaCompleta(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#f87171;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">🗑️ Cancelar mesa</button>
+    ? `<div class="mesa-acoes">
+        <button class="btn bp" style="flex:2" onclick="openRegistrarPagamento(${t.num})">Receber R$ ${displayTotal.toFixed(2).replace('.', ',')}</button>
+        <button class="btn bg" onclick="gestorAbrirDetalheMesa(${t.num})">Detalhes</button>
+        <button class="btn bg" onclick="reabrirMesa(${t.num})">Reabrir mesa</button>
+        <button class="btn bd" onclick="cancelarMesaCompleta(${t.num})">Cancelar mesa</button>
       </div>`
-    : `<div style="display:flex;gap:8px;margin-top:8px">
-        <button onclick="openGarcomMesa(${t.num})" class="btn bp" style="flex:1;justify-content:center;font-size:12px">➕ Lançar pedido</button>
-        <button onclick="gestorAbrirDetalheMesa(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">📋 Detalhes</button>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:6px">
-        <button onclick="cobrarMesaDireta(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:none;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">💳 Cobrar agora</button>
-        <button onclick="fecharMesa(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">💰 Fechar mesa</button>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:6px">
-        <button onclick="cancelarMesaCompleta(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#f87171;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">🗑️ Cancelar mesa</button>
+    : `<div class="mesa-acoes">
+        <button class="btn bp" onclick="openGarcomMesa(${t.num})">Lançar pedido</button>
+        <button class="btn bg" onclick="cobrarMesaDireta(${t.num})">Cobrar agora</button>
+        <button class="btn bg" onclick="fecharMesa(${t.num})">Fechar mesa</button>
+        <button class="btn bg" onclick="gestorAbrirDetalheMesa(${t.num})">Detalhes</button>
+        <button class="btn bd" onclick="cancelarMesaCompleta(${t.num})">Cancelar mesa</button>
       </div>`;
 
   const clientesResumo = _salaoResumoClientesMesa(orders);
@@ -918,18 +931,16 @@ function renderMesaCard(t, orders) {
         </div>
       </div>` : '');
 
-  return `<div style="background:var(--surface);border:1.5px solid ${bordColor};border-radius:14px;padding:16px;margin-bottom:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:900">Mesa ${t.num}</div>
-        ${t.guests ? `<span style="font-size:11.5px;color:var(--muted)">${t.guests} pessoas</span>` : ''}
+  return `<div class="mesa-card${isWaiting ? ' aguardando' : ''}">
+    <div class="mesa-card-topo">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div class="mesa-card-nome">Mesa ${t.num}</div>
         ${statusLabel}
-        ${t.opened_at && t.status !== 'free' ? `<span style="font-size:11px;font-weight:700;color:${_elapsedColor(t.opened_at, isWaiting)};background:${_elapsedColor(t.opened_at, isWaiting)}1a;padding:2px 8px;border-radius:99px">⏱ ${_elapsedLabel(t.opened_at)}</span>` : ''}
-        <button onclick="event.stopPropagation();openEditMesa(${t.num})" style="margin-left:4px;background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted);cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif" title="Editar mesa"></button>
+        ${t.guests ? `<span class="pf-chip">${t.guests} ${Number(t.guests) === 1 ? 'pessoa' : 'pessoas'}</span>` : ''}
+        ${t.opened_at && t.status !== 'free' ? `<span class="pf-chip" title="Tempo desde a abertura" style="color:${_elapsedColor(t.opened_at, isWaiting)}">Aberta há ${_elapsedLabel(t.opened_at)}</span>` : ''}
+        <button class="btn bg pf-sm" onclick="event.stopPropagation();openEditMesa(${t.num})" title="Editar mesa">Editar</button>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:900;color:var(--accent3)">R$ ${displayTotal.toFixed(2).replace('.', ',')}</div>
-      </div>
+      <div class="mesa-card-total">R$ ${displayTotal.toFixed(2).replace('.', ',')}</div>
     </div>
     ${ordersHtml}
     ${clientesResumoHtml}
@@ -1021,17 +1032,21 @@ function renderCupons() {
   const el = document.getElementById('cupom-list');
   if (!el) return;
   document.getElementById('cupom-count').textContent = cupons.filter(c => c.ativo).length;
+  if (!cupons.length) {
+    el.innerHTML = '<div class="pf-empty"><strong>Nenhum cupom criado</strong>Use o botão Criar cupom para oferecer um desconto com código.</div>';
+    return;
+  }
   el.innerHTML = cupons.map((c, i) => `
     <div class="coupon-card">
       <div class="coupon-icon" style="background:${c.ativo ? 'rgba(34,197,94,.12)' : 'rgba(100,116,139,.1)'}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 6a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1a2 2 0 0 0 0 4v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1a2 2 0 0 0 0-4V6z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 4v2M10 10v2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div style="flex:1">
         <div class="coupon-code">${c.code}</div>
         <div class="coupon-desc">${c.tipo === '%' ? c.val + '% de desconto' : c.tipo === 'frete' ? 'Frete grátis' : 'Desconto R$' + c.val}</div>
-        <div class="coupon-use">Usado ${c.usos}x • ${c.minimo > 0 ? 'Pedido mín. R$' + c.minimo : 'Sem pedido mínimo'}</div>
+        <div class="coupon-use">Usado ${c.usos} ${c.usos === 1 ? 'vez' : 'vezes'}, ${c.minimo > 0 ? 'pedido mínimo de R$ ' + c.minimo : 'sem pedido mínimo'}</div>
       </div>
-      <span class="chip ${c.ativo ? 'chip-green' : 'chip-red'}">${c.ativo ? '● Ativo' : '● Inativo'}</span>
-      <button class="btn bg" style="font-size:11px;padding:3px 8px" onclick="toggleCupom(${i})">${c.ativo ? 'Pausar' : 'Ativar'}</button>
-      <button class="btn bd" style="font-size:11px;padding:3px 8px" onclick="deleteCupom(${i})"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M3 4h10M6 4V2.5A.5.5 0 0 1 6.5 2h3a.5.5 0 0 1 .5.5V4M5 4l.7 9.5a.5.5 0 0 0 .5.5h3.6a.5.5 0 0 0 .5-.5L11 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <span class="pf-chip ${c.ativo ? 'ok' : ''}"><span class="pf-dot"></span>${c.ativo ? 'Ativo' : 'Pausado'}</span>
+      <button class="btn bg pf-sm" onclick="toggleCupom(${i})">${c.ativo ? 'Pausar' : 'Ativar'}</button>
+      <button class="btn bd pf-sm pf-icon" title="Excluir cupom" aria-label="Excluir cupom" onclick="deleteCupom(${i})"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M3 4h10M6 4V2.5A.5.5 0 0 1 6.5 2h3a.5.5 0 0 1 .5.5V4M5 4l.7 9.5a.5.5 0 0 0 .5.5h3.6a.5.5 0 0 0 .5-.5L11 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>`).join('');
 }
 
@@ -1687,7 +1702,7 @@ function renderGarcom() {
       <div class="gm-guests">${t.guests ? t.guests + ' pessoas' : ''}</div>
       <div class="gm-status ${sc}">${t.status === 'free' ? 'Livre' : 'Ocupada'}</div>
       ${t.total && t.status === 'busy' ? `<div style="font-size:12px;font-weight:700;color:var(--success);margin-top:5px">${t.total}</div>` : ''}
-      <button class="btn bp" style="width:100%;justify-content:center;font-size:11.5px;margin-top:9px;padding:5px">➕ Lançar pedido</button>
+      <button class="btn bp pf-sm" style="width:100%;justify-content:center;margin-top:10px">Lançar pedido</button>
     </div>`;
   }).join('');
 }

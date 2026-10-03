@@ -1,0 +1,546 @@
+/* ══════════════════════════════════════════════════════════════════════
+   EstimaFood — padrão visual do gestor
+   Camada final: carrega depois de gestor.css e dos estilos da página.
+   Tudo usa as variáveis de tema (--surface, --text, --accent...), então
+   vale para os temas claro e escuros sem regra separada.
+
+   Regras do padrão:
+   · uma família só (Plus Jakarta Sans), números alinhados em coluna
+   · cabeçalho de página: título + frase curta + ações à direita
+   · cartões planos (borda fina, sem sombra pesada, sem "pulo" no hover)
+   · cor só para estado (ok / atenção / erro) e para a ação principal
+   ══════════════════════════════════════════════════════════════════════ */
+
+:root{
+  --pf-font:'Plus Jakarta Sans','Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --pf-r-s:8px;
+  --pf-r-m:12px;
+  --pf-r-l:16px;
+  --pf-line:var(--border);
+  --pf-line-strong:var(--border2);
+  --pf-shadow:0 1px 2px rgba(13,38,59,.05);
+  --pf-shadow-pop:0 18px 48px rgba(13,38,59,.18);
+  --pf-ok:#1f9d57;
+  --pf-warn:#c27a00;
+  --pf-bad:#d93a1e;
+  --pf-info:var(--accent);
+}
+
+/* ── 1. Tipografia ──────────────────────────────────────────────────── */
+/* Só na tela: a impressão do cupom e as prévias de cupom continuam com a
+   fonte da impressora (Courier), sem nenhuma interferência daqui. */
+@media screen{
+  html body,
+  html body *:not(#_print_area, #_print_area *, .print-ticket, .print-ticket *, .print-preview, .print-preview *, [style*="monospace"], [style*="monospace"] *, [style*="Courier"], [style*="Courier"] *, pre, pre *, code, kbd, .kbd){
+    font-family:var(--pf-font)!important;
+  }
+  html body{
+    font-feature-settings:'tnum' 1,'calt' 1;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    text-rendering:optimizeLegibility;
+  }
+}
+
+/* ── 2. Página e cabeçalho ──────────────────────────────────────────── */
+.page{padding:26px 32px;animation:none}
+.page.on{padding-bottom:56px}
+
+.ph,
+.gz-page-head,
+.ent-page-head{
+  display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  background:none!important;border:0!important;box-shadow:none!important;border-radius:0!important;
+  padding:0 0 18px!important;margin:0 0 22px!important;
+  border-bottom:1px solid var(--pf-line)!important;
+}
+.pt,
+.gz-page-title,
+.ent-page-title{
+  font-size:23px!important;font-weight:800!important;letter-spacing:-.022em!important;line-height:1.2!important;color:var(--text)!important;
+}
+.ps,
+.gz-page-sub,
+.ent-page-sub{
+  font-size:13.5px!important;font-weight:500!important;color:var(--muted)!important;margin-top:5px!important;line-height:1.45;max-width:72ch;
+}
+.gz-head-actions,
+.ent-head-actions,
+.ph > div:last-child:not(:first-child){display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* ── 3. Botões ──────────────────────────────────────────────────────── */
+.btn{
+  min-height:36px;padding:0 14px;border-radius:var(--pf-r-s)!important;
+  font-size:13px!important;font-weight:700!important;letter-spacing:0!important;line-height:1;
+  gap:7px;transition:background .15s,border-color .15s,color .15s,box-shadow .15s!important;
+  transform:none!important;
+}
+.btn:focus-visible,
+.si:focus-visible,
+.pf-tab:focus-visible,
+.gz-tab:focus-visible,
+.ent-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn svg{flex-shrink:0}
+.bp,.btn.bp{box-shadow:0 1px 2px rgba(13,38,59,.18)!important}
+.bp:hover,.btn.bp:hover{box-shadow:0 2px 8px var(--accent-glow)!important}
+.bg,.btn.bg{
+  background:var(--surface)!important;border:1px solid var(--pf-line-strong)!important;color:var(--muted2)!important;box-shadow:none!important;
+}
+.bg:hover,.btn.bg:hover{background:var(--surface2)!important;border-color:var(--accent)!important;color:var(--accent)!important}
+.bd,.btn.bd{background:rgba(217,58,30,.07)!important;border:1px solid rgba(217,58,30,.24)!important;color:var(--danger)!important}
+.bd:hover,.btn.bd:hover{background:rgba(217,58,30,.13)!important}
+.btn[disabled],.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.pf-sm{min-height:30px;padding:0 10px;font-size:12px!important}
+.btn.pf-icon{width:34px;min-height:34px;padding:0;justify-content:center}
+
+/* ── 4. Campos ──────────────────────────────────────────────────────── */
+.form-label{
+  font-size:12.5px!important;font-weight:650!important;text-transform:none!important;letter-spacing:0!important;
+  color:var(--muted2)!important;margin-bottom:6px!important;
+}
+.form-input{
+  min-height:38px;border-radius:var(--pf-r-s)!important;border:1px solid var(--pf-line-strong)!important;
+  background:var(--surface)!important;box-shadow:none!important;font-size:13.5px!important;color:var(--text)!important;
+  transition:border-color .15s,box-shadow .15s!important;
+}
+textarea.form-input{line-height:1.5;padding-top:10px;padding-bottom:10px}
+.form-input:hover{border-color:var(--muted)!important}
+.form-input:focus{border-color:var(--accent)!important;box-shadow:0 0 0 3px var(--accent-dim)!important;outline:0}
+.form-input::placeholder{color:var(--muted)!important;opacity:.75}
+.pf-help{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.45}
+.pf-field{display:flex;flex-direction:column;min-width:0}
+.pf-field > .form-label{display:block}
+
+/* ── 5. Cartões ─────────────────────────────────────────────────────── */
+.card{
+  border-radius:var(--pf-r-m)!important;border:1px solid var(--pf-line)!important;background:var(--surface)!important;
+  box-shadow:var(--pf-shadow)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+}
+.card:hover{border-color:var(--pf-line)!important;box-shadow:var(--pf-shadow)!important}
+.card:not([style*="padding"]){padding:20px 22px}
+.card > .card-title:first-child:not([style*="margin-bottom"]){margin-bottom:14px}
+.card-title{font-size:14.5px!important;font-weight:750!important;letter-spacing:-.01em!important;color:var(--text)}
+
+.pf-card{
+  background:var(--surface);border:1px solid var(--pf-line);border-radius:var(--pf-r-m);box-shadow:var(--pf-shadow);
+  padding:20px 22px;margin-bottom:16px;
+}
+.pf-card.pf-flush{padding:0;overflow:hidden}
+.pf-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.pf-flush > .pf-card-head{padding:16px 20px;margin:0;border-bottom:1px solid var(--pf-line)}
+.pf-card-title{font-size:15px;font-weight:750;letter-spacing:-.01em;color:var(--text);display:flex;align-items:center;gap:8px}
+.pf-card-title svg{color:var(--muted);flex-shrink:0}
+.pf-card-sub{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.45}
+.pf-card-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pf-grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.pf-grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.pf-stack{display:flex;flex-direction:column;gap:14px}
+.pf-note{
+  display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:var(--pf-r-s);
+  background:var(--surface2);border:1px solid var(--pf-line);font-size:12.5px;line-height:1.5;color:var(--muted2);
+}
+.pf-note svg{flex-shrink:0;margin-top:2px;color:var(--muted)}
+.pf-note.pf-warn{background:rgba(194,122,0,.07);border-color:rgba(194,122,0,.24);color:var(--text)}
+.pf-note.pf-warn svg{color:var(--pf-warn)}
+
+/* ── 6. Números de resumo (KPIs) ────────────────────────────────────── */
+.sg,
+.gz-stats-grid,
+.ent-stats-grid{gap:14px!important;margin-bottom:22px!important}
+.sc,
+.gz-stat-card,
+.ent-stat-card{
+  background:var(--surface)!important;border:1px solid var(--pf-line)!important;border-radius:var(--pf-r-m)!important;
+  padding:16px 18px!important;box-shadow:var(--pf-shadow)!important;transform:none!important;
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+}
+.sc:hover,
+.gz-stat-card:hover,
+.ent-stat-card:hover{transform:none!important;box-shadow:var(--pf-shadow)!important;border-color:var(--pf-line)!important}
+.sc::after,
+.gz-stat-card::before,
+.ent-stat-card::before{display:none!important}
+/* rótulo em cima, número embaixo, ícone à direita */
+.gz-stat-card,
+.ent-stat-card{display:grid!important;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"lbl ico" "val ico";column-gap:12px;align-items:start}
+.gz-stat-card > .gz-stat-lbl,.ent-stat-card > .ent-stat-lbl{grid-area:lbl}
+.gz-stat-card > .gz-stat-val,.ent-stat-card > .ent-stat-val{grid-area:val}
+.gz-stat-card > .gz-stat-icon,.ent-stat-card > .ent-stat-icon{grid-area:ico}
+.sl,
+.gz-stat-lbl,
+.ent-stat-lbl{
+  font-size:12.5px!important;font-weight:650!important;color:var(--muted)!important;text-transform:none!important;
+  letter-spacing:0!important;margin:0 0 8px!important;line-height:1.3;
+}
+.sl::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ca,var(--accent));margin-right:7px;vertical-align:1px}
+.sv,
+.gz-stat-val,
+.ent-stat-val{
+  font-size:25px!important;font-weight:800!important;letter-spacing:-.025em!important;line-height:1.15!important;
+  font-variant-numeric:tabular-nums;
+}
+.gz-stat-icon,
+.ent-stat-icon{width:34px!important;height:34px!important;border-radius:9px!important;margin:0!important}
+.sc .si2{width:34px;height:34px;border-radius:9px}
+
+/* ── 7. Abas ────────────────────────────────────────────────────────── */
+.gz-tabs,
+.ent-tabs,
+.pf-tabs{
+  display:flex!important;gap:2px!important;background:none!important;border:0!important;border-bottom:1px solid var(--pf-line)!important;
+  border-radius:0!important;padding:0!important;margin:0 0 22px!important;overflow-x:auto;scrollbar-width:none;box-shadow:none!important;
+}
+.gz-tabs::-webkit-scrollbar,.ent-tabs::-webkit-scrollbar,.pf-tabs::-webkit-scrollbar{display:none}
+.gz-tab,
+.ent-tab,
+.pf-tab{
+  flex:0 0 auto!important;display:inline-flex;align-items:center;gap:8px;padding:11px 14px 12px!important;margin-bottom:-1px;
+  border:0!important;border-bottom:2px solid transparent!important;border-radius:0!important;background:none!important;box-shadow:none!important;
+  font-size:13.5px!important;font-weight:650!important;color:var(--muted)!important;cursor:pointer;white-space:nowrap;
+  transition:color .15s,border-color .15s!important;
+}
+.gz-tab svg,.ent-tab svg,.pf-tab svg{width:15px;height:15px;flex-shrink:0;opacity:.85}
+.gz-tab:hover,.ent-tab:hover,.pf-tab:hover{color:var(--text)!important}
+.gz-tab.on,
+.ent-tab.on,
+.pf-tab.on{color:var(--accent)!important;border-bottom-color:var(--accent)!important;font-weight:750!important}
+.gz-tab-badge,
+.ent-tab-badge,
+.pf-tab-badge{
+  background:var(--surface3,var(--surface2))!important;color:var(--muted2)!important;font-size:11.5px!important;font-weight:750!important;
+  padding:2px 7px!important;border-radius:99px!important;min-width:20px;text-align:center;font-variant-numeric:tabular-nums;
+}
+.gz-tab.on .gz-tab-badge,
+.ent-tab.on .ent-tab-badge,
+.pf-tab.on .pf-tab-badge{background:var(--accent)!important;color:#fff!important}
+
+/* abas do topo de telas inteiras (Robô, PDV) */
+.pdvb-tab{font-size:13.5px!important;font-weight:650!important}
+
+/* ── 8. Tabelas ─────────────────────────────────────────────────────── */
+th{
+  font-size:12px!important;font-weight:700!important;text-transform:none!important;letter-spacing:0!important;color:var(--muted)!important;
+  background:var(--surface2)!important;border-bottom:1px solid var(--pf-line)!important;padding:11px 14px!important;white-space:nowrap;
+}
+td{font-size:13.5px!important;padding:13px 14px!important;border-bottom:1px solid var(--pf-line);font-variant-numeric:tabular-nums}
+tr:last-child > td{border-bottom:0}
+th:first-child,td:first-child{padding-left:20px!important}
+th:last-child,td:last-child{padding-right:20px!important}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:var(--surface2)}
+.pf-num{text-align:right!important;font-variant-numeric:tabular-nums}
+.pf-table-wrap{overflow-x:auto}
+
+/* ── 9. Etiquetas de estado ─────────────────────────────────────────── */
+.pf-chip,
+.ent-chip{
+  display:inline-flex;align-items:center;gap:5px;font-size:12px!important;font-weight:700!important;padding:3px 9px!important;border-radius:99px!important;
+  background:var(--surface2);border:1px solid var(--pf-line);color:var(--muted2);line-height:1.4;white-space:nowrap;
+}
+.pf-chip.ok,.ent-chip.green{color:var(--pf-ok)!important;background:rgba(31,157,87,.09)!important;border-color:rgba(31,157,87,.26)!important}
+.pf-chip.warn{color:var(--pf-warn)!important;background:rgba(194,122,0,.09)!important;border-color:rgba(194,122,0,.26)!important}
+.pf-chip.bad,.ent-chip.red{color:var(--pf-bad)!important;background:rgba(217,58,30,.08)!important;border-color:rgba(217,58,30,.24)!important}
+.pf-chip.info,.ent-chip.blue{color:var(--accent)!important;background:var(--accent-dim)!important;border-color:var(--accent-glow)!important}
+.pf-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0}
+
+/* ── 10. Vazio ──────────────────────────────────────────────────────── */
+.pf-empty,
+.ent-empty{
+  text-align:center;padding:44px 20px!important;color:var(--muted)!important;font-size:13.5px!important;line-height:1.5;
+  border:1px dashed var(--pf-line-strong);border-radius:var(--pf-r-m);background:var(--surface);
+}
+.pf-empty strong{display:block;color:var(--text);font-size:14.5px;font-weight:750;margin-bottom:4px}
+
+/* ── 11. Chave liga/desliga e opções em cartão ──────────────────────── */
+.pf-switch{position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0}
+.pf-switch input{position:absolute;opacity:0;width:0;height:0}
+.pf-switch span{position:absolute;inset:0;border-radius:99px;background:var(--surface3,#d9e3ec);border:1px solid var(--pf-line-strong);cursor:pointer;transition:background .18s,border-color .18s}
+.pf-switch span::after{content:'';position:absolute;left:2px;top:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(13,38,59,.3);transition:transform .18s}
+.pf-switch input:checked + span{background:var(--accent);border-color:var(--accent)}
+.pf-switch input:checked + span::after{transform:translateX(18px)}
+.pf-switch input:focus-visible + span{outline:2px solid var(--accent);outline-offset:2px}
+
+.pf-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.pf-choice{
+  display:flex!important;align-items:flex-start;gap:10px;padding:13px 14px!important;border-radius:var(--pf-r-s)!important;cursor:pointer;
+  border:1px solid var(--pf-line-strong)!important;background:var(--surface)!important;transition:border-color .15s,background .15s;
+}
+.pf-choice:hover{border-color:var(--muted)!important}
+.pf-choice input{margin-top:3px;accent-color:var(--accent);flex-shrink:0}
+.pf-choice b{display:block;font-size:13.5px;font-weight:700;color:var(--text)}
+.pf-choice small{display:block;font-size:12px;color:var(--muted);margin-top:2px;line-height:1.4}
+.pf-choice:has(input:checked){border-color:var(--accent)!important;background:var(--accent-dim)!important}
+
+/* ── 12. Janelas (modais) ───────────────────────────────────────────── */
+.modal{border-radius:var(--pf-r-l)!important;box-shadow:var(--pf-shadow-pop)!important}
+.modal-title,.modal h2,.mt{font-size:17px!important;font-weight:800!important;letter-spacing:-.015em!important}
+
+/* ── 13. Menu lateral ───────────────────────────────────────────────── */
+.si{font-size:13px!important;font-weight:550!important;letter-spacing:0!important;border-radius:9px!important}
+.sidebar:not(.mobile-open):hover .si,
+.sidebar.pinned .si{font-size:13px!important}
+.shead{font-weight:700!important;letter-spacing:.04em!important}
+.sidebar:not(.mobile-open):hover .shead,
+.sidebar.pinned .shead,
+.sidebar.mobile-open .shead{font-size:11px!important;padding:14px 12px 6px!important}
+
+/* itens com subitens recolhidos (Gestor de cardápio, Marketing) */
+.si-parent{position:relative}
+.si-chev{margin-left:auto;display:inline-flex;align-items:center;opacity:.6;transition:transform .18s}
+.si-chev svg{width:10px!important;height:10px!important;opacity:1!important}
+.si-parent[aria-expanded="true"] .si-chev{transform:rotate(90deg)}
+.si-parent.has-on{color:#fff;background:rgba(255,255,255,.08)}
+.si-sub{display:none;padding:2px 0 4px;margin-left:17px;border-left:1px solid rgba(255,255,255,.16)}
+.si-sub.open{display:block}
+.si-sub .si.ssub{padding-left:14px!important;margin-left:6px;width:calc(100% - 6px);font-size:12.5px!important;font-weight:500!important}
+.si-sub .si.ssub svg{display:none}
+.sidebar:not(.mobile-open):not(:hover):not(.pinned) .si-sub{display:none!important}
+.sidebar:not(.mobile-open):not(:hover):not(.pinned) .si-chev{display:none}
+.sidebar:not(.mobile-open):not(:hover):not(.pinned) .si-parent.has-on{background:#0d75b1;box-shadow:inset 3px 0 0 #30c6ff}
+/* busca do menu: esconde o que não combina */
+.sidebar.pf-searching .si.pf-nomatch,
+.sidebar.pf-searching .shead.pf-nomatch{display:none!important}
+.sidebar.pf-searching .si-sub,
+.sidebar.pf-searching .sidebar-group{display:block!important;max-height:none!important;opacity:1!important}
+
+/* ── 14. Listas em linha (entregadores, contas, fornecedores...) ────── */
+.pf-list{border:1px solid var(--pf-line);border-radius:var(--pf-r-m);background:var(--surface);overflow:hidden;box-shadow:var(--pf-shadow)}
+.pf-row{display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--pf-line);transition:background .12s}
+.pf-row:last-child{border-bottom:0}
+.pf-row:hover{background:var(--surface2)}
+.pf-row-main{flex:1;min-width:0}
+.pf-row-title{font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pf-row-sub{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.4}
+.pf-row-val{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pf-row-actions{display:flex;gap:6px;flex-shrink:0}
+.pf-avatar{width:38px;height:38px;border-radius:50%;background:var(--accent-dim);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0}
+
+/* ── 15. Barra de filtros ───────────────────────────────────────────── */
+.pf-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px}
+.pf-toolbar .pf-grow{flex:1;min-width:200px}
+.pf-search{position:relative}
+.pf-search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.pf-search .form-input{padding-left:36px!important;width:100%}
+.pf-count{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* ── 16. Celular ────────────────────────────────────────────────────── */
+@media(max-width:900px){
+  .page{padding:18px 16px}
+  .ph,.gz-page-head,.ent-page-head{align-items:flex-start;padding-bottom:14px!important;margin-bottom:16px!important}
+  .pt,.gz-page-title,.ent-page-title{font-size:20px!important}
+  .pf-grid-2,.pf-grid-3{grid-template-columns:1fr}
+  .pf-card{padding:16px}
+  .pf-row{flex-wrap:wrap}
+  .sg,.gz-stats-grid,.ent-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+  .sv,.gz-stat-val,.ent-stat-val{font-size:21px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+
+/* ── 17. Entregas ───────────────────────────────────────────────────── */
+.ent-tabpanel{animation:none!important}
+.ent-panel-head{margin-bottom:16px!important;align-items:flex-end!important}
+.ent-panel-title{font-size:16px!important;font-weight:780!important;letter-spacing:-.012em}
+.ent-panel-sub{font-size:13px!important;color:var(--muted)!important;margin-top:3px!important}
+.ent-card{background:var(--surface)!important;border:1px solid var(--pf-line)!important;border-radius:var(--pf-r-m)!important;padding:16px 18px!important;box-shadow:var(--pf-shadow)}
+.ent-title{font-size:14.5px!important;font-weight:780!important}
+.ent-sub{font-size:13px!important}
+.ent-actions{border-top:1px solid var(--pf-line)!important;margin-top:14px!important;padding-top:14px!important;gap:8px!important}
+.ent-actions .btn{font-size:13px!important;padding:0 12px!important}
+.ent-driver-list{border:1px solid var(--pf-line)!important;border-radius:var(--pf-r-m)!important;background:var(--surface);box-shadow:var(--pf-shadow)}
+.ent-driver-list:has(> .ent-empty){border:0!important;box-shadow:none;background:none}
+.ent-driver-row{background:var(--surface)!important;padding:14px 18px!important;gap:14px!important}
+.ent-driver-row:hover{background:var(--surface2)!important}
+.ent-avatar{background:var(--accent-dim)!important;color:var(--accent)!important}
+.ent-driver-name{font-size:14px!important;font-weight:750!important}
+.ent-driver-phone{font-size:12.5px!important}
+.ent-driver-metric-val{font-size:15px!important;font-weight:800!important;font-variant-numeric:tabular-nums}
+.ent-driver-metric-lbl{font-size:11.5px!important;text-transform:none!important;letter-spacing:0!important;margin-top:4px!important}
+.ent-driver-metrics{gap:22px!important}
+@media(max-width:900px){
+  #ent-panel-taxa .pf-grid-2{grid-template-columns:1fr!important}
+  #taxa-preview-block{position:static!important}
+}
+
+/* ── 18. Acertos do menu lateral ────────────────────────────────────── */
+.sidebar-search input{background:transparent!important;border:0!important;box-shadow:none!important;min-height:0;font-size:13px!important}
+.urow > div.sfoot-info{flex-direction:column;align-items:flex-start!important;gap:1px}
+
+/* ── 19. Painéis de abas internas ───────────────────────────────────── */
+.pf-panel{display:none}
+.pf-panel.on{display:block}
+
+/* ── 20. Cupons ─────────────────────────────────────────────────────── */
+#cupom-list{display:flex;flex-direction:column;border:1px solid var(--pf-line);border-radius:var(--pf-r-m);background:var(--surface);box-shadow:var(--pf-shadow);overflow:hidden}
+#cupom-list:has(> .pf-empty){border:0;box-shadow:none;background:none}
+.coupon-card{display:flex!important;align-items:center;gap:14px;padding:14px 18px!important;margin:0!important;border:0!important;border-bottom:1px solid var(--pf-line)!important;border-radius:0!important;background:none!important;box-shadow:none!important}
+.coupon-card:last-child{border-bottom:0!important}
+.coupon-card:hover{background:var(--surface2)!important}
+.coupon-icon{width:38px!important;height:38px!important;border-radius:9px!important;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.coupon-code{font-size:14.5px!important;font-weight:800!important;letter-spacing:.04em!important}
+.coupon-desc{font-size:13px!important;color:var(--text)!important;margin-top:2px}
+.coupon-use{font-size:12.5px!important;color:var(--muted)!important;margin-top:2px}
+.promo-escopo-btn{border-width:1px!important;border-radius:var(--pf-r-s)!important;font-size:13px!important;font-weight:650!important;padding:9px 14px!important;border-color:var(--pf-line-strong)!important}
+.promo-escopo-btn.on{background:var(--accent-dim)!important;border-color:var(--accent)!important;color:var(--accent)!important}
+
+/* ── 21. Caixa ──────────────────────────────────────────────────────── */
+.cx-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+.cx-mini-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--pf-line);font-size:13px;color:var(--muted)}
+.cx-mini-row:last-child{border-bottom:0;padding-bottom:0}
+.cx-mini-row b{font-weight:750;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cx-mini-vazio{font-size:13px;color:var(--muted);padding:6px 0}
+@media(max-width:1000px){.cx-layout{grid-template-columns:1fr}}
+
+/* ── 22. Busca e seletor soltos ─────────────────────────────────────── */
+.sbox{min-height:38px;border-radius:var(--pf-r-s)!important;border:1px solid var(--pf-line-strong)!important;background:var(--surface)!important;box-shadow:none!important;padding:0 12px!important}
+.sbox:focus-within{border-color:var(--accent)!important;box-shadow:0 0 0 3px var(--accent-dim)!important}
+.sbox input{font-size:13.5px!important}
+.sw select{min-height:38px;border-radius:var(--pf-r-s)!important;border:1px solid var(--pf-line-strong)!important;background-color:var(--surface)!important;box-shadow:none!important;font-size:13.5px!important}
+.tw{border-radius:var(--pf-r-m)!important;border:1px solid var(--pf-line)!important;box-shadow:var(--pf-shadow)!important;overflow:hidden;background:var(--surface)!important}
+
+/* ── 23. Carteira e saques ──────────────────────────────────────────── */
+.saq-forma{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;border:1px solid var(--pf-line);border-radius:10px;margin-bottom:10px;background:var(--surface)}
+.saq-seg{display:inline-flex;border:1px solid var(--pf-line-strong);border-radius:var(--pf-r-s);overflow:hidden}
+.saq-seg button{padding:7px 14px;font-size:12.5px;font-weight:700;border:0;cursor:pointer}
+
+/* ── 24. Gestor de cardápio ─────────────────────────────────────────── */
+.quality-bar{border-radius:var(--pf-r-m)!important;border:1px solid var(--pf-line)!important;background:var(--surface)!important;box-shadow:var(--pf-shadow)!important;padding:16px 20px!important;gap:18px!important;margin-bottom:20px!important;flex-wrap:wrap}
+.quality-score{width:56px!important;height:56px!important}
+#quality-score-txt{font-size:13.5px!important;font-weight:800!important}
+.quality-title{display:flex;flex-direction:column;gap:2px;min-width:170px}
+.quality-title b{font-size:14.5px;font-weight:750;color:var(--text)}
+.quality-title span{font-size:12.5px;color:var(--muted)}
+.quality-pills{gap:0!important;flex:1;justify-content:flex-end}
+.qpill{background:none!important;border:0!important;border-left:1px solid var(--pf-line)!important;border-radius:0!important;padding:2px 22px!important;text-align:left!important;min-width:150px!important;cursor:default!important}
+.qpill-label{font-size:12.5px!important;font-weight:650!important;text-transform:none!important;letter-spacing:0!important;color:var(--muted)!important;margin-bottom:2px!important}
+.qpill-val{font-size:20px!important;font-weight:800!important;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.qpill-btn{background:none!important;color:var(--accent)!important;padding:0!important;margin-top:2px!important;font-size:12.5px!important;font-weight:700!important;border-radius:0!important;cursor:pointer}
+.qpill-btn:hover{text-decoration:underline}
+
+.cat-row{border-radius:var(--pf-r-m)!important;border:1px solid var(--pf-line)!important;background:var(--surface)!important;box-shadow:var(--pf-shadow);margin-bottom:10px!important}
+.cat-row:hover{border-color:var(--pf-line-strong)!important}
+.cat-head{padding:14px 18px!important;gap:12px!important}
+.cat-head > div:nth-child(2){display:flex;align-items:baseline;gap:10px;flex:1;min-width:0}
+.cat-name{font-size:15px!important;font-weight:750!important;letter-spacing:-.01em;flex:0 1 auto!important}
+.cat-badge{font-size:12.5px!important;font-weight:600!important;color:var(--muted)!important;background:none!important;border:0!important;padding:0!important}
+.cat-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
+.cat-actions .sw select{min-height:32px!important;font-size:12.5px!important;padding:0 26px 0 10px!important}
+.cat-toggle{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;color:var(--muted);transition:transform .18s}
+.cat-toggle.open{transform:rotate(180deg)}
+.cat-drag{font-size:15px!important;opacity:.45}
+.cat-item-row{padding:10px 18px!important;gap:12px!important}
+.cat-item-name{font-size:13.5px!important;font-weight:650!important}
+.cat-item-price{font-size:12.5px!important;margin-top:2px!important}
+.cat-item-row .btn{min-height:30px;padding:0 10px!important;font-size:12px!important}
+.stbadge-mini{width:30px!important;height:30px!important;border-radius:var(--pf-r-s)!important}
+.cat-add{font-size:13px!important;font-weight:650!important;padding:12px!important;border-top:1px solid var(--pf-line)!important}
+
+/* ── 25. Robô WhatsApp ──────────────────────────────────────────────── */
+.robo-tabs .pdvb-tab{padding:15px 16px 14px!important;color:var(--muted)!important;border-bottom:2px solid transparent!important;margin-bottom:-1px}
+.robo-tabs .pdvb-tab.on{color:var(--accent)!important;border-bottom-color:var(--accent)!important;font-weight:750!important}
+#robo-section-auto .card,#robo-section-ia .card{padding:20px 22px!important}
+#robo-section-auto .card > div:first-child > div:first-child > div:last-child > div:first-child,
+#robo-section-ia .card > div > div > div > div:first-child{font-size:14.5px!important;font-weight:750!important}
+#robo-section-auto textarea.form-input{font-size:13.5px!important;line-height:1.55}
+.toggle{flex-shrink:0}
+
+/* ── 26. Mesas (pedidos mesa, cadastro de mesas, modo garçom) ───────── */
+.mesa-card{background:var(--surface);border:1px solid var(--pf-line);border-radius:var(--pf-r-m);box-shadow:var(--pf-shadow);padding:18px 20px;margin-bottom:14px}
+.mesa-card.aguardando{box-shadow:inset 3px 0 0 var(--pf-warn),var(--pf-shadow)}
+.mesa-card-topo{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.mesa-card-nome{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mesa-card-total{font-size:20px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.mesa-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--pf-line)}
+.mesa-acoes .btn{flex:1 1 auto;justify-content:center}
+.oc-btn{font-size:12.5px!important;font-weight:700!important;border-radius:var(--pf-r-s)!important;min-height:32px}
+
+.qr-wrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.qr-table{background:var(--surface);border:1px solid var(--pf-line);border-radius:var(--pf-r-m);box-shadow:var(--pf-shadow);padding:16px;cursor:pointer;transition:border-color .15s}
+.qr-table:hover{border-color:var(--accent)}
+.qr-num{font-size:16px;font-weight:800;letter-spacing:-.015em;margin-bottom:8px}
+.qr-status,.gm-status{display:inline-flex;align-items:center;font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;border:1px solid transparent;margin-bottom:10px}
+.qr-free{color:var(--pf-ok);background:rgba(31,157,87,.09);border-color:rgba(31,157,87,.26)}
+.qr-busy{color:var(--pf-bad);background:rgba(217,58,30,.08);border-color:rgba(217,58,30,.24)}
+.qr-waiting{color:var(--pf-warn);background:rgba(194,122,0,.09);border-color:rgba(194,122,0,.26)}
+.qr-code{color:var(--muted);margin-bottom:4px}
+.qr-table > div[style*="font-size:11px"]{font-size:12.5px!important}
+.qr-table .btn{min-height:32px;font-size:12.5px!important;padding:0 8px!important}
+
+#garcom-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.garcom-mesa{border:1px solid var(--pf-line);border-radius:var(--pf-r-m);padding:14px;cursor:pointer;transition:border-color .15s}
+.garcom-mesa:hover{border-color:var(--accent)}
+.gm-num{font-size:15.5px;font-weight:800;letter-spacing:-.015em}
+.gm-guests{font-size:12.5px;color:var(--muted);min-height:18px;margin:2px 0 8px}
+.gm-status{margin-bottom:0}
+
+/* ── 27. Normalização geral (estilos escritos direto nas telas) ─────── */
+/* rótulos em caixa alta e letras miúdas viram texto normal e legível */
+.page:not(#page-pedidos):not(#page-pdv-balcao):not(#page-pdv) [style*="text-transform:uppercase"]:not(.print-preview *):not(.print-ticket *),
+.modal [style*="text-transform:uppercase"]:not(.print-preview *):not(.print-ticket *){
+  text-transform:none!important;letter-spacing:0!important;
+}
+.page:not(#page-pedidos):not(#page-pdv-balcao):not(#page-pdv) [style*="font-size:9px"]:not(.print-preview *):not(.print-ticket *),
+.page:not(#page-pedidos):not(#page-pdv-balcao):not(#page-pdv) [style*="font-size:9.5px"]:not(.print-preview *):not(.print-ticket *),
+.page:not(#page-pedidos):not(#page-pdv-balcao):not(#page-pdv) [style*="font-size:10px"]:not(.print-preview *):not(.print-ticket *),
+.page:not(#page-pedidos):not(#page-pdv-balcao):not(#page-pdv) [style*="font-size:10.5px"]:not(.print-preview *):not(.print-ticket *){font-size:12px!important}
+.page:not(#page-pedidos):not(#page-pdv-balcao):not(#page-pdv) [style*="font-size:11px"]:not(.print-preview *):not(.print-ticket *),
+.page:not(#page-pedidos):not(#page-pdv-balcao):not(#page-pdv) [style*="font-size:11.5px"]:not(.print-preview *):not(.print-ticket *){font-size:12.5px!important}
+.page:not(#page-pedidos):not(#page-pdv-balcao):not(#page-pdv) [style*="font-size:12px"]:not(.print-preview *):not(.print-ticket *),
+.page:not(#page-pedidos):not(#page-pdv-balcao):not(#page-pdv) [style*="font-size:12.5px"]:not(.print-preview *):not(.print-ticket *){font-size:13px!important}
+
+/* ── 28. Desempenho, relatórios e DRE: mesmos cartões de número ─────── */
+.desemp-grid{gap:14px!important;margin-bottom:22px!important}
+.desemp-card,
+.rel-kpi-card{
+  background:var(--surface)!important;border:1px solid var(--pf-line)!important;border-radius:var(--pf-r-m)!important;
+  box-shadow:var(--pf-shadow)!important;transform:none!important;padding:16px 18px!important;
+}
+.desemp-card:hover,.rel-kpi-card:hover{transform:none!important;box-shadow:var(--pf-shadow)!important}
+.desemp-card::after,.rel-kpi-card::before{display:none!important}
+.desemp-label{font-size:12.5px!important;font-weight:650!important;text-transform:none!important;letter-spacing:0!important;color:var(--muted)!important}
+.desemp-val{font-size:25px!important;font-weight:800!important;letter-spacing:-.025em!important;color:var(--text)!important;font-variant-numeric:tabular-nums}
+.desemp-sub,.desemp-trend{font-size:12.5px!important}
+.desemp-card-icon{margin-bottom:0!important}
+.rel-kpi-card [id^="rel-kpi-"]:not([id$="-sub"]):not([id$="-trend"]){font-size:25px!important;font-weight:800!important;letter-spacing:-.025em!important;font-variant-numeric:tabular-nums}
+.desemp-prd-btn,.rel-periodo-btn{font-size:12.5px!important;font-weight:650!important;min-height:30px!important;padding:0 12px!important;border-radius:7px!important}
+.desemp-prd-btn.on{background:var(--accent)!important;color:#fff!important}
+
+/* ── 29. Abas antigas (.tabs/.tab) no mesmo desenho das novas ───────── */
+.tabs{display:flex!important;gap:2px!important;background:none!important;border:0!important;border-bottom:1px solid var(--pf-line)!important;border-radius:0!important;padding:0!important;box-shadow:none!important;overflow-x:auto;scrollbar-width:none;margin-bottom:20px!important}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto!important;padding:11px 14px 12px!important;margin-bottom:-1px;border:0!important;border-bottom:2px solid transparent!important;border-radius:0!important;background:none!important;box-shadow:none!important;font-size:13.5px!important;font-weight:650!important;color:var(--muted)!important;white-space:nowrap}
+.tab:hover{color:var(--text)!important;background:none!important}
+.tab.on{color:var(--accent)!important;border-bottom-color:var(--accent)!important;font-weight:750!important}
+.ts{animation:none!important}
+
+/* números de resumo sempre na cor do texto (a cor fica no ícone) */
+.gz-stat-val:not(#cx-saldo),.ent-stat-val{color:var(--text)!important}
+
+/* ── 30. Cabeçalho de janela no formato antigo (.mh / .mt / .mc) ────── */
+.mh{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 14px;border-bottom:1px solid var(--pf-line)}
+.mc{width:32px;height:32px;border-radius:50%;border:1px solid var(--pf-line-strong);background:var(--surface2);color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.mc:hover{color:var(--text);border-color:var(--muted)}
+.btn[style*="width:100%"]{justify-content:center}
+
+/* ── 31. Acertos finais ─────────────────────────────────────────────── */
+/* o cabeçalho de página nunca vira "caixa", em nenhum tema ou largura */
+:root:root:root .ph,
+:root:root:root .gz-page-head,
+:root:root:root .ent-page-head{background:none!important;border:0!important;border-bottom:1px solid var(--pf-line)!important;border-radius:0!important;box-shadow:none!important;padding:0 0 18px!important}
+.tw{overflow-x:auto!important}
+@media(max-width:900px){
+  :root:root:root .ph,
+  :root:root:root .gz-page-head,
+  :root:root:root .ent-page-head{padding-bottom:14px!important}
+  .pf-grid-2,.pf-grid-3{grid-template-columns:1fr!important}
+  .pf-card [style*="grid-template-columns"]:not(.pf-choices){grid-template-columns:1fr!important}
+  .pf-table-wrap table,.tw table{min-width:640px}
+  .pf-card-head{flex-direction:column;align-items:stretch}
+  .pf-card-actions .form-input{width:100%!important}
+  .cx-layout{grid-template-columns:1fr!important}
+  .quality-pills{display:flex!important;justify-content:flex-start;width:100%}
+  .qpill{border-left:0!important;border-top:1px solid var(--pf-line)!important;padding:12px 0 0!important;min-width:0!important;flex:1 1 30%}
+  .cat-actions .sw select{max-width:110px}
+  .saq-forma{flex-wrap:wrap}
+}

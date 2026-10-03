@@ -132,31 +132,76 @@ let evoQrInterval = null;
 let wuzConnected  = false;
 let wuzQrInterval = null;
 
-// ── Seletor de motor (Evolution / WuzAPI) ──────────────
+// ── Conexão do WhatsApp da loja ─────────────────────────
+// Para o gestor existe uma conexão só, chamada "WhatsApp". Por trás há duas
+// formas de conectar (a antiga e a nova); a escolha entre elas não aparece
+// mais na tela:
+//  · loja já na conexão nova           → mostra a conexão nova
+//  · loja conectada pela antiga        → continua nela, só com o estado "conectado"
+//  · loja na antiga, mas desconectada  → mostra a conexão nova; a troca só é
+//    gravada quando o gestor clica em "Conectar WhatsApp"
+//  · servidor sem a conexão nova       → mostra a antiga, com o nome da conexão
+let _waProvider = null;          // 'wuzapi' | 'evolution' (o que está gravado no servidor)
+let _waTrocarAoConectar = false; // true = gravar a conexão nova no primeiro "Conectar"
+
 async function waProviderInit() {
   const r = await WUZ.req('GET', '/status');
-  const provider = r.data?.provider === 'wuzapi' ? 'wuzapi' : 'evolution';
-  const radioEvo = document.getElementById('wa-provider-evolution');
-  const radioWuz = document.getElementById('wa-provider-wuzapi');
-  if (radioEvo) radioEvo.checked = provider === 'evolution';
-  if (radioWuz) radioWuz.checked = provider === 'wuzapi';
-  _waProviderShow(provider);
-  if (provider === 'wuzapi') wuzCheckStatus(); else evoCheckStatus();
+  _waProvider = r.data?.provider === 'wuzapi' ? 'wuzapi' : 'evolution';
+  const novaDisponivel = r.data?.wuzapi_configured !== false;
+  _waTrocarAoConectar = false;
+  const legacyCfg = document.getElementById('evo-legacy-config');
+  if (legacyCfg) legacyCfg.style.display = 'none';
+
+  if (_waProvider === 'wuzapi') {
+    _waProviderShow('wuzapi');
+    await wuzCheckStatus(r);
+    return;
+  }
+  if (EVO.instance) await evoCheckStatus();
+  if (evoConnected) { _waProviderShow('evolution'); return; }
+  if (novaDisponivel) {
+    _waTrocarAoConectar = true;
+    _waProviderShow('wuzapi');
+    _wuzSetStatus('disconnected', 'Desconectado');
+    return;
+  }
+  _waProviderShow('evolution');
+  if (legacyCfg) legacyCfg.style.display = '';
+  if (!EVO.instance) _evoSetStatus('disconnected', 'Desconectado');
 }
 
 function _waProviderShow(provider) {
   const evoCards = document.getElementById('evo-cards');
   const wuzCards = document.getElementById('wuz-cards');
-  if (evoCards) evoCards.style.display = provider === 'wuzapi' ? 'none' : 'grid';
-  if (wuzCards) wuzCards.style.display = provider === 'wuzapi' ? 'grid' : 'none';
+  if (evoCards) evoCards.style.display = provider === 'wuzapi' ? 'none' : 'block';
+  if (wuzCards) wuzCards.style.display = provider === 'wuzapi' ? 'block' : 'none';
+}
+
+// Botão "Atualizar" da aba Conexão
+function waConexaoAtualizar() { return waProviderInit(); }
+
+// Atualiza o indicador do topo (bolinha do Robô) sem depender da tela aberta.
+// So consulta a conexão nova quando a loja usa ela.
+async function waStatusRefresh() {
+  try {
+    if (_waProvider === null) {
+      const r = await WUZ.req('GET', '/status');
+      _waProvider = r.data?.provider === 'wuzapi' ? 'wuzapi' : 'evolution';
+      if (_waProvider === 'wuzapi') { await wuzCheckStatus(r); return; }
+    } else if (_waProvider === 'wuzapi') {
+      await wuzCheckStatus();
+      return;
+    }
+    if (EVO.instance) await evoCheckStatus();
+  } catch (e) {}
 }
 
 async function waProviderChange(provider) {
   const r = await WUZ.req('POST', '/provider', { provider });
-  if (!r.ok) { sbToast('err', 'Erro ao trocar o motor do WhatsApp'); return; }
-  _waProviderShow(provider);
-  sbToast('ok', provider === 'wuzapi' ? 'Motor alterado para WuzAPI' : 'Motor alterado para Evolution API');
-  if (provider === 'wuzapi') wuzCheckStatus(); else evoCheckStatus();
+  if (!r.ok) { sbToast('err', 'Não foi possível preparar a conexão do WhatsApp'); return false; }
+  _waProvider = provider === 'wuzapi' ? 'wuzapi' : 'evolution';
+  _waProviderShow(_waProvider);
+  return true;
 }
 
 // ── Conexão WuzAPI ──────────────────────────────────────
@@ -165,29 +210,42 @@ function _wuzSetStatus(kind, txt) {
   const label = document.getElementById('wuz-status-txt');
   if (label) label.textContent = txt;
   if (dot) dot.style.background = kind === 'connected' ? 'var(--success,#22c55e)' : kind === 'loading' ? 'var(--warning,#f59e0b)' : 'var(--muted)';
+  // mesmo indicador do cabeçalho da aba e da bolinha do topo
+  if (typeof _evoSetStatus === 'function') _evoSetStatus(kind, txt);
 }
 
-async function wuzCheckStatus() {
-  _wuzSetStatus('loading', 'Verificando...');
-  const r = await WUZ.req('GET', '/status');
-  if (!r.ok) { _wuzSetStatus('disconnected', 'Desconectado'); return; }
-  if (r.data?.status === 'connected') {
+const _WUZ_DESCONECTADO_HTML = `<div style="font-size:15px;font-weight:750;margin-bottom:6px">WhatsApp desconectado</div><div style="font-size:13px;color:var(--muted);margin-bottom:16px">Gere o QR Code e leia com o celular da loja</div><button class="btn bp" onclick="wuzConectar()">Conectar WhatsApp</button>`;
+
+async function wuzCheckStatus(respostaPronta) {
+  const naAbaRobo = document.getElementById('page-robo')?.classList.contains('on');
+  if (naAbaRobo) _wuzSetStatus('loading', 'Verificando...');
+  const r = (respostaPronta && respostaPronta.data) ? respostaPronta : await WUZ.req('GET', '/status');
+  const area = document.getElementById('wuz-qr-area');
+  if (r.ok && r.data?.status === 'connected') {
     wuzConnected = true;
     _wuzSetStatus('connected', 'Conectado');
-    const area = document.getElementById('wuz-qr-area');
-    if (area) area.innerHTML = `<div style="margin-bottom:16px;color:var(--success,#22c55e)"><svg width="48" height="48" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.5 4L6 11.5 2.5 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div style="font-size:14px;font-weight:600;margin-bottom:12px">WhatsApp conectado!</div><button class="btn bg" onclick="wuzDesconectar()">Desconectar</button>`;
+    if (area) area.innerHTML = `<div style="width:52px;height:52px;border-radius:50%;background:rgba(31,157,87,.12);color:var(--pf-ok);display:flex;align-items:center;justify-content:center;margin:0 auto 14px"><svg width="26" height="26" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div style="font-size:15px;font-weight:750;margin-bottom:4px">WhatsApp conectado</div><div style="font-size:13px;color:var(--muted);margin-bottom:16px">As mensagens automáticas saem por este número</div><button class="btn bd" onclick="wuzDesconectar()">Desconectar</button>`;
   } else {
     wuzConnected = false;
     _wuzSetStatus('disconnected', 'Desconectado');
+    // só repõe o botão se não houver um QR Code na tela esperando leitura
+    if (area && !area.querySelector('img')) area.innerHTML = _WUZ_DESCONECTADO_HTML;
   }
 }
 
 async function wuzConectar() {
   const area = document.getElementById('wuz-qr-area');
-  if (area) area.innerHTML = '<div style="font-size:13px;color:var(--muted)">Conectando na WuzAPI e gerando o QR Code... (até 20s)</div>';
+  if (area) area.innerHTML = '<div style="font-size:13.5px;color:var(--muted)">Gerando o QR Code... pode levar até 20 segundos</div>';
+  // Loja que estava na conexão antiga (desconectada): passa a usar a nova a partir daqui
+  if (_waTrocarAoConectar || _waProvider !== 'wuzapi') {
+    const ok = await waProviderChange('wuzapi');
+    if (!ok) { if (area) area.innerHTML = _WUZ_DESCONECTADO_HTML; return; }
+    _waTrocarAoConectar = false;
+  }
   const r = await WUZ.req('POST', '/connect', {});
   if (!r.ok) {
-    if (area) area.innerHTML = `<div style="font-size:13px;color:var(--danger);margin-bottom:12px">${r.data?.error || 'Erro ao conectar'}</div><button class="btn bp" onclick="wuzConectar()">Tentar de novo</button>`;
+    console.warn('[WhatsApp] falha ao conectar:', r.data?.error || r.status);
+    if (area) area.innerHTML = `<div style="font-size:14px;font-weight:700;margin-bottom:6px">Não foi possível gerar o QR Code agora</div><div style="font-size:13px;color:var(--muted);margin-bottom:14px">Tente de novo em instantes. Se continuar, fale com o suporte.</div><button class="btn bp" onclick="wuzConectar()">Tentar de novo</button>`;
     return;
   }
   if (r.data?.status === 'connected') { wuzCheckStatus(); sbToast('ok', 'WhatsApp já estava conectado!'); return; }
@@ -216,17 +274,17 @@ function _iniciarPollingWuz() {
 }
 
 async function wuzDesconectar() {
-  if (!confirm('Desconectar WhatsApp (WuzAPI)?')) return;
+  if (!confirm('Desconectar o WhatsApp da loja?')) return;
   await WUZ.req('POST', '/disconnect', {});
   wuzConnected = false;
   _wuzSetStatus('disconnected', 'Desconectado');
   const area = document.getElementById('wuz-qr-area');
-  if (area) area.innerHTML = `<div style="font-size:14px;font-weight:600;margin-bottom:6px">Aguardando conexão</div><div style="font-size:12px;color:var(--muted);margin-bottom:16px">Clique em "Conectar WhatsApp" para gerar o QR Code</div><button class="btn bp" onclick="wuzConectar()">Conectar WhatsApp</button>`;
+  if (area) area.innerHTML = _WUZ_DESCONECTADO_HTML;
   sbToast('ok', 'WhatsApp desconectado');
 }
 
 function roboTab(tab) {
-  ['wp','auto','msgs','ia','chat'].forEach(t => {
+  ['wp','auto','msgs','ia'].forEach(t => {
     document.getElementById('robo-tab-'+t)?.classList.toggle('on', t===tab);
     const s = document.getElementById('robo-section-'+t);
     if (s) s.style.display = t===tab ? '' : 'none';
@@ -256,12 +314,12 @@ async function evoCarregarInstancia() {
 async function _salvarEvoInstanceConfirmado(instName) {
   const { error } = await sb.from('store_config').upsert({ evo_instance: instName });
   if (error) {
-    sbToast('err', `Falha ao salvar a instância "${instName}" no banco: ${error.message || 'erro desconhecido'}. O robô pode não responder.`);
+    sbToast('err', `Falha ao salvar a conexão "${instName}" no banco: ${error.message || 'erro desconhecido'}. O robô pode não responder.`);
     return false;
   }
   const { data: confirmacao } = await sb.from('store_config').select('evo_instance').single();
   if (confirmacao?.evo_instance !== instName) {
-    sbToast('err', `A instância salva ("${confirmacao?.evo_instance || 'nenhuma'}") não bate com "${instName}". Tente criar de novo.`);
+    sbToast('err', `A conexão salva ("${confirmacao?.evo_instance || 'nenhuma'}") não bate com "${instName}". Tente criar de novo.`);
     return false;
   }
   return true;
@@ -269,7 +327,7 @@ async function _salvarEvoInstanceConfirmado(instName) {
 
 async function evoCriarInstancia() {
   const instName = EVO.instance;
-  if (!instName) { sbToast('err', 'Informe o nome da instância antes de criar.'); return; }
+  if (!instName) { sbToast('err', 'Informe o nome da conexão antes de criar.'); return; }
   sbLoading(true);
 
   // v2: tenta criar — se já existir (409/500), usa a instância existente
@@ -288,7 +346,7 @@ async function evoCriarInstancia() {
       msg.toLowerCase().includes('duplicate')
     ));
     if (isDuplicate || r.status === 500) {
-      sbToast('ok', `Instância "${instName}" já existe. Usando existente...`);
+      sbToast('ok', `A conexão "${instName}" já existe. Usando a existente...`);
       sbLoading(false);
       const salvou = await _salvarEvoInstanceConfirmado(instName);
       if (!salvou) return;
@@ -307,7 +365,7 @@ async function evoCriarInstancia() {
   const salvou = await _salvarEvoInstanceConfirmado(instName);
   if (!salvou) return;
   const whOk = await iaRegistrarWebhook();
-  sbToast('ok', `Instância "${instName}" criada!${whOk ? '' : ' (verifique o webhook manualmente)'}`);
+  sbToast('ok', `Conexão "${instName}" criada!${whOk ? '' : ' (verifique o webhook manualmente)'}`);
 
   // v2: QR pode vir direto na resposta de criação
   const qrBase64 = r.data?.qrcode?.base64 || r.data?.base64;
@@ -364,7 +422,7 @@ async function evoConectar() {
   const qrCode = r?.data?.code || r?.data?.qrcode?.code;
 
   if (!r?.ok || (!qrCode && !qrB64)) {
-    if (qrArea) qrArea.innerHTML=`<div style="font-size:13px;color:var(--danger);margin-bottom:12px">${r?.data?.message||'Erro ao gerar QR. Verifique se a instância existe.'}</div><button class="btn bp" onclick="evoCriarInstancia()">Criar instância</button>`;
+    if (qrArea) qrArea.innerHTML=`<div style="font-size:13px;color:var(--danger);margin-bottom:12px">${r?.data?.message||'Não foi possível gerar o QR Code.'}</div><button class="btn bp" onclick="evoCriarInstancia()">Criar conexão</button>`;
     return;
   }
   if (qrArea) {
@@ -1017,7 +1075,7 @@ let _cpBanners   = []; // [{type:'image'|'video', url}] — até 5, formam slide
 
 async function loadCardapioPublico() {
   const { data } = await sb.from('store_config').select(
-    'store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config,pickup_addresses,mostrar_indicacao_preparo,permitir_agendamento'
+    'store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,pedido_minimo_retirada,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config,pickup_addresses,mostrar_indicacao_preparo,permitir_agendamento'
   ).single();
   if (!data) return;
 
@@ -1028,6 +1086,10 @@ async function loadCardapioPublico() {
   v('cp-tempo',         data.store_tempo_entrega);
   v('cp-avaliacao',     data.store_avaliacao);
   v('cp-pedido-minimo', data.pedido_minimo ?? 0);
+  // Pedido mínimo também na retirada — desligado por padrão (só liga se estiver salvo como 1)
+  const minRetOn = data.pedido_minimo_retirada === 1 || data.pedido_minimo_retirada === true || data.pedido_minimo_retirada === '1';
+  const minRetEl = document.getElementById('cp-pedido-minimo-retirada');
+  if (minRetEl) { minRetEl.checked = minRetOn; cpToggleMinimoRetirada(minRetOn); }
   v('cp-store-address', data.store_address);
   v('cp-store-lat',     data.store_lat ?? '');
   v('cp-store-lng',     data.store_lng ?? '');
@@ -1425,6 +1487,13 @@ function cpToggleIndicacaoPreparo(on) {
   if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
 }
 
+function cpToggleMinimoRetirada(on) {
+  const track = document.getElementById('cp-pedido-minimo-retirada-track');
+  const thumb = document.getElementById('cp-pedido-minimo-retirada-thumb');
+  if (track) track.style.background = on ? 'var(--accent)' : 'var(--surface2)';
+  if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
+}
+
 function cpToggleAgendamento(on) {
   const track = document.getElementById('cp-permitir-agendamento-track');
   const thumb = document.getElementById('cp-permitir-agendamento-thumb');
@@ -1584,7 +1653,7 @@ function cpRenderBanners() {
             ? `<video src="${b.url}" style="width:100%;height:100%;object-fit:cover" muted></video>`
             : `<img src="${b.url}" style="width:100%;height:100%;object-fit:cover">`}
         </div>
-        <div style="flex:1;font-size:12px;color:var(--muted)">${b.type === 'video' ? '🎬 Vídeo' : '🖼️ Imagem'} ${i === 0 ? '· principal' : ''}</div>
+        <div style="flex:1;font-size:12px;color:var(--muted)">${b.type === 'video' ? 'Vídeo' : 'Imagem'}${i === 0 ? ' (principal)' : ''}</div>
         <button type="button" class="btn" style="padding:5px 9px;font-size:11px" onclick="cpRemoveBanner(${i})">Remover</button>
       </div>
     `).join('') || `<div style="font-size:12px;color:var(--muted);text-align:center;padding:10px">Nenhum banner adicionado ainda.</div>`;
@@ -1691,6 +1760,7 @@ async function salvarCardapioPublico() {
       permitir_agendamento: document.getElementById('cp-permitir-agendamento')?.checked ? 1 : 0,
       horarios_config:     JSON.stringify(cpGetHorarios()),
       pedido_minimo:       parseFloat(document.getElementById('cp-pedido-minimo')?.value) || 0,
+      pedido_minimo_retirada: document.getElementById('cp-pedido-minimo-retirada')?.checked ? 1 : 0,
       store_address:       document.getElementById('cp-store-address')?.value.trim() || null,
       store_lat:           parseFloat(document.getElementById('cp-store-lat')?.value)  || null,
       store_lng:           parseFloat(document.getElementById('cp-store-lng')?.value)  || null,
@@ -2116,7 +2186,7 @@ async function iaRegistrarWebhook(webhookUrl) {
     }
     if (!r.ok) {
       console.error('iaRegistrarWebhook: FALHOU nas duas tentativas para instância', inst, r);
-      sbToast('err', `Não foi possível configurar o webhook da instância "${inst}". O WhatsApp pode não responder mensagens. Tente novamente em "Verificar webhook".`);
+      sbToast('err', `Não foi possível terminar de configurar a conexão "${inst}". O WhatsApp pode não responder mensagens. Tente novamente em "Verificar webhook".`);
       return false;
     }
     return true;

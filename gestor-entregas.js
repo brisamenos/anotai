@@ -9,8 +9,88 @@ var entregasState = {
   selected: new Set(),
   sse: null,
   sseTid: null,
-  refreshTimer: null
+  refreshTimer: null,
+  tab: 'fila'
 };
+
+// ── Abas da tela de Entregas ────────────────────────────────────────
+// Fila, Na rua agora, Entregadores, Rotas e histórico, Taxa de entrega e
+// App do entregador. Esta função não existia: as abas chamavam
+// entShowTab() e nada acontecia (erro no console), então a lista de
+// entregadores nunca aparecia — dava a impressão de que o cadastro não
+// tinha salvado, mesmo com o entregador gravado no banco.
+var ENT_TABS = ['fila', 'ativas', 'entregadores', 'rotas', 'taxa', 'app'];
+
+function entShowTab(tab) {
+  if (!ENT_TABS.includes(tab)) tab = 'fila';
+  entregasState.tab = tab;
+  ENT_TABS.forEach(t => {
+    const btn = document.getElementById('ent-tab-' + t);
+    const panel = document.getElementById('ent-panel-' + t);
+    if (btn) { btn.classList.toggle('on', t === tab); btn.setAttribute('aria-selected', t === tab ? 'true' : 'false'); }
+    if (panel) panel.classList.toggle('on', t === tab);
+  });
+  if (tab === 'taxa' && typeof renderTaxaPage === 'function') renderTaxaPage();
+  if (tab === 'app') entRenderApp();
+}
+
+function entRenderBadges() {
+  const ids = new Set([].concat(entregasState.fila, entregasState.sem_entregador).map(o => Number(o.id)));
+  entSetText('ent-badge-fila', String(ids.size));
+  entSetText('ent-badge-ativas', String(entregasState.ativas.length));
+  entSetText('ent-badge-entregadores', String(entregasState.entregadores.length));
+}
+
+// Só os dígitos do telefone, com o 55 do Brasil na frente (para o link do WhatsApp)
+function entFoneWa(tel) {
+  const d = String(tel || '').replace(/\D/g, '');
+  if (d.length < 10) return '';
+  return d.startsWith('55') && d.length >= 12 ? d : '55' + d;
+}
+
+function entRenderApp() {
+  const link = document.getElementById('ent-app-link');
+  if (link) link.value = entAppUrl();
+  const wrap = document.getElementById('ent-app-drivers');
+  if (!wrap) return;
+  const ativos = entregasState.entregadores.filter(d => Number(d.ativo) !== 0);
+  if (!ativos.length) {
+    wrap.className = '';
+    wrap.innerHTML = entEmpty('Nenhum entregador ativo. Cadastre na aba Entregadores para enviar o link.');
+    return;
+  }
+  wrap.className = 'pf-list';
+  const msg = 'Olá! Este é o app de entregas da loja. Entre com o seu telefone cadastrado: ' + entAppUrl();
+  wrap.innerHTML = ativos.map(d => {
+    const fone = entFoneWa(d.telefone);
+    const inicial = (d.nome || '?').trim().charAt(0).toUpperCase();
+    return `
+      <div class="pf-row">
+        <div class="pf-avatar">${entEsc(inicial)}</div>
+        <div class="pf-row-main">
+          <div class="pf-row-title">${entEsc(d.nome)}</div>
+          <div class="pf-row-sub">${entEsc(d.telefone || 'Sem telefone cadastrado')}</div>
+        </div>
+        <div class="pf-row-actions">
+          ${fone
+            ? `<a class="btn bg pf-sm" style="text-decoration:none" target="_blank" rel="noopener" href="https://wa.me/${fone}?text=${encodeURIComponent(msg)}">Enviar pelo WhatsApp</a>`
+            : `<button class="btn bg pf-sm" onclick="openEntregadorModal(${d.id})">Cadastrar telefone</button>`}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function entCopiarLinkApp() {
+  const url = entAppUrl();
+  try {
+    await navigator.clipboard.writeText(url);
+    sbToast('ok', 'Link do app copiado');
+  } catch {
+    const el = document.getElementById('ent-app-link');
+    if (el) { el.focus(); el.select(); }
+    sbToast('err', 'Não deu para copiar sozinho. Selecione o link e copie.');
+  }
+}
 
 function entTenantId() {
   return _sessao?.tenant_id || (() => {
@@ -44,7 +124,7 @@ function entSetText(id, value) {
 }
 
 function entEmpty(text) {
-  return `<div style="padding:18px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:13px;text-align:center">${entEsc(text)}</div>`;
+  return `<div class="ent-empty">${entEsc(text)}</div>`;
 }
 
 function entWhen(value) {
@@ -70,7 +150,7 @@ function entWhen(value) {
 function entStatusLabel(status) {
   return ({
     pendente: 'Pendente',
-    atribuida: 'Atribuida',
+    atribuida: 'Atribuída',
     em_rota: 'Em rota',
     entregue: 'Entregue',
     problema: 'Problema',
@@ -97,11 +177,7 @@ function entAppUrl() {
 
 async function entAbrirAppEntregador() {
   const url = entAppUrl();
-  if (!entTenantId()) { if (typeof sbToast === 'function') sbToast('err', 'Sessao sem tenant'); return; }
-  try {
-    if (navigator.clipboard) await navigator.clipboard.writeText(url);
-    if (typeof sbToast === 'function') sbToast('ok', 'Link do app copiado. Abrindo em nova aba.');
-  } catch {}
+  if (!entTenantId()) { if (typeof sbToast === 'function') sbToast('err', 'Sessão expirada. Recarregue o gestor.'); return; }
   window.open(url, '_blank', 'noopener');
 }
 
@@ -148,12 +224,14 @@ async function renderEntregas(silent = false) {
     entregasState.concluidas_hoje = data.concluidas_hoje || [];
     entregasState.resumo = data.resumo || {};
     entSyncSelection();
+    entRenderBadges();
     entRenderStats();
     entRenderFila();
     entRenderDrivers();
     entRenderAtivas();
     entRenderRotas();
     entRenderConcluidas();
+    if (entregasState.tab === 'app') entRenderApp();
     entSubscribeSSE();
   } catch(e) {
     console.error('[ENTREGAS]', e);
@@ -201,7 +279,7 @@ function entRenderFila() {
             <select class="form-input" id="${driverSelect}" style="width:200px;max-width:100%;font-size:12.5px;padding:7px 10px">${entDriverOptions(o.entregador_id, 'Entregador')}</select>
             <button class="btn bg" onclick="entAtribuir(${id}, false)">Atribuir</button>
             <button class="btn bp" onclick="entAtribuir(${id}, true)">Sair p/ entrega</button>
-            <a class="btn bg" style="text-decoration:none" href="${entMapUrl(address)}" target="_blank" rel="noopener">📍 Mapa</a>
+            <a class="btn bg" style="text-decoration:none" href="${entMapUrl(address)}" target="_blank" rel="noopener">Ver no mapa</a>
           </div>
         </div>
       </div>`;
@@ -212,7 +290,7 @@ function entRenderDrivers() {
   const wrap = document.getElementById('ent-entregadores-list');
   if (!wrap) return;
   if (!entregasState.entregadores.length) {
-    wrap.innerHTML = entEmpty('Cadastre um entregador para montar rotas.');
+    wrap.innerHTML = entEmpty('Nenhum entregador cadastrado. Use o botão Novo entregador para começar.');
     return;
   }
   wrap.innerHTML = entregasState.entregadores.map(d => {
@@ -225,7 +303,7 @@ function entRenderDrivers() {
       <div class="ent-driver-row">
         <div class="ent-avatar" style="${ativo ? '' : 'background:var(--muted)'}">${entEsc(inicial)}</div>
         <div style="flex:1;min-width:120px">
-          <div class="ent-driver-name">${entEsc(d.nome)} <span class="ent-chip ${ativo ? 'green' : ''}" style="font-size:9.5px;padding:2px 7px">${ativo ? 'Ativo' : 'Pausado'}</span></div>
+          <div class="ent-driver-name">${entEsc(d.nome)} <span class="ent-chip ${ativo ? 'green' : ''}">${ativo ? 'Ativo' : 'Pausado'}</span></div>
           <div class="ent-driver-phone">${entEsc(d.telefone || 'Sem telefone')} · Comissão ${entEsc(comissao)}</div>
         </div>
         <div class="ent-driver-metrics">
@@ -247,9 +325,8 @@ function entRenderDrivers() {
           </div>
         </div>
         <div class="ent-driver-actions">
-          <button class="btn bg" onclick="openEntregadorModal(${d.id})" title="Editar">✏️</button>
-          <button class="btn bg" onclick="entAbrirAppEntregador()" title="App do entregador">📱</button>
-          <button class="btn ${ativo ? 'bd' : 'bp'}" onclick="toggleEntregador(${d.id}, ${ativo ? 0 : 1})">${ativo ? 'Pausar' : 'Ativar'}</button>
+          <button class="btn bg pf-sm" onclick="openEntregadorModal(${d.id})">Editar</button>
+          <button class="btn ${ativo ? 'bg' : 'bp'} pf-sm" onclick="toggleEntregador(${d.id}, ${ativo ? 0 : 1})">${ativo ? 'Pausar' : 'Ativar'}</button>
         </div>
       </div>`;
   }).join('');
@@ -259,7 +336,7 @@ function entRenderAtivas() {
   const wrap = document.getElementById('ent-ativas-list');
   if (!wrap) return;
   if (!entregasState.ativas.length) {
-    wrap.innerHTML = entEmpty('Nenhuma entrega atribuida ou em rota.');
+    wrap.innerHTML = entEmpty('Nenhuma entrega atribuída ou em rota agora.');
     return;
   }
   wrap.innerHTML = entregasState.ativas.map(o => {
@@ -282,12 +359,12 @@ function entRenderAtivas() {
           <span class="ent-chip">Comissão ${entMoney(o.comissao || 0)}</span>
           ${o.saiu_at ? `<span class="ent-chip">Saiu ${entWhen(o.saiu_at)}</span>` : ''}
         </div>
-        ${o.problema ? `<div style="font-size:12px;color:var(--danger);font-weight:700;margin-top:8px">⚠ ${entEsc(o.problema)}</div>` : ''}
+        ${o.problema ? `<div style="font-size:12px;color:var(--danger);font-weight:700;margin-top:8px">Problema: ${entEsc(o.problema)}</div>` : ''}
         <div class="ent-actions">
           ${status !== 'em_rota' ? `<button class="btn bp" onclick="entAtualizarStatus(${entregaId}, 'em_rota')">Iniciar</button>` : ''}
-          <button class="btn bg" onclick="entConcluirEntrega(${entregaId}, ${orderId}, ${parseFloat(o.valor_receber || 0) || 0})">✓ Entregue</button>
+          <button class="btn bg" onclick="entConcluirEntrega(${entregaId}, ${orderId}, ${parseFloat(o.valor_receber || 0) || 0})">Marcar entregue</button>
           <button class="btn bd" onclick="entMarcarProblema(${entregaId})">Problema</button>
-          <a class="btn bg" style="text-decoration:none" href="${entMapUrl(o.addr)}" target="_blank" rel="noopener">📍 Mapa</a>
+          <a class="btn bg" style="text-decoration:none" href="${entMapUrl(o.addr)}" target="_blank" rel="noopener">Ver no mapa</a>
           ${entDriverLocationUrl(o) ? `<a class="btn bg" style="text-decoration:none" href="${entDriverLocationUrl(o)}" target="_blank" rel="noopener">GPS</a>` : ''}
         </div>
       </div>`;
@@ -321,7 +398,7 @@ function entRenderConcluidas() {
   const wrap = document.getElementById('ent-concluidas-list');
   if (!wrap) return;
   if (!entregasState.concluidas_hoje.length) {
-    wrap.innerHTML = entEmpty('Nenhuma entrega concluida hoje.');
+    wrap.innerHTML = entEmpty('Nenhuma entrega concluída hoje.');
     return;
   }
   wrap.innerHTML = entregasState.concluidas_hoje.map(e => `
@@ -545,6 +622,7 @@ async function saveEntregador() {
     });
     closeModal('modal-entregador');
     await renderEntregas(true);
+    if (entregasState.tab !== 'app') entShowTab('entregadores');
     sbToast('ok', id ? 'Entregador atualizado' : 'Entregador cadastrado');
   } catch(e) {
     sbToast('err', e.message);

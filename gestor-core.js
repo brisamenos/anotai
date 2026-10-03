@@ -485,8 +485,8 @@ function financeOpenUnlockModal(afterUnlock) {
     <div style="width:min(420px,94vw);background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;box-shadow:0 24px 80px rgba(0,0,0,.45)">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px">
         <div>
-          <div style="font-size:16px;font-weight:800;color:var(--text)">Area financeira bloqueada</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.35">Digite a senha do gestor para liberar esta area por 30 minutos.</div>
+          <div style="font-size:16px;font-weight:800;color:var(--text)">Área financeira bloqueada</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.35">Digite a senha do gestor para liberar esta área por 30 minutos.</div>
         </div>
         <button type="button" id="finance-auth-close" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-size:18px;line-height:1">x</button>
       </div>
@@ -685,11 +685,11 @@ function atualizarQualidadeCardapio() {
   if (!scoreEl) return; // painel não está nessa tela agora
 
   if (!total) {
-    scoreEl.style.background = 'conic-gradient(var(--accent3) 0% 0%,var(--surface2) 0% 100%)';
+    scoreEl.style.background = 'conic-gradient(var(--accent) 0% 0%,var(--surface2) 0% 100%)';
     if (scoreTxt) scoreTxt.textContent = '—';
     if (fotoEl) fotoEl.textContent = '—';
     if (descEl) descEl.textContent = '—';
-    if (promoEl) promoEl.innerHTML = '0 <span style="font-size:12px;color:var(--muted)">$</span>';
+    if (promoEl) promoEl.textContent = '0';
     return;
   }
 
@@ -700,11 +700,11 @@ function atualizarQualidadeCardapio() {
   const pctDesc  = Math.round((comDesc  / total) * 100);
   const score    = Math.round((pctFoto + pctDesc) / 2);
 
-  scoreEl.style.background = `conic-gradient(var(--accent3) 0% ${score}%,var(--surface2) ${score}% 100%)`;
+  scoreEl.style.background = `conic-gradient(var(--accent) 0% ${score}%,var(--surface2) ${score}% 100%)`;
   if (scoreTxt) scoreTxt.textContent = score + '%';
   if (fotoEl) fotoEl.textContent = pctFoto + '%';
   if (descEl) descEl.textContent = pctDesc + '%';
-  if (promoEl) promoEl.innerHTML = comPromo + ' <span style="font-size:12px;color:var(--muted)">$</span>';
+  if (promoEl) promoEl.textContent = String(comPromo);
 }
 
 function mapItem(i) {
@@ -2255,7 +2255,7 @@ function _radioPlayBlob(blob, nome) {
   audio.onended = () => URL.revokeObjectURL(url);
   audio.onerror = () => {
     URL.revokeObjectURL(url);
-    sbToast('err', 'Nao foi possivel reproduzir este audio neste navegador');
+    sbToast('err', 'Não foi possível reproduzir este áudio neste navegador');
   };
   const playPromise = audio.play();
   if (playPromise?.catch) {
@@ -2281,11 +2281,11 @@ function _radioShowManualPlay(url, nome) {
     audio.onended = () => URL.revokeObjectURL(url);
     audio.onerror = () => {
       URL.revokeObjectURL(url);
-      sbToast('err', 'Nao foi possivel reproduzir este audio neste navegador');
+      sbToast('err', 'Não foi possível reproduzir este áudio neste navegador');
     };
     audio.play().catch(() => {
       URL.revokeObjectURL(url);
-      sbToast('err', 'Nao foi possivel reproduzir este audio neste navegador');
+      sbToast('err', 'Não foi possível reproduzir este áudio neste navegador');
     });
     d.remove();
   };
@@ -2363,7 +2363,7 @@ async function _radioGestorStartRec() {
   const destId = document.getElementById('radio-gestor-dest')?.value;
   if (!destId) { sbToast('err', 'Selecione um garçom primeiro'); return; }
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-    sbToast('err', 'Gravacao de audio nao suportada neste navegador');
+    sbToast('err', 'Gravação de áudio não suportada neste navegador');
     return;
   }
   if (_radioGestorRecording) { _radioGestorStopRec(); return; }
