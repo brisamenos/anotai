@@ -9,13 +9,19 @@
 //     clicar num passo leva o vídeo até ele
 //   · "Abrir esta tela" leva direto para a tela que o vídeo ensina
 //   · o que já foi concluído fica marcado (guardado neste aparelho)
-// Os vídeos e as miniaturas ficam em /assets/tutoriais/<id>.mp4 e .jpg.
+// Os vídeos e as miniaturas ficam na pasta tutoriais, na raiz do sistema:
+// /tutoriais/<id>.mp4 e /tutoriais/<id>.jpg (um arquivo que ainda estiver na pasta
+// antiga, /assets/tutoriais/, continua sendo encontrado).
 // Este arquivo se liga sozinho à navegação: o gestor só precisa ter o item de
 // menu (nav('treinamento')) e a <div class="page" id="page-treinamento">.
 (function () {
   'use strict';
 
-  var PASTA = '/assets/tutoriais/';
+  var PASTA = '/tutoriais/';
+  var PASTA_ANTIGA = '/assets/tutoriais/';
+  var naAntiga = {};       // arquivos que só foram achados na pasta antiga
+  var comecarAoAbrir = false;
+  function arquivo(nome) { return (naAntiga[nome] ? PASTA_ANTIGA : PASTA) + nome; }
   var SUPORTE = '5588981841517';
   var ESPERA = 5; // segundos entre o fim de um vídeo e o começo do próximo
 
@@ -277,6 +283,20 @@
     el.video.addEventListener('seeked', marcarPasso);
     el.video.addEventListener('play', function () { el.tocar.hidden = true; pararContagem(); });
     el.video.addEventListener('ended', aoTerminar);
+    // não achou na pasta nova: tenta uma vez na antiga
+    el.video.addEventListener('error', function () {
+      var n = atual + '.mp4';
+      if (!atual || naAntiga[n]) return;
+      naAntiga[n] = true;
+      el.video.src = arquivo(n) + '#t=0.001';
+      if (comecarAoAbrir) tocar();
+    });
+    el.itens.addEventListener('error', function (ev) {
+      var im = ev.target, n = im && im.getAttribute && im.getAttribute('data-arq');
+      if (!n || naAntiga[n]) return;
+      naAntiga[n] = true;
+      im.src = arquivo(n);
+    }, true);
     el.tocar.addEventListener('click', function () { tocar(); });
     el.passos.addEventListener('click', function (ev) {
       var b = ev.target.closest('button[data-t]');
@@ -326,7 +346,7 @@
       itens.forEach(function (t) {
         var on = t.id === atual;
         html += '<button type="button" class="tr-item' + (on ? ' on' : '') + (vistos[t.id] ? ' visto' : '') + '" data-id="' + t.id + '"' + (on ? ' aria-current="true"' : '') + '>' +
-          '<span class="tr-mini"><img src="' + PASTA + t.id + '.jpg" alt="" loading="lazy" width="72" height="54"><span class="tr-ok">' + ICO_OK + '</span></span>' +
+          '<span class="tr-mini"><img src="' + arquivo(t.id + '.jpg') + '" data-arq="' + t.id + '.jpg" alt="" loading="lazy" width="72" height="54"><span class="tr-ok">' + ICO_OK + '</span></span>' +
           '<span><b>' + esc(t.titulo) + '</b><small>' + (on ? 'Assistindo agora' : minutos(t.dur)) + '</small></span></button>';
       });
       html += '</div>';
@@ -394,7 +414,8 @@
     el.suporte.href = 'https://wa.me/' + SUPORTE + '?text=' + encodeURIComponent('Olá, estou na Central de Treinamento e tenho uma dúvida sobre: ' + t.titulo + '.');
     el.rol.scrollTop = 0;
     el.tocar.hidden = true;
-    el.video.src = PASTA + id + '.mp4#t=0.001';
+    comecarAoAbrir = !!comecar;
+    el.video.src = arquivo(id + '.mp4') + '#t=0.001';
     el.video.setAttribute('aria-label', t.titulo);
     desenharLista();
     var item = el.itens.querySelector('.tr-item.on');
