@@ -309,6 +309,32 @@ function slugDe(nome) {
 
 // ==================== Contas de teste ====================
 
+// A mesma caixa de e-mail escrita de outro jeito conta como o mesmo e-mail:
+// maiúsculas, o "+algo" antes do @ e, no Gmail, os pontos (joao.silva = joaosilva).
+function chaveEmail(email) {
+  const s = String(email || '').trim().toLowerCase()
+  const i = s.lastIndexOf('@')
+  if (i < 1) return s
+  let local = s.slice(0, i).split('+')[0]
+  let dominio = s.slice(i + 1)
+  if (dominio === 'googlemail.com') dominio = 'gmail.com'
+  if (dominio === 'gmail.com') local = local.replace(/\./g, '')
+  return local + '@' + dominio
+}
+
+// O teste grátis é sempre com e-mail novo. Devolve por que o e-mail não serve:
+//   'conta' — já existe uma conta com ele (cliente ou teste em andamento)
+//   'teste' — já fez teste antes, mesmo que o teste tenha vencido ou a conta tenha sido apagada
+//   ''      — e-mail novo, pode seguir
+function emailJaUsado(email) {
+  const db = D.db
+  if (db.prepare('SELECT id FROM sys_users WHERE email=?').get(email)) return 'conta'
+  const chave = chaveEmail(email)
+  if (db.prepare('SELECT email FROM sys_users WHERE email IS NOT NULL').all().some(u => chaveEmail(u.email) === chave)) return 'conta'
+  if (db.prepare('SELECT email FROM testes_gratis WHERE email IS NOT NULL').all().some(g => chaveEmail(g.email) === chave)) return 'teste'
+  return ''
+}
+
 function criarContaTeste({ nome, restaurante, telefone, email, senha, ip, dias, cfg }) {
   const db = D.db
   const hoje = hojeBR()
@@ -457,8 +483,12 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
     const db = D.db
     const ip = D.clientIp(req)
     try {
-      if (db.prepare('SELECT id FROM sys_users WHERE email=?').get(email)) {
+      const usado = emailJaUsado(email)
+      if (usado === 'conta') {
         send(res, 409, { error: 'Este e-mail já tem uma conta. Entre no painel com ele.', campo: 'email', login_url: gestorUrl(cfg) }); return true
+      }
+      if (usado === 'teste') {
+        send(res, 409, { error: 'Este e-mail já foi usado em um teste grátis. Use outro e-mail ou fale com a gente pelo WhatsApp.', campo: 'email' }); return true
       }
       if (db.prepare("SELECT id FROM testes_gratis WHERE telefone=? AND status='ativo'").get(telefone)) {
         send(res, 409, { error: 'Já existe um teste em andamento com este WhatsApp.', campo: 'telefone', login_url: gestorUrl(cfg) }); return true
