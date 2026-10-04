@@ -3934,10 +3934,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // Download do App Desktop
   // ═══════════════════════════════════════════════════════
   if (req.method === 'GET' && (upath === '/download' || upath === '/download/')) {
-    // Redireciona para a página de releases — o usuário baixa o .exe de lá
-    // Alternativa: redirecionar direto pro .exe da versão atual
-    const GITHUB_RELEASES = 'https://github.com/brisamenos/estimafood/releases/latest'
-    res.writeHead(302, { 'Location': GITHUB_RELEASES })
+    // Redireciona para a página do instalador (MediaFire) — o usuário baixa o .exe de lá.
+    // A cada versão nova do aplicativo, troque só este link.
+    const LINK_APP_DESKTOP = 'https://www.mediafire.com/file/2nhvjhkddhqbe8t/EstimaFood-1.10.37.exe/file'
+    res.writeHead(302, { 'Location': LINK_APP_DESKTOP, 'Cache-Control': 'no-store' })
     res.end()
     return true
   }
