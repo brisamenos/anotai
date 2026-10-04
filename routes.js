@@ -19,6 +19,43 @@ const _mkt = require('./marketing-flows') // Marketing: fluxos de mensagens e di
 const _site = require('./site-admin') // Site institucional editável pelo admin + contas de teste grátis
 const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (como sempre foi) ou WuzAPI (alternativa leve)
 
+// ── App Desktop: link direto do instalador ──────────────────────────────────
+// O MediaFire só mostra o link direto do arquivo dentro da página dele, e esse
+// link vale por pouco tempo. Por isso o servidor lê a página na hora do clique,
+// pega o link direto e guarda por alguns minutos. Se não conseguir (página fora
+// do ar, layout mudou), devolve vazio e o /download manda para a página, como antes.
+let _appDesktopDireto = { pagina: '', url: '', ate: 0 }
+function _extrairLinkDiretoMediafire(html) {
+  const s = String(html || '')
+  const valido = u => (/^https:\/\/download\d*\.mediafire\.com\/[^\s"'<>]+$/i.test(u) ? u : '')
+  let m = /data-scrambled-url="([A-Za-z0-9+/=]+)"/.exec(s)
+  if (m) {
+    try { const u = valido(Buffer.from(m[1], 'base64').toString('utf8').trim()); if (u) return u } catch { /* segue para o href */ }
+  }
+  m = /href="(https:\/\/download\d*\.mediafire\.com\/[^"]+)"/i.exec(s)
+  return m ? valido(m[1].replace(/&amp;/g, '&')) : ''
+}
+async function _linkDiretoAppDesktop(pagina) {
+  const agora = Date.now()
+  if (_appDesktopDireto.pagina === pagina && _appDesktopDireto.url && _appDesktopDireto.ate > agora) return _appDesktopDireto.url
+  if (typeof fetch !== 'function') return ''
+  const ctl = new AbortController()
+  const limite = setTimeout(() => ctl.abort(), 5000)
+  try {
+    const r = await fetch(pagina, {
+      signal: ctl.signal, redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml', 'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8'
+      }
+    })
+    if (!r.ok) return ''
+    const url = _extrairLinkDiretoMediafire(await r.text())
+    if (url) _appDesktopDireto = { pagina, url, ate: agora + 5 * 60 * 1000 }
+    return url
+  } catch { return '' } finally { clearTimeout(limite) }
+}
+
 // ── Helper: notifica cliente quando PIX é confirmado (online ou manual) ──────
 function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
   if (!order?.phone) return
@@ -3934,10 +3971,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // Download do App Desktop
   // ═══════════════════════════════════════════════════════
   if (req.method === 'GET' && (upath === '/download' || upath === '/download/')) {
-    // Redireciona para a página do instalador (MediaFire) — o usuário baixa o .exe de lá.
-    // A cada versão nova do aplicativo, troque só este link.
+    // Página do instalador no MediaFire. A cada versão nova do aplicativo, troque só este link.
     const LINK_APP_DESKTOP = 'https://www.mediafire.com/file/2nhvjhkddhqbe8t/EstimaFood-1.10.37.exe/file'
-    res.writeHead(302, { 'Location': LINK_APP_DESKTOP, 'Cache-Control': 'no-store' })
+    // Tenta o link direto, para o download começar sozinho; se não der, vai para a página.
+    const direto = await _linkDiretoAppDesktop(LINK_APP_DESKTOP)
+    res.writeHead(302, { 'Location': direto || LINK_APP_DESKTOP, 'Cache-Control': 'no-store' })
     res.end()
     return true
   }
