@@ -438,7 +438,7 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
 .card:not(.plan-card){overflow-x:auto;-webkit-overflow-scrolling:touch}
 table{min-width:760px}
 #sec-clientes table,#sec-indicacoes table,#sec-auditoria table{min-width:980px}
-#sec-faturamento table,#sec-fiscal-uso table,#sec-saques table,#sec-backup table,#sec-planos table{min-width:860px}
+#sec-faturamento table,#sec-fiscal-uso table,#sec-saques table,#sec-pix-geral table,#sec-backup table,#sec-planos table{min-width:860px}
 th,td{overflow-wrap:normal}
 .tw table th:last-child,
 .tw table td:last-child{
@@ -827,6 +827,9 @@ td{padding:12px 16px;color:#dce6f7}
       </button>
       <button class="sb-item" id="nav-saques" onclick="navTo('saques')">
         <span class="sb-icon"></span> Saques PIX
+      </button>
+      <button class="sb-item" id="nav-pix-geral" onclick="navTo('pix-geral')">
+        <span class="sb-icon"></span> Pix online geral
       </button>
       <button class="sb-item" id="nav-faturamento" onclick="navTo('faturamento')">
         <span class="sb-icon"></span> Faturamento
@@ -1874,6 +1877,77 @@ td{padding:12px 16px;color:#dce6f7}
             </thead>
             <tbody id="saq-tbody-pagos"></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- ════ PIX ONLINE GERAL: quem recebe pela conta da plataforma ════ -->
+      <div id="sec-pix-geral" style="display:none" class="sec-page">
+        <div class="sec-head">
+          <div>
+            <div class="sec-head-title">Pix online geral</div>
+            <div class="sec-head-sub">Lojas que recebem o Pix online pela conta do Mercado Pago da plataforma</div>
+          </div>
+          <button class="btn bg2 bsm" onclick="carregarPixGeral()">Atualizar</button>
+        </div>
+
+        <div id="pxg-aviso" style="display:none;margin-bottom:16px;padding:12px 14px;border-radius:12px;border:1px solid rgba(249,115,22,.35);background:rgba(249,115,22,.08);font-size:13px;line-height:1.5"></div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:20px">
+          <div class="stat-card" style="--ca:var(--accent)">
+            <div class="stat-card-label">Usando o Pix geral</div>
+            <div class="stat-card-val" id="pxg-usando" style="color:var(--accent)">—</div>
+            <div class="stat-card-sub" id="pxg-usando-sub">— com pagamento em 30 dias</div>
+            <div class="stat-card-icon">PIX</div>
+          </div>
+          <div class="stat-card" style="--ca:var(--success)">
+            <div class="stat-card-label">Recebido pelo geral (30 dias)</div>
+            <div class="stat-card-val" id="pxg-valor" style="color:var(--success);font-size:22px">R$ —</div>
+            <div class="stat-card-sub" id="pxg-valor-sub">— pagamentos</div>
+            <div class="stat-card-icon">R$</div>
+          </div>
+          <div class="stat-card" style="--ca:var(--purple)">
+            <div class="stat-card-label">Suas taxas (30 dias)</div>
+            <div class="stat-card-val" id="pxg-taxas" style="color:var(--purple);font-size:22px">R$ —</div>
+            <div class="stat-card-sub" id="pxg-taxas-sub">taxa por pagamento</div>
+            <div class="stat-card-icon">%</div>
+          </div>
+          <div class="stat-card" style="--ca:var(--orange)">
+            <div class="stat-card-label">Saldo nas carteiras</div>
+            <div class="stat-card-val" id="pxg-saldo" style="color:var(--orange);font-size:22px">R$ —</div>
+            <div class="stat-card-sub">ainda não pedido em saque</div>
+            <div class="stat-card-icon">R$</div>
+          </div>
+        </div>
+
+        <div class="tw">
+          <div class="tmeta">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="card-title">Lojas</div>
+              <span class="badge bg-gray" id="pxg-count">—</span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <input id="pxg-q" class="minput" placeholder="Buscar loja..." oninput="renderPixGeral()" style="width:180px;padding:6px 10px;font-size:12px">
+              <select id="pxg-filtro" class="minput" onchange="renderPixGeral()" style="width:auto;padding:6px 10px;font-size:12px">
+                <option value="geral">Usando o Pix geral</option>
+                <option value="uso30">Com pagamento em 30 dias</option>
+                <option value="proprio">Conta própria do Mercado Pago</option>
+                <option value="manual">Chave Pix manual</option>
+                <option value="sem_pix">Sem Pix online</option>
+                <option value="">Todas as lojas</option>
+              </select>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Loja</th><th>Como recebe o Pix</th><th>Pagamentos (30 dias)</th><th>Recebido (30 dias)</th><th>Total pelo geral</th><th>Último pagamento</th><th>Saldo na carteira</th></tr>
+            </thead>
+            <tbody id="pxg-tbody"><tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-top:-6px">
+          Pix geral: o pagamento cai na conta do Mercado Pago da plataforma e vira saldo na carteira da loja, que depois pede o saque.
+          Conta própria: a loja cadastrou o Mercado Pago dela e recebe direto, sem passar pela carteira.
+          Os valores desta tela contam só pagamentos aprovados.
         </div>
       </div>
 
@@ -3151,6 +3225,7 @@ function polishAdminUI(root = document) {
     'nav-comunicados':'mail',
     'nav-marketing':'target',
     'nav-saques':'wallet',
+    'nav-pix-geral':'coin',
     'nav-faturamento':'invoice',
     'nav-indicacoes':'target',
     'nav-ia':'brain',
@@ -3244,7 +3319,7 @@ function polishAdminUI(root = document) {
 window.addEventListener('DOMContentLoaded', () => polishAdminUI());
 
 function navTo(id) {
-  ['dash','clientes','ia','backup','saques','planos','comunicados','marketing','testes','site','faturamento','fiscal-uso','indicacoes','auditoria','icones','operacao'].forEach(s => {
+  ['dash','clientes','ia','backup','saques','pix-geral','planos','comunicados','marketing','testes','site','faturamento','fiscal-uso','indicacoes','auditoria','icones','operacao'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
     if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
@@ -3254,10 +3329,12 @@ function navTo(id) {
   titles.marketing = 'Marketing';
   titles.testes = 'Testes grátis';
   titles.site = 'Site';
+  titles['pix-geral'] = 'Pix online geral';
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
   if (id==='backup')      { renderBackupList(); telegramBackupCarregar(); }
   if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); carregarCobrancaWA(); svCarregar(); conectarAdminSSE(); }
+  if (id==='pix-geral')   { carregarPixGeral(); }
   if (id==='planos')      { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
   if (id==='marketing')   { window.MKUI && MKUI.init(); }
   if (id==='testes')      { window.SITEUI && SITEUI.initTestes(); }
@@ -4887,6 +4964,77 @@ function fiscalMesAtual() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
+// ── PIX ONLINE GERAL: quem recebe pela conta da plataforma ──────────────
+let _pxgDados = null;
+async function carregarPixGeral() {
+  const tbody = document.getElementById('pxg-tbody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr>';
+  try {
+    const r = await fetch('/api/admin/pix-geral', { headers: adminAuthHeader() });
+    if (r.status === 401) { toast('err', 'Sessão expirada'); setTimeout(doLogout, 1500); return; }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha ao carregar o Pix online geral');
+    _pxgDados = d;
+    const m = d.resumo || {};
+    const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+    document.getElementById('pxg-usando').textContent = m.usando_geral || 0;
+    document.getElementById('pxg-usando-sub').textContent = `${m.em_uso_30d || 0} com pagamento em 30 dias`;
+    document.getElementById('pxg-valor').textContent = fiscalMoney(m.valor_30d);
+    document.getElementById('pxg-valor-sub').textContent = plural(m.qtd_30d || 0, 'pagamento', 'pagamentos');
+    document.getElementById('pxg-taxas').textContent = fiscalMoney(m.taxas_30d);
+    document.getElementById('pxg-taxas-sub').textContent = `${fiscalMoney(d.taxa_pix)} por pagamento`;
+    document.getElementById('pxg-saldo').textContent = fiscalMoney(m.saldo_repassar);
+    const aviso = document.getElementById('pxg-aviso');
+    if (aviso) {
+      aviso.style.display = d.geral_configurado ? 'none' : 'block';
+      aviso.textContent = d.geral_configurado ? '' : 'A conta geral do Mercado Pago não está configurada. Sem ela nenhuma loja consegue usar o Pix online geral. Cadastre o Access Token em Saques PIX.';
+    }
+    renderPixGeral();
+  } catch (e) {
+    _pxgDados = null;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--danger)">Erro: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+function renderPixGeral() {
+  const tbody = document.getElementById('pxg-tbody');
+  if (!tbody || !_pxgDados) return;
+  const q = (document.getElementById('pxg-q')?.value || '').toLowerCase().trim();
+  const filtro = document.getElementById('pxg-filtro')?.value || '';
+  let lista = (_pxgDados.lojas || []).slice();
+  if (q) lista = lista.filter(l => (l.nome || '').toLowerCase().includes(q) || (l.slug || '').toLowerCase().includes(q));
+  if (filtro === 'uso30') lista = lista.filter(l => l.qtd_30d > 0);
+  else if (filtro) lista = lista.filter(l => l.modo === filtro);
+  lista.sort((a, b) => (b.valor_30d - a.valor_30d) || (b.valor_total - a.valor_total) || String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+  document.getElementById('pxg-count').textContent = lista.length;
+  if (!lista.length) {
+    const vazio = { geral: 'Nenhuma loja está usando o Pix online geral.', uso30: 'Nenhuma loja recebeu pelo Pix geral nos últimos 30 dias.', proprio: 'Nenhuma loja com conta própria do Mercado Pago.', manual: 'Nenhuma loja usando chave Pix manual.', sem_pix: 'Nenhuma loja sem Pix online.' };
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">${adminIcon('coin')}</div><div class="es-msg">${q ? 'Nenhuma loja encontrada com essa busca.' : (vazio[filtro] || 'Nenhuma loja cadastrada.')}</div></div></td></tr>`;
+    return;
+  }
+  const quando = v => { if (!v) return '—'; const dt = new Date(String(v).replace(' ', 'T') + 'Z'); return isNaN(dt) ? '—' : dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); };
+  const modoBadge = l => {
+    if (l.modo === 'geral') return l.qtd_30d > 0
+      ? '<span class="badge bg-green">Pix geral, em uso</span>'
+      : '<span class="badge bg-orange">Pix geral, sem pagamentos</span>';
+    if (l.modo === 'proprio') return '<span class="badge bg-blue">Conta própria</span>';
+    if (l.modo === 'manual') return '<span class="badge bg-gray">Chave manual</span>';
+    return '<span class="badge bg-gray">Sem Pix online</span>';
+  };
+  tbody.innerHTML = lista.map(l => `
+    <tr>
+      <td>
+        <div style="font-weight:700">${escapeHtml(l.nome || '—')}</div>
+        <div style="font-size:11px;color:var(--muted)">${escapeHtml(l.slug || '')}${l.ativo ? '' : ' · loja inativa'}</div>
+      </td>
+      <td>${modoBadge(l)}${l.modo === 'geral' && !l.ligado_de_proposito ? '<div style="font-size:11px;color:var(--muted);margin-top:4px">ligado por padrão</div>' : ''}</td>
+      <td>${l.qtd_30d || 0}</td>
+      <td style="font-weight:700">${fiscalMoney(l.valor_30d)}</td>
+      <td>${fiscalMoney(l.valor_total)}<div style="font-size:11px;color:var(--muted)">${l.qtd_total || 0} ${l.qtd_total === 1 ? 'pagamento' : 'pagamentos'}</div></td>
+      <td style="font-size:12px;color:var(--text-2)">${quando(l.ultimo_pagamento)}</td>
+      <td style="font-weight:700;color:${l.saldo_carteira > 0 ? 'var(--orange)' : 'var(--muted)'}">${fiscalMoney(l.saldo_carteira)}</td>
+    </tr>`).join('');
+}
+
 function fiscalMoney(v) {
   return 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }

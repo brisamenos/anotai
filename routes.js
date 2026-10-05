@@ -6635,6 +6635,75 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Admin: quem usa o PIX online geral (conta MP da plataforma) ──────────
+  // Loja por loja: por onde o PIX online dela passa hoje (conta geral, conta
+  // própria, chave manual ou nenhum) e o que de fato já foi recebido pela conta
+  // geral. Só leitura, não altera nada.
+  if (req.method === 'GET' && upath === '/api/admin/pix-geral') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const safeJson = (v) => { try { return v ? JSON.parse(v) : {} } catch { return {} } }
+      const limpa = (v) => String(v || '').replace(/^["'\s​-‍﻿]+|["'\s​-‍﻿]+$/g, '').replace(/[\r\n\t]/g, '')
+      const porTenant = (rows) => { const m = {}; rows.forEach(r => { m[r.tenant_id] = r }); return m }
+      const num = (v) => Math.round((parseFloat(v) || 0) * 100) / 100
+
+      const gIa = safeJson(db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()?.ia_config)
+      const geralConfigurado = !!(limpa(gIa.mp_token) || limpa(MP_TOKEN))
+      const taxaPix = gIa.taxa_pix !== undefined ? (parseFloat(gIa.taxa_pix) || 0) : TAXA_PIX
+
+      const tenants = db.prepare("SELECT id, nome, slug, plano, ativo FROM tenants WHERE COALESCE(id,'') NOT IN ('_admin','_global','admin','system') AND COALESCE(slug,'') NOT IN ('_admin','_global','admin','system') ORDER BY nome COLLATE NOCASE").all()
+      const cfgs = porTenant(db.prepare('SELECT tenant_id, ia_config FROM store_config').all())
+      // Recebido pela conta geral (mp_source antigo sem valor = geral)
+      const NA_JANELA = "status='aprovado' AND datetime(COALESCE(paid_at, created_at)) >= datetime('now','-30 days')"
+      const geral = porTenant(db.prepare(`
+        SELECT tenant_id,
+          SUM(CASE WHEN status='aprovado' THEN 1 ELSE 0 END)     AS qtd_total,
+          SUM(CASE WHEN status='aprovado' THEN valor ELSE 0 END) AS valor_total,
+          SUM(CASE WHEN ${NA_JANELA} THEN 1 ELSE 0 END)          AS qtd_30d,
+          SUM(CASE WHEN ${NA_JANELA} THEN valor ELSE 0 END)      AS valor_30d,
+          SUM(CASE WHEN ${NA_JANELA} THEN taxa ELSE 0 END)       AS taxas_30d,
+          MAX(CASE WHEN status='aprovado' THEN datetime(COALESCE(paid_at, created_at)) END) AS ultimo
+        FROM pagamentos_pix WHERE COALESCE(mp_source,'global')='global' GROUP BY tenant_id`).all())
+      // Saldo ainda na carteira da loja: mesma conta de /api/carteira
+      const pixLiq = porTenant(db.prepare("SELECT tenant_id, COALESCE(SUM(valor_liquido),0) AS v FROM pagamentos_pix WHERE status='aprovado' GROUP BY tenant_id").all())
+      let cartao = {}
+      try { cartao = porTenant(db.prepare("SELECT tenant_id, COALESCE(SUM(valor),0) AS v FROM pagamentos_cartao WHERE status='aprovado' GROUP BY tenant_id").all()) } catch { /* tabela pode não existir em base antiga */ }
+      const sacado = porTenant(db.prepare("SELECT tenant_id, COALESCE(SUM(valor_liquido),0) AS v FROM saques WHERE status IN ('pendente','aprovado','pago') GROUP BY tenant_id").all())
+
+      const resumo = { usando_geral: 0, em_uso_30d: 0, conta_propria: 0, manual: 0, sem_pix: 0, qtd_30d: 0, valor_30d: 0, taxas_30d: 0, saldo_repassar: 0 }
+      const lojas = tenants.map(t => {
+        const ia = safeJson(cfgs[t.id]?.ia_config)
+        const temProprio     = !!limpa(ia.mp_token)
+        const definido       = Object.prototype.hasOwnProperty.call(ia, 'pix_ativo')
+        const temChaveManual = !!String(ia.pix_key_manual || '').trim()
+        // Mesma regra do cardápio (_aplicarPixCfg) e do bloqueio em /api/pix/criar:
+        // online ligado de propósito, ou nunca mexeu no botão e não tem chave manual.
+        const onlineLigado = (temProprio || geralConfigurado) && (ia.pix_ativo === true || (!definido && !temChaveManual))
+        const modo = onlineLigado ? (temProprio ? 'proprio' : 'geral') : (temChaveManual ? 'manual' : 'sem_pix')
+        const g = geral[t.id] || {}
+        const saldo = Math.max(0, (pixLiq[t.id]?.v || 0) + (cartao[t.id]?.v || 0) * (1 - 0.07) - (sacado[t.id]?.v || 0))
+        const linha = {
+          tenant_id: t.id, nome: t.nome || '', slug: t.slug || '', plano: t.plano || '', ativo: t.ativo !== 0,
+          modo, ligado_de_proposito: ia.pix_ativo === true,
+          qtd_30d: g.qtd_30d || 0, valor_30d: num(g.valor_30d), taxas_30d: num(g.taxas_30d),
+          qtd_total: g.qtd_total || 0, valor_total: num(g.valor_total),
+          ultimo_pagamento: g.ultimo || null, saldo_carteira: num(saldo)
+        }
+        if (modo === 'geral') resumo.usando_geral++
+        else if (modo === 'proprio') resumo.conta_propria++
+        else if (modo === 'manual') resumo.manual++
+        else resumo.sem_pix++
+        if (linha.qtd_30d > 0) resumo.em_uso_30d++
+        resumo.qtd_30d += linha.qtd_30d; resumo.valor_30d += linha.valor_30d
+        resumo.taxas_30d += linha.taxas_30d; resumo.saldo_repassar += linha.saldo_carteira
+        return linha
+      })
+      ;['valor_30d', 'taxas_30d', 'saldo_repassar'].forEach(k => { resumo[k] = num(resumo[k]) })
+      send(res, 200, { ok: true, geral_configurado: geralConfigurado, taxa_pix: taxaPix, resumo, lojas })
+    } catch (e) { log('❌', '/api/admin/pix-geral erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
   // ── Admin: toggle PIX por tenant ─────────────────────
   if (req.method === 'POST' && upath === '/api/admin/pix-toggle') {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
