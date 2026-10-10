@@ -1134,6 +1134,20 @@ input,textarea{font-family:inherit}
 .dtab.on{background:rgba(var(--accent-rgb,249,115,22),.12);border-color:var(--accent);color:var(--accent)}
 .dtab-icon{font-size:18px;display:block;margin-bottom:3px}
 
+/* agendamento com horário escolhido */
+.agh{margin:14px 0 2px}
+.agh-modos{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.agh-modo{background:var(--s2);border:1.5px solid var(--border);border-radius:10px;padding:10px 6px;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .18s}
+.agh-modo.on{background:rgba(var(--accent-rgb,249,115,22),.12);border-color:var(--accent);color:var(--accent)}
+.agh-modos.so-agendar{grid-template-columns:1fr}
+.agh-dias{display:flex;gap:6px;overflow-x:auto;margin:10px 0 8px;padding-bottom:2px;scrollbar-width:none}
+.agh-dias::-webkit-scrollbar{display:none}
+.agh-dia{flex-shrink:0;background:var(--s2);border:1.5px solid var(--border);border-radius:99px;padding:7px 13px;font:inherit;font-size:12px;font-weight:600;color:var(--text);cursor:pointer}
+.agh-dia.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.agh-hora{margin-bottom:6px}
+.agh-resumo{font-size:12px;color:var(--muted2);padding-left:2px}
+.agh-vazio{margin-top:10px;font-size:12px;color:var(--muted2);padding:10px 12px;border:1px dashed var(--border);border-radius:10px}
+
 /* itens do carrinho */
 .cart-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
 .ci{
@@ -3459,6 +3473,21 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3M8 10v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           Pedido mínimo para delivery: <strong id="cart-minimo-val" style="color:var(--text)"></strong>
         </div>
+
+        <!-- Agendamento com horário escolhido (aparece quando o gestor liga a opção) -->
+        <div id="agnd-horario-block" class="agh" style="display:none">
+          <div class="form-section-label" id="agh-titulo">Quando você quer receber?</div>
+          <div class="agh-modos" id="agh-modos">
+            <button type="button" class="agh-modo on" id="agh-asap" onclick="agEscolherModo('asap')">O quanto antes</button>
+            <button type="button" class="agh-modo" id="agh-agendar" onclick="agEscolherModo('agendar')">Agendar horário</button>
+          </div>
+          <div id="agh-escolha" style="display:none">
+            <div class="agh-dias" id="agh-dias"></div>
+            <select class="form-input agh-hora" id="agh-hora" onchange="agEscolherHora(this.value)" aria-label="Horário"></select>
+            <div class="agh-resumo" id="agh-resumo"></div>
+          </div>
+          <div class="agh-vazio" id="agh-vazio" style="display:none">Não há horários disponíveis para agendar nos próximos dias.</div>
+        </div>
         </div>
 
         <!-- itens -->
@@ -3977,7 +4006,7 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 // celular mais fraca. Os 12 arquivos-fonte continuam existindo, e
 // sempre que algum deles for editado, o bundle precisa ser regenerado
 // juntando eles de novo, na mesma ordem.
-document.write('<script src="/cardapio/cardapio-bundle.js?v=v3"><\/script>');
+document.write('<script src="/cardapio/cardapio-bundle.js?v=v4"><\/script>');
 </script>
 <canvas id="anim-particle-canvas"></canvas>
 <button id="im-close-fab" onclick="closeItemModal()" style="position:fixed;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.65);border:none;color:#fff;display:none;align-items:center;justify-content:center;z-index:600;cursor:pointer;backdrop-filter:blur(6px);box-shadow:0 2px 12px rgba(0,0,0,.4)">

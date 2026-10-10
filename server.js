@@ -1281,6 +1281,8 @@ const MIGRATIONS = [
     `ALTER TABLE estoque_movimentos ADD COLUMN prod_qty REAL DEFAULT 0`,
     `ALTER TABLE estoque_movimentos ADD COLUMN updated_at TEXT`
   ] },
+  { version:91, description:'agendamento com horário escolhido pelo cliente (liga/desliga, dias à frente, antecedência e intervalo)', up:
+    `ALTER TABLE store_config ADD COLUMN agendamento_config TEXT` },
 ]
 
 function runMigrations() {
@@ -2373,6 +2375,54 @@ function deliveryPausaAtiva(feeConfig, modalidade) {
   return true
 }
 
+// ── Agendamento com horário escolhido pelo cliente ─────────────────────
+// agendamento_config = { escolher_horario, dias, antecedencia, intervalo }
+//   escolher_horario: cliente escolhe dia e hora no carrinho (padrão: desligado)
+//   dias: até quantos dias à frente (0 = só hoje)
+//   antecedencia: minutos mínimos entre agora e o horário escolhido
+//   intervalo: de quantos em quantos minutos aparecem os horários
+function _agendamentoConfigServer(tenantId) {
+  const pad = { escolher_horario: false, dias: 2, antecedencia: 60, intervalo: 30 }
+  try {
+    const row = db.prepare('SELECT agendamento_config FROM store_config WHERE tenant_id=?').get(tenantId)
+    const c = row?.agendamento_config ? JSON.parse(row.agendamento_config) : {}
+    return {
+      escolher_horario: c.escolher_horario === true || c.escolher_horario === 1,
+      dias: Number.isFinite(+c.dias) ? Math.max(0, Math.min(30, Math.round(+c.dias))) : pad.dias,
+      antecedencia: Number.isFinite(+c.antecedencia) ? Math.max(0, Math.round(+c.antecedencia)) : pad.antecedencia,
+      intervalo: [15, 30, 60].includes(+c.intervalo) ? +c.intervalo : pad.intervalo,
+    }
+  } catch (e) { return pad }
+}
+
+// Confere se o horário escolhido cai dentro do funcionamento da loja e do
+// limite de dias. A antecedência mínima fica só no cardápio (que já nem
+// mostra horário perto demais); aqui só barra horário que já passou, pra
+// não recusar pedido legítimo por diferença de relógio do celular.
+function _validarHorarioAgendado(tenantId, iso, agCfg) {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return { ok: false, motivo: 'Horário de agendamento inválido.' }
+  if (d.getTime() < Date.now() - 10 * 60 * 1000) return { ok: false, motivo: 'Esse horário já passou. Escolha outro horário.' }
+  const pd = brasiliaParts(d), ph = brasiliaParts(new Date())
+  const diaAg = Date.UTC(+pd.year, +pd.month - 1, +pd.day)
+  const diaHoje = Date.UTC(+ph.year, +ph.month - 1, +ph.day)
+  if (Math.round((diaAg - diaHoje) / 86400000) > agCfg.dias) {
+    return { ok: false, motivo: 'Esse dia passa do limite de agendamento. Escolha um dia mais próximo.' }
+  }
+  try {
+    const cfg = db.prepare('SELECT horarios_config FROM store_config WHERE tenant_id=?').get(tenantId)
+    const horarios = cfg?.horarios_config ? JSON.parse(cfg.horarios_config) : null
+    if (!horarios || !Object.keys(horarios).length) return { ok: true }
+    const dias = ['dom','seg','ter','qua','qui','sex','sab']
+    const idx = new Date(diaAg).getUTCDay()
+    const minuto = (+pd.hour) * 60 + (+pd.minute)
+    const aberto = _horarioAbertoNoMinutoServer(horarios[dias[idx]], minuto, false)
+                || _horarioAbertoNoMinutoServer(horarios[dias[(idx + 6) % 7]], minuto, true)
+    if (!aberto) return { ok: false, motivo: 'A loja estará fechada nesse horário. Escolha outro horário.' }
+  } catch (e) { log('⚠️', 'validar horário agendado:', e.message) }
+  return { ok: true }
+}
+
 function isLojaAbertaServer(tenantId) {
   try {
     const cfg = db.prepare('SELECT store_open, horarios_config FROM store_config WHERE tenant_id=?').get(tenantId)
@@ -2464,7 +2514,7 @@ agendarResetDiarioPedidos()
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca','voz_ativo'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','pedido_minimo_retirada','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento','tablet_splash_bg_url','promo_automatica'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','pedido_minimo_retirada','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento','tablet_splash_bg_url','promo_automatica','agendamento_config'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','image_url','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','video_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','hide_price','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
@@ -2495,6 +2545,10 @@ const TABLE_COLS = {
   admin_alerts: ['id','tipo','titulo','mensagem','display_mode','bg_color','text_color','font_family','cta_label','cta_whatsapp','target_all','target_tenants','ativo','created_by','created_at','updated_at','expires_at'],
 }
 // Colunas que NUNCA aparecem na resposta GET — mas ainda funcionam como filtro WHERE e em escrita
+// Campos de pagamento dentro de store_config.ia_config que o upsert genérico
+// do painel nunca pode alterar (ver merge no POST de store_config).
+const CAMPOS_PAGAMENTO_IA = ['pix_ativo', 'pix_key_manual', 'pix_key_manual_tipo', 'pix_key_manual_banco', 'pag_online_ativo', 'cartao_online_ativo']
+
 const STRIP_FROM_OUTPUT = {
   sys_users:    new Set(['senha_hash']),
   garcons:      new Set(['senha']),
@@ -2524,7 +2578,7 @@ const JSON_FIELDS = {
   orders:       new Set(['items']),
   mesas:        new Set(['clientes_json','pagamentos_json']),
   menu_items:   new Set(['days','ingredients','custom_groups']),
-  store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega','stamp_config','promo_automatica']),
+  store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega','stamp_config','promo_automatica','agendamento_config']),
   admin_audit_log: new Set(['detalhes']),
   admin_alerts: new Set(['target_tenants']),
 }
@@ -3002,12 +3056,23 @@ async function handleREST(req, res, table, params, body) {
             }
           }
 
+          // Horário escolhido pelo cliente: precisa cair dentro do
+          // funcionamento da loja (ex.: loja que fecha 12h no sábado não
+          // aceita pedido agendado pra 16h do sábado).
+          const _agCfg = _agendamentoConfigServer(tenantId)
+          if (payload.scheduled_for && _agCfg.escolher_horario) {
+            const _vAg = _validarHorarioAgendado(tenantId, payload.scheduled_for, _agCfg)
+            if (!_vAg.ok) return send(res, 422, { error: _vAg.motivo })
+            payload.scheduled_for = new Date(payload.scheduled_for).toISOString()
+          }
+
           const _chk = isLojaAbertaServer(tenantId)
           if (!_chk.aberto) {
             // Loja fechada — mas se o cliente confirmou um pedido AGENDADO no
             // modal de loja fechada (scheduled_for preenchido) e o gestor não
-            // desativou esse recurso, deixa passar mesmo assim.
-            const ehAgendado = !!payload.scheduled_for && _permiteAgendamentoServer(tenantId)
+            // desativou esse recurso, deixa passar mesmo assim. Com a escolha
+            // de horário ligada, o agendamento também vale com a loja fechada.
+            const ehAgendado = !!payload.scheduled_for && (_permiteAgendamentoServer(tenantId) || _agCfg.escolher_horario)
             if (!ehAgendado) {
               return send(res, 503, { error: _chk.motivo || 'Loja fechada no momento.' })
             }
@@ -3183,6 +3248,16 @@ async function handleREST(req, res, table, params, body) {
                 if (!(campoSegredo in incoming) && atual[campoSegredo] !== undefined) {
                   incoming[campoSegredo] = atual[campoSegredo]
                 }
+              }
+              // Escolha de pagamento (PIX manual x online, chave manual, cartão)
+              // só muda pelas rotas próprias (/api/pix/gestor-config e admin).
+              // Aqui vale sempre o que está no banco: se o painel regravar o
+              // ia_config com uma cópia vazia ou antiga (ex.: a leitura falhou
+              // na hora de salvar o robô), a loja não perde o "Manual" nem a
+              // chave e não cai sozinha no PIX online da conta geral.
+              for (const campoPag of CAMPOS_PAGAMENTO_IA) {
+                if (atual[campoPag] !== undefined) incoming[campoPag] = atual[campoPag]
+                else delete incoming[campoPag]
               }
               payload.ia_config = JSON.stringify(incoming)
             }

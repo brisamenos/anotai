@@ -23,6 +23,7 @@
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
+const dns = require('dns')
 
 const PADRAO = require('./site-padrao.json')
 
@@ -322,6 +323,84 @@ function chaveEmail(email) {
   return local + '@' + dominio
 }
 
+// ── E-mail de verdade ───────────────────────────────────
+// O teste grátis só aceita e-mail de provedor real. Provedores conhecidos passam
+// direto; qualquer outro domínio precisa ter servidor de e-mail publicado (registro
+// MX no DNS). E-mail temporário/descartável e endereço de mentira não passam.
+const PROVEDORES_CONHECIDOS = new Set([
+  'gmail.com', 'googlemail.com',
+  'icloud.com', 'me.com', 'mac.com',
+  'outlook.com', 'outlook.com.br', 'hotmail.com', 'hotmail.com.br', 'live.com', 'live.com.br', 'msn.com',
+  'yahoo.com', 'yahoo.com.br', 'ymail.com', 'rocketmail.com',
+  'uol.com.br', 'bol.com.br', 'terra.com.br', 'ig.com.br', 'globo.com', 'globomail.com', 'r7.com', 'zipmail.com.br', 'oi.com.br',
+  'proton.me', 'protonmail.com', 'pm.me', 'aol.com', 'gmx.com', 'zoho.com'
+])
+const EMAIL_DESCARTAVEL = new Set([
+  'mailinator.com', 'yopmail.com', 'yopmail.net', 'yopmail.fr', 'guerrillamail.com', 'guerrillamail.net', 'guerrillamail.org', 'guerrillamail.biz',
+  'guerrillamail.de', 'sharklasers.com', 'grr.la', '10minutemail.com', '10minutemail.net', '20minutemail.com', 'tempmail.com', 'temp-mail.org',
+  'temp-mail.io', 'tempmailo.com', 'tempmail.net', 'tempail.com', 'tempr.email', 'tempinbox.com', 'throwawaymail.com', 'trashmail.com',
+  'trashmail.net', 'getnada.com', 'nada.email', 'maildrop.cc', 'dispostable.com', 'fakeinbox.com', 'fakemail.net', 'emailfake.com',
+  'mohmal.com', 'emailondeck.com', 'mintemail.com', 'mailnesia.com', 'moakt.com', 'tmpmail.org', 'tmpmail.net', '1secmail.com',
+  '1secmail.org', '1secmail.net', 'discard.email', 'spamgourmet.com', 'mytemp.email', 'burnermail.io', 'mailcatch.com', 'inboxkitten.com',
+  'minuteinbox.com', 'luxusmail.org', 'mail.tm', 'getairmail.com', 'spam4.me', 'mailsac.com', 'harakirimail.com', 'tempmailaddress.com',
+  'example.com', 'example.org', 'example.net', 'exemplo.com', 'exemplo.com.br', 'test.com', 'teste.com', 'teste.com.br', 'email.teste'
+])
+// Erros de digitação mais comuns: o cadastro mostra a correção em vez de aceitar um endereço que não existe.
+const DOMINIO_DIGITADO_ERRADO = {
+  'gmial.com': 'gmail.com', 'gmai.com': 'gmail.com', 'gmal.com': 'gmail.com', 'gmil.com': 'gmail.com', 'gamil.com': 'gmail.com', 'gnail.com': 'gmail.com',
+  'gemail.com': 'gmail.com', 'gmaill.com': 'gmail.com', 'gmail.co': 'gmail.com', 'gmail.con': 'gmail.com', 'gmail.cm': 'gmail.com', 'gmail.om': 'gmail.com',
+  'gmail.comm': 'gmail.com', 'gmail.com.br': 'gmail.com', 'gmail.cim': 'gmail.com', 'gmail.vom': 'gmail.com',
+  'hotmal.com': 'hotmail.com', 'hotmai.com': 'hotmail.com', 'hotmial.com': 'hotmail.com', 'hotmil.com': 'hotmail.com', 'hormail.com': 'hotmail.com',
+  'hotmaill.com': 'hotmail.com', 'hotmail.co': 'hotmail.com', 'hotmail.con': 'hotmail.com', 'hotmail.cm': 'hotmail.com',
+  'outlok.com': 'outlook.com', 'outloo.com': 'outlook.com', 'outllok.com': 'outlook.com', 'outlook.co': 'outlook.com', 'outlook.con': 'outlook.com',
+  'iclod.com': 'icloud.com', 'icoud.com': 'icloud.com', 'icloud.co': 'icloud.com', 'icloud.con': 'icloud.com', 'icloud.com.br': 'icloud.com',
+  'yaho.com': 'yahoo.com', 'yhoo.com': 'yahoo.com', 'yahoo.co': 'yahoo.com', 'yahoo.con': 'yahoo.com', 'yaho.com.br': 'yahoo.com.br'
+}
+const _mxGuardado = new Map() // domínio -> { r: 'sim' | 'nao', ate }
+
+// 'sim' = o domínio recebe e-mail, 'nao' = não existe ou não recebe, 'indefinido' = não deu para consultar agora
+async function dominioRecebeEmail(dominio) {
+  const g = _mxGuardado.get(dominio)
+  if (g && g.ate > Date.now()) return g.r
+  let relogio
+  const limite = new Promise(ok => { relogio = setTimeout(() => ok('indefinido'), 4000) })
+  const consulta = dns.promises.resolveMx(dominio)
+    .then(lista => (Array.isArray(lista) && lista.some(m => m && m.exchange && m.exchange !== '.')) ? 'sim' : 'nao')
+    .catch(e => (e && (e.code === 'ENOTFOUND' || e.code === 'ENODATA')) ? 'nao' : 'indefinido')
+  const r = await Promise.race([consulta, limite])
+  clearTimeout(relogio)
+  if (r !== 'indefinido') {
+    if (_mxGuardado.size > 2000) _mxGuardado.clear()
+    _mxGuardado.set(dominio, { r, ate: Date.now() + (r === 'sim' ? 6 : 1) * 3600 * 1000 })
+  }
+  return r
+}
+
+// Devolve null quando o e-mail serve, ou { error, sugestao? } explicando por que não serve.
+async function conferirProvedorEmail(email) {
+  const s = String(email || '').trim().toLowerCase()
+  const i = s.lastIndexOf('@')
+  const local = s.slice(0, i), dominio = s.slice(i + 1)
+  const certo = DOMINIO_DIGITADO_ERRADO[dominio]
+  if (certo) {
+    const sugestao = local + '@' + certo
+    return { error: `Confira o e-mail. Você quis dizer ${sugestao}?`, sugestao }
+  }
+  if (EMAIL_DESCARTAVEL.has(dominio) || [...EMAIL_DESCARTAVEL].some(d => dominio.endsWith('.' + d))) {
+    return { error: 'Use um e-mail de verdade, como Gmail, Outlook ou iCloud. E-mail temporário não é aceito.' }
+  }
+  if (dominio === 'gmail.com' || dominio === 'googlemail.com') {
+    // o Gmail só tem endereços com 6 a 30 letras, números ou pontos antes do @
+    const nome = local.split('+')[0]
+    if (!/^[a-z0-9.]{6,30}$/.test(nome) || /^\.|\.$|\.\./.test(nome)) return { error: 'Este endereço do Gmail não existe. Confira o que vem antes do @.' }
+  }
+  if (PROVEDORES_CONHECIDOS.has(dominio)) return null
+  const mx = await dominioRecebeEmail(dominio)
+  if (mx === 'sim') return null
+  if (mx === 'nao') return { error: `Não encontramos o provedor deste e-mail (@${dominio}). Confira o endereço ou use Gmail, Outlook ou iCloud.` }
+  return { error: 'Não foi possível conferir este e-mail agora. Tente de novo em instantes ou use Gmail, Outlook ou iCloud.' }
+}
+
 // O teste grátis é sempre com e-mail novo. Devolve por que o e-mail não serve:
 //   'conta' — já existe uma conta com ele (cliente ou teste em andamento)
 //   'teste' — já fez teste antes, mesmo que o teste tenha vencido ou a conta tenha sido apagada
@@ -490,6 +569,8 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
       if (usado === 'teste') {
         send(res, 409, { error: 'Este e-mail já foi usado em um teste grátis. Use outro e-mail ou fale com a gente pelo WhatsApp.', campo: 'email' }); return true
       }
+      const provedor = await conferirProvedorEmail(email)
+      if (provedor) { send(res, 400, { error: provedor.error, campo: 'email', sugestao: provedor.sugestao }); return true }
       if (db.prepare("SELECT id FROM testes_gratis WHERE telefone=? AND status='ativo'").get(telefone)) {
         send(res, 409, { error: 'Já existe um teste em andamento com este WhatsApp.', campo: 'telefone', login_url: gestorUrl(cfg) }); return true
       }
@@ -717,4 +798,4 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
   return true
 }
 
-module.exports = { init, api, processarMensagens }
+module.exports = { init, api, processarMensagens, _internals: { chaveEmail, conferirProvedorEmail, dominioRecebeEmail } }

@@ -6307,6 +6307,54 @@ Use no seu próximo pedido.</textarea>
     </div>
   </div>
 
+  <!-- Agendamento com horário escolhido pelo cliente -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div>
+        <div style="font-size:13px;font-weight:700">Cliente escolhe o horário do pedido</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">No carrinho, o cliente pode pedir "o quanto antes" ou agendar o dia e o horário em que quer receber ou retirar. Só aparecem horários em que a loja está aberta, conforme os horários de funcionamento.</div>
+      </div>
+      <label style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0">
+        <input type="checkbox" id="cp-ag-escolher" onchange="cpToggleAgEscolher(this.checked)" style="opacity:0;width:0;height:0">
+        <span style="position:absolute;cursor:pointer;inset:0;background:var(--surface2);border:1px solid var(--border);border-radius:99px;transition:.2s" id="cp-ag-escolher-track">
+          <span style="position:absolute;width:18px;height:18px;left:2px;bottom:2px;background:var(--muted);border-radius:50%;transition:.2s" id="cp-ag-escolher-thumb"></span>
+        </span>
+      </label>
+    </div>
+    <div id="cp-ag-opcoes" style="display:none;margin-top:14px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+      <div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:5px">Agendar até</div>
+        <select class="form-input" id="cp-ag-dias" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none">
+          <option value="0">Só para hoje</option>
+          <option value="1">Até amanhã</option>
+          <option value="2">Até 2 dias</option>
+          <option value="3">Até 3 dias</option>
+          <option value="7">Até 7 dias</option>
+          <option value="15">Até 15 dias</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:5px">Antecedência mínima</div>
+        <select class="form-input" id="cp-ag-antecedencia" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none">
+          <option value="30">30 minutos</option>
+          <option value="60">1 hora</option>
+          <option value="90">1 hora e meia</option>
+          <option value="120">2 horas</option>
+          <option value="180">3 horas</option>
+          <option value="1440">1 dia</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:5px">Horários de</div>
+        <select class="form-input" id="cp-ag-intervalo" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none">
+          <option value="15">15 em 15 minutos</option>
+          <option value="30">30 em 30 minutos</option>
+          <option value="60">1 em 1 hora</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
   <!-- Cardápio de Mesa/Tablet — portal de boas-vindas -->
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
     <div style="font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:7px">

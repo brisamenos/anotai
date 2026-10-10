@@ -1,3 +1,36 @@
+// Texto do selo de pedido agendado: "Agendado: entregar hoje às 16:00 (em 40 min)"
+function _agendadoTexto(o) {
+  if (!o || !o.scheduled_for) return '';
+  const d = new Date(o.scheduled_for);
+  if (isNaN(d)) return '';
+  const tz = 'America/Sao_Paulo';
+  const dia = x => x.toLocaleDateString('en-CA', { timeZone: tz });
+  const hoje = new Date();
+  const amanha = new Date(hoje.getTime() + 86400000);
+  const hora = d.toLocaleTimeString('pt-BR', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
+  let quando;
+  if (dia(d) === dia(hoje)) quando = 'hoje';
+  else if (dia(d) === dia(amanha)) quando = 'amanhã';
+  else quando = d.toLocaleDateString('pt-BR', { timeZone: tz, weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', '');
+  const tipo = o._tipoAg || (window._detectOrderType ? window._detectOrderType(o) : 'delivery');
+  const acao = tipo === 'balcao' ? 'retirar' : tipo === 'mesa' ? 'servir' : 'entregar';
+  const faltam = Math.round((d.getTime() - Date.now()) / 60000);
+  let extra = '';
+  if (faltam > 0 && faltam <= 120) extra = faltam < 60 ? ' (em ' + faltam + ' min)' : ' (em ' + Math.floor(faltam / 60) + 'h' + String(faltam % 60).padStart(2, '0') + ')';
+  else if (faltam <= 0 && faltam > -180) extra = ' (horário chegou)';
+  return 'Agendado: ' + acao + ' ' + quando + ' às ' + hora + extra;
+}
+
+// Atualiza o "(em X min)" dos selos a cada minuto, sem redesenhar o Kanban
+setInterval(() => {
+  try {
+    document.querySelectorAll('.oc-agendado-badge[data-ag]').forEach(el => {
+      const span = el.querySelector('.oc-ag-txt');
+      if (span) span.textContent = _agendadoTexto({ scheduled_for: el.dataset.ag, _tipoAg: el.dataset.agTipo });
+    });
+  } catch(e) {}
+}, 60000);
+
 // Escapa texto que vem do cliente (nome, endereço, observação) antes de
 // colocar dentro de innerHTML — sem isso, alguém podia digitar um "nome"
 // que na real é um pedaço de código e ele rodaria dentro da tela do
@@ -456,7 +489,7 @@ function renderKanban() {
         // Selo de pedido agendado — mostrado quando a loja estava fechada e
         // o cliente confirmou o pedido pra ser feito na próxima abertura.
         const _agendadoBadge = o.scheduled_for
-          ? '<div class="oc-agendado-badge">🕐 Agendado para ' + new Date(o.scheduled_for).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) + '</div>'
+          ? '<div class="oc-agendado-badge" data-ag="' + _escHtml(o.scheduled_for) + '" data-ag-tipo="' + _tipo + '"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3l2 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span class="oc-ag-txt">' + _escHtml(_agendadoTexto(o)) + '</span></div>'
           : '';
 
         // Selo de pedido feito pelo totem fixo na mesa (totem.html) —
@@ -904,7 +937,7 @@ function openOrderDetail(id) {
   if (agBadgeEl) {
     if (o.scheduled_for) {
       agBadgeEl.style.display = 'flex';
-      agBadgeEl.textContent = '🕐 Agendado para ' + new Date(o.scheduled_for).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      agBadgeEl.textContent = _agendadoTexto(o);
     } else {
       agBadgeEl.style.display = 'none';
     }

@@ -152,6 +152,14 @@ function buildOrderTrackingMessage(options) {
   else if (troco < 0) lines.push('Troco: cliente solicitou troco')
 
   lines.push('', `*${delivery.title}*`, delivery.detail)
+  if (order.scheduled_for) {
+    const ag = new Date(order.scheduled_for)
+    if (!isNaN(ag)) {
+      const dia = ag.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: '2-digit' })
+      const hora = ag.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })
+      lines.push(`*Agendado para:* ${dia} às ${hora}`)
+    }
+  }
   if (includeTrackingNote) {
     lines.push('', '_📲 Vou te avisar por aqui a cada novidade do seu pedido!_')
   }

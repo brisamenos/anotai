@@ -6536,6 +6536,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         delete ia.mp_public_key
         log('⚙️', `MP gestor LIMPO tenant=${tid}`)
       } else {
+        let _mpTokenNovo = false, _mpPkNovo = false
         // Validação básica do formato (token MP começa com APP_USR ou TEST)
         if (mp_token !== undefined) {
           // Sanitização agressiva: remove aspas, espaços, quebras de linha invisíveis,
@@ -6587,6 +6588,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
               log('⚠️', `MP gestor tenant=${tid} validação online falhou (rede?):`, testErr.message)
             }
             ia.mp_token = tk
+            _mpTokenNovo = true
           }
         }
         if (mp_public_key !== undefined) {
@@ -6599,13 +6601,17 @@ module.exports = async function handleRoutes(req, res, ctx) {
               return true
             }
             ia.mp_public_key = pk
+            _mpPkNovo = true
           }
         }
         // Auto-ativa PIX/cartão quando o gestor salva MP próprio.
         // Faz sentido: ele só configurou MP próprio porque quer receber online.
         // Antes ele tinha que ir em "Pagamentos Online" e ativar manualmente —
         // resultado era PIX não aparecer no cardápio mesmo com MP configurado.
-        if (ia.mp_token) {
+        // Só quando um token NOVO foi salvo agora: salvar de novo só a public
+        // key (ou reenviar o mesmo formulário) não pode tirar a loja do PIX
+        // manual que ela escolheu depois.
+        if (ia.mp_token && _mpTokenNovo) {
           ia.pix_ativo = true
           // Cartão só faz sentido se tem public key
           if (ia.mp_public_key) {
@@ -6614,6 +6620,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           // Garante que pagamento online geral está ligado
           ia.pag_online_ativo = true
         }
+        else if (ia.mp_token && _mpPkNovo) { ia.cartao_online_ativo = true }
         log('⚙️', `MP gestor SALVO tenant=${tid} token=${ia.mp_token ? 'sim' : 'não'} pk=${ia.mp_public_key ? 'sim' : 'não'} pix_ativo=${ia.pix_ativo}`)
       }
 

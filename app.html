@@ -1959,7 +1959,8 @@ async function salvarIA() {
   const ativo = document.getElementById('ia-toggle').classList.contains('on');
   const persona = document.getElementById('ia-persona').value;
   const nome = document.getElementById('ia-nome').value.trim();
-  const { data } = await sb.from('store_config').select('ia_config').single();
+  const { data, error: erroLeitura } = await sb.from('store_config').select('ia_config').single();
+  if (erroLeitura || !data) { toast('Não foi possível ler a configuração atual. Tente de novo.', 'err'); return; }
   let ia = {};
   try { ia = data?.ia_config ? JSON.parse(data.ia_config) : {}; } catch {}
   ia.ativo = ativo; ia.persona = persona;

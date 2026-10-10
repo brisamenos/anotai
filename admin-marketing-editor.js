@@ -730,7 +730,6 @@
       </div>
       <div class="ed-fld"><label class="form-label">Esperar antes de responder a mesma pessoa de novo (segundos)</label>${inp('opcoes.cooldown', o.cooldown, '30', 'type="number" min="0"')}</div>
       <label class="ed-check"><input type="checkbox" data-k="opcoes.ignorar_pausa" ${o.ignorar_pausa ? 'checked' : ''} onchange="MKED.in(this)"> <span>Responder mesmo quando eu assumi a conversa pelo celular</span></label>
-      <label class="ed-check"><input type="checkbox" data-k="opcoes.aceita_meu_envio" ${o.aceita_meu_envio ? 'checked' : ''} onchange="MKED.in(this)"> <span>Também disparar quando <b>eu</b> digitar a palavra na conversa (só palavra exata; envia o fluxo ao cliente daquela conversa)</span></label>
       <label class="ed-check"><input type="checkbox" data-k="opcoes.pausar_robo" ${o.pausar_robo ? 'checked' : ''} onchange="MKED.in(this)"> <span>Pausar o robô de atendimento nessa conversa ao terminar</span></label>` : '';
     return palavras + `<label class="ed-check"><input type="checkbox" data-k="opcoes.presenca" ${o.presenca !== false ? 'checked' : ''} onchange="MKED.in(this)"> <span>Simular "digitando..." e "gravando áudio..." antes de cada mensagem</span></label>`;
   }

@@ -638,6 +638,65 @@ function definirAtivo(id, ativo) {
   return obterFluxo(id)
 }
 
+// Problemas do conteúdo do fluxo (mensagens e ligações), sem contar a falta de palavra-chave:
+// a forma de começar é resolvida no painel, no diálogo "Como este fluxo começa".
+const pendenciasConteudo = f => problemas({ ...f, gatilho: { ...f.gatilho, tipo: 'manual' } })
+
+// Define de uma vez como o fluxo começa (palavra-chave, primeira mensagem de quem não é
+// cliente, opção do menu do robô) e liga ou desliga o fluxo. Só mexe no gatilho e nas duas
+// configurações: as mensagens do fluxo não são tocadas.
+function definirInicio(id, b) {
+  const f = obterFluxo(id)
+  if (!f) throw new Error('Fluxo não encontrado')
+  const g = { ...f.gatilho }
+  if (b?.palavra && typeof b.palavra === 'object') {
+    const p = b.palavra
+    if (p.palavras !== undefined) {
+      g.palavras = [...new Set((Array.isArray(p.palavras) ? p.palavras : String(p.palavras || '').split(/[\n,;]+/)).map(x => str(x, 60)).filter(Boolean))].slice(0, 30)
+    }
+    if (['contem', 'exata', 'inicia'].includes(p.modo)) g.modo = p.modo
+    if (['todos', 'clientes', 'nao_clientes'].includes(p.publico)) g.publico = p.publico
+    g.tipo = p.on ? 'palavra' : 'manual'
+  }
+  const ligar = b?.ligar !== false
+  const nc = lerConfigNaoCliente(), mr = lerMenuRobo()
+  const querNc = b?.nao_cliente === undefined ? (nc.modo === 'fluxo' && nc.fluxo === id) : !!b.nao_cliente
+  const querMenu = b?.menu === undefined ? mr.fluxo === id : !!b.menu?.on
+  if (ligar) {
+    if (g.tipo === 'palavra' && !(g.palavras || []).length) throw new Error('Escreva pelo menos uma palavra-chave')
+    if (g.tipo !== 'palavra' && !querNc && !querMenu) throw new Error('Escolha pelo menos uma forma de este fluxo começar')
+    const erros = problemas({ ...f, gatilho: g })
+    if (erros.length) throw new Error('Não dá para ligar: ' + erros.join('; '))
+  }
+  D.db.transaction(() => {
+    D.db.prepare("UPDATE mkt_flows SET gatilho=?, ativo=?, updated_at=datetime('now') WHERE id=?").run(JSON.stringify(g), ligar ? 1 : 0, id)
+    invalidar()
+    if (b?.nao_cliente !== undefined) {
+      if (querNc && ligar) salvarConfigNaoCliente({ modo: 'fluxo', fluxo: id })
+      else if (!querNc && nc.modo === 'fluxo' && nc.fluxo === id) salvarConfigNaoCliente({ modo: 'menu' })
+    }
+    if (!ligar) return
+    if (b?.menu !== undefined) {
+      if (querMenu) salvarMenuRobo({ fluxo: id, titulo: b.menu?.titulo, descricao: b.menu?.descricao })
+      else if (mr.fluxo === id) salvarMenuRobo({ fluxo: null })
+    }
+  })()
+  invalidar()
+  return obterFluxo(id)
+}
+
+// Deixa o fluxo pronto para ser usado na primeira mensagem ou no menu do robô: liga se
+// estiver desligado. Fluxo por palavra-chave sem nenhuma palavra passa a não depender dela.
+function ligarParaUso(id) {
+  const f = id ? obterFluxo(id) : null
+  if (!f) return
+  if (f.gatilho.tipo === 'palavra' && !f.gatilho.palavras.length) {
+    D.db.prepare("UPDATE mkt_flows SET gatilho=?, updated_at=datetime('now') WHERE id=?").run(JSON.stringify({ ...f.gatilho, tipo: 'manual' }), id)
+    invalidar()
+  }
+  if (!f.ativo) definirAtivo(id, true)
+}
+
 function duplicarFluxo(id) {
   const f = obterFluxo(id)
   if (!f) throw new Error('Fluxo não encontrado')
@@ -1172,11 +1231,12 @@ function onMessage(m, { fromMe = false } = {}) {
       escolhido = ativos.find(f => f.id === Number(dir[1])) || null
       if (!escolhido) return false
     } else {
-      escolhido = ativos.find(f => casaGatilho(f, texto, fromMe) && (!fromMe || f.opcoes?.aceita_meu_envio)) || null
+      // A palavra-chave vale para quem enviar: o cliente, ou você mesmo digitando só a palavra na conversa
+      escolhido = ativos.find(f => casaGatilho(f, texto, fromMe)) || null
     }
     if (!escolhido) return false
 
-    if (!dir) {
+    if (!dir && !fromMe) {
       let tenant = null
       try { tenant = D.bot.tenantByPhone(tel) } catch {}
       const pub = escolhido.gatilho.publico
@@ -1184,6 +1244,8 @@ function onMessage(m, { fromMe = false } = {}) {
       if (pub === 'nao_clientes' && tenant) return false
     }
     if (m.paused && !escolhido.opcoes?.ignorar_pausa) return false
+    // Foi você quem mandou o fluxo: a conversa deixa de estar em pausa, para os botões dele responderem
+    if (fromMe) { try { D.bot.despausar?.(tel) } catch {} }
 
     const chave = `${escolhido.id}:${tel}`
     const cd = (escolhido.opcoes?.cooldown || 0) * 1000
@@ -1481,12 +1543,17 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
     }
     if (met === 'POST' && sub === '/config') {
       const body = await readBody(req)
+      // "ligar": o painel pede para já ligar o fluxo escolhido, em vez de só avisar que está desligado
+      if (body?.ligar) {
+        if (body?.nao_cliente?.modo === 'fluxo') ligarParaUso(parseInt(body.nao_cliente.fluxo, 10) || 0)
+        if (body?.menu_robo?.fluxo) ligarParaUso(parseInt(body.menu_robo.fluxo, 10) || 0)
+      }
       if (body?.nao_cliente) salvarConfigNaoCliente(body.nao_cliente)
       if (body?.menu_robo) salvarMenuRobo(body.menu_robo)
       send(res, 200, { ok: true, nao_cliente: situacaoNaoCliente(), menu_robo: situacaoMenuRobo() }); return true
     }
     if (met === 'GET' && sub === '/fluxos') {
-      send(res, 200, { fluxos: listarFluxos() }); return true
+      send(res, 200, { fluxos: listarFluxos().map(f => ({ ...f, pendencias: pendenciasConteudo(f) })) }); return true
     }
     if (met === 'POST' && sub === '/fluxos') {
       const body = await readBody(req)
@@ -1494,6 +1561,11 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
     }
     if ((m = /^\/fluxos\/(\d+)\/(ativar|desativar)$/.exec(sub)) && met === 'POST') {
       send(res, 200, { ok: true, fluxo: definirAtivo(Number(m[1]), m[2] === 'ativar') }); return true
+    }
+    if ((m = /^\/fluxos\/(\d+)\/inicio$/.exec(sub)) && met === 'POST') {
+      const body = await readBody(req)
+      const fluxo = definirInicio(Number(m[1]), body || {})
+      send(res, 200, { ok: true, fluxo: { ...fluxo, pendencias: pendenciasConteudo(fluxo) }, nao_cliente: situacaoNaoCliente(), menu_robo: situacaoMenuRobo() }); return true
     }
     if ((m = /^\/fluxos\/(\d+)\/duplicar$/.exec(sub)) && met === 'POST') {
       send(res, 200, { ok: true, fluxo: duplicarFluxo(Number(m[1])) }); return true
@@ -1572,5 +1644,5 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
 module.exports = {
   init, api, onMessage, naoCliente, atalhoMenu,
   // uteis para testes
-  _internals: { varrerTimeouts, sanitizarFluxo, sanitizarGrafo, passosParaGrafo, portasDe, problemas, casaGatilho, aplicarVars, norm, contatosDoPublico, executarFluxo, obterFluxo, salvarFluxo, criarDisparo, iniciarWorker, salvarMidia, definirAtivo, lerConfigNaoCliente, salvarConfigNaoCliente, situacaoNaoCliente, salvarMenuRobo, situacaoMenuRobo }
+  _internals: { definirInicio, ligarParaUso, varrerTimeouts, sanitizarFluxo, sanitizarGrafo, passosParaGrafo, portasDe, problemas, casaGatilho, aplicarVars, norm, contatosDoPublico, executarFluxo, obterFluxo, salvarFluxo, criarDisparo, iniciarWorker, salvarMidia, definirAtivo, lerConfigNaoCliente, salvarConfigNaoCliente, situacaoNaoCliente, salvarMenuRobo, situacaoMenuRobo }
 }

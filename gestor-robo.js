@@ -746,9 +746,14 @@ async function iaSalvarConfig() {
   // Gestor só salva os tópicos e textos — preserva key/modelo do admin
   let iaAtual = {};
   try {
-    const { data } = await sb.from('store_config').select('ia_config').single();
+    const { data, error } = await sb.from('store_config').select('ia_config').single();
+    if (error || !data) throw new Error(error?.message || 'sem resposta');
     iaAtual = data?.ia_config ? JSON.parse(data.ia_config) : {};
-  } catch(e) {}
+  } catch(e) {
+    // Sem a configuração atual, salvar aqui apagaria o resto (PIX manual, chave etc.)
+    sbToast('err', 'Não foi possível ler a configuração atual. Verifique a conexão e tente salvar de novo.');
+    return;
+  }
 
   const ia = {
     ...iaAtual, // preserva openai_key, modelo, prompt_base, quebra_linha, buffer_seg, pausa_min
@@ -1075,7 +1080,7 @@ let _cpBanners   = []; // [{type:'image'|'video', url}] — até 5, formam slide
 
 async function loadCardapioPublico() {
   const { data } = await sb.from('store_config').select(
-    'store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,pedido_minimo_retirada,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config,pickup_addresses,mostrar_indicacao_preparo,permitir_agendamento'
+    'store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,pedido_minimo_retirada,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config,pickup_addresses,mostrar_indicacao_preparo,permitir_agendamento,agendamento_config'
   ).single();
   if (!data) return;
 
@@ -1150,6 +1155,19 @@ async function loadCardapioPublico() {
   const agendamentoOn = data.permitir_agendamento !== 0 && data.permitir_agendamento !== false;
   const agendamentoEl = document.getElementById('cp-permitir-agendamento');
   if (agendamentoEl) { agendamentoEl.checked = agendamentoOn; cpToggleAgendamento(agendamentoOn); }
+  // Agendamento com horário escolhido pelo cliente (desligado por padrão)
+  try {
+    let ag = data.agendamento_config;
+    if (typeof ag === 'string') { try { ag = JSON.parse(ag); } catch(e) { ag = null; } }
+    ag = (ag && typeof ag === 'object') ? ag : {};
+    const agOn = ag.escolher_horario === true || ag.escolher_horario === 1;
+    const agEl = document.getElementById('cp-ag-escolher');
+    if (agEl) { agEl.checked = agOn; cpToggleAgEscolher(agOn); }
+    const setSel = (id, v, pad) => { const el = document.getElementById(id); if (!el) return; el.value = String(v ?? pad); if (el.value === '') el.value = String(pad); };
+    setSel('cp-ag-dias', ag.dias, 2);
+    setSel('cp-ag-antecedencia', ag.antecedencia, 60);
+    setSel('cp-ag-intervalo', ag.intervalo, 30);
+  } catch(e) {}
   // Oculta opção de carrossel se for açougue (já usa por padrão)
   // Busca segmento direto para não depender de window._segmento que pode não ter carregado
   const catsWrap = document.getElementById('cp-cats-modo-wrap');
@@ -1494,6 +1512,15 @@ function cpToggleMinimoRetirada(on) {
   if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
 }
 
+function cpToggleAgEscolher(on) {
+  const track = document.getElementById('cp-ag-escolher-track');
+  const thumb = document.getElementById('cp-ag-escolher-thumb');
+  if (track) track.style.background = on ? 'var(--accent)' : 'var(--surface2)';
+  if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
+  const op = document.getElementById('cp-ag-opcoes');
+  if (op) op.style.display = on ? 'grid' : 'none';
+}
+
 function cpToggleAgendamento(on) {
   const track = document.getElementById('cp-permitir-agendamento-track');
   const thumb = document.getElementById('cp-permitir-agendamento-thumb');
@@ -1758,6 +1785,12 @@ async function salvarCardapioPublico() {
       cats_carrossel:      document.getElementById('cp-cats-carrossel')?.checked ? 1 : 0,
       mostrar_indicacao_preparo: document.getElementById('cp-indicacao-preparo')?.checked ? 1 : 0,
       permitir_agendamento: document.getElementById('cp-permitir-agendamento')?.checked ? 1 : 0,
+      agendamento_config:  JSON.stringify({
+        escolher_horario: !!document.getElementById('cp-ag-escolher')?.checked,
+        dias:         parseInt(document.getElementById('cp-ag-dias')?.value, 10) || 0,
+        antecedencia: parseInt(document.getElementById('cp-ag-antecedencia')?.value, 10) || 0,
+        intervalo:    parseInt(document.getElementById('cp-ag-intervalo')?.value, 10) || 30,
+      }),
       horarios_config:     JSON.stringify(cpGetHorarios()),
       pedido_minimo:       parseFloat(document.getElementById('cp-pedido-minimo')?.value) || 0,
       pedido_minimo_retirada: document.getElementById('cp-pedido-minimo-retirada')?.checked ? 1 : 0,

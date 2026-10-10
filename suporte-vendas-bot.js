@@ -927,6 +927,7 @@ module.exports = {
   wuzToken,
   rememberSent,
   pausar: pause,
+  despausar: phone => { try { D._pausaHumano.delete(pauseKey(phone)) } catch {} },
   notificar: notifyAtendente,
   tenantByPhone,
   config: cfg,

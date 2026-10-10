@@ -250,6 +250,7 @@ function conectarSaquesSSE() {
 // ════════════════════════════════════════════════════
 
 let _pixOnlineAtivo    = false;
+let _pixCfgCarregada   = false; // evita ligar o online clicando antes de carregar o estado real
 let _cartaoOnlineAtivo = false; // false até o admin configurar a public key
 
 function _renderPixOnlineToggle(ativo) {
@@ -317,8 +318,14 @@ async function carregarConfigPixGestor() {
     const r = await fetch('/api/pix/config', { headers: { 'x-tenant-id': tid } });
     if (!r.ok) return;
     const d = await r.json();
-    // PIX
-    _renderPixOnlineToggle(d.pix_ativo !== false);
+    // PIX: mostra o que o cardápio realmente usa. Loja que nunca escolheu
+    // (sem "Manual" salvo e sem chave manual) cai no PIX online da conta
+    // configurada; antes o painel mostrava "Desligado" nesse caso.
+    const _temChaveManualG = !!(d.pix_key_manual && String(d.pix_key_manual).trim());
+    const _pixOnlineEfetivo = d.pix_ativo === true
+      || (d.pix_ativo_definido !== true && d.mp_configurado === true && !_temChaveManualG);
+    _renderPixOnlineToggle(_pixOnlineEfetivo);
+    _pixCfgCarregada = true;
     // Preenche campos da chave manual se existirem
     const keyEl  = document.getElementById('pix-manual-key-input');
     const tipoEl = document.getElementById('pix-manual-tipo-select');
@@ -329,13 +336,14 @@ async function carregarConfigPixGestor() {
     const cartaoAtivo      = d.cartao_online_ativo !== false && cartaoDisponivel;
     _renderCartaoOnlineToggle(cartaoAtivo, cartaoDisponivel);
     // Mantém _pixAtivoGestor sincronizado (usado no fluxo PIX do cardápio)
-    _pixAtivoGestor = d.pix_ativo !== false;
+    _pixAtivoGestor = _pixOnlineEfetivo;
   } catch(e) {}
 }
 
 async function togglePixOnline() {
   const tid = _sessao?.tenant_id;
   if (!tid) return;
+  if (!_pixCfgCarregada) { await carregarConfigPixGestor(); if (!_pixCfgCarregada) { sbToast('err', 'Não foi possível carregar a configuração do PIX. Tente de novo.'); return; } }
   const btn = document.getElementById('btn-pix-online-toggle');
   if (btn) btn.disabled = true;
   try {

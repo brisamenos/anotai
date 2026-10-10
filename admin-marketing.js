@@ -127,6 +127,36 @@
 .mk-alert.erro{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.08)}
 .mk-imp-prog{margin-top:12px;font-size:12.5px;color:var(--text-2)}
 .mk-imp-prog .mk-bar{margin-top:7px;min-width:0}
+.mk-lista-t{font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:15px;margin:4px 0 12px;display:flex;align-items:baseline;gap:10px}
+.mk-lista-t span{font-family:inherit;font-weight:600;font-size:12px;color:var(--muted)}
+.mk-estado{display:inline-block;margin-top:6px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid var(--border);background:var(--s2);color:var(--muted)}
+.mk-estado.on{color:var(--success);border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.1)}
+.mk-estado.av{color:var(--orange);border-color:rgba(249,115,22,.4);background:rgba(249,115,22,.1)}
+.mk-estado.inc{color:var(--danger);border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.1)}
+.mk-como{background:var(--s2);border:1px solid var(--border);border-radius:11px;padding:11px 12px}
+.mk-como-t{display:block;font-size:10.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+.mk-linha{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.45;color:var(--text);margin:5px 0;word-break:break-word}
+.mk-linha b{font-weight:700}
+.mk-linha svg,.mk-rota-t svg,.mk-op-t svg{width:16px;height:16px;flex:none;fill:none;stroke:var(--accent);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;margin-top:1px}
+.mk-linha.vazio{color:var(--text-2)}.mk-linha.erro{color:var(--danger)}
+.mk-flow.off .mk-linha svg{stroke:var(--muted)}
+.mk-links{display:flex;gap:14px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:9px}
+.mk-links button{background:none;border:0;padding:0;font:inherit;font-size:12px;font-weight:600;color:var(--text-2);cursor:pointer}
+.mk-links button:hover{color:var(--text);text-decoration:underline}.mk-links button.del:hover{color:var(--danger)}
+.mk-rotas{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px}
+.mk-rota{background:var(--s2);border:1px solid var(--border);border-radius:11px;padding:12px;min-width:0}
+.mk-rota-t{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;font-weight:700;margin-bottom:8px;line-height:1.35}
+.mk-rota-num{font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:15px;margin-bottom:2px}
+.mk-rota .form-hint{margin-top:6px}.mk-vai{color:var(--orange)!important}
+.mk-pal-pe{display:flex;gap:8px;margin-top:10px}
+.mk-av{margin-top:18px;border:1px solid var(--border);border-radius:14px;background:var(--s1);padding:12px 16px}
+.mk-av summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--text-2)}
+.mk-av[open] summary{margin-bottom:4px;color:var(--text)}
+.mk-op{border:1px solid var(--border);border-radius:11px;padding:11px 12px;margin-bottom:9px;background:var(--s2)}
+.mk-op-t{display:flex;gap:9px;align-items:flex-start;cursor:pointer;font-size:13px;font-weight:700;line-height:1.4}
+.mk-op-t input{margin-top:3px;flex:none}.mk-op-t span{display:flex;gap:7px;align-items:flex-start}
+.mk-op-h{margin:4px 0 0 24px}.mk-op-c{margin:10px 0 0 24px}
+@media(max-width:600px){.mk-op-h,.mk-op-c{margin-left:0}}
 `;
     document.head.appendChild(st);
   }
@@ -217,167 +247,157 @@
 
   const TIPO_NOME = { texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', audio: 'Áudio', documento: 'Documento', botoes: 'Botões', lista: 'Lista', carrossel: 'Carrossel', espera: 'Espera', aguardar: 'Aguardar', condicao: 'Condição', definir_var: 'Variável', notificar: 'Notificar', pausar_robo: 'Pausar robô', chamar_fluxo: 'Outro fluxo' };
 
+  // ── Lista de fluxos: palavra-chave e liga/desliga direto no cartão ──
+  // Regra única: fluxo ligado + palavra-chave = dispara, seja o cliente ou você quem enviou a
+  // palavra. A caixa "primeira mensagem" é a única escolha a mais, e também fica no cartão.
+  const palavrasDe = f => ((f.gatilho || {}).tipo === 'palavra' ? ((f.gatilho || {}).palavras || []) : []);
+  const ehNaoCliente = f => !!MK.nc && MK.nc.modo === 'fluxo' && Number(MK.nc.fluxo) === f.id;
+  const lerPalavras = id => ($('mk-p-' + id)?.value || '').split(/[\n,;]+/).map(x => x.trim()).filter(Boolean);
+
   function renderFluxos() {
     const el = $('mk-body');
     if (!el) return;
     if (!MK.fluxos.length) {
-      el.innerHTML = htmlNaoCliente() + htmlMenuRobo() + '<div class="mk-empty">Nenhum fluxo criado ainda.<br>Clique em <b>Novo fluxo</b> para montar o primeiro ou em <b>Importar fluxo</b> para trazer um fluxo pronto.</div>';
+      el.innerHTML = '<div class="mk-empty">Nenhum fluxo criado ainda.<br>Clique em <b>Novo fluxo</b> para montar o primeiro ou em <b>Importar fluxo</b> para trazer um fluxo pronto.</div>' + htmlAvancado();
       return;
     }
-    el.innerHTML = htmlNaoCliente() + htmlMenuRobo() + '<div class="mk-grid">' + MK.fluxos.map(f => {
+    const ordem = MK.fluxos.slice().sort((a, b) => (b.ativo ? 1 : 0) - (a.ativo ? 1 : 0) || b.id - a.id);
+    el.innerHTML = '<div class="mk-grid">' + ordem.map(f => {
       const nos = ((f.grafo && f.grafo.nodes) || []).filter(n => n.tipo !== 'gatilho');
-      const tipos = [...new Set(nos.map(n => TIPO_NOME[n.tipo]))];
+      const pend = f.pendencias || [];
+      const estado = pend.length ? ['inc', 'Incompleto'] : f.ativo ? ['on', 'Ligado'] : ['off', 'Desligado'];
       return `
       <div class="mk-flow ${f.ativo ? '' : 'off'}">
         <div class="mk-flow-top">
-          <div class="mk-flow-name">${esc(f.nome)}</div>
-          <label class="toggle" title="${f.ativo ? 'Ativo' : 'Desativado'}">
+          <div style="min-width:0">
+            <div class="mk-flow-name">${esc(f.nome)}</div>
+            <span class="mk-estado ${estado[0]}">${estado[1]}</span>
+          </div>
+          <label class="toggle" title="${f.ativo ? 'Desligar este fluxo' : 'Ligar este fluxo'}">
             <input type="checkbox" ${f.ativo ? 'checked' : ''} onchange="MKUI.ativar(${f.id}, this)">
             <span class="toggle-slider"></span>
           </label>
         </div>
-        <div class="mk-meta">${resumoGatilho(f)}</div>
-        <div class="mk-chips">${nos.length ? `<span class="mk-chip">${nos.length} nó(s)</span>` : '<span class="mk-chip">Vazio</span>'}${tipos.map(t => `<span class="mk-chip">${t}</span>`).join('')}</div>
-        <div class="mk-meta">Executado <b>${f.execucoes}</b> vez(es)${f.ultima_execucao ? ' · última em ' + esc(f.ultima_execucao) + ' (UTC)' : ''}</div>
+        ${pend.length ? `<div class="mk-linha erro"><span>Falta terminar as mensagens: ${esc(pend.slice(0, 2).join('; '))}${pend.length > 2 ? ` e mais ${pend.length - 2}` : ''}</span></div>` : ''}
+        <div class="mk-como">
+          <label class="mk-como-t" for="mk-p-${f.id}">Palavras-chave</label>
+          <textarea class="minput mk-ta" id="mk-p-${f.id}" rows="2" style="min-height:54px" placeholder="Ex.: promoção, cardápio, /apresentar" oninput="MKUI.palMudou(${f.id})">${esc(palavrasDe(f).join(', '))}</textarea>
+          <div class="form-hint">Separe por vírgula. O fluxo é enviado quando o cliente escrever uma delas, ou quando você mesmo enviar a palavra sozinha na conversa.</div>
+          ${MK.nc ? `<label class="mk-check" style="margin:9px 0 0"><input type="checkbox" id="mk-n-${f.id}" ${ehNaoCliente(f) ? 'checked' : ''} onchange="MKUI.palMudou(${f.id})"><span>Enviar também na primeira mensagem de quem ainda não é cliente</span></label>` : ''}
+          <div class="mk-pal-pe" id="mk-s-${f.id}" style="display:none">
+            <button class="btn bp bsm" onclick="MKUI.palSalvar(${f.id})">${f.ativo || pend.length ? 'Salvar' : 'Salvar e ligar'}</button>
+            <button class="btn bg2 bsm" onclick="MKUI.recarregar()">Desfazer</button>
+          </div>
+        </div>
+        <div class="mk-meta">${nos.length} nó(s) · executado <b>${f.execucoes}</b> vez(es)${f.ultima_execucao ? ' · última em ' + esc(f.ultima_execucao) + ' (UTC)' : ''}</div>
         <div class="mk-actions">
-          <button class="btn bp bsm" onclick="MKUI.editar(${f.id})">Editar</button>
+          <button class="btn ${pend.length ? 'bp' : 'bg2'} bsm" onclick="MKUI.editar(${f.id})">${pend.length ? 'Terminar no editor' : 'Editar mensagens'}</button>
           <button class="btn bg2 bsm" onclick="MKUI.testar(${f.id})">Testar</button>
           <button class="btn bg2 bsm" onclick="MKUI.disparar(${f.id})">Disparar</button>
-          <button class="btn bg2 bsm" onclick="MKUI.duplicar(${f.id})">Duplicar</button>
-          <button class="btn bg2 bsm" onclick="MKUI.exportar(${f.id}, this)">Exportar</button>
-          <button class="btn bd bsm" onclick="MKUI.excluir(${f.id})">Excluir</button>
+        </div>
+        <div class="mk-links">
+          <button onclick="MKUI.duplicar(${f.id})">Duplicar</button>
+          <button onclick="MKUI.exportar(${f.id}, this)">Exportar</button>
+          <button class="del" onclick="MKUI.excluir(${f.id})">Excluir</button>
         </div>
       </div>`;
-    }).join('') + '</div>';
+    }).join('') + '</div>' + htmlAvancado();
   }
 
-  // ── Quem não é cliente: o que responder no lugar do menu automático do robô ──
+  // Mostra "Salvar" no cartão só quando algo mudou nele
+  function palMudou(id) {
+    const f = MK.fluxos.find(x => x.id === id), pe = $('mk-s-' + id), nc = $('mk-n-' + id);
+    if (!f || !pe) return;
+    const mudou = lerPalavras(id).join('|') !== palavrasDe(f).join('|') || (!!nc && nc.checked !== ehNaoCliente(f));
+    pe.style.display = mudou ? '' : 'none';
+  }
+  // Grava as palavras e a caixa "primeira mensagem" do cartão. Com algo para começar, o fluxo já fica ligado.
+  async function palSalvar(id, pedirLigar) {
+    const f = MK.fluxos.find(x => x.id === id);
+    if (!f) return false;
+    const palavras = lerPalavras(id), nc = $('mk-n-' + id), querNc = nc ? nc.checked : ehNaoCliente(f);
+    const temComeco = palavras.length > 0 || querNc, pend = (f.pendencias || []).length > 0;
+    if (pedirLigar && !temComeco) { toast('err', 'Escreva uma palavra-chave para este fluxo poder começar'); $('mk-p-' + id)?.focus(); return false; }
+    if (pedirLigar && pend) { toast('err', 'Este fluxo está incompleto. Termine as mensagens no editor antes de ligar.'); return false; }
+    const corpo = { ligar: temComeco && !pend, palavra: { on: palavras.length > 0, palavras } };
+    if (nc) corpo.nao_cliente = querNc;
+    try {
+      const r = await req('POST', `/fluxos/${id}/inicio`, corpo);
+      if (r.nao_cliente) MK.nc = r.nao_cliente;
+      toast('ok', pend ? 'Palavras salvas. O fluxo liga quando as mensagens estiverem completas.'
+        : temComeco ? (f.ativo ? 'Salvo. Já está valendo no WhatsApp.' : 'Fluxo ligado. Já está valendo no WhatsApp.')
+        : 'Salvo. Sem palavra-chave o fluxo ficou desligado.');
+    } catch (e) { toast('err', e.message); return false; }
+    await carregarFluxos();
+    if (MK.tab === 'fluxos') renderFluxos();
+    return true;
+  }
+  // Botão liga/desliga do cartão
+  async function ativar(id, input) {
+    if (input.checked) { if (!(await palSalvar(id, true))) input.checked = false; return; }
+    try { await req('POST', `/fluxos/${id}/desativar`); toast('ok', 'Fluxo desligado'); }
+    catch (e) { input.checked = true; toast('err', e.message); }
+    await carregarFluxos();
+    renderFluxos();
+  }
+
+  // ── Opções avançadas (fechadas por padrão): o que quase nunca precisa mexer ──
   async function carregarNaoCliente() {
     try { const c = await req('GET', '/config'); MK.nc = c.nao_cliente || null; MK.mr = c.menu_robo || null; } catch (_) { MK.nc = null; MK.mr = null; }
     MK.ncRascunho = null; MK.mrRascunho = null;
   }
-  function htmlNaoCliente() {
-    if (!MK.nc) return '';
-    const c = MK.ncRascunho || MK.nc;
-    const mudou = !!MK.ncRascunho && ['modo', 'fluxo', 'resposta'].some(k => String(MK.ncRascunho[k] ?? '') !== String(MK.nc[k] ?? ''));
-    const opModo = [['menu', 'Recebe o menu do robô (como é hoje)'], ['fluxo', 'Recebe um fluxo'], ['silencio', 'Não recebe resposta automática']]
-      .map(([v, t]) => `<option value="${v}" ${c.modo === v ? 'selected' : ''}>${t}</option>`).join('');
-    const opFluxo = '<option value="">Escolha o fluxo</option>' + MK.fluxos.map(f =>
-      `<option value="${f.id}" ${Number(c.fluxo) === f.id ? 'selected' : ''}>${esc(f.nome)}${f.ativo ? '' : ' (desativado)'}</option>`).join('');
-    const escolhido = MK.fluxos.find(f => f.id === Number(c.fluxo));
-    let aviso = '';
-    if (c.modo === 'fluxo' && escolhido && !escolhido.ativo) aviso = 'Este fluxo está desativado. Enquanto ele não for ativado, quem não é cliente continua recebendo o menu do robô.';
-    else if (c.modo === 'fluxo' && !mudou && MK.nc.aviso) aviso = MK.nc.aviso;
-    const dica = {
-      menu: 'O robô de atendimento responde com o menu de Vendas, Suporte e Financeiro.',
-      fluxo: 'O fluxo começa na primeira mensagem, mesmo sem palavra-chave. Ele só recomeça para a mesma pessoa depois de 12 horas.',
-      silencio: 'O robô não manda o menu. Só os fluxos por palavra-chave respondem.'
-    }[c.modo];
-    return `
-      <div class="mk-nc" id="mk-nc">
-        <div class="mk-nc-t">Quem ainda não é cliente e manda mensagem</div>
-        <div class="mk-meta">Vale para as mensagens que nenhum fluxo por palavra-chave pegou, como um "oi" ou uma pergunta digitada. Cliente cadastrado continua recebendo o menu do robô, e quem digitar <b>menu</b> também.</div>
-        <div class="mk-nc-campos">
-          <div class="form-group"><label class="form-label">O que ele recebe</label>
-            <select class="minput" id="mk-nc-modo" onchange="MKUI.ncMudou(true)">${opModo}</select></div>
-          <div class="form-group" style="${c.modo === 'fluxo' ? '' : 'display:none'}"><label class="form-label">Fluxo</label>
-            <select class="minput" id="mk-nc-fluxo" onchange="MKUI.ncMudou(true)">${opFluxo}</select></div>
-        </div>
-        <div class="form-hint" style="margin-top:8px">${dica}</div>
-        <div class="form-group" style="margin:12px 0 0;${c.modo === 'fluxo' ? '' : 'display:none'}"><label class="form-label">Se ele digitar uma mensagem depois de já ter recebido o fluxo</label>
-          <textarea class="minput mk-ta" id="mk-nc-resposta" maxlength="600" style="min-height:58px" oninput="MKUI.ncMudou()">${esc(c.resposta ?? '')}</textarea>
-          <div class="form-hint">A equipe é avisada no WhatsApp do atendente, com a mensagem dele, e ele recebe esta resposta. Em branco, só a equipe é avisada.</div></div>
-        ${aviso ? `<div class="mk-alert" style="margin:12px 0 0">${esc(aviso)}</div>` : ''}
-        <div class="mk-nc-pe">
-          <button class="btn bp bsm" id="mk-nc-salvar" onclick="MKUI.ncSalvar()" ${mudou ? '' : 'disabled'}>Salvar</button>
-          <span class="form-hint" id="mk-nc-estado">${mudou ? 'Alteração ainda não salva' : ''}</span>
-        </div>
-      </div>`;
-  }
-  // Guarda o que está na tela; redesenha só quando muda a opção (os campos visíveis dependem dela)
-  function ncMudou(redesenhar) {
-    if (!MK.nc || !$('mk-nc-modo')) return;
-    MK.ncRascunho = {
-      modo: $('mk-nc-modo').value,
-      fluxo: parseInt($('mk-nc-fluxo').value, 10) || null,
-      resposta: $('mk-nc-resposta').value
-    };
-    if (redesenhar) { if (MK.tab === 'fluxos') renderFluxos(); return; }
-    const b = $('mk-nc-salvar'); if (b) b.disabled = false;
-    const e = $('mk-nc-estado'); if (e) e.textContent = 'Alteração ainda não salva';
-  }
-  async function ncSalvar() {
-    if (!MK.nc) return;
-    ncMudou();
-    const c = MK.ncRascunho;
-    if (c.modo === 'fluxo' && !c.fluxo) { toast('err', 'Escolha o fluxo que o contato vai receber'); return; }
-    try {
-      MK.nc = (await req('POST', '/config', { nao_cliente: c })).nao_cliente;
-      MK.ncRascunho = null;
-      toast('ok', 'Opção salva');
-    } catch (e) { toast('err', e.message); }
-    if (MK.tab === 'fluxos') renderFluxos();
-  }
-
-  // ── Opção extra no menu do robô (abre um fluxo, ex.: tutoriais em vídeo) ──
-  function htmlMenuRobo() {
-    if (!MK.mr) return '';
-    const c = MK.mrRascunho || MK.mr;
-    const mudou = !!MK.mrRascunho && ['fluxo', 'titulo', 'descricao'].some(k => String(MK.mrRascunho[k] ?? '') !== String(MK.mr[k] ?? ''));
-    const opFluxo = '<option value="">Não mostrar</option>' + MK.fluxos.map(f =>
-      `<option value="${f.id}" ${Number(c.fluxo) === f.id ? 'selected' : ''}>${esc(f.nome)}${f.ativo ? '' : ' (desativado)'}</option>`).join('');
-    const escolhido = MK.fluxos.find(f => f.id === Number(c.fluxo));
-    let aviso = '';
-    if (escolhido && !escolhido.ativo) aviso = 'Este fluxo está desativado. A opção só aparece no menu do robô com o fluxo ativo.';
-    else if (c.fluxo && !mudou && MK.mr.aviso) aviso = MK.mr.aviso;
-    return `
-      <div class="mk-nc" id="mk-mr">
-        <div class="mk-nc-t">Opção extra no menu do robô</div>
-        <div class="mk-meta">Acrescenta uma linha na parte de Suporte do menu automático do robô. Quando a pessoa toca nela, o fluxo escolhido começa. Use para os tutoriais em vídeo.</div>
-        <div class="mk-nc-campos">
-          <div class="form-group"><label class="form-label">Fluxo que a opção abre</label>
-            <select class="minput" id="mk-mr-fluxo" onchange="MKUI.mrMudou(true)">${opFluxo}</select></div>
-          <div class="form-group" style="${c.fluxo ? '' : 'display:none'}"><label class="form-label">Nome da opção</label>
-            <input class="minput" id="mk-mr-titulo" maxlength="24" value="${esc(c.titulo ?? '')}" oninput="MKUI.mrMudou()"></div>
-          <div class="form-group" style="${c.fluxo ? '' : 'display:none'}"><label class="form-label">Descrição</label>
-            <input class="minput" id="mk-mr-descricao" maxlength="72" value="${esc(c.descricao ?? '')}" oninput="MKUI.mrMudou()"></div>
-        </div>
-        ${aviso ? `<div class="mk-alert" style="margin:12px 0 0">${esc(aviso)}</div>` : ''}
-        <div class="mk-nc-pe">
-          <button class="btn bp bsm" id="mk-mr-salvar" onclick="MKUI.mrSalvar()" ${mudou ? '' : 'disabled'}>Salvar</button>
-          <span class="form-hint" id="mk-mr-estado">${mudou ? 'Alteração ainda não salva' : ''}</span>
-        </div>
-      </div>`;
-  }
-  function mrMudou(redesenhar) {
-    if (!MK.mr || !$('mk-mr-fluxo')) return;
-    MK.mrRascunho = { fluxo: parseInt($('mk-mr-fluxo').value, 10) || null, titulo: $('mk-mr-titulo').value, descricao: $('mk-mr-descricao').value };
-    if (redesenhar) { if (MK.tab === 'fluxos') renderFluxos(); return; }
-    const b = $('mk-mr-salvar'); if (b) b.disabled = false;
-    const e = $('mk-mr-estado'); if (e) e.textContent = 'Alteração ainda não salva';
-  }
-  async function mrSalvar() {
-    if (!MK.mr) return;
-    mrMudou();
-    try {
-      MK.mr = (await req('POST', '/config', { menu_robo: MK.mrRascunho })).menu_robo;
-      MK.mrRascunho = null;
-      toast('ok', 'Opção salva');
-    } catch (e) { toast('err', e.message); }
-    if (MK.tab === 'fluxos') renderFluxos();
-  }
-
-  async function ativar(id, input) {
-    const querAtivo = input.checked;
-    try {
-      await req('POST', `/fluxos/${id}/${querAtivo ? 'ativar' : 'desativar'}`);
-      toast('ok', querAtivo ? 'Fluxo ativado' : 'Fluxo desativado');
-    } catch (e) {
-      input.checked = !querAtivo;
-      toast('err', e.message);
+  function htmlAvancado() {
+    if (!MK.nc && !MK.mr) return '';
+    const fxNc = MK.nc && MK.nc.modo === 'fluxo' ? MK.fluxos.find(f => f.id === Number(MK.nc.fluxo)) : null;
+    let nc = '';
+    if (MK.nc && fxNc) {
+      nc = `<div class="mk-rota"><div class="mk-rota-t"><span>Quem não é cliente e escreve de novo depois de receber "${esc(fxNc.nome)}"</span></div>
+        <textarea class="minput mk-ta" id="mk-nc-resposta" maxlength="600" style="min-height:54px">${esc(MK.nc.resposta ?? '')}</textarea>
+        <div class="form-hint">A equipe é avisada no WhatsApp do atendente, com a mensagem dele, e ele recebe esta resposta. Em branco, só a equipe é avisada.</div>
+        <button class="btn bg2 bsm" style="margin-top:8px" onclick="MKUI.avSalvarNc()">Salvar resposta</button></div>`;
+    } else if (MK.nc) {
+      nc = `<div class="mk-rota"><div class="mk-rota-t"><span>Quem não é cliente e não usou nenhuma palavra-chave</span></div>
+        <select class="minput" id="mk-nc-modo" onchange="MKUI.avSalvarNc()">
+          <option value="menu" ${MK.nc.modo !== 'silencio' ? 'selected' : ''}>Recebe o menu do robô</option>
+          <option value="silencio" ${MK.nc.modo === 'silencio' ? 'selected' : ''}>Não recebe resposta automática</option>
+        </select>
+        <div class="form-hint">Para ele receber um fluxo, marque a caixa "primeira mensagem" no cartão do fluxo.</div></div>`;
     }
+    let mr = '';
+    if (MK.mr) {
+      const c = MK.mr;
+      mr = `<div class="mk-rota"><div class="mk-rota-t"><span>Opção extra no menu do robô</span></div>
+        <select class="minput" id="mk-mr-fluxo">
+          <option value="">Não mostrar</option>
+          ${MK.fluxos.map(f => `<option value="${f.id}" ${Number(c.fluxo) === f.id ? 'selected' : ''}>${esc(f.nome)}${f.ativo ? '' : ' (desligado)'}</option>`).join('')}
+        </select>
+        <div class="mk-row" style="margin-top:8px">
+          <input class="minput" id="mk-mr-titulo" maxlength="24" placeholder="Nome da opção" value="${esc(c.titulo ?? '')}">
+          <input class="minput" id="mk-mr-descricao" maxlength="72" placeholder="Descrição" value="${esc(c.descricao ?? '')}">
+        </div>
+        <div class="form-hint">Uma linha a mais na parte de Suporte do menu do robô, que abre o fluxo escolhido.${c.aviso ? ' ' + esc(c.aviso) : ''}</div>
+        <button class="btn bg2 bsm" style="margin-top:8px" onclick="MKUI.avSalvarMr()">Salvar opção</button></div>`;
+    }
+    return `<details class="mk-av" ${MK.avAberto ? 'open' : ''} ontoggle="MKUI.avToggle(this.open)">
+        <summary>Opções avançadas</summary>
+        <div class="mk-rotas">${nc}${mr}</div>
+      </details>`;
+  }
+  async function avSalvarNc() {
+    const corpo = {};
+    if ($('mk-nc-resposta')) corpo.resposta = $('mk-nc-resposta').value;
+    if ($('mk-nc-modo')) corpo.modo = $('mk-nc-modo').value;
+    try { MK.nc = (await req('POST', '/config', { nao_cliente: corpo })).nao_cliente; toast('ok', 'Salvo'); }
+    catch (e) { toast('err', e.message); }
+    if (MK.tab === 'fluxos') renderFluxos();
+  }
+  async function avSalvarMr() {
+    try {
+      MK.mr = (await req('POST', '/config', { ligar: true, menu_robo: { fluxo: parseInt($('mk-mr-fluxo').value, 10) || null, titulo: $('mk-mr-titulo').value, descricao: $('mk-mr-descricao').value } })).menu_robo;
+      toast('ok', 'Salvo');
+    } catch (e) { toast('err', e.message); }
     await carregarFluxos();
-    renderFluxos();
+    if (MK.tab === 'fluxos') renderFluxos();
   }
 
   async function duplicar(id) {
@@ -1018,6 +1038,6 @@
     testar, enviarTeste, disparar, dispPub, dispPrevia, confirmarDisparo, disp, fecharSmall,
     req, fluxos: () => MK.fluxos, recarregar,
     importar, exportar, impArquivos, impSoltar: soltar, impValor, impFechar, impConfirmar,
-    ncMudou, ncSalvar, mrMudou, mrSalvar
+    palMudou, palSalvar, avSalvarNc, avSalvarMr, avToggle: aberto => { MK.avAberto = !!aberto; }
   };
 })();
