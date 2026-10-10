@@ -178,7 +178,9 @@ function renderTrackItems(items, client, details) {
   el.innerHTML = (rows || '<div style="font-size:12px;color:var(--muted)">Itens do pedido</div>') + `
     ${details?.scheduled_for ? `<div style="margin-top:10px;padding:10px 12px;background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.3);border-radius:10px;font-size:12.5px;color:var(--text);display:flex;align-items:center;gap:6px">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;color:#a78bfa"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3l2 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-      <span><strong>Pedido agendado</strong> — vamos preparar assim que abrirmos, por volta de ${new Date(details.scheduled_for).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}.</span>
+      <span>${(typeof _agendamentoCfg !== 'undefined' && _agendamentoCfg.escolher_horario)
+        ? `<strong>Pedido agendado para ${new Date(details.scheduled_for).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', weekday:'short', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</strong>. Vamos deixar tudo pronto para esse horário.`
+        : `<strong>Pedido agendado</strong> — vamos preparar assim que abrirmos, por volta de ${new Date(details.scheduled_for).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}.`}</span>
     </div>` : ''}
     <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--muted2)">
       ${subtotal > 0 ? `<div style="display:flex;justify-content:space-between"><span>Subtotal dos itens</span><strong style="color:var(--text)">R$ ${fmt(subtotal)}</strong></div>` : ''}

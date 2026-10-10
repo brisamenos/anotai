@@ -31,6 +31,28 @@ let feeConfig     = {};
 let promoAutomatica = {};
 let selectedFaixa = 0;
 let _pedidoMinimo = 0;
+let _pedidoMinimoRetirada = false; // true = o mínimo também vale na retirada (chave do gestor, desligada por padrão)
+
+// O pedido mínimo sempre vale no delivery; na retirada só se a loja ligou a chave.
+function _pedidoMinimoAplica(tipo) {
+  if (!(_pedidoMinimo > 0)) return false;
+  return tipo === 'delivery' || (tipo === 'retirada' && _pedidoMinimoRetirada);
+}
+function _pedidoMinimoRotulo(tipo) { return tipo === 'retirada' ? 'retirada' : 'delivery'; }
+
+// Barra "Pedido mínimo para ...: R$ X" do carrinho — mostra/esconde e ajusta o texto
+function _pedidoMinimoBarra(tipo) {
+  const bar = document.getElementById('cart-minimo-bar');
+  const val = document.getElementById('cart-minimo-val');
+  if (!bar) return;
+  if (!_pedidoMinimoAplica(tipo)) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  if (val) {
+    val.textContent = 'R$ ' + fmt(_pedidoMinimo);
+    const lbl = val.previousSibling;
+    if (lbl && lbl.nodeType === 3) lbl.nodeValue = ' Pedido mínimo para ' + _pedidoMinimoRotulo(tipo) + ': ';
+  }
+}
 let _storeAddress = '';
 let _storeLat     = null;
 let _storeLng     = null;
@@ -43,6 +65,11 @@ let _mostrarIndicacaoPreparo = true;
 // Agendamento de pedido quando a loja está fechada — idem, true por padrão.
 let _permitirAgendamento = true;
 let _agendamentoModalMostrado = false; // mostra o modal 1x por carregamento de página
+// Horário escolhido pelo cliente (config do gestor em store_config.agendamento_config)
+let _agendamentoCfg = { escolher_horario: false, dias: 2, antecedencia: 60, intervalo: 30 };
+let _agModo = 'asap';   // 'asap' (o quanto antes) | 'agendar' (cliente escolheu dia e hora)
+let _agDiaSel = '';     // 'AAAA-MM-DD' do dia escolhido
+let _agHoraIso = '';    // horário escolhido, ISO com fuso de Brasília
 let _pedidoAgendadoPara = null; // Date escolhida, preenchido ao confirmar no modal
 
 // ── Segmento ──

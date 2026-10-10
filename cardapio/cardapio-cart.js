@@ -415,6 +415,8 @@ function openCart() {
   // Se não está logado, ainda tenta restaurar endereço do localStorage
   if (!_customer) loadSavedAddr();
   renderFaixas();
+  // Recalcula os horários de agendamento (o relógio andou desde a última vez)
+  if (typeof agRender === 'function') { try { agRender(); applyStatus(); } catch(e) {} }
 }
 function closeCart() {
   document.getElementById('drawer-bg').classList.remove('on');
@@ -511,6 +513,7 @@ function calcDist(lat1, lng1, lat2, lng2) {
 
 function setDelivery(type) {
   deliveryType = type;
+  if (typeof agRender === 'function') { try { agRender(); applyStatus(); } catch(e) {} }
   ['delivery','retirada','mesa'].forEach(t => {
     document.getElementById('dtab-'+t).classList.toggle('on', t===type);
   });
@@ -558,16 +561,7 @@ function setDelivery(type) {
   }
 
   // Pedido mínimo delivery — mostra só na aba delivery
-  const minimoBar = document.getElementById('cart-minimo-bar');
-  const minimoVal = document.getElementById('cart-minimo-val');
-  if (minimoBar) {
-    if (type === 'delivery' && _pedidoMinimo > 0) {
-      minimoBar.style.display = 'flex';
-      if (minimoVal) minimoVal.textContent = 'R$ ' + fmt(_pedidoMinimo);
-    } else {
-      minimoBar.style.display = 'none';
-    }
-  }
+  _pedidoMinimoBarra(type);
   renderFaixas();
   renderGeoBlock();
   renderTotals();
@@ -744,7 +738,7 @@ function renderTotals() {
     else if (digitadoRaw) taxaLabel = 'Bairro não encontrado';
   }
   // Aviso de pedido mínimo
-  const minimoFalta = _pedidoMinimo > 0 && deliveryType === 'delivery' && sub < _pedidoMinimo ? _pedidoMinimo - sub : 0;
+  const minimoFalta = _pedidoMinimoAplica(deliveryType) && sub < _pedidoMinimo ? _pedidoMinimo - sub : 0;
   // Label da taxa: se cupom de frete aplicado, mostra "Grátis (cupom)" para feedback ao cliente
   const taxaTxt = isCupomFrete ? 'Grátis (cupom)' : (taxa > 0 ? 'R$ ' + fmt(taxa) : 'Grátis');
   // O desconto pode vir de um cupom digitado OU da promoção automática da
@@ -755,7 +749,7 @@ function renderTotals() {
   document.getElementById('totals-wrap').innerHTML = `
     ${minimoFalta > 0 ? `<div style="padding:8px 12px;margin-bottom:8px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:7px">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3M8 10v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      Faltam <strong>R$ ${fmt(minimoFalta)}</strong> para o pedido mínimo delivery (R$ ${fmt(_pedidoMinimo)})
+      Faltam <strong>R$ ${fmt(minimoFalta)}</strong> para o pedido mínimo ${deliveryType === 'retirada' ? 'de retirada' : 'delivery'} (R$ ${fmt(_pedidoMinimo)})
     </div>` : ''}
     <div class="total-row"><span>Subtotal</span><span>R$ ${fmt(sub)}</span></div>
     ${deliveryType === 'delivery' ? `<div class="total-row ${isCupomFrete?'total-disc':''}"><span>${taxaLabel}</span><span>${taxaTxt}</span></div>` : ''}

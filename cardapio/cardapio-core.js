@@ -575,12 +575,7 @@ function applyDeliveryInfo() {
   }
 
   // Pedido mínimo — barra no carrinho (aba delivery é o padrão)
-  const minimoBar = document.getElementById('cart-minimo-bar');
-  const minimoVal = document.getElementById('cart-minimo-val');
-  if (minimoBar && _pedidoMinimo > 0 && deliveryType === 'delivery') {
-    minimoBar.style.display = 'flex';
-    if (minimoVal) minimoVal.textContent = 'R$ ' + fmt(_pedidoMinimo);
-  }
+  if (_pedidoMinimoAplica(deliveryType)) _pedidoMinimoBarra(deliveryType);
 
   // Endereço do estabelecimento — inline elegante
   if (_storeAddress) {
@@ -734,6 +729,19 @@ function fecharModalAgendamento() {
 }
 
 function confirmarAgendamento() {
+  // Loja com escolha de horário: o cliente escolhe o dia e a hora no carrinho
+  if (_agEscolhaAtiva()) {
+    fecharModalAgendamento();
+    _agModo = 'agendar';
+    agRender();
+    applyStatus();
+    try {
+      if (typeof toast === 'function') toast('ok', _pedidoAgendadoPara
+        ? 'Combinado! Escolha o dia e o horário no carrinho.'
+        : 'No momento não há horários disponíveis para agendar.');
+    } catch(e) {}
+    return;
+  }
   const proxima = _calcularProximaAbertura();
   _pedidoAgendadoPara = proxima ? proxima.data : new Date();
   fecharModalAgendamento();
@@ -742,6 +750,187 @@ function confirmarAgendamento() {
     const proxTxt = proxima ? proxima.label : 'assim que abrirmos';
     if (typeof toast === 'function') toast('ok', `Combinado! Monte seu pedido — vamos prepará-lo para ${proxTxt}.`);
   } catch(e) {}
+}
+
+// ══════════════════════════════════════════
+//  AGENDAMENTO COM HORÁRIO ESCOLHIDO
+// ══════════════════════════════════════════
+// Liga pelo gestor (Configurações do cardápio). O cliente escolhe o dia e o
+// horário em que quer receber ou retirar; só aparecem horários em que a loja
+// está aberta, respeitando a antecedência mínima e o limite de dias. Tudo é
+// calculado no horário de Brasília, igual à validação do servidor.
+function _agAplicarConfig(raw) {
+  let c = raw;
+  if (typeof c === 'string') { try { c = JSON.parse(c); } catch(e) { c = null; } }
+  c = (c && typeof c === 'object') ? c : {};
+  const n = (v, d) => (v === undefined || v === null || v === '' || !isFinite(+v)) ? d : +v;
+  _agendamentoCfg = {
+    escolher_horario: c.escolher_horario === true || c.escolher_horario === 1,
+    dias: Math.max(0, Math.min(30, Math.round(n(c.dias, 2)))),
+    antecedencia: Math.max(0, Math.round(n(c.antecedencia, 60))),
+    intervalo: [15, 30, 60].includes(+c.intervalo) ? +c.intervalo : 30,
+  };
+  if (!_agendamentoCfg.escolher_horario) { _agModo = 'asap'; _agDiaSel = ''; _agHoraIso = ''; }
+}
+
+function _agEscolhaAtiva() {
+  return typeof _agendamentoCfg !== 'undefined' && !!_agendamentoCfg.escolher_horario && deliveryType !== 'mesa';
+}
+
+// Data/hora de agora em Brasília: { y, m, d, min }
+function _agAgoraBR() {
+  const p = {};
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false })
+    .formatToParts(new Date()).forEach(x => { if (x.type !== 'literal') p[x.type] = x.value; });
+  const h = p.hour === '24' ? 0 : +p.hour;
+  return { y: +p.year, m: +p.month, d: +p.day, min: h * 60 + (+p.minute) };
+}
+
+const _agPad2 = n => String(n).padStart(2, '0');
+const _agHoraTxt = min => _agPad2(Math.floor(min / 60)) + ':' + _agPad2(min % 60);
+
+// Lista de dias com os horários disponíveis:
+// [{ dia:'AAAA-MM-DD', rotulo:'Hoje', horarios:[{ iso, txt }] }]
+function _agGerarDias() {
+  const cfg = _agendamentoCfg;
+  const step = cfg.intervalo || 30;
+  const agora = _agAgoraBR();
+  const limite = agora.min + (cfg.antecedencia || 0); // em minutos a partir de hoje 00:00
+  const h = _cachedHorarios && Object.keys(_cachedHorarios).length ? _cachedHorarios : null;
+  const dias = ['dom','seg','ter','qua','qui','sex','sab'];
+  const nomes = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const out = [];
+  for (let off = 0; off <= cfg.dias; off++) {
+    const dt = new Date(Date.UTC(agora.y, agora.m - 1, agora.d + off));
+    const dow = dt.getUTCDay();
+    const faixas = []; // [inicio, fim) em minutos deste dia
+    if (!h) faixas.push([0, 1440]);
+    else {
+      const cfgDia = h[dias[dow]];
+      if (_horarioAtivo(cfgDia)) {
+        _cpJanelasDia(cfgDia).forEach(j => {
+          const a = _horaParaMinutos(j.abertura) ?? 0, f = _horaParaMinutos(j.fechamento) ?? 1439;
+          if (a === f) faixas.push([0, 1440]);
+          else if (f > a) faixas.push([a, f]);
+          else faixas.push([a, 1440]); // vira a meia-noite: o resto entra no dia seguinte
+        });
+      }
+      // Janela do dia anterior que passou da meia-noite
+      const cfgOntem = h[dias[(dow + 6) % 7]];
+      if (_horarioAtivo(cfgOntem)) {
+        _cpJanelasDia(cfgOntem).forEach(j => {
+          const a = _horaParaMinutos(j.abertura) ?? 0, f = _horaParaMinutos(j.fechamento) ?? 1439;
+          if (f < a && f > 0) faixas.push([0, f]);
+        });
+      }
+    }
+    const mins = new Set();
+    faixas.forEach(([a, f]) => {
+      for (let t = Math.ceil(a / step) * step; t < f; t += step) {
+        if (off * 1440 + t >= limite) mins.add(t);
+      }
+    });
+    if (!mins.size) continue;
+    const ymd = dt.getUTCFullYear() + '-' + _agPad2(dt.getUTCMonth() + 1) + '-' + _agPad2(dt.getUTCDate());
+    const rotulo = off === 0 ? 'Hoje' : off === 1 ? 'Amanhã' : nomes[dow] + ', ' + _agPad2(dt.getUTCDate()) + '/' + _agPad2(dt.getUTCMonth() + 1);
+    const horarios = [...mins].sort((x, y) => x - y).map(t => ({ iso: ymd + 'T' + _agHoraTxt(t) + ':00-03:00', txt: _agHoraTxt(t) }));
+    out.push({ dia: ymd, rotulo, horarios });
+  }
+  return out;
+}
+
+function _agRotuloIso(iso) {
+  const d = _agGerarDias().find(x => iso && iso.startsWith(x.dia));
+  const hora = iso ? iso.slice(11, 16) : '';
+  if (!d) return hora;
+  return d.rotulo.toLowerCase() + ' às ' + hora;
+}
+
+// Desenha o bloco "Quando?" no carrinho e mantém _pedidoAgendadoPara em dia
+function agRender() {
+  const box = document.getElementById('agnd-horario-block');
+  const ativo = _agEscolhaAtiva();
+  if (!box) {
+    if (!ativo && typeof _agHoraIso !== 'undefined' && _agHoraIso) { _agHoraIso = ''; _pedidoAgendadoPara = null; }
+    return;
+  }
+  if (!ativo) {
+    box.style.display = 'none';
+    if (_agHoraIso) { _agHoraIso = ''; _agModo = 'asap'; _pedidoAgendadoPara = null; }
+    return;
+  }
+  box.style.display = '';
+  const titulo = document.getElementById('agh-titulo');
+  if (titulo) titulo.textContent = deliveryType === 'retirada' ? 'Quando você vai retirar?' : 'Quando você quer receber?';
+
+  const dias = _agGerarDias();
+  const btnAsap = document.getElementById('agh-asap');
+  // Loja fechada: só dá pra agendar
+  if (!_lojaAberta) _agModo = 'agendar';
+  if (btnAsap) btnAsap.style.display = _lojaAberta ? '' : 'none';
+  document.getElementById('agh-modos')?.classList.toggle('so-agendar', !_lojaAberta);
+  document.getElementById('agh-asap')?.classList.toggle('on', _agModo === 'asap');
+  document.getElementById('agh-agendar')?.classList.toggle('on', _agModo === 'agendar');
+
+  const escolha = document.getElementById('agh-escolha');
+  const vazio = document.getElementById('agh-vazio');
+  if (_agModo !== 'agendar') {
+    if (escolha) escolha.style.display = 'none';
+    if (vazio) vazio.style.display = 'none';
+    _agHoraIso = ''; _pedidoAgendadoPara = null;
+    return;
+  }
+  if (!dias.length) {
+    if (escolha) escolha.style.display = 'none';
+    if (vazio) vazio.style.display = '';
+    _agHoraIso = ''; _pedidoAgendadoPara = null;
+    return;
+  }
+  if (vazio) vazio.style.display = 'none';
+  if (escolha) escolha.style.display = '';
+
+  // Mantém a escolha se ainda existir; senão, cai no primeiro horário possível
+  let dia = dias.find(d => d.dia === _agDiaSel) || dias[0];
+  _agDiaSel = dia.dia;
+  if (!dia.horarios.some(x => x.iso === _agHoraIso)) _agHoraIso = dia.horarios[0].iso;
+  _pedidoAgendadoPara = new Date(_agHoraIso);
+
+  const diasEl = document.getElementById('agh-dias');
+  if (diasEl) diasEl.innerHTML = dias.map(d =>
+    `<button type="button" class="agh-dia${d.dia === _agDiaSel ? ' on' : ''}" onclick="agEscolherDia('${d.dia}')">${d.rotulo}</button>`).join('');
+  const sel = document.getElementById('agh-hora');
+  if (sel) sel.innerHTML = dia.horarios.map(x => `<option value="${x.iso}"${x.iso === _agHoraIso ? ' selected' : ''}>${x.txt}</option>`).join('');
+  const resumo = document.getElementById('agh-resumo');
+  if (resumo) resumo.textContent = (deliveryType === 'retirada' ? 'Pronto para retirar ' : 'Entrega ') + _agRotuloIso(_agHoraIso) + '.';
+}
+
+function agEscolherModo(modo) {
+  _agModo = (modo === 'agendar' || !_lojaAberta) ? 'agendar' : 'asap';
+  agRender();
+  applyStatus();
+}
+function agEscolherDia(dia) {
+  _agDiaSel = dia; _agHoraIso = '';
+  agRender();
+  applyStatus();
+}
+function agEscolherHora(iso) {
+  _agHoraIso = iso;
+  agRender();
+  applyStatus();
+}
+
+// Antes de enviar: confirma que o horário escolhido ainda está disponível
+function agValidarAntesDeEnviar() {
+  if (!_agEscolhaAtiva() || _agModo !== 'agendar') return true;
+  const escolhido = _agHoraIso;
+  const ok = !!escolhido && _agGerarDias().some(d => d.horarios.some(x => x.iso === escolhido));
+  if (!ok) {
+    agRender();
+    try { toast('⚠️', escolhido ? 'Esse horário não está mais disponível. Escolha outro.' : 'Escolha o dia e o horário do agendamento.'); } catch(e) {}
+    return false;
+  }
+  return true;
 }
 
 // ── Modal info da loja ────────────────────────────────
@@ -863,6 +1052,8 @@ function applyStatus(store_open, horarios) {
       statusBtnTxt.textContent = 'Loja fechada, deixe seu pedido agendado';
     }
   }
+  // Bloco "Quando?" do carrinho (agendamento com horário escolhido)
+  try { if (typeof agRender === 'function') agRender(); } catch(e) {}
   if (btn) {
     // typeof-guard: se por acaso o cardapio-state.js estiver desatualizado
     // (arquivo antigo, sem essa variável ainda), acessar direto quebraria
@@ -870,10 +1061,12 @@ function applyStatus(store_open, horarios) {
     // fechada (loja aberta nem chega a avaliar isso, por causa do &&).
     const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
     const podeAgendado = !_lojaAberta && _pedidoAgendadoSeguro;
+    // Loja aberta, mas o cliente escolheu um horário: o botão também avisa que é agendado
+    const agendadoEscolhido = _lojaAberta && _pedidoAgendadoSeguro && typeof _agModo !== 'undefined' && _agModo === 'agendar';
     btn.disabled = (!_lojaAberta && !podeAgendado) || cart.length === 0;
     if (!_lojaAberta && !podeAgendado) btn.innerHTML = '<span style="color:var(--red);font-size:10px">●</span> Loja fechada';
     else if (cart.length === 0) btn.innerHTML = podeAgendado ? 'Adicione itens para agendar' : 'Adicione itens ao carrinho';
-    else if (podeAgendado) btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 4v4l2.5 2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg> Confirmar Pedido Agendado';
+    else if (podeAgendado || agendadoEscolhido) btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 4v4l2.5 2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg> Confirmar Pedido Agendado';
     else btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido';
   }
   // Modal "loja fechada, quer agendar?" — mostra 1x por sessão quando a
@@ -883,7 +1076,8 @@ function applyStatus(store_open, horarios) {
   // de travar o carregamento inteiro do cardápio.
   const _permitirAgendamentoSeguro = (typeof _permitirAgendamento !== 'undefined') ? _permitirAgendamento : false;
   const _modalJaMostradoSeguro = (typeof _agendamentoModalMostrado !== 'undefined') ? _agendamentoModalMostrado : true;
-  if (!_lojaAberta && _permitirAgendamentoSeguro && !_modalJaMostradoSeguro) {
+  const _escolhaHorarioSegura = (typeof _agEscolhaAtiva === 'function') && _agEscolhaAtiva();
+  if (!_lojaAberta && (_permitirAgendamentoSeguro || _escolhaHorarioSegura) && !_modalJaMostradoSeguro) {
     try { _agendamentoModalMostrado = true; } catch(e) {}
     setTimeout(() => { if (typeof abrirModalAgendamento === 'function') abrirModalAgendamento(); }, 600);
   }
@@ -941,7 +1135,7 @@ async function init() {
       sb.from('menu_items').select('*').not('status','eq','pausado').order('sort_order', { nullsFirst: false }).order('id'),
       sb.from('categories').select('*').eq('ativo', true).order('sort_order'),
       sb.from('cupons').select('*').eq('ativo', true),
-      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,pickup_addresses,store_tempo_entrega,store_tempo_retirada,mostrar_indicacao_preparo,permitir_agendamento,promo_automatica').single(),
+      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset,pedido_minimo,pedido_minimo_retirada,store_address,store_lat,store_lng,tipos_entrega,pickup_addresses,store_tempo_entrega,store_tempo_retirada,mostrar_indicacao_preparo,permitir_agendamento,promo_automatica,agendamento_config').single(),
       fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } }).then(r => r.ok ? r.json() : {}).catch(() => ({}))
     ]);
 
@@ -977,6 +1171,7 @@ async function init() {
       feeConfig     = c.delivery_fee_config || {};
       promoAutomatica = c.promo_automatica || {};
       _pedidoMinimo = parseFloat(c.pedido_minimo) || 0;
+      _pedidoMinimoRetirada = c.pedido_minimo_retirada === 1 || c.pedido_minimo_retirada === true || c.pedido_minimo_retirada === '1';
       _storeAddress = c.store_address || '';
       _storeLat     = parseFloat(c.store_lat) || null;
       _storeLng     = parseFloat(c.store_lng) || null;
@@ -985,6 +1180,7 @@ async function init() {
       // por padrão pra não sumir de quem nunca mexeu nessa opção.
       _mostrarIndicacaoPreparo = c.mostrar_indicacao_preparo !== 0 && c.mostrar_indicacao_preparo !== false;
       _permitirAgendamento = c.permitir_agendamento !== 0 && c.permitir_agendamento !== false;
+      _agAplicarConfig(c.agendamento_config);
       // Só agora, com _permitirAgendamento já certo, aplica o status —
       // é ele quem decide se mostra o modal de loja fechada + agendamento.
       applyStatus(c.store_open, c.horarios_config);
@@ -1211,6 +1407,7 @@ function subscribeRealtime() {
       const cfg = p.new;
       // Status aberto/fechado
       if (cfg.permitir_agendamento !== undefined) _permitirAgendamento = cfg.permitir_agendamento !== 0 && cfg.permitir_agendamento !== false;
+      if (cfg.agendamento_config !== undefined) { _agAplicarConfig(cfg.agendamento_config); agRender(); }
       applyStatus(cfg.store_open, cfg.horarios_config || _cachedHorarios);
       // Offset de numeração — atualiza imediatamente quando gestor zera a contagem
       if (cfg.order_num_offset !== undefined) {

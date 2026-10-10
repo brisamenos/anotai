@@ -341,16 +341,18 @@ async function submitOrder() {
   // um pedido agendado no modal de loja fechada (_pedidoAgendadoPara setado).
   { const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
     if (!_lojaAberta && !_pedidoAgendadoSeguro) { toast('🔴','Loja fechada');     return; } }
+  // Horário escolhido pelo cliente ainda precisa estar disponível
+  if (typeof agValidarAntesDeEnviar === 'function' && !agValidarAntesDeEnviar()) return;
   // Sem isso, cancelar a modal de troco (dinheiro) ou a modal "pagar agora/
   // na entrega" (crédito/débito) zera selectedPay, e o pedido seguia sem
   // forma de pagamento nenhuma — imprimia "Forma de Pagamento: -" na comanda.
   if (!selectedPay) { toast('⚠️','Escolha uma forma de pagamento'); return; }
 
-  // Valida pedido mínimo para delivery
-  if (deliveryType === 'delivery' && _pedidoMinimo > 0) {
+  // Valida pedido mínimo (delivery sempre; retirada só com a chave ligada no gestor)
+  if (_pedidoMinimoAplica(deliveryType)) {
     const sub = cart.reduce((s, i) => s + (i.price * (i.qty||1)), 0);
     if (sub < _pedidoMinimo) {
-      toast('⚠️', `Pedido mínimo delivery: R$ ${fmt(_pedidoMinimo)}`);
+      toast('⚠️', `Pedido mínimo ${deliveryType === 'retirada' ? 'para retirada' : 'delivery'}: R$ ${fmt(_pedidoMinimo)}`);
       return;
     }
   }
@@ -655,6 +657,7 @@ async function _doSubmitOrder(addr, troco) {
     appliedCupom = null;
     _pendingOrderAddr = '';
     _pedidoAgendadoPara = null; // reseta pra não marcar um próximo pedido como agendado por engano
+    try { _agModo = 'asap'; _agHoraIso = ''; _agDiaSel = ''; } catch(e) {}
     updateCartFloat();
     if (typeof applyStatus === 'function') applyStatus(); // atualiza texto/estado do botão de confirmar
     document.getElementById('cupom-input').value = '';
@@ -1043,12 +1046,14 @@ async function _iniciarSubmit() {
   // um pedido agendado no modal de loja fechada (_pedidoAgendadoPara setado).
   { const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
     if (!_lojaAberta && !_pedidoAgendadoSeguro) { toast('🔴','Loja fechada');     return; } }
+  // Horário escolhido pelo cliente ainda precisa estar disponível
+  if (typeof agValidarAntesDeEnviar === 'function' && !agValidarAntesDeEnviar()) return;
   if (!selectedPay) { toast('⚠️','Escolha uma forma de pagamento'); return; }
 
-  if (deliveryType === 'delivery' && _pedidoMinimo > 0) {
+  if (_pedidoMinimoAplica(deliveryType)) {
     const sub = cart.reduce((s, i) => s + (i.price * (i.qty||1)), 0);
     if (sub < _pedidoMinimo) {
-      toast('⚠️', `Pedido mínimo delivery: R$ ${fmt(_pedidoMinimo)}`);
+      toast('⚠️', `Pedido mínimo ${deliveryType === 'retirada' ? 'para retirada' : 'delivery'}: R$ ${fmt(_pedidoMinimo)}`);
       return;
     }
   }
