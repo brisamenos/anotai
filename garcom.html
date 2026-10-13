@@ -2460,12 +2460,11 @@ async function garcomPrint(order, newItems) {
       .filter(i => (i?.item_status || 'active') !== 'cancelado');
     if (!items.length) return;
 
-    const isCozinha = i => {
-      const skip = ['bebida','drink','suco','agua','refrigerante','cerveja','chopp','vinho','dose','tanque','long'];
-      const cat  = (i.cat || i.cat_key || '').toLowerCase();
-      const name = (i.name || '').toLowerCase();
-      return !skip.some(s => cat.includes(s) || name.includes(s));
-    };
+    // Mesma regra do envio do pedido (isDrink): só bebida pronta (refrigerante,
+    // cerveja, água...) fica fora da cozinha. Suco, vitamina, drink da casa vão
+    // para a cozinha — antes qualquer item da categoria "Bebidas" ficava de fora
+    // e, com impressora da cozinha separada, não saía em papel nenhum.
+    const isCozinha = i => !(i.drink === true || isDrink(i, true));
 
     const renderItem = i => {
       const cliente = i.cliente_nome ? `<div style="font-size:0.86em;font-weight:bold">Cliente: ${_garcomHtmlEscape(i.cliente_nome)}</div>` : '';
@@ -2506,6 +2505,16 @@ async function garcomPrint(order, newItems) {
     const htmlCozinha  = montarVia('VIA DA COZINHA', itensCozinha);
     const htmlBar      = montarVia('VIA DO BAR', itensBebida);
     const setorJobs    = _garcomBuildSetorJobs(order, cfg, itensCozinha, printerCozinha);
+    // "Imprimir bebidas" ligado: com impressoras separadas, a bebida pronta sai
+    // numa via própria (impressora da categoria dela ou, se não tiver, a do caixa).
+    const _bebidasOnCfg = (cfg.printBebidaSolo === undefined)
+      ? (localStorage.getItem('printBebidaSolo') !== '0')
+      : (cfg.printBebidaSolo === true || cfg.printBebidaSolo === '1' || cfg.printBebidaSolo === 1);
+    const barJobs = (_bebidasOnCfg && itensBebida.length)
+      ? (setoresAtivos
+          ? _garcomBuildSetorJobs(order, cfg, itensBebida, printerCaixa)
+          : [{ html: htmlBar, printer: printerCaixa, tipo: 'caixa', dedupe_key: _garcomDedupeKey(order && order.id, printerCaixa, itensBebida) }])
+      : [];
     if (!htmlCozinha && !htmlBar) return;
 
     // ── REGRA DEFINITIVA do toggle "Imprimir bebida industrializada" ──
@@ -2534,7 +2543,10 @@ async function garcomPrint(order, newItems) {
         for (const job of cozinhaJobs) {
           await window.ElectronPrint.printHtml(job.html, { printer: job.printer || printerCozinha, paperWidth: pw }).catch(()=>{});
         }
-        if (cozinhaJobs.length) showToast('Cozinha');
+        for (const job of barJobs) {
+          await window.ElectronPrint.printHtml(job.html, { printer: job.printer || printerCaixa || undefined, paperWidth: pw }).catch(()=>{});
+        }
+        if (cozinhaJobs.length || barJobs.length) showToast(cozinhaJobs.length ? 'Cozinha' : 'Bebidas');
         return;
       }
       // Print Agent — dois jobs separados, sem verificar status
@@ -2545,6 +2557,7 @@ async function garcomPrint(order, newItems) {
         } else if (htmlCozinha) {
           jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: htmlCozinha, format: fmt, printer: printerCozinha, tipo: 'cozinha' }) }));
         }
+        barJobs.forEach(job => jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: job.html, format: fmt, printer: job.printer || undefined, tipo: job.tipo || 'caixa', dedupe_key: job.dedupe_key }) })));
         if (jobs.length) { await Promise.all(jobs); showToast('Enviado'); return; }
         return;
       } catch(e) { console.warn('[PRINT] Agent falhou:', e.message); }
@@ -2554,7 +2567,9 @@ async function garcomPrint(order, newItems) {
       // Antes, mesmo configurado como impressão única, o garçom sempre
       // dividia o pedido em duas seções tituladas — não era de fato "uma
       // comanda só", só ficava fisicamente no mesmo papel.
-      const todosItensImpressao = [...itensCozinha, ...itensBebida];
+      // "Imprimir bebidas" desligado: a bebida pronta não entra na comanda.
+      const todosItensImpressao = _bebidasOnCfg ? [...itensCozinha, ...itensBebida] : itensCozinha;
+      if (!todosItensImpressao.length) return;
       const htmlTudo = montarVia('COMANDA', todosItensImpressao);
       if (window.ElectronPrint?.printHtml) {
         const pw = fmt === '58mm' ? 58 : 80;
@@ -4175,7 +4190,7 @@ function limparObsCarrinho(idx) {
 // Tudo que é feito/montado manualmente (suco, vitamina, açaí, pizza, hambúrguer, etc.) → false → vai ao kanban.
 // Toggle "Bebida pronta também aparece no kanban" (config de impressão) permite
 // que o restaurante decida que a bebida pronta também deve ir ao kanban.
-function isDrink(item) {
+function isDrink(item, ignorarKanban) {
   const n = (item.name + ' ' + (item.description || '') + ' ' + (item.cat || '') + ' ' + (item.cat_key || '')).toLowerCase();
 
   // Itens preparados manualmente — SEMPRE vão ao kanban independente de ser bebida
@@ -4186,7 +4201,7 @@ function isDrink(item) {
   // que o restaurante tenha ligado o toggle pra elas irem também)
   const industrializadas = /refrigerante|coca.cola|pepsi|guarana|guaraná|fanta|sprite|soda|schweppes|tônica|tonica|agua\s|água\s|agua$|água$|agua com|água com|agua sem|água sem|mineral|cerveja|chopp|brahma|skol|heineken|budweiser|corona|stella|amstel|itaipava|eisenbahn|vinho|wine|espumante|prosecco|champagne|sake|dose|tanque|long.neck|long neck|energetico|energético|red.bull|redbull|monster|gatorade|powerade|isotônico|isotonico|ice.tea|nescau|leite.caixinha|leite longa/;
   if (!industrializadas.test(n)) return false;
-  if (localStorage.getItem('bebidaProntaKanban') === '1') return false; // restaurante quer no kanban
+  if (!ignorarKanban && localStorage.getItem('bebidaProntaKanban') === '1') return false; // restaurante quer no kanban
   return true;
 }
 

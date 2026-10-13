@@ -5226,6 +5226,23 @@ function _printBuildJobsForOrder(order, ticket, cfg, opts = {}) {
     else jobs.push({ html: ticket.cozinha, printer: _printPrinterCozinha || '', tipo: 'cozinha' });
   };
 
+  // "Imprimir bebidas" ligado: no modo de vias separadas a bebida pronta
+  // (refrigerante, cerveja, água...) não vai na via da cozinha e o recibo do
+  // caixa só sai no fechamento — então ela não saía em papel nenhum. Agora
+  // sai numa via própria: na impressora da categoria dela, se configurada,
+  // senão na impressora do caixa. Desligado: não imprime bebida pronta.
+  const addBebidas = () => {
+    if (localStorage.getItem('printBebidaSolo') === '0') return;
+    const cozSigs = new Set((ticket.cozinhaItems || []).map(_printItemSignature));
+    const bebidas = (Array.isArray(order.items) ? order.items : [])
+      .filter(i => (i?.item_status || 'active') !== 'cancelado' && !cozSigs.has(_printItemSignature(i)));
+    if (!bebidas.length) return;
+    const impressoraBar = _printPrinter || _printPrinterCozinha || '';
+    const barJobs = _buildSetorPrintJobsForItems(order, cfg, bebidas, { force: true, defaultPrinter: impressoraBar, defaultTitle: 'Bebidas' });
+    barJobs.forEach(j => { if (j.printer && j.printer === _printPrinter) j.tipo = 'caixa'; });
+    jobs.push(...barJobs);
+  };
+
   const addFolhaUnica = () => {
     if (!ticket.singleSheet) return;
     const printer = _printPrinter || _printPrinterCozinha || '';
@@ -5257,6 +5274,7 @@ function _printBuildJobsForOrder(order, ticket, cfg, opts = {}) {
 
   if (viaMode === 'separado' && (ticket.cozinha || _printHasSetorRoutesConfigured() || _printPrinterCozinha)) {
     addCozinha();
+    addBebidas();
   } else if (viaMode === 'somente_principal') {
     addCaixa();
   } else {

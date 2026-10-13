@@ -2000,11 +2000,14 @@ async function submitGarcomOrder() {
           await printOrder(Object.assign({}, mapOrder(savedOrder), { items: newItems }));
         }
       } else if (_autoPrintOn) {
-        const _htmlCozinha = _renderViaHtml('VIA DA COZINHA', itensCozinha);
+        // Toggle "Imprimir bebidas": desligado, bebida pronta não sai em papel
+        // nenhum (nem na via da cozinha, quando ela entra no kanban).
+        const _printBebidaSolo = localStorage.getItem('printBebidaSolo') !== '0';
+        const _cozImprimir = _printBebidaSolo ? itensCozinha
+          : itensCozinha.filter(c => !(typeof _printItemEhIndustrializado === 'function' && _printItemEhIndustrializado(c)));
+        const _htmlCozinha = _renderViaHtml('VIA DA COZINHA', _cozImprimir);
         if (_htmlCozinha) await _printJob(_htmlCozinha, 'cozinha');
 
-        // Toggle "Imprimir bebida industrializada sozinha" — se desligado, pula.
-        const _printBebidaSolo = localStorage.getItem('printBebidaSolo') !== '0';
         const _htmlBar = _renderViaHtml('VIA DO BAR', itensImediatos);
         if (_htmlBar && _printBebidaSolo) await _printJob(_htmlBar, 'caixa');
       }

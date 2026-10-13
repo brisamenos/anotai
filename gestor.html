@@ -3615,8 +3615,8 @@ Use no seu próximo pedido.</textarea>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px">
             <div>
-              <div style="font-size:12px;font-weight:600">Imprimir pedido só de produto industrializado</div>
-              <div style="font-size:10px;color:var(--muted)">Vale só quando a opção acima está desligada (fora do kanban). Ligado: imprime mesmo que o pedido tenha só produto(s) industrializado(s) — sozinho(s) — no caixa. Desligado: pedido só com industrializado não imprime (cliente pega direto). Itens preparados sempre imprimem.</div>
+              <div style="font-size:12px;font-weight:600">Imprimir bebidas</div>
+              <div style="font-size:10px;color:var(--muted)">Ligado: bebida pronta (refrigerante, cerveja, água, energético) é impressa junto com o pedido, inclusive pedido só de bebida. Com impressoras separadas, sai na impressora da categoria dela ou, se não tiver, na do caixa. Desligado: bebida pronta não é impressa; ela continua na conta do cliente. Suco, vitamina e drink da casa sempre imprimem, porque precisam ser preparados.</div>
             </div>
             <div class="toggle on" id="toggle-print-bebida" onclick="this.classList.toggle('on');localStorage.setItem('printBebidaSolo',this.classList.contains('on')?'1':'0');_syncPrintConfigServer()"></div>
           </div>
