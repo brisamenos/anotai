@@ -5520,8 +5520,15 @@ function _printDedupeKey(order, printer, tipo, html, items) {
   if (!order || order.id === undefined || order.id === null || order.id === '') return '';
   const ids = (Array.isArray(items) ? items : []).map(i => i && i.item_id).filter(Boolean).map(String).sort();
   if (ids.length) return `${order.id}|${printer || ''}|i:${_printHashStr(ids.join(','))}`;
-  const semData = String(html || '').replace(/\d{2}\/\d{2}\/\d{4},?\s*\d{2}:\d{2}(:\d{2})?/g, '');
-  return `${order.id}|${printer || ''}|${tipo || ''}|h:${_printHashStr(semData)}`;
+  // Chave da via inteira do pedido: pedido + tipo da via + itens. Não usa o
+  // HTML nem a impressora porque eles mudam de um aparelho pro outro
+  // (tamanho de fonte, impressora configurada só no computador). Com o HTML
+  // na chave, o gestor aberto no celular e o do computador geravam chaves
+  // diferentes e a mesma comanda saía duas vezes.
+  const sig = (Array.isArray(order.items) ? order.items : [])
+    .filter(i => (i?.item_status || 'active') !== 'cancelado')
+    .map(i => `${i?.qty || 1}x${i?.name || ''}|${i?.obs || ''}`).join(';');
+  return `${order.id}|${tipo || ''}|s:${_printHashStr(sig)}`;
 }
 async function _printQueuePost(payload) {
   const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
@@ -5538,6 +5545,10 @@ async function _printQueuePost(payload) {
 // ── Cascata de impressão silenciosa (1 job) ──────────────
 async function _printJobCascade(html, fmt, printer, order, cfg, tipo, cascadeOpts = {}) {
   let compatibleAgentActive = false;
+  // Mesma chave anti-duplicidade em todos os caminhos automáticos (app
+  // desktop e fila do agente): se outro aparelho já mandou esta via, não
+  // manda de novo.
+  const dKeyAuto = cascadeOpts.dedupe ? _printDedupeKey(order, printer || '', tipo, html, cascadeOpts.items) : '';
   // 1️⃣ Electron — usa printHtml para enviar HTML + impressora específica do job
   if (window.ElectronPrint) {
     try {
@@ -5556,7 +5567,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo, cascadeOpt
         if (sel.cancelled) return;
         targetPrinter = sel.printer;
       } else {
-        const dKey = cascadeOpts.dedupe ? _printDedupeKey(order, printer || '', tipo, html, cascadeOpts.items) : '';
+        const dKey = dKeyAuto;
         if (!(await _printPrinterEhDesteComputador(targetPrinter))) {
           // Impressora do setor está em outro computador: manda pra fila do
           // servidor, o EstimaFood Print de lá pega e imprime.
@@ -5627,11 +5638,13 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo, cascadeOpt
         : (Date.now() - _printAgentCache.last_seen > 30000 ? await _checkPrintAgent() : _printAgentCache);
       compatibleAgentActive = !!agentStatus?.active;
       if (compatibleAgentActive) {
-        await fetch('/api/print-queue/job', {
+        const rq = await fetch('/api/print-queue/job', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-          body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: tipo || undefined, marginH: _printMarginH, marginV: _printMarginV }),
+          body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: tipo || undefined, dedupe_key: dKeyAuto || undefined, marginH: _printMarginH, marginV: _printMarginV }),
         });
+        const dq = await rq.json().catch(() => ({}));
+        if (dq?.dup) { console.log('[PRINT] Via já enviada por outro aparelho — não duplica', dKeyAuto); return; }
         sbToast('ok', '🖨️ Enviado ao agente!');
         return;
       }

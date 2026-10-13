@@ -1887,7 +1887,10 @@ td{padding:12px 16px;color:#dce6f7}
             <div class="sec-head-title">Pix online geral</div>
             <div class="sec-head-sub">Lojas que recebem o Pix online pela conta do Mercado Pago da plataforma</div>
           </div>
-          <button class="btn bg2 bsm" onclick="carregarPixGeral()">Atualizar</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn bp bsm" onclick="abrirHistoricoPix()">Histórico de pagamentos Pix</button>
+            <button class="btn bg2 bsm" onclick="carregarPixGeral()">Atualizar</button>
+          </div>
         </div>
 
         <div id="pxg-aviso" style="display:none;margin-bottom:16px;padding:12px 14px;border-radius:12px;border:1px solid rgba(249,115,22,.35);background:rgba(249,115,22,.08);font-size:13px;line-height:1.5"></div>
@@ -1931,6 +1934,8 @@ td{padding:12px 16px;color:#dce6f7}
                 <option value="geral">Usando o Pix geral</option>
                 <option value="uso30">Com pagamento em 30 dias</option>
                 <option value="proprio">Conta própria do Mercado Pago</option>
+                <option value="mp_ativas">Lojas ativas com chaves do Mercado Pago</option>
+                <option value="com_saldo">Com saldo a receber</option>
                 <option value="manual">Chave Pix manual</option>
                 <option value="sem_pix">Sem Pix online</option>
                 <option value="">Todas as lojas</option>
@@ -1939,9 +1944,9 @@ td{padding:12px 16px;color:#dce6f7}
           </div>
           <table>
             <thead>
-              <tr><th>Loja</th><th>Como recebe o Pix</th><th>Pagamentos (30 dias)</th><th>Recebido (30 dias)</th><th>Total pelo geral</th><th>Último pagamento</th><th>Saldo na carteira</th></tr>
+              <tr><th>Loja</th><th>Como recebe o Pix</th><th>Pagamentos (30 dias)</th><th>Recebido (30 dias)</th><th>Total pelo geral</th><th>Último pagamento</th><th>Saldo na carteira</th><th>Mercado Pago</th><th></th></tr>
             </thead>
-            <tbody id="pxg-tbody"><tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
+            <tbody id="pxg-tbody"><tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
           </table>
         </div>
         <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-top:-6px">
@@ -4968,7 +4973,7 @@ function fiscalMesAtual() {
 let _pxgDados = null;
 async function carregarPixGeral() {
   const tbody = document.getElementById('pxg-tbody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr>';
   try {
     const r = await fetch('/api/admin/pix-geral', { headers: adminAuthHeader() });
     if (r.status === 401) { toast('err', 'Sessão expirada'); setTimeout(doLogout, 1500); return; }
@@ -4992,7 +4997,7 @@ async function carregarPixGeral() {
     renderPixGeral();
   } catch (e) {
     _pxgDados = null;
-    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--danger)">Erro: ${escapeHtml(e.message)}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--danger)">Erro: ${escapeHtml(e.message)}</td></tr>`;
   }
 }
 function renderPixGeral() {
@@ -5003,12 +5008,14 @@ function renderPixGeral() {
   let lista = (_pxgDados.lojas || []).slice();
   if (q) lista = lista.filter(l => (l.nome || '').toLowerCase().includes(q) || (l.slug || '').toLowerCase().includes(q));
   if (filtro === 'uso30') lista = lista.filter(l => l.qtd_30d > 0);
+  else if (filtro === 'mp_ativas') lista = lista.filter(l => l.mp_proprio && l.ativo);
+  else if (filtro === 'com_saldo') lista = lista.filter(l => l.saldo_carteira > 0);
   else if (filtro) lista = lista.filter(l => l.modo === filtro);
   lista.sort((a, b) => (b.valor_30d - a.valor_30d) || (b.valor_total - a.valor_total) || String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
   document.getElementById('pxg-count').textContent = lista.length;
   if (!lista.length) {
-    const vazio = { geral: 'Nenhuma loja está usando o Pix online geral.', uso30: 'Nenhuma loja recebeu pelo Pix geral nos últimos 30 dias.', proprio: 'Nenhuma loja com conta própria do Mercado Pago.', manual: 'Nenhuma loja usando chave Pix manual.', sem_pix: 'Nenhuma loja sem Pix online.' };
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">${adminIcon('coin')}</div><div class="es-msg">${q ? 'Nenhuma loja encontrada com essa busca.' : (vazio[filtro] || 'Nenhuma loja cadastrada.')}</div></div></td></tr>`;
+    const vazio = { geral: 'Nenhuma loja está usando o Pix online geral.', uso30: 'Nenhuma loja recebeu pelo Pix geral nos últimos 30 dias.', proprio: 'Nenhuma loja com conta própria do Mercado Pago.', manual: 'Nenhuma loja usando chave Pix manual.', mp_ativas: 'Nenhuma loja ativa com Mercado Pago próprio cadastrado.', com_saldo: 'Nenhuma loja com saldo a receber.', sem_pix: 'Nenhuma loja sem Pix online.' };
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">${adminIcon('coin')}</div><div class="es-msg">${q ? 'Nenhuma loja encontrada com essa busca.' : (vazio[filtro] || 'Nenhuma loja cadastrada.')}</div></div></td></tr>`;
     return;
   }
   const quando = v => { if (!v) return '—'; const dt = new Date(String(v).replace(' ', 'T') + 'Z'); return isNaN(dt) ? '—' : dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); };
@@ -5031,8 +5038,208 @@ function renderPixGeral() {
       <td style="font-weight:700">${fiscalMoney(l.valor_30d)}</td>
       <td>${fiscalMoney(l.valor_total)}<div style="font-size:11px;color:var(--muted)">${l.qtd_total || 0} ${l.qtd_total === 1 ? 'pagamento' : 'pagamentos'}</div></td>
       <td style="font-size:12px;color:var(--text-2)">${quando(l.ultimo_pagamento)}</td>
-      <td style="font-weight:700;color:${l.saldo_carteira > 0 ? 'var(--orange)' : 'var(--muted)'}">${fiscalMoney(l.saldo_carteira)}</td>
+      <td style="font-weight:700;color:${l.saldo_carteira > 0 ? 'var(--orange)' : 'var(--muted)'}">${fiscalMoney(l.saldo_carteira)}${l.saldo_carteira > 0 ? `<div><button class="btn bd bsm" style="margin-top:6px" onclick="abrirZerarSaldo('${escapeHtml(l.tenant_id)}')">Zerar saldo</button></div>` : ''}</td>
+      <td>${l.mp_proprio
+        ? `<div style="font-size:11.5px;color:var(--text-2);white-space:nowrap">Token final ${escapeHtml(l.mp_token_final)}${l.mp_public_key ? '' : '<br><span style="color:var(--orange)">sem Public Key</span>'}</div><button class="btn bg2 bsm" style="margin-top:6px" onclick="verChavesMp('${escapeHtml(l.tenant_id)}')">Ver chaves</button>`
+        : '<span style="font-size:12px;color:var(--muted)">Não cadastrado</span>'}</td>
+      <td><button class="btn bg2 bsm" onclick="abrirHistoricoPix('${escapeHtml(l.tenant_id)}')">Histórico</button></td>
     </tr>`).join('');
+}
+
+// ── Chaves do Mercado Pago da loja, zerar saldo e histórico Pix ─────────
+function _pxgModal(id, largura, html) {
+  document.getElementById(id)?.remove();
+  const m = document.createElement('div');
+  m.id = id; m.className = 'modal-bg on';
+  m.innerHTML = `<div class="modal" style="width:${largura};max-width:96vw;max-height:92vh;overflow:auto">
+    <button class="modal-x" onclick="document.getElementById('${id}').remove()">✕</button>${html}</div>`;
+  m.addEventListener('click', e => { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+  return m;
+}
+function _pxgLoja(tid) { return (_pxgDados?.lojas || []).find(l => l.tenant_id === tid) || { tenant_id: tid, nome: tid }; }
+async function _pxgCopiar(txt) {
+  try { await navigator.clipboard.writeText(txt); }
+  catch { const t = document.createElement('textarea'); t.value = txt; t.style.position = 'fixed'; t.style.opacity = '0'; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch {} t.remove(); }
+  toast('ok', 'Copiado');
+}
+
+async function verChavesMp(tid) {
+  const loja = _pxgLoja(tid);
+  const m = _pxgModal('m-pxg-chaves', '560px', `<h2>Chaves do Mercado Pago</h2>
+    <div style="font-weight:700;font-size:14px">${escapeHtml(loja.nome || '—')}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${escapeHtml(loja.slug || '')}${loja.ativo === false ? ' · loja inativa' : ''}</div>
+    <div id="pxg-chaves-corpo" style="color:var(--muted);font-size:13px">Carregando...</div>`);
+  try {
+    const r = await fetch('/api/admin/pix-geral/chaves?tenant_id=' + encodeURIComponent(tid), { headers: adminAuthHeader() });
+    if (r.status === 401) { toast('err', 'Sessão expirada'); setTimeout(doLogout, 1500); return; }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Não foi possível buscar as chaves');
+    const campo = (rotulo, valor, chave, secreto) => `
+      <div style="margin-bottom:14px">
+        <div style="font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:5px">${rotulo}</div>
+        ${valor ? `<div style="display:flex;gap:6px;align-items:center">
+          <input class="minput" id="pxg-k-${chave}" type="${secreto ? 'password' : 'text'}" readonly value="${escapeHtml(valor)}" style="flex:1;font-family:monospace;font-size:12px">
+          ${secreto ? `<button class="btn bg2 bsm" onclick="const i=document.getElementById('pxg-k-${chave}');const v=i.type==='password';i.type=v?'text':'password';this.textContent=v?'Ocultar':'Mostrar'">Mostrar</button>` : ''}
+          <button class="btn bg2 bsm" onclick="_pxgCopiar(document.getElementById('pxg-k-${chave}').value)">Copiar</button>
+        </div>` : '<div style="font-size:12.5px;color:var(--orange)">Não cadastrada</div>'}
+      </div>`;
+    m.querySelector('#pxg-chaves-corpo').innerHTML = `
+      ${d.ambiente === 'teste' ? '<div class="badge bg-orange" style="margin-bottom:12px">Credencial de teste</div>' : ''}
+      ${campo('Access Token', d.mp_token, 'token', true)}
+      ${campo('Public Key', d.mp_public_key, 'pk', false)}
+      <div style="font-size:11.5px;color:var(--muted);line-height:1.55;border-top:1px solid var(--border);padding-top:12px">
+        O Access Token dá acesso à conta do Mercado Pago da loja. Não envie por mensagem nem compartilhe. Esta consulta ficou registrada na auditoria.
+      </div>`;
+  } catch (e) {
+    const c = m.querySelector('#pxg-chaves-corpo'); if (c) { c.style.color = 'var(--danger)'; c.textContent = e.message; }
+  }
+}
+
+function abrirZerarSaldo(tid) {
+  const loja = _pxgLoja(tid);
+  _pxgModal('m-pxg-zerar', '440px', `<h2>Zerar saldo da loja</h2>
+    <div style="font-size:12px;color:var(--muted)">Loja</div>
+    <div style="font-weight:700;font-size:14px;margin-bottom:12px">${escapeHtml(loja.nome || '—')}</div>
+    <div style="font-size:12px;color:var(--muted)">Saldo a receber que será zerado</div>
+    <div style="font-weight:800;font-size:22px;color:var(--orange);margin-bottom:14px">${fiscalMoney(loja.saldo_carteira)}</div>
+    <div style="font-size:12.5px;line-height:1.55;color:var(--text-2);margin-bottom:12px">
+      Use quando você já repassou esse valor para a loja por fora. Os pagamentos não são apagados: fica registrado um repasse pago nesse valor, que aparece em Saques PIX e na carteira da loja.
+    </div>
+    <div style="font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:5px">Observação (opcional)</div>
+    <input class="minput" id="pxg-zerar-obs" placeholder="Ex: repassado por Pix em 12/10" maxlength="300" style="width:100%;margin-bottom:16px">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn bg2 bsm" onclick="document.getElementById('m-pxg-zerar').remove()">Cancelar</button>
+      <button class="btn bd bsm" id="pxg-zerar-btn" onclick="confirmarZerarSaldo('${escapeHtml(tid)}')">Zerar ${fiscalMoney(loja.saldo_carteira)}</button>
+    </div>`);
+}
+async function confirmarZerarSaldo(tid) {
+  const btn = document.getElementById('pxg-zerar-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Zerando...'; }
+  try {
+    const r = await fetch('/api/admin/pix-geral/zerar', { method: 'POST', headers: adminAuthHeader(),
+      body: JSON.stringify({ tenant_id: tid, obs: document.getElementById('pxg-zerar-obs')?.value || '' }) });
+    if (r.status === 401) { toast('err', 'Sessão expirada'); setTimeout(doLogout, 1500); return; }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Não foi possível zerar o saldo');
+    document.getElementById('m-pxg-zerar')?.remove();
+    toast('ok', `Saldo de ${fiscalMoney(d.valor)} zerado`);
+    carregarPixGeral();
+  } catch (e) {
+    toast('err', e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Tentar de novo'; }
+  }
+}
+
+let _pxhRows = [], _pxhTotal = 0;
+function abrirHistoricoPix(tid) {
+  const lojas = (_pxgDados?.lojas || []).slice().sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+  const hoje = new Date(), ini = new Date(hoje.getTime() - 29 * 864e5);
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const sel = 'class="minput" style="width:auto;padding:6px 10px;font-size:12px"';
+  _pxgModal('m-pxg-hist', '1120px', `<h2>Histórico de pagamentos Pix</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <select id="pxh-loja" ${sel} onchange="carregarHistoricoPix()">
+        <option value="">Todas as lojas</option>
+        ${lojas.map(l => `<option value="${escapeHtml(l.tenant_id)}" ${l.tenant_id === tid ? 'selected' : ''}>${escapeHtml(l.nome || l.slug || l.tenant_id)}</option>`).join('')}
+      </select>
+      <select id="pxh-status" ${sel} onchange="carregarHistoricoPix()">
+        <option value="">Todos os status</option><option value="aprovado">Aprovados</option><option value="pendente">Pendentes</option>
+        <option value="rejeitado">Rejeitados</option><option value="cancelado">Cancelados</option>
+      </select>
+      <select id="pxh-origem" ${sel} onchange="carregarHistoricoPix()">
+        <option value="">Todas as contas</option><option value="global">Conta da plataforma</option>
+        <option value="tenant">Conta própria da loja</option><option value="plano">Mensalidades</option>
+      </select>
+      <input type="date" id="pxh-de" ${sel} value="${ymd(ini)}" onchange="carregarHistoricoPix()" title="De">
+      <input type="date" id="pxh-ate" ${sel} value="${ymd(hoje)}" onchange="carregarHistoricoPix()" title="Até">
+      <input id="pxh-q" ${sel.replace('width:auto', 'width:200px')} placeholder="Pagador, pedido ou ID" onkeydown="if(event.key==='Enter')carregarHistoricoPix()">
+      <button class="btn bg2 bsm" onclick="carregarHistoricoPix()">Buscar</button>
+      <button class="btn bg2 bsm" onclick="exportarHistoricoPix()" style="margin-left:auto">Exportar CSV</button>
+    </div>
+    <div id="pxh-resumo" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px"></div>
+    <div style="overflow:auto;max-height:46vh;border:1px solid var(--border);border-radius:10px">
+      <table style="width:100%;min-width:980px">
+        <thead><tr><th>Data</th><th>Loja</th><th>Pedido</th><th>Pagador</th><th>Valor</th><th>Taxa</th><th>Líquido</th><th>Status</th><th>Conta</th><th>ID Mercado Pago</th></tr></thead>
+        <tbody id="pxh-tbody"><tr><td colspan="10" style="text-align:center;padding:28px;color:var(--muted)">Carregando...</td></tr></tbody>
+      </table>
+    </div>
+    <div id="pxh-mais" style="text-align:center;margin-top:12px"></div>`);
+  carregarHistoricoPix();
+}
+function _pxhParams(offset, limit) {
+  const v = id => document.getElementById(id)?.value || '';
+  return new URLSearchParams({ tenant_id: v('pxh-loja'), status: v('pxh-status'), origem: v('pxh-origem'), de: v('pxh-de'), ate: v('pxh-ate'), q: v('pxh-q').trim(), offset: String(offset), limit: String(limit) });
+}
+async function carregarHistoricoPix(mais) {
+  const tbody = document.getElementById('pxh-tbody');
+  if (!tbody) return;
+  if (!mais) { _pxhRows = []; tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--muted)">Carregando...</td></tr>'; }
+  try {
+    const r = await fetch('/api/admin/pix-historico?' + _pxhParams(_pxhRows.length, 100), { headers: adminAuthHeader() });
+    if (r.status === 401) { toast('err', 'Sessão expirada'); setTimeout(doLogout, 1500); return; }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha ao carregar o histórico');
+    _pxhRows = _pxhRows.concat(d.rows || []); _pxhTotal = d.total || 0;
+    const m = d.resumo || {};
+    const card = (rot, val, sub, cor) => `<div class="stat-card" style="padding:12px 14px"><div class="stat-card-label">${rot}</div><div style="font-size:18px;font-weight:800;color:${cor}">${val}</div><div class="stat-card-sub">${sub}</div></div>`;
+    document.getElementById('pxh-resumo').innerHTML =
+      card('Aprovados', fiscalMoney(m.valor_aprovado), `${m.qtd_aprovado || 0} pagamentos`, 'var(--success)') +
+      card('Suas taxas', fiscalMoney(m.taxas), 'nos aprovados', 'var(--purple)') +
+      card('Líquido para as lojas', fiscalMoney(m.liquido), 'conta da plataforma', 'var(--orange)') +
+      card('Pendentes', String(m.qtd_pendente || 0), 'aguardando pagamento', 'var(--text-2)');
+    renderHistoricoPix();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--danger)">Erro: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+function renderHistoricoPix() {
+  const tbody = document.getElementById('pxh-tbody');
+  if (!tbody) return;
+  if (!_pxhRows.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--muted)">Nenhum pagamento Pix encontrado com esses filtros.</td></tr>';
+    document.getElementById('pxh-mais').innerHTML = '';
+    return;
+  }
+  const quando = v => { if (!v) return '—'; const dt = new Date(String(v).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(v)) ? '' : 'Z')); return isNaN(dt) ? '—' : dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); };
+  const st = { aprovado: ['bg-green', 'Aprovado'], pendente: ['bg-orange', 'Pendente'], rejeitado: ['bg-red', 'Rejeitado'], cancelado: ['bg-gray', 'Cancelado'] };
+  const conta = { global: 'Plataforma', tenant: 'Própria da loja', plano: 'Mensalidade' };
+  tbody.innerHTML = _pxhRows.map(p => {
+    const [cls, txt] = st[p.status] || ['bg-gray', p.status || '—'];
+    return `<tr>
+      <td style="font-size:12px;white-space:nowrap">${quando(p.created_at)}${p.paid_at && p.status === 'aprovado' ? `<div style="font-size:11px;color:var(--muted)">pago ${quando(p.paid_at)}</div>` : ''}</td>
+      <td><div style="font-weight:600">${escapeHtml(p.loja || p.tenant_id)}</div></td>
+      <td>${p.order_id ? '#' + escapeHtml(p.order_id) : '—'}</td>
+      <td style="font-size:12px">${escapeHtml(p.payer_name || '—')}</td>
+      <td style="font-weight:700;white-space:nowrap">${fiscalMoney(p.valor)}</td>
+      <td style="font-size:12px;white-space:nowrap">${p.origem === 'global' ? fiscalMoney(p.taxa) : '—'}</td>
+      <td style="font-size:12px;white-space:nowrap">${p.origem === 'global' ? fiscalMoney(p.valor_liquido) : '—'}</td>
+      <td><span class="badge ${cls}">${txt}</span></td>
+      <td style="font-size:12px">${conta[p.origem] || '—'}</td>
+      <td style="font-size:11.5px;font-family:monospace;color:var(--text-2)">${escapeHtml(p.mp_payment_id || '—')}</td>
+    </tr>`;
+  }).join('');
+  const resta = _pxhTotal - _pxhRows.length;
+  document.getElementById('pxh-mais').innerHTML = `<span style="font-size:12px;color:var(--muted);margin-right:10px">Mostrando ${_pxhRows.length} de ${_pxhTotal}</span>` +
+    (resta > 0 ? '<button class="btn bg2 bsm" onclick="carregarHistoricoPix(true)">Carregar mais</button>' : '');
+}
+async function exportarHistoricoPix() {
+  try {
+    const r = await fetch('/api/admin/pix-historico?' + _pxhParams(0, 500), { headers: adminAuthHeader() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha ao exportar');
+    const linhas = [['Data', 'Pago em', 'Loja', 'Pedido', 'Pagador', 'Valor', 'Taxa', 'Liquido', 'Status', 'Conta', 'ID Mercado Pago']];
+    const conta = { global: 'Plataforma', tenant: 'Propria da loja', plano: 'Mensalidade' };
+    const n = v => (parseFloat(v) || 0).toFixed(2).replace('.', ',');
+    (d.rows || []).forEach(p => linhas.push([p.created_at || '', p.paid_at || '', p.loja || p.tenant_id, p.order_id || '', p.payer_name || '', n(p.valor), n(p.taxa), n(p.valor_liquido), p.status || '', conta[p.origem] || '', p.mp_payment_id || '']));
+    const csv = '﻿' + linhas.map(l => l.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const hj = new Date();
+    a.download = `historico-pix-${hj.getFullYear()}-${String(hj.getMonth() + 1).padStart(2, '0')}-${String(hj.getDate()).padStart(2, '0')}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    if ((d.total || 0) > 500) toast('ok', 'Exportados os 500 mais recentes. Use os filtros de data para o restante.');
+  } catch (e) { toast('err', e.message); }
 }
 
 function fiscalMoney(v) {

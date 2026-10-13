@@ -156,12 +156,17 @@ function billingSetLocked(expiresAt) {
 }
 
 function billingClearLock(opts = {}) {
+  // A tela de bloqueio esconde o menu inteiro; tirar só a classe deixava o
+  // gestor preso em "Meu plano" mesmo depois do pagamento confirmado.
+  // Se a tela estava bloqueada, recarrega a própria página (gestor ou celular)
+  // para voltar tudo ao normal. Vale também para o app EstimaFood Print.
+  const estavaTravado = !!document.body?.classList.contains('billing-locked');
   const patch = { billing_locked: false, billing_reason: null, billing_expired_at: null };
   if (opts.expiresAt !== undefined) patch.tenant_expires_at = opts.expiresAt;
   billingSaveSessionPatch(patch);
   document.body?.classList.remove('billing-locked');
-  if (opts.reload) {
-    window.location.href = 'gestor.html';
+  if (opts.reload || estavaTravado) {
+    window.location.href = window.location.pathname || 'gestor.html';
   }
 }
 

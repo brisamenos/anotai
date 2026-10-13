@@ -822,6 +822,97 @@ function _renovarPlanoSaas(db, tenantId, plano, meses = 1) {
   return { tenant, plano: planoNovo, expires_at: novaExpISO }
 }
 
+// ── Mensalidade paga pelo gestor (Pix ou cartão em "Meu plano") ───────────
+// Renova a loja uma única vez por pagamento, venha a confirmação de onde vier
+// (webhook do Mercado Pago, tela do gestor consultando o status ou o job de
+// conferência). Soma 1 mês a partir do vencimento atual, sem perder os dias
+// que ainda faltavam. Antes só a tela do gestor renovava, e só se fosse ela
+// a primeira a ver o pagamento aprovado: quando o webhook chegava antes, ou o
+// lojista fechava a tela, o pagamento entrava e a loja não era renovada.
+let _ppaPronto = false
+function _prepararPlanoPagamentosAvulsos(db, ignorarId = '') {
+  if (_ppaPronto) return
+  const existia = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='plano_pagamentos_avulsos'").get()
+  db.prepare(`CREATE TABLE IF NOT EXISTS plano_pagamentos_avulsos (
+    mp_payment_id TEXT PRIMARY KEY, tenant_id TEXT, plano TEXT, origem TEXT, expires_at TEXT,
+    created_at TEXT DEFAULT (datetime('now')))`).run()
+  if (!existia) {
+    // Pagamentos aprovados antes desta versão já passaram pelo fluxo antigo: não renova de novo
+    db.prepare(`INSERT OR IGNORE INTO plano_pagamentos_avulsos (mp_payment_id, tenant_id, plano, origem)
+      SELECT mp_payment_id, tenant_id, substr(payer_name,7), 'anterior' FROM pagamentos_pix
+      WHERE status='aprovado' AND payer_name LIKE 'PLANO:%' AND mp_payment_id IS NOT NULL AND mp_payment_id<>?`).run(String(ignorarId))
+    try {
+      db.prepare(`INSERT OR IGNORE INTO plano_pagamentos_avulsos (mp_payment_id, tenant_id, plano, origem)
+        SELECT mp_payment_id, tenant_id, substr(payer_name,7), 'anterior' FROM pagamentos_cartao
+        WHERE status='aprovado' AND payer_name LIKE 'PLANO:%' AND mp_payment_id IS NOT NULL AND mp_payment_id<>?`).run(String(ignorarId))
+    } catch {}
+  }
+  _ppaPronto = true
+}
+function _confirmarMensalidadePaga(db, log, marcarDirty, sse, { tenantId, plano, mpPaymentId, origem }) {
+  if (!tenantId || !mpPaymentId) return null
+  try {
+    _prepararPlanoPagamentosAvulsos(db, mpPaymentId)
+    const r = db.transaction(() => {
+      const ins = db.prepare('INSERT OR IGNORE INTO plano_pagamentos_avulsos (mp_payment_id, tenant_id, plano, origem) VALUES (?,?,?,?)')
+        .run(String(mpPaymentId), String(tenantId), String(plano || ''), String(origem || ''))
+      if (!ins.changes) return null   // este pagamento já renovou a loja
+      const ren = _renovarPlanoSaas(db, tenantId, plano, 1)
+      if (!ren) throw new Error('loja não encontrada')
+      db.prepare('UPDATE plano_pagamentos_avulsos SET expires_at=? WHERE mp_payment_id=?').run(ren.expires_at, String(mpPaymentId))
+      return ren
+    })()
+    if (!r) return null
+    _ajustarAvisoFatura(db, sse, tenantId)
+    try { marcarDirty && marcarDirty() } catch {}
+    // Avisa o gestor aberto (navegador, celular ou app) para sair da tela de cobrança na hora
+    try { const ch = sse || _sseAvisoRef; if (ch) ch(`admin-alerts:${tenantId}`, 'admin_alerts:REFRESH', { action: 'plano_renovado', ts: Date.now() }) } catch {}
+    log('✅', `PLANO RENOVADO (${origem}): ${r.plano} tenant=${tenantId} novo vencimento=${r.expires_at} mp=${mpPaymentId}`)
+    return r
+  } catch (e) {
+    log('⚠️', `Renovação da mensalidade falhou tenant=${tenantId} mp=${mpPaymentId}:`, e.message)
+    return null
+  }
+}
+
+// Confere a cada 2 min os Pix de mensalidade pendentes das últimas 24h, para
+// renovar mesmo se o aviso do Mercado Pago não chegar e o lojista fechar a tela.
+function _urlBasePublica(req) {
+  const env = String(process.env.PUBLIC_BASE_URL || process.env.APP_URL || process.env.BASE_URL || '').replace(/\/+$/, '')
+  if (env) return env
+  const proto = String(req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http')).split(',')[0].trim()
+  const host  = String(req.headers['x-forwarded-host'] || req.headers.host || 'estimafood.evocrm.sbs').split(',')[0].trim()
+  return `${proto || 'https'}://${host || 'estimafood.evocrm.sbs'}`
+}
+
+let _planoPixJobIniciado = false
+function _iniciarPlanoPixJob(db, log, marcarDirty, sse, MP_TOKEN_ENV) {
+  if (_planoPixJobIniciado) return
+  _planoPixJobIniciado = true
+  try { _prepararPlanoPagamentosAvulsos(db) } catch (e) { log('⚠️', 'Tabela de mensalidades pagas:', e.message) }
+  setInterval(async () => {
+    try {
+      const pend = db.prepare(`SELECT mp_payment_id, tenant_id, payer_name FROM pagamentos_pix
+        WHERE status='pendente' AND payer_name LIKE 'PLANO:%' AND created_at > datetime('now','-24 hours')`).all()
+      if (!pend.length) return
+      const token = _resolveMpGlobal(db, MP_TOKEN_ENV)
+      if (!token) return
+      for (const p of pend) {
+        try {
+          const r = await fetch(`https://api.mercadopago.com/v1/payments/${p.mp_payment_id}`, { headers: { Authorization: `Bearer ${token}` } })
+          if (!r.ok) continue
+          const pd = await r.json()
+          const st = pd.status === 'approved' ? 'aprovado' : pd.status === 'rejected' ? 'rejeitado' : pd.status === 'cancelled' ? 'cancelado' : 'pendente'
+          if (st === 'pendente') continue
+          db.prepare('UPDATE pagamentos_pix SET status=?, paid_at=? WHERE mp_payment_id=?').run(st, pd.date_approved || null, String(p.mp_payment_id))
+          if (st === 'aprovado') _confirmarMensalidadePaga(db, log, marcarDirty, sse, { tenantId: p.tenant_id, plano: String(p.payer_name).slice(6), mpPaymentId: p.mp_payment_id, origem: 'pix-conferencia' })
+          else marcarDirty && marcarDirty()
+        } catch (e) { log('⚠️', `Conferência Pix mensalidade mp=${p.mp_payment_id}:`, e.message) }
+      }
+    } catch (e) { log('⚠️', 'Conferência Pix mensalidade erro geral:', e.message) }
+  }, 2 * 60_000)
+}
+
 function _upsertAssinaturaPreapproval(db, tenantId, plano, valor, pre, extRef, email, paymentMethodId) {
   _ensurePlanoAssinaturas(db)
   const preId = pre?.id ? String(pre.id) : ''
@@ -1307,6 +1398,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
   _svBotInit(ctx); _tenantWaInit(ctx)
   _sseAvisoRef = sseBroadcast
+
+  // Criar cardápio por foto (gestor)
+  if (upath.startsWith('/api/cardapio-ia/')) { if (await require('./cardapio-ia')(req, res, ctx)) return true }
 
   const INDICADOR_SESSION_TTL = 8 * 60 * 60 * 1000
   const criarSessaoIndicador = (ind) => {
@@ -3353,6 +3447,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // O job resolve o token MP por tenant em cada iteração — pagamentos de
   // pedidos do tenant X consultam a conta MP do tenant X (com fallback global).
   _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN, aplicarBaixaEstoquePedido)
+  _iniciarPlanoPixJob(db, log, marcarDirty, sseBroadcast, MP_TOKEN)
 
   // ── Inicia job de auto-cobrança SaaS (uma vez) ────────────────────────────
   _iniciarAutoCobrancaJob(ctx)
@@ -6103,7 +6198,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const novoStatus = pd.status === 'approved' ? 'aprovado' : pd.status === 'rejected' ? 'rejeitado' : pd.status === 'cancelled' ? 'cancelado' : 'pendente'
 
       // ── Rota 1: PIX (pagamentos_pix) ──────────────────────────────────────
-      const row = db.prepare('SELECT status,valor,tenant_id,order_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
+      const row = db.prepare('SELECT status,valor,tenant_id,order_id,payer_name FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
+      if (row && novoStatus === 'aprovado' && String(row.payer_name || '').startsWith('PLANO:')) {
+        if (row.status !== novoStatus) db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.date_approved || null, String(mpId))
+        _confirmarMensalidadePaga(db, log, marcarDirty, sseBroadcast, { tenantId: row.tenant_id, plano: String(row.payer_name).slice(6), mpPaymentId: mpId, origem: 'pix-webhook' })
+        send(res, 200, { ok: true })
+        return true
+      }
       if (row && row.status !== novoStatus) {
         db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.date_approved || null, String(mpId))
         marcarDirty()
@@ -6144,7 +6245,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
       }
 
       // ── Rota 2: Cartão online (pagamentos_cartao) ────────────────────────
-      const rowC = db.prepare('SELECT status,valor,tenant_id,order_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
+      const rowC = db.prepare('SELECT status,valor,tenant_id,order_id,payer_name FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
+      if (rowC && novoStatus === 'aprovado' && String(rowC.payer_name || '').startsWith('PLANO:')) {
+        if (rowC.status !== novoStatus) db.prepare('UPDATE pagamentos_cartao SET status=?, status_detail=?, paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.status_detail || '', pd.date_approved || null, String(mpId))
+        _confirmarMensalidadePaga(db, log, marcarDirty, sseBroadcast, { tenantId: rowC.tenant_id, plano: String(rowC.payer_name).slice(6), mpPaymentId: mpId, origem: 'cartao-webhook' })
+        send(res, 200, { ok: true })
+        return true
+      }
       if (rowC && rowC.status !== novoStatus) {
         db.prepare('UPDATE pagamentos_cartao SET status=?, status_detail=?, paid_at=? WHERE mp_payment_id=?')
           .run(novoStatus, pd.status_detail || '', pd.date_approved || null, String(mpId))
@@ -6281,11 +6388,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!requireFinanceAccess(tid)) return true
     try {
       // PIX aprovados
-      const pixRecebido  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
-      const pixTaxas     = db.prepare("SELECT COALESCE(SUM(taxa),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
-      const pixCount     = db.prepare("SELECT COUNT(*) as c FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.c || 0
-      const ultimosPix   = db.prepare("SELECT * FROM pagamentos_pix WHERE tenant_id=? ORDER BY created_at DESC LIMIT 10").all(tid)
-      const pixPendentes = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(valor),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='pendente'").get(tid)
+      const pixRecebido  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado' AND COALESCE(payer_name,'') NOT LIKE 'PLANO:%'").get(tid)?.v || 0
+      const pixTaxas     = db.prepare("SELECT COALESCE(SUM(taxa),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado' AND COALESCE(payer_name,'') NOT LIKE 'PLANO:%'").get(tid)?.v || 0
+      const pixCount     = db.prepare("SELECT COUNT(*) as c FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado' AND COALESCE(payer_name,'') NOT LIKE 'PLANO:%'").get(tid)?.c || 0
+      const ultimosPix   = db.prepare("SELECT * FROM pagamentos_pix WHERE tenant_id=? AND COALESCE(payer_name,'') NOT LIKE 'PLANO:%' ORDER BY created_at DESC LIMIT 10").all(tid)
+      const pixPendentes = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(valor),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='pendente' AND COALESCE(payer_name,'') NOT LIKE 'PLANO:%'").get(tid)
 
       // Cartão online aprovados (taxa = 7% já descontada na hora do pagamento)
       const cartaoRows   = db.prepare("SELECT COALESCE(SUM(valor),0) as bruto, COUNT(*) as c FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)
@@ -6357,7 +6464,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       try {
         resultado = db.transaction(() => {
           // PIX aprovados
-          const pixLiq  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+          const pixLiq  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado' AND COALESCE(payer_name,'') NOT LIKE 'PLANO:%'").get(tid)?.v || 0
           // Cartão aprovados (desconta 7% taxa)
           const cartaoB = db.prepare("SELECT COALESCE(SUM(valor),0) as v FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
           const cartaoLiq = cartaoB * 0.93
@@ -6370,7 +6477,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           const jaTemPendente = db.prepare("SELECT id FROM saques WHERE tenant_id=? AND status='pendente'").get(tid)
           if (jaTemPendente) return { err: 'Você já tem um saque pendente aguardando aprovação' }
 
-          const numPix    = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(taxa),0) as t FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)
+          const numPix    = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(taxa),0) as t FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado' AND COALESCE(payer_name,'') NOT LIKE 'PLANO:%'").get(tid)
           const numCartao = db.prepare("SELECT COUNT(*) as c FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)
           const numTotal  = (numPix?.c || 0) + (numCartao?.c || 0)
           const taxaTotal = (numPix?.t || 0) + (cartaoB * 0.07)
@@ -6494,7 +6601,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       // se sobrar saldo de antes, queremos avisar pra ele sacar)
       let saldoCarteira = 0
       try {
-        const pixLiq  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+        const pixLiq  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado' AND COALESCE(payer_name,'') NOT LIKE 'PLANO:%'").get(tid)?.v || 0
         const cartaoB = db.prepare("SELECT COALESCE(SUM(valor),0) as v FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
         const totalRec = pixLiq + (cartaoB * 0.93)
         const totalSac = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v || 0
@@ -6670,9 +6777,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
           SUM(CASE WHEN ${NA_JANELA} THEN valor ELSE 0 END)      AS valor_30d,
           SUM(CASE WHEN ${NA_JANELA} THEN taxa ELSE 0 END)       AS taxas_30d,
           MAX(CASE WHEN status='aprovado' THEN datetime(COALESCE(paid_at, created_at)) END) AS ultimo
-        FROM pagamentos_pix WHERE COALESCE(mp_source,'global')='global' GROUP BY tenant_id`).all())
+        FROM pagamentos_pix WHERE COALESCE(mp_source,'global')='global' AND COALESCE(payer_name,'') NOT LIKE 'PLANO:%' GROUP BY tenant_id`).all())
       // Saldo ainda na carteira da loja: mesma conta de /api/carteira
-      const pixLiq = porTenant(db.prepare("SELECT tenant_id, COALESCE(SUM(valor_liquido),0) AS v FROM pagamentos_pix WHERE status='aprovado' GROUP BY tenant_id").all())
+      const pixLiq = porTenant(db.prepare("SELECT tenant_id, COALESCE(SUM(valor_liquido),0) AS v FROM pagamentos_pix WHERE status='aprovado' AND COALESCE(payer_name,'') NOT LIKE 'PLANO:%' GROUP BY tenant_id").all())
       let cartao = {}
       try { cartao = porTenant(db.prepare("SELECT tenant_id, COALESCE(SUM(valor),0) AS v FROM pagamentos_cartao WHERE status='aprovado' GROUP BY tenant_id").all()) } catch { /* tabela pode não existir em base antiga */ }
       const sacado = porTenant(db.prepare("SELECT tenant_id, COALESCE(SUM(valor_liquido),0) AS v FROM saques WHERE status IN ('pendente','aprovado','pago') GROUP BY tenant_id").all())
@@ -6694,7 +6801,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
           modo, ligado_de_proposito: ia.pix_ativo === true,
           qtd_30d: g.qtd_30d || 0, valor_30d: num(g.valor_30d), taxas_30d: num(g.taxas_30d),
           qtd_total: g.qtd_total || 0, valor_total: num(g.valor_total),
-          ultimo_pagamento: g.ultimo || null, saldo_carteira: num(saldo)
+          ultimo_pagamento: g.ultimo || null, saldo_carteira: num(saldo),
+          mp_proprio: temProprio, mp_token_final: temProprio ? limpa(ia.mp_token).slice(-6) : '',
+          mp_public_key: temProprio && !!limpa(ia.mp_public_key)
         }
         if (modo === 'geral') resumo.usando_geral++
         else if (modo === 'proprio') resumo.conta_propria++
@@ -6708,6 +6817,107 @@ module.exports = async function handleRoutes(req, res, ctx) {
       ;['valor_30d', 'taxas_30d', 'saldo_repassar'].forEach(k => { resumo[k] = num(resumo[k]) })
       send(res, 200, { ok: true, geral_configurado: geralConfigurado, taxa_pix: taxaPix, resumo, lojas })
     } catch (e) { log('❌', '/api/admin/pix-geral erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Admin: chaves do Mercado Pago próprio de uma loja ─────────
+  // Só o admin vê, e cada consulta fica no log de auditoria.
+  if (req.method === 'GET' && upath === '/api/admin/pix-geral/chaves') {
+    const adm = validarSessaoAdmin(req)
+    if (!adm) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const tid = String(params.get('tenant_id') || '')
+    if (!tid) { send(res, 400, { error: 'tenant_id obrigatório' }); return true }
+    try {
+      const limpa = (v) => String(v || '').replace(/^["'\s​-‍﻿]+|["'\s​-‍﻿]+$/g, '').replace(/[\r\n\t]/g, '')
+      const t = db.prepare('SELECT id, nome, slug, ativo FROM tenants WHERE id=?').get(tid)
+      if (!t) { send(res, 404, { error: 'Loja não encontrada' }); return true }
+      let ia = {}
+      try { ia = JSON.parse(db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)?.ia_config || '{}') || {} } catch {}
+      const mp_token = limpa(ia.mp_token), mp_public_key = limpa(ia.mp_public_key)
+      _registrarAudit(adm, { acao: 'ver_chaves_mp', alvo_tipo: 'tenant', alvo_id: tid, alvo_nome: t.nome || t.slug || tid }, req.headers)
+      send(res, 200, { ok: true, tenant_id: tid, nome: t.nome || '', slug: t.slug || '', ativo: t.ativo !== 0,
+        mp_token, mp_public_key, ambiente: /^TEST-/i.test(mp_token) ? 'teste' : (mp_token ? 'producao' : '') })
+    } catch (e) { log('❌', '/api/admin/pix-geral/chaves erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Admin: zerar o saldo a repassar de uma loja ──────────────
+  // Não apaga pagamentos: registra um repasse já pago no valor do saldo,
+  // então o histórico fica completo e a carteira da loja passa a mostrar zero.
+  if (req.method === 'POST' && upath === '/api/admin/pix-geral/zerar') {
+    const adm = validarSessaoAdmin(req)
+    if (!adm) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const tid = String(body?.tenant_id || '')
+    const obs = String(body?.obs || '').trim().slice(0, 300)
+    if (!tid) { send(res, 400, { error: 'tenant_id obrigatório' }); return true }
+    try {
+      const t = db.prepare('SELECT id, nome, slug FROM tenants WHERE id=?').get(tid)
+      if (!t) { send(res, 404, { error: 'Loja não encontrada' }); return true }
+      const r2 = (v) => Math.round((parseFloat(v) || 0) * 100) / 100
+      const res2 = db.transaction(() => {
+        const pixLiq = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado' AND COALESCE(payer_name,'') NOT LIKE 'PLANO:%'").get(tid)?.v || 0
+        let cartao = 0
+        try { cartao = db.prepare("SELECT COALESCE(SUM(valor),0) v FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0 } catch {}
+        const sacado = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v || 0
+        const saldo = r2(Math.max(0, pixLiq + cartao * (1 - 0.07) - sacado))
+        if (saldo <= 0) return { saldo: 0 }
+        const agora = new Date().toISOString()
+        const info = db.prepare(`INSERT INTO saques (tenant_id,tenant_nome,valor_solicitado,num_pagamentos,taxa_total,valor_liquido,pix_key,pix_key_tipo,status,obs_admin,paid_at)
+          VALUES (?,?,?,0,0,?,?,?,'pago',?,?)`)
+          .run(tid, t.nome || t.slug || tid, saldo, saldo, 'feito pelo administrador', 'repasse manual', obs || 'Saldo zerado pelo administrador', agora)
+        return { saldo, saque: db.prepare('SELECT * FROM saques WHERE id=?').get(info.lastInsertRowid) }
+      })()
+      if (!res2.saldo) { send(res, 400, { error: 'Esta loja não tem saldo para zerar.' }); return true }
+      marcarDirty()
+      try { sseBroadcast('saques-admin', 'saques:INSERT', res2.saque); sseBroadcast(`saques-rt:${tid}`, 'saques:INSERT', res2.saque) } catch {}
+      _registrarAudit(adm, { acao: 'zerar_saldo_loja', alvo_tipo: 'tenant', alvo_id: tid, alvo_nome: t.nome || t.slug || tid, detalhes: { valor: res2.saldo, obs } }, req.headers)
+      log('💸', `[ADMIN] saldo zerado tenant=${tid} valor=R$${res2.saldo.toFixed(2)}`)
+      send(res, 200, { ok: true, valor: res2.saldo })
+    } catch (e) { log('❌', '/api/admin/pix-geral/zerar erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Admin: histórico de pagamentos Pix ───────────────────────
+  if (req.method === 'GET' && upath === '/api/admin/pix-historico') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const tid = String(params.get('tenant_id') || '')
+      const status = String(params.get('status') || '')
+      const origem = String(params.get('origem') || '')
+      const de = String(params.get('de') || '').slice(0, 10)
+      const ate = String(params.get('ate') || '').slice(0, 10)
+      const q = String(params.get('q') || '').trim().slice(0, 80)
+      const limit = Math.max(1, Math.min(500, parseInt(params.get('limit')) || 100))
+      const offset = Math.max(0, parseInt(params.get('offset')) || 0)
+      const where = [], args = []
+      if (tid) { where.push('p.tenant_id=?'); args.push(tid) }
+      if (['aprovado', 'pendente', 'rejeitado', 'cancelado', 'estornado'].includes(status)) { where.push('p.status=?'); args.push(status) }
+      if (origem === 'plano') where.push("COALESCE(p.payer_name,'') LIKE 'PLANO:%'")
+      else if (origem === 'tenant') where.push("COALESCE(p.mp_source,'global')='tenant' AND COALESCE(p.payer_name,'') NOT LIKE 'PLANO:%'")
+      else if (origem === 'global') where.push("COALESCE(p.mp_source,'global')='global' AND COALESCE(p.payer_name,'') NOT LIKE 'PLANO:%'")
+      // datas no horário de Brasília
+      if (/^\d{4}-\d{2}-\d{2}$/.test(de)) { where.push("date(datetime(p.created_at,'-3 hours')) >= ?"); args.push(de) }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(ate)) { where.push("date(datetime(p.created_at,'-3 hours')) <= ?"); args.push(ate) }
+      if (q) { where.push("(COALESCE(p.payer_name,'') LIKE ? OR COALESCE(p.mp_payment_id,'') LIKE ? OR CAST(COALESCE(p.order_id,'') AS TEXT)=? OR COALESCE(t.nome,'') LIKE ?)"); args.push(`%${q}%`, `%${q}%`, q.replace(/\D/g, ''), `%${q}%`) }
+      const W = where.length ? 'WHERE ' + where.join(' AND ') : ''
+      const base = `FROM pagamentos_pix p LEFT JOIN tenants t ON t.id=p.tenant_id ${W}`
+      const rows = db.prepare(`SELECT p.id, p.tenant_id, t.nome AS loja, t.slug, p.order_id, p.mp_payment_id, p.valor, p.taxa, p.valor_liquido,
+          p.status, p.payer_name, COALESCE(p.mp_source,'global') AS mp_source, p.created_at, p.paid_at
+        ${base} ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset)
+      const tot = db.prepare(`SELECT COUNT(*) AS qtd,
+          SUM(CASE WHEN p.status='aprovado' THEN 1 ELSE 0 END) AS qtd_aprovado,
+          COALESCE(SUM(CASE WHEN p.status='aprovado' THEN p.valor END),0) AS valor_aprovado,
+          COALESCE(SUM(CASE WHEN p.status='aprovado' AND COALESCE(p.mp_source,'global')='global' AND COALESCE(p.payer_name,'') NOT LIKE 'PLANO:%' THEN p.taxa END),0) AS taxas,
+          COALESCE(SUM(CASE WHEN p.status='aprovado' AND COALESCE(p.mp_source,'global')='global' AND COALESCE(p.payer_name,'') NOT LIKE 'PLANO:%' THEN p.valor_liquido END),0) AS liquido,
+          SUM(CASE WHEN p.status='pendente' THEN 1 ELSE 0 END) AS qtd_pendente
+        ${base}`).get(...args)
+      const r2 = (v) => Math.round((parseFloat(v) || 0) * 100) / 100
+      send(res, 200, { ok: true, total: tot.qtd || 0, limit, offset,
+        resumo: { qtd_aprovado: tot.qtd_aprovado || 0, valor_aprovado: r2(tot.valor_aprovado), taxas: r2(tot.taxas), liquido: r2(tot.liquido), qtd_pendente: tot.qtd_pendente || 0 },
+        rows: rows.map(r => ({ ...r, origem: String(r.payer_name || '').startsWith('PLANO:') ? 'plano' : (r.mp_source === 'tenant' ? 'tenant' : 'global'),
+          payer_name: String(r.payer_name || '').startsWith('PLANO:') ? 'Mensalidade ' + String(r.payer_name).slice(6) : (r.payer_name === 'MP_PROPRIO' ? '' : (r.payer_name || '')) })) })
+    } catch (e) { log('❌', '/api/admin/pix-historico erro:', e.message); send(res, 500, { error: e.message }) }
     return true
   }
 
@@ -7507,6 +7717,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           description: `Renovacao Plano ${_planoSaasLabel(plano)} - ${tenant?.nome || 'Cliente'}`,
           payment_method_id: 'pix',
           external_reference: extRef,
+          notification_url: `${_urlBasePublica(req)}/webhook/mercadopago`,
           payer: { email: 'renovacao@estimafood.com', first_name: tenant?.nome || 'Cliente', last_name: '' },
         })
       })
@@ -7522,7 +7733,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
         try {
           db.prepare(`INSERT INTO pagamentos_pix (tenant_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64)
             VALUES (?,?,?,?,0,?,?,?,?,?)`)
-            .run(tid, String(mpData.id), extRef, parseFloat(valor), parseFloat(valor),
+            // valor_liquido = 0: mensalidade é da plataforma e nunca vira saldo na carteira da loja
+            .run(tid, String(mpData.id), extRef, parseFloat(valor), 0,
               (mpData.status==='approved'?'aprovado':'pendente'), `PLANO:${plano}`, qr, qrB64)
         } catch (dbErr) { log('⚠️', `PIX plano: nao foi possivel salvar no BD tenant=${tid}:`, dbErr.message) }
       } else {
@@ -7550,15 +7762,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const rowAtual = db.prepare('SELECT status,valor,tenant_id,payer_name FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
       if (rowAtual && rowAtual.status !== novoStatus) {
         db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.date_approved || null, String(mpId))
-        if (novoStatus === 'aprovado' && rowAtual.payer_name?.startsWith('PLANO:')) {
-          // Renovar o plano do tenant
-          const plano = rowAtual.payer_name.replace('PLANO:', '')
-          const novaExpISO = _dateOnlyISO(_addCalendarMonths(new Date(), 1))
-          db.prepare('UPDATE tenants SET plano=?, expires_at=?, ativo=1 WHERE id=?').run(plano, novaExpISO, rowAtual.tenant_id)
-          _ajustarAvisoFatura(db, sseBroadcast, rowAtual.tenant_id)   // renovou: o aviso de fatura some
-          marcarDirty()
-          log('✅', `PLANO RENOVADO: ${plano} tenant=${rowAtual.tenant_id} expira=${novaExpISO}`)
-        }
+        marcarDirty()
+      }
+      // Renova a loja (uma vez só por pagamento, mesmo que o webhook tenha marcado aprovado antes)
+      if (rowAtual && novoStatus === 'aprovado' && String(rowAtual.payer_name || '').startsWith('PLANO:')) {
+        _confirmarMensalidadePaga(db, log, marcarDirty, sseBroadcast, { tenantId: rowAtual.tenant_id, plano: String(rowAtual.payer_name).slice(6), mpPaymentId: mpId, origem: 'pix-gestor' })
       }
       send(res, 200, { status: novoStatus, mp_status: pd.status })
     } catch (e) { send(res, 500, { error: e.message }) }
@@ -7595,6 +7803,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           installments: 1,
           payment_method_id,
           external_reference: extRef,
+          notification_url: `${_urlBasePublica(req)}/webhook/mercadopago`,
           payer: {
             email: payer_email || 'renovacao@estimafood.com',
             identification: { type: 'CPF', number: (payer_cpf || '').replace(/\D/g,'') }
@@ -7617,11 +7826,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
       // Se aprovado, renova o plano
       if (novoStatus === 'aprovado') {
-        const novaExpISO = _dateOnlyISO(_addCalendarMonths(new Date(), 1))
-        db.prepare('UPDATE tenants SET plano=?, expires_at=?, ativo=1 WHERE id=?').run(plano, novaExpISO, tid)
-        _ajustarAvisoFatura(db, sseBroadcast, tid)   // renovou: o aviso de fatura some
-        marcarDirty()
-        log('✅', `PLANO RENOVADO (Cartao): ${plano} tenant=${tid} expira=${novaExpISO}`)
+        _confirmarMensalidadePaga(db, log, marcarDirty, sseBroadcast, { tenantId: tid, plano, mpPaymentId: mpData.id, origem: 'cartao-gestor' })
       }
 
       log('💳', `Cartao plano: R$${valor} plano=${plano} tenant=${tid} status=${novoStatus}`)
@@ -8356,8 +8561,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
         created_at TEXT DEFAULT (datetime('now')), done_at TEXT
       )`)
       try { db.exec(`ALTER TABLE print_jobs ADD COLUMN tipo TEXT DEFAULT NULL`) } catch (_) {}
-      // Recupera jobs travados em 'processing' há mais de 2 minutos — agente pode ter caído
-      try { db.exec(`UPDATE print_jobs SET status='pending' WHERE status='processing' AND created_at < datetime('now','-2 minutes')`) } catch (_) {}
+      // Recupera jobs travados em 'processing' há mais de 2 minutos — agente pode ter caído.
+      // Conta a partir de quando o job foi PEGO (claimed_at), não de quando foi
+      // criado: antes, um job que ficou mais de 2 min na fila voltava pra
+      // 'pending' logo depois de ser pego e saía impresso duas vezes.
+      try { db.exec(`ALTER TABLE print_jobs ADD COLUMN claimed_at TEXT DEFAULT NULL`) } catch (_) {}
+      try { db.exec(`UPDATE print_jobs SET status='pending' WHERE status='processing' AND COALESCE(claimed_at, created_at) < datetime('now','-2 minutes')`) } catch (_) {}
       // Job pendente há mais de 10 min não imprime mais (evita a cozinha
       // receber de uma vez comandas velhas que ficaram paradas na fila)
       try { db.exec(`UPDATE print_jobs SET status='expirado' WHERE status='pending' AND created_at < datetime('now','-10 minutes')`) } catch (_) {}
@@ -8387,7 +8596,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       // Marca como 'processing' para não duplicar
       if (jobs.length) {
         const ids = jobs.map(j => j.id).join(',')
-        db.exec(`UPDATE print_jobs SET status='processing' WHERE id IN (${ids})`)
+        db.exec(`UPDATE print_jobs SET status='processing', claimed_at=datetime('now') WHERE id IN (${ids})`)
       }
       send(res, 200, jobs)
     } catch (e) { send(res, 500, { error: e.message }) }

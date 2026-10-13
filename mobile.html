@@ -649,6 +649,10 @@ table { min-width: 500px !important; }
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         Nova categoria
       </button>
+      <button class="btn bg" onclick="abrirCardapioIA()" style="flex-basis:100%">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-2.5h6L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.6"/></svg>
+        Criar por IA
+      </button>
     </div>
   </div>
   <div id="gestor-cats-list"></div>
@@ -1636,13 +1640,13 @@ Se tiver alguma dúvida, responda esta mensagem que vamos ajudar.</textarea>
 </div>
 
 <!-- TOAST -->
-<div id="toast" style="position:fixed;bottom:80px;right:16px;background:rgba(20,20,20,.95);border:1px solid var(--border2);border-radius:12px;padding:12px 18px;font-size:12.5px;display:none;align-items:center;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.6);z-index:9999;backdrop-filter:blur(20px)"></div>
+<div id="toast" style="position:fixed;bottom:80px;right:16px;background:rgba(20,20,20,.95);border:1px solid var(--border2);border-radius:12px;padding:12px 18px;font-size:12.5px;display:none;align-items:center;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.6);z-index:9999;backdrop-filter:blur(20px)"><span id="ti"></span><span id="tm"></span></div>
 
 <!-- ══ SCRIPTS ═══════════════════════════════════════════════ -->
 <script>
 var _v = Date.now();
 var _mods = [
-  'gestor-core.js','gestor-pedidos.js','gestor-cardapio.js',
+  'gestor-core.js','gestor-pedidos.js','gestor-cardapio.js','gestor-cardapio-ia.js',
   'gestor-salao.js','gestor-relatorios.js','gestor-caixa.js',
   'gestor-financeiro.js','gestor-robo.js','gestor-config.js'
 ];
