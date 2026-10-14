@@ -5543,10 +5543,16 @@ function _printDedupeKey(order, printer, tipo, html, items) {
   // (tamanho de fonte, impressora configurada só no computador). Com o HTML
   // na chave, o gestor aberto no celular e o do computador geravam chaves
   // diferentes e a mesma comanda saía duas vezes.
-  const sig = (Array.isArray(order.items) ? order.items : [])
+  // Via de um setor (só parte dos itens, ex.: Lanches numa impressora e
+  // Bebidas em outra): a chave usa os itens DESSA via. Antes usava os itens
+  // do pedido inteiro, então todas as vias do mesmo pedido e do mesmo tipo
+  // ganhavam a mesma chave, e o servidor descartava a segunda como repetida.
+  // Era por isso que a via das bebidas não saía.
+  const daVia = Array.isArray(items) && items.length;
+  const sig = (daVia ? items : (Array.isArray(order.items) ? order.items : []))
     .filter(i => (i?.item_status || 'active') !== 'cancelado')
     .map(i => `${i?.qty || 1}x${i?.name || ''}|${i?.obs || ''}`).join(';');
-  return `${order.id}|${tipo || ''}|s:${_printHashStr(sig)}`;
+  return `${order.id}|${tipo || ''}|${daVia ? 'v' : 's'}:${_printHashStr(sig)}`;
 }
 async function _printQueuePost(payload) {
   const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
