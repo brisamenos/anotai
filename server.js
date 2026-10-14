@@ -6686,6 +6686,24 @@ function _resolverOpenAIKey(tenantId) {
   } catch (e) { return process.env.OPENAI_API_KEY || null }
 }
 
+// Pedido por IA (voz e texto no WhatsApp) liberado para a loja: add-on ligado
+// pelo admin (tenants.voz_ativo, entra na cobrança) OU teste grátis criado com a
+// atendente com IA, só até o último dia do teste (não entra em cobrança nenhuma).
+// Depois do teste, só o admin liga de novo.
+function _vozLiberadaRow(tenantId) {
+  try {
+    const t = db.prepare('SELECT voz_ativo FROM tenants WHERE id=?').get(tenantId)
+    if (!t) return null
+    if (t.voz_ativo) return { voz_ativo: 1 }
+    try {
+      const hojeBR = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10)
+      const g = db.prepare("SELECT 1 AS ok FROM testes_gratis WHERE tenant_id=? AND ia_teste=1 AND status IN ('ativo','convertido') AND expira_em >= ? LIMIT 1").get(tenantId, hojeBR)
+      if (g) return { voz_ativo: 1, teste: true }
+    } catch (e) { /* tabela de testes ainda não existe */ }
+    return { voz_ativo: 0 }
+  } catch (e) { return null }
+}
+
 async function transcreverAudioWhatsapp(base64, mimetype, tenantId) {
   try {
     const apiKey = _resolverOpenAIKey(tenantId)
@@ -7396,7 +7414,7 @@ async function handleIAWebhook(req, res) {
     const audioMsg = body?.data?.message?.audioMessage || null
     if (!msg && audioMsg && from && tenantId) {
       const phoneVoz = phoneUtils.cleanWhatsappJid(from)
-      const tRow = phoneVoz ? db.prepare('SELECT voz_ativo FROM tenants WHERE id=?').get(tenantId) : null
+      const tRow = phoneVoz ? _vozLiberadaRow(tenantId) : null
       if (phoneVoz && tRow?.voz_ativo) {
         send(res, 200, { ok: true, voz: true }) // responde rápido — processa em background
         ;(async () => {
@@ -7650,7 +7668,7 @@ async function handleIAWebhook(req, res) {
       // Reaproveita o MESMO pipeline do áudio (extração + confirmação); só
       // segue se a IA achar pelo menos 1 item de verdade, senão passa a
       // vez pro roteador normal (saudação/status/cupom/horário/silêncio).
-      const _tRowTxt = db.prepare('SELECT voz_ativo FROM tenants WHERE id=?').get(tenantId)
+      const _tRowTxt = _vozLiberadaRow(tenantId)
       if (_tRowTxt?.voz_ativo && _vozDentroDoLimite(tenantId, phone)) {
         const _abertaChkTxt = isLojaAbertaServer(tenantId)
         if (_abertaChkTxt.aberto) {

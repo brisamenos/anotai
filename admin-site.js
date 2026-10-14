@@ -38,6 +38,31 @@
     st.id = 'sa-css';
     st.textContent = `
 .sa-liga{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:22px;align-items:center}
+.sa-vis-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.sa-vis-baixo{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:28px;margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+.sa-vis-sub{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:none}
+.sa-vis-sub span{font-weight:500}
+.sa-vis-orig{display:grid;grid-template-columns:130px minmax(0,1fr) 44px;gap:10px;align-items:center;font-size:13px;margin-bottom:8px}
+.sa-vis-orig b{text-align:right;font-variant-numeric:tabular-nums}
+.sa-vis-barra{height:8px;border-radius:99px;background:var(--surface2,rgba(127,127,127,.15));overflow:hidden}
+.sa-vis-barra i{display:block;height:100%;border-radius:99px;background:var(--accent)}
+.sa-vis-graf{display:flex;align-items:flex-end;gap:4px;height:150px}
+.sa-vis-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;height:100%}
+.sa-vis-num{font-size:10px;color:var(--muted);height:14px;font-variant-numeric:tabular-nums}
+.sa-vis-pilar{flex:1;width:100%;display:flex;align-items:flex-end;position:relative}
+.sa-vis-pilar i{display:block;width:100%;min-height:2px;border-radius:5px 5px 2px 2px;background:var(--accent);opacity:.85}
+.sa-vis-pilar em{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);font-style:normal;font-size:10px;font-weight:800;color:#fff;background:var(--orange);border-radius:99px;padding:0 5px;line-height:15px}
+.sa-vis-dia{font-size:9.5px;color:var(--muted);margin-top:4px;white-space:nowrap}
+.sa-vis{min-width:0;overflow:hidden}
+.sa-vis-baixo > div{min-width:0}
+.sa-vis-dia,.sa-vis-num{max-width:100%;overflow:hidden}
+@media (max-width:900px){.sa-vis-baixo{grid-template-columns:1fr}.sa-vis-dia{font-size:8.5px}}
+@media (max-width:600px){
+  .sa-vis-orig{grid-template-columns:minmax(0,1fr) 72px 36px;gap:8px}
+  .sa-vis-graf{gap:2px;height:130px}
+  .sa-vis-num{font-size:8.5px}
+  .sa-vis-col:nth-child(even) .sa-vis-dia{visibility:hidden}
+}
 .sa-liga-titulo{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:800;letter-spacing:-.3px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .sa-liga-texto{font-size:13px;color:var(--text-2);margin-top:5px;max-width:640px;line-height:1.55}
 .sa-chave{position:relative;width:64px;height:36px;flex-shrink:0;cursor:pointer;display:block}
@@ -131,7 +156,55 @@ body.theme-light .sa-chave span{background:#cbd5e1}
   // ════════════════════════════════════════════════════
   // TESTES GRÁTIS
   // ════════════════════════════════════════════════════
-  const T = { dados: null, filtro: 'todos', busca: '', senhas: {}, rascunho: {} };
+  const T = { dados: null, filtro: 'todos', busca: '', senhas: {}, rascunho: {}, visPeriodo: 'dias7' };
+
+  // ── Visitas do site ─────────────────────────────────────
+  const NOME_ORIGEM = { meta: 'Facebook / Instagram', google: 'Google', whatsapp: 'WhatsApp', direto: 'Direto e outros' };
+  const fmtN = n => Number(n || 0).toLocaleString('pt-BR');
+  function blocoVisitas() {
+    const vis = T.dados?.visitas;
+    if (!vis) return '';
+    const per = vis[T.visPeriodo] || vis.dias7;
+    const rotulo = { hoje: 'hoje', dias7: 'nos últimos 7 dias', dias30: 'nos últimos 30 dias' }[T.visPeriodo];
+    const taxa = per.pessoas ? (per.cadastros / per.pessoas * 100) : 0;
+    const taxaTxt = per.pessoas ? (taxa < 10 ? taxa.toFixed(1).replace('.', ',') : Math.round(taxa)) + '%' : '—';
+    const totalOrig = Object.values(per.origens || {}).reduce((a, b) => a + b, 0);
+    const origens = ['meta', 'google', 'whatsapp', 'direto'].map(k => {
+      const n = per.origens?.[k] || 0;
+      const pct = totalOrig ? Math.round(n / totalOrig * 100) : 0;
+      return `<div class="sa-vis-orig"><span>${NOME_ORIGEM[k]}</span><div class="sa-vis-barra"><i style="width:${pct}%"></i></div><b>${fmtN(n)}</b></div>`;
+    }).join('');
+    const dias = (vis.por_dia || []).slice(T.visPeriodo === 'dias30' ? -30 : -14);
+    const max = Math.max(1, ...dias.map(d => d.pessoas));
+    const graf = dias.map(d => {
+      const h = Math.round(d.pessoas / max * 100);
+      const dd = d.dia.slice(8, 10) + '/' + d.dia.slice(5, 7);
+      return `<div class="sa-vis-col" title="${dd}: ${fmtN(d.pessoas)} ${plural(d.pessoas, 'pessoa', 'pessoas')}, ${fmtN(d.cadastros)} ${plural(d.cadastros, 'cadastro', 'cadastros')}">
+        <div class="sa-vis-num">${d.pessoas || ''}</div><div class="sa-vis-pilar"><i style="height:${h}%"></i>${d.cadastros ? `<em>${d.cadastros}</em>` : ''}</div><div class="sa-vis-dia">${dd}</div></div>`;
+    }).join('');
+    return `
+      <div class="card sa-vis">
+        <div class="sa-vis-topo">
+          <div><div class="sa-liga-titulo">Visitas do site</div>
+            <div class="sa-liga-texto">Quantas pessoas entraram no site de vendas ${rotulo}, de onde vieram e quantas criaram o teste grátis.</div></div>
+          <div class="sa-filtros" role="group" aria-label="Período das visitas">
+            ${[['hoje', 'Hoje'], ['dias7', '7 dias'], ['dias30', '30 dias']].map(([k, l]) => `<button class="${T.visPeriodo === k ? 'on' : ''}" data-vis="${k}">${l}</button>`).join('')}
+          </div>
+        </div>
+        <div class="stats-grid" style="margin:16px 0 0">
+          <div class="stat-card" style="--ca:var(--accent)"><div class="stat-card-label">Pessoas no site</div><div class="stat-card-val">${fmtN(per.pessoas)}</div><div class="stat-card-sub">${fmtN(per.acessos)} ${plural(per.acessos, 'acesso', 'acessos')} · ${per.pessoas ? Math.round(per.celular / per.pessoas * 100) : 0}% pelo celular</div></div>
+          <div class="stat-card" style="--ca:var(--success)"><div class="stat-card-label">Chamaram no WhatsApp</div><div class="stat-card-val">${fmtN(per.whats)}</div><div class="stat-card-sub">tocaram em algum botão do WhatsApp</div></div>
+          <div class="stat-card" style="--ca:var(--orange)"><div class="stat-card-label">Criaram o teste grátis</div><div class="stat-card-val">${fmtN(per.cadastros)}</div><div class="stat-card-sub">contas novas pelo site</div></div>
+          <div class="stat-card" style="--ca:#a855f7"><div class="stat-card-label">Taxa de cadastro</div><div class="stat-card-val">${taxaTxt}</div><div class="stat-card-sub">de cada 100 pessoas que entram</div></div>
+        </div>
+        <div class="sa-vis-baixo">
+          <div><div class="sa-vis-sub">De onde vieram</div>${origens}
+            <div class="sa-dica" style="margin-top:8px">Facebook / Instagram inclui quem veio dos anúncios da Meta.</div></div>
+          <div><div class="sa-vis-sub">Pessoas por dia <span>(o número laranja é quantos criaram o teste no dia)</span></div><div class="sa-vis-graf">${graf}</div></div>
+        </div>
+        ${vis.desde ? '' : '<div class="sa-dica" style="margin-top:10px">A contagem começa assim que o site novo estiver no ar.</div>'}
+      </div>`;
+  }
 
   function badgeMenu(n) {
     const b = $('nav-testes-badge');
@@ -205,6 +278,13 @@ body.theme-light .sa-chave span{background:#cbd5e1}
     return h;
   }
 
+  function linhaIA(t) {
+    if (t.voz_ativo) return '<div class="sa-sub" style="color:var(--success);font-weight:600">IA ligada pelo admin</div>';
+    if (!t.ia_teste) return '';
+    if (t.expira_em >= (T.dados?.hoje || '')) return '<div class="sa-sub" style="color:var(--accent);font-weight:600">IA liberada até ' + dataBR(t.expira_em) + '</div>';
+    return '<div class="sa-sub">IA do teste encerrada</div>';
+  }
+
   function uso(t) {
     const partes = [
       t.produtos + ' ' + plural(t.produtos, 'produto', 'produtos'),
@@ -242,6 +322,8 @@ body.theme-light .sa-chave span{background:#cbd5e1}
         </div>
         <button class="btn bg2" data-acao="atualizar">Atualizar</button>
       </div>
+
+      ${blocoVisitas()}
 
       <div class="card" style="border-color:${c.ativo ? 'rgba(34,197,94,.35)' : 'var(--border)'}">
         <div class="sa-liga">
@@ -290,6 +372,14 @@ body.theme-light .sa-chave span{background:#cbd5e1}
           <div class="sa-dica" style="margin-top:8px">Além dos códigos da mensagem de boas-vindas, aqui também vale {preco}: o preço do 1º mês mostrado no site.</div>
         </div>
 
+        <div class="sa-msg ${c.ia_teste ? '' : 'desligada'}">
+          <div class="sa-msg-topo">
+            <div><b>Atendente com IA liberada no teste</b>
+              <div class="sa-dica" style="margin-top:3px">Quem cria o teste já tem o pedido por IA no WhatsApp (texto e áudio) ligado, sem custo, até o último dia do teste. Depois disso a função desliga sozinha e só volta se você ligar "Pedido por voz" no cadastro do cliente, em Clientes. Vale para os testes criados a partir de agora.</div></div>
+            <label class="toggle" title="${c.ia_teste ? 'Desligar a IA no teste' : 'Ligar a IA no teste'}"><input type="checkbox" id="sa-teste-ia" ${c.ia_teste ? 'checked' : ''} aria-label="Atendente com IA liberada no teste"><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+
         <div class="sa-msg">
           <div class="sa-msg-topo">
             <div><b>Venda nos anúncios da Meta (API de Conversões)</b>
@@ -336,7 +426,7 @@ body.theme-light .sa-chave span{background:#cbd5e1}
               <td><div class="sa-loja">${esc(t.loja || t.restaurante)}</div><div class="sa-sub">${esc(t.nome)}</div></td>
               <td>${wa ? `<a href="${wa}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">${esc(t.telefone)}</a>` : '—'}<div class="sa-sub">${esc(t.email)}</div>${linhaSenha(t)}</td>
               <td>${dataBR(t.created_at)}${linhaMensagem(t)}${linhaAcompanhamento(t)}</td>
-              <td>${situacao(t)}<div class="sa-sub">até ${dataBR(t.situacao === 'cliente' ? (t.loja_expira || t.expira_em) : t.expira_em)}</div></td>
+              <td>${situacao(t)}<div class="sa-sub">até ${dataBR(t.situacao === 'cliente' ? (t.loja_expira || t.expira_em) : t.expira_em)}</div>${linhaIA(t)}</td>
               <td>${uso(t)}</td>
               <td><div class="sa-acoes">${t.situacao === 'cliente' ? '<span class="sa-sub">em Clientes</span>' : `
                 <button class="btn bp bsm" data-acao="ativar" data-id="${t.id}">Ativar como cliente</button>
@@ -447,6 +537,8 @@ body.theme-light .sa-chave span{background:#cbd5e1}
     sec.addEventListener('click', ev => {
       const f = ev.target.closest('[data-filtro]');
       if (f) { T.filtro = f.dataset.filtro; renderTestes(); return; }
+      const vp = ev.target.closest('[data-vis]');
+      if (vp) { T.visPeriodo = vp.dataset.vis; renderTestes(); return; }
       const a = ev.target.closest('[data-acao]');
       if (!a) return;
       const id = parseInt(a.dataset.id, 10);
@@ -477,6 +569,10 @@ body.theme-light .sa-chave span{background:#cbd5e1}
       if (ev.target.id === 'sa-teste-ativo') {
         const ligar = ev.target.checked;
         salvarConfig({ ativo: ligar }, ligar ? 'Teste grátis ligado: o site já está oferecendo' : 'Teste grátis desligado: o site parou de oferecer', true);
+      }
+      if (ev.target.id === 'sa-teste-ia') {
+        const ligar = ev.target.checked;
+        salvarConfig({ ia_teste: ligar }, ligar ? 'Atendente com IA liberada nos próximos testes' : 'Os próximos testes vêm sem a atendente com IA', true);
       }
       if (ev.target.id === 'sa-teste-msg-ativa') { T.rascunho['sa-teste-msg-ativa'] = ev.target.checked; renderTestes(); }
       if (ev.target.id === 'sa-teste-seq-ativa') { T.rascunho['sa-teste-seq-ativa'] = ev.target.checked; renderTestes(); }

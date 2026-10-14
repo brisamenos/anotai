@@ -78,7 +78,7 @@ const META_PIXEL_PADRAO = '3403468509829400' // pixel "estima" (conta de anúnci
 const META_PIXEL_ANTIGO = '1075636798774814' // pixel usado antes; quem salvou com ele passa a usar o novo
 const META_GRAPH = process.env.META_GRAPH_VERSION || 'v23.0'
 const TESTE_PADRAO = { ativo: false, dias: 7, limite_dia: 30, download_url: '', gestor_url: '', msg_ativa: true, msg_minutos: 2, msg_texto: MSG_PADRAO,
-  seq_ativa: true, seq: SEQ_PADRAO, meta_pixel: META_PIXEL_PADRAO, meta_token: '', meta_teste: '' }
+  seq_ativa: true, seq: SEQ_PADRAO, meta_pixel: META_PIXEL_PADRAO, meta_token: '', meta_teste: '', ia_teste: true }
 const MSG_TENTATIVAS = 5        // quantas vezes tenta enviar antes de marcar como falha
 const MSG_NOVA_TENTATIVA = 5    // minutos entre uma tentativa e outra
 const MAX_CONTEUDO_BYTES = 600 * 1024
@@ -130,11 +130,28 @@ function init(deps) {
     seq_erro: 'TEXT',
     // Meta (API de Conversões)
     fbp: 'TEXT', fbc: 'TEXT', ua: 'TEXT', origem_url: 'TEXT', ev_id: 'TEXT',
-    meta_compra_em: 'TEXT', meta_compra_erro: 'TEXT'
+    meta_compra_em: 'TEXT', meta_compra_erro: 'TEXT',
+    // atendente com IA (pedido por voz/texto no WhatsApp) liberada só durante o teste
+    ia_teste: 'INTEGER DEFAULT 0'
   }
   for (const [col, tipo] of Object.entries(novas)) {
     if (!existentes.has(col)) D.db.exec(`ALTER TABLE testes_gratis ADD COLUMN ${col} ${tipo}`)
   }
+  // Visitas do site de vendas: uma linha por pessoa (aparelho) por dia, sem dado pessoal
+  D.db.exec(`
+    CREATE TABLE IF NOT EXISTS site_visitas (
+      dia TEXT NOT NULL,
+      visitante TEXT NOT NULL,
+      origem TEXT,
+      paginas INTEGER DEFAULT 1,
+      whats INTEGER DEFAULT 0,
+      celular INTEGER DEFAULT 0,
+      criado_em TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (dia, visitante)
+    );
+    CREATE INDEX IF NOT EXISTS idx_site_visitas_dia ON site_visitas(dia);
+  `)
+  try { D.db.prepare("DELETE FROM site_visitas WHERE dia < ?").run(somaDias(hojeBR(), -400)) } catch {}
   // Confere a cada minuto se há mensagem de boas-vindas na hora de sair
   const relogio = setInterval(() => { processarMensagens().catch(() => {}) }, 60 * 1000)
   if (relogio.unref) relogio.unref()
@@ -309,7 +326,8 @@ function cfgTeste() {
     seq: Object.fromEntries(SEQ_ETAPAS.map(k => [k, typeof salvo.seq?.[k] === 'string' && salvo.seq[k].trim() ? salvo.seq[k].slice(0, 1500) : SEQ_PADRAO[k]])),
     meta_pixel: /^\d{6,20}$/.test(String(salvo.meta_pixel || '')) && String(salvo.meta_pixel) !== META_PIXEL_ANTIGO ? String(salvo.meta_pixel) : META_PIXEL_PADRAO,
     meta_token: typeof salvo.meta_token === 'string' ? salvo.meta_token : '',
-    meta_teste: typeof salvo.meta_teste === 'string' ? salvo.meta_teste.slice(0, 40) : ''
+    meta_teste: typeof salvo.meta_teste === 'string' ? salvo.meta_teste.slice(0, 40) : '',
+    ia_teste: salvo.ia_teste !== false
   }
 }
 function downloadUrl(cfg) { return cfg.download_url || `${BASE_URL}/download` }
@@ -671,15 +689,18 @@ function criarContaTeste({ nome, restaurante, telefone, email, senha, ip, dias, 
     // Mesmo acerto do cadastro pelo admin: o 1º pedido da loja começa em #1.
     const maxOrderId = db.prepare('SELECT COALESCE(MAX(id),0) AS m FROM orders').get()?.m || 0
     db.prepare('UPDATE store_config SET order_num_offset=?, store_name=? WHERE tenant_id=?').run(maxOrderId, restaurante, t.id)
+    // Teste com a atendente com IA: o robô do WhatsApp da loja já começa ligado
+    // (só responde depois que a loja conectar o WhatsApp no painel)
+    if (cfg.ia_teste) db.prepare("UPDATE store_config SET ia_config=? WHERE tenant_id=? AND (ia_config IS NULL OR ia_config='')").run(JSON.stringify({ ativo: true }), t.id)
     db.prepare('INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)')
       .run(nome, email, D.hashPassword(senha), 'gestor', t.id)
     const cat = db.prepare("INSERT INTO categories (tenant_id,name,label,type,emoji,sort_order,ativo) VALUES (?,?,?,?,?,?,1)")
     ;[['entradas', 'Entradas', '🥗'], ['pratos', 'Pratos', '🍽️'], ['bebidas', 'Bebidas', '🥤'], ['sobremesas', 'Sobremesas', '🍰']]
       .forEach(([name, label, emoji], i) => cat.run(t.id, name, label, 'Itens principais', emoji, i + 1))
-    db.prepare(`INSERT INTO testes_gratis (tenant_id,nome,restaurante,telefone,email,ip,dias,expira_em,senha_cifrada,msg_status,msg_em,fbp,fbc,ua,origem_url,ev_id)
-      VALUES (?,?,?,?,?,?,?,?,?,?,${cfg.msg_ativa ? `datetime('now','+${cfg.msg_minutos} minutes')` : 'NULL'},?,?,?,?,?)`)
+    db.prepare(`INSERT INTO testes_gratis (tenant_id,nome,restaurante,telefone,email,ip,dias,expira_em,senha_cifrada,msg_status,msg_em,fbp,fbc,ua,origem_url,ev_id,ia_teste)
+      VALUES (?,?,?,?,?,?,?,?,?,?,${cfg.msg_ativa ? `datetime('now','+${cfg.msg_minutos} minutes')` : 'NULL'},?,?,?,?,?,?)`)
       .run(t.id, nome, restaurante, telefone, email, ip, dias, expira, cifrar(senha), cfg.msg_ativa ? 'pendente' : null,
-        meta.fbp || null, meta.fbc || null, meta.ua || null, meta.url || null, meta.ev_id || null)
+        meta.fbp || null, meta.fbc || null, meta.ua || null, meta.url || null, meta.ev_id || null, cfg.ia_teste ? 1 : 0)
     return t.id
   })
   const tenantId = criar()
@@ -702,6 +723,66 @@ function sincronizarTestes() {
   }
 }
 
+// ==================== Visitas do site ====================
+// O site manda um aviso a cada página aberta (e quando a pessoa toca no
+// WhatsApp). Cada aparelho tem um código aleatório guardado no navegador, então
+// dá para contar pessoas, e não só acessos. Robôs e pré-visualizações ficam de fora.
+const ORIGENS = new Set(['meta', 'google', 'whatsapp', 'direto'])
+const ROBO_UA = /bot|crawl|spider|slurp|facebookexternalhit|facebookcatalog|whatsapp\/|preview|headless|lighthouse|pingdom|uptime|monitor|curl|wget|python|axios|node-fetch/i
+const _limiteVisitas = new Map()
+function registrarVisita(req, body) {
+  try {
+    const ua = String(req.headers['user-agent'] || '')
+    if (!ua || ROBO_UA.test(ua)) return
+    const vid = String(body.v || '')
+    if (!/^[a-z0-9]{8,40}$/i.test(vid)) return
+    // no máximo 120 avisos por hora por conexão
+    const ip = D.clientIp(req) || '-'
+    const agora = Date.now()
+    const lim = _limiteVisitas.get(ip)
+    if (!lim || lim.ate < agora) _limiteVisitas.set(ip, { n: 1, ate: agora + 3600000 })
+    else if (++lim.n > 120) return
+    if (_limiteVisitas.size > 5000) for (const [k, l] of _limiteVisitas) if (l.ate < agora) _limiteVisitas.delete(k)
+    const origem = ORIGENS.has(body.o) ? body.o : 'direto'
+    const celular = body.m ? 1 : 0
+    const dia = hojeBR()
+    if (body.t === 'whats') {
+      D.db.prepare(`INSERT INTO site_visitas (dia,visitante,origem,paginas,whats,celular) VALUES (?,?,?,1,1,?)
+        ON CONFLICT(dia,visitante) DO UPDATE SET whats=whats+1`).run(dia, vid, origem, celular)
+    } else {
+      D.db.prepare(`INSERT INTO site_visitas (dia,visitante,origem,paginas,whats,celular) VALUES (?,?,?,1,0,?)
+        ON CONFLICT(dia,visitante) DO UPDATE SET paginas=paginas+1`).run(dia, vid, origem, celular)
+    }
+  } catch (e) { /* contador nunca atrapalha o site */ }
+}
+
+function resumoVisitas() {
+  const db = D.db
+  const hoje = hojeBR()
+  const periodo = (ini) => {
+    const r = db.prepare(`SELECT COUNT(DISTINCT visitante) AS pessoas, COALESCE(SUM(paginas),0) AS acessos,
+      COUNT(DISTINCT CASE WHEN whats > 0 THEN visitante END) AS whats,
+      COUNT(DISTINCT CASE WHEN celular = 1 THEN visitante END) AS celular
+      FROM site_visitas WHERE dia >= ?`).get(ini)
+    const origens = { meta: 0, google: 0, whatsapp: 0, direto: 0 }
+    db.prepare('SELECT origem, COUNT(DISTINCT visitante) AS c FROM site_visitas WHERE dia >= ? GROUP BY origem').all(ini)
+      .forEach(o => { origens[ORIGENS.has(o.origem) ? o.origem : 'direto'] += o.c })
+    const cadastros = db.prepare("SELECT COUNT(*) AS c FROM testes_gratis WHERE date(created_at,'-3 hours') >= ?").get(ini).c
+    return { ...r, cadastros, origens }
+  }
+  const ini30 = somaDias(hoje, -29)
+  const porDia = new Map(db.prepare('SELECT dia, COUNT(*) AS pessoas, SUM(paginas) AS acessos FROM site_visitas WHERE dia >= ? GROUP BY dia').all(ini30).map(r => [r.dia, r]))
+  const cadDia = new Map(db.prepare("SELECT date(created_at,'-3 hours') AS dia, COUNT(*) AS c FROM testes_gratis WHERE date(created_at,'-3 hours') >= ? GROUP BY 1").all(ini30).map(r => [r.dia, r.c]))
+  const dias = []
+  for (let i = 29; i >= 0; i--) {
+    const d = somaDias(hoje, -i)
+    const r = porDia.get(d) || {}
+    dias.push({ dia: d, pessoas: r.pessoas || 0, acessos: r.acessos || 0, cadastros: cadDia.get(d) || 0 })
+  }
+  const desde = db.prepare('SELECT MIN(dia) AS d FROM site_visitas').get()?.d || null
+  return { hoje: periodo(hoje), dias7: periodo(somaDias(hoje, -6)), dias30: periodo(ini30), por_dia: dias, desde }
+}
+
 function listarTestes() {
   sincronizarTestes()
   const hoje = hojeBR()
@@ -709,8 +790,8 @@ function listarTestes() {
     SELECT g.id, g.tenant_id, g.nome, g.restaurante, g.telefone, g.email, g.dias, g.expira_em, g.status,
            g.convertido_em, g.created_at,
            g.msg_status, g.msg_em, g.msg_enviada_em, g.msg_erro,
-           g.seq_enviados, g.seq_erro, g.meta_compra_em, g.meta_compra_erro,
-           (g.senha_cifrada IS NOT NULL) AS tem_senha,
+           g.seq_enviados, g.seq_erro, g.meta_compra_em, g.meta_compra_erro, g.ia_teste,
+           (g.senha_cifrada IS NOT NULL) AS tem_senha, t.voz_ativo,
            t.nome AS loja, t.slug, t.ativo AS loja_ativa, t.expires_at AS loja_expira,
            (SELECT COUNT(*) FROM orders o WHERE o.tenant_id = g.tenant_id) AS pedidos,
            (SELECT COUNT(*) FROM menu_items m WHERE m.tenant_id = g.tenant_id) AS produtos,
@@ -776,6 +857,15 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
       teste: { ativo: teste.ativo, dias: teste.dias },
       download_url: downloadUrl(teste)
     })
+    return true
+  }
+
+  // ── Público: contador de visitas do site ──────────────
+  if (metodo === 'POST' && upath === '/api/site/visita') {
+    let body = {}
+    try { body = await readBody(req, 2048) } catch {}
+    registrarVisita(req, body)
+    send(res, 200, { ok: true })
     return true
   }
 
@@ -930,7 +1020,9 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
 
   if (metodo === 'GET' && upath === '/api/admin/testes') {
     const cfg = cfgTeste()
-    send(res, 200, { ...listarTestes(), config: cfgParaPainel(cfg), hoje: hojeBR() })
+    let visitas = null
+    try { visitas = resumoVisitas() } catch (e) { D.log('⚠️', 'Visitas do site:', e.message) }
+    send(res, 200, { ...listarTestes(), config: cfgParaPainel(cfg), hoje: hojeBR(), visitas })
     return true
   }
 
@@ -991,6 +1083,7 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
       novo.meta_token = tk
     } else novo.meta_token = atual.meta_token
     if (body.meta_teste !== undefined) novo.meta_teste = String(body.meta_teste || '').trim().slice(0, 40)
+    if (body.ia_teste !== undefined) novo.ia_teste = body.ia_teste === true
     gravarDado('teste', novo)
     D.log('🧪', `Teste grátis no site: ${novo.ativo ? 'LIGADO' : 'desligado'} (${novo.dias} dias, até ${novo.limite_dia}/dia)`)
     send(res, 200, { ok: true, config: cfgParaPainel(cfgTeste()) })
