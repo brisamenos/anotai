@@ -40,7 +40,44 @@ const MSG_PADRAO = [
   '',
   'Quer ajuda para montar o cardápio? É só responder esta mensagem.'
 ].join('\n')
-const TESTE_PADRAO = { ativo: false, dias: 7, limite_dia: 30, download_url: '', gestor_url: '', msg_ativa: true, msg_minutos: 30, msg_texto: MSG_PADRAO }
+// Acompanhamento do teste: mensagens ao longo dos dias, pelo mesmo WhatsApp de Suporte e Vendas
+const SEQ_PADRAO = {
+  dia1: [
+    'Oi, {nome}! Já montou o cardápio da *{loja}*?',
+    '',
+    'Dica: no painel, em *Gestor de cardápio*, clique em *Criar por IA* e envie fotos do seu cardápio. A IA cria os produtos, os preços e os adicionais em poucos minutos.',
+    '',
+    'Entrar no painel: {link_gestor}',
+    '',
+    'Se preferir, responda esta mensagem que a gente ajuda a montar.'
+  ].join('\n'),
+  dia3: [
+    '{nome}, que tal ver um pedido chegando?',
+    '',
+    'Abra o seu cardápio, faça um pedido de teste e acompanhe ele aparecendo no painel e saindo na impressora.',
+    '',
+    'Seu cardápio: {link_cardapio}',
+    '',
+    'Qualquer dúvida, é só responder aqui.'
+  ].join('\n'),
+  vespera: [
+    '{nome}, o teste da *{loja}* termina amanhã ({validade}).',
+    '',
+    'Para continuar sem perder nada do que você montou, garanta o primeiro mês por *R$ {preco}*: responda esta mensagem ou pague em *Meu plano*, dentro do painel.',
+    '',
+    '{link_gestor}'
+  ].join('\n'),
+  expirou: [
+    '{nome}, o teste da *{loja}* terminou, mas o seu cardápio e as configurações continuam guardados.',
+    '',
+    'Quer continuar? Responda esta mensagem que a gente libera a sua loja.'
+  ].join('\n')
+}
+const SEQ_ETAPAS = ['dia1', 'dia3', 'vespera', 'expirou']
+const META_PIXEL_PADRAO = '1075636798774814'
+const META_GRAPH = process.env.META_GRAPH_VERSION || 'v23.0'
+const TESTE_PADRAO = { ativo: false, dias: 7, limite_dia: 30, download_url: '', gestor_url: '', msg_ativa: true, msg_minutos: 2, msg_texto: MSG_PADRAO,
+  seq_ativa: true, seq: SEQ_PADRAO, meta_pixel: META_PIXEL_PADRAO, meta_token: '', meta_teste: '' }
 const MSG_TENTATIVAS = 5        // quantas vezes tenta enviar antes de marcar como falha
 const MSG_NOVA_TENTATIVA = 5    // minutos entre uma tentativa e outra
 const MAX_CONTEUDO_BYTES = 600 * 1024
@@ -84,7 +121,15 @@ function init(deps) {
     msg_em: 'TEXT',              // quando a mensagem deve sair (UTC)
     msg_enviada_em: 'TEXT',
     msg_tentativas: 'INTEGER DEFAULT 0',
-    msg_erro: 'TEXT'
+    msg_erro: 'TEXT',
+    // acompanhamento do teste
+    seq_enviados: "TEXT DEFAULT ''", // etapas já enviadas, separadas por vírgula
+    seq_ultimo_em: 'TEXT',           // última mensagem enviada (boas-vindas ou etapa)
+    seq_tentativa_em: 'TEXT',
+    seq_erro: 'TEXT',
+    // Meta (API de Conversões)
+    fbp: 'TEXT', fbc: 'TEXT', ua: 'TEXT', origem_url: 'TEXT', ev_id: 'TEXT',
+    meta_compra_em: 'TEXT', meta_compra_erro: 'TEXT'
   }
   for (const [col, tipo] of Object.entries(novas)) {
     if (!existentes.has(col)) D.db.exec(`ALTER TABLE testes_gratis ADD COLUMN ${col} ${tipo}`)
@@ -93,6 +138,132 @@ function init(deps) {
   const relogio = setInterval(() => { processarMensagens().catch(() => {}) }, 60 * 1000)
   if (relogio.unref) relogio.unref()
   setTimeout(() => { processarMensagens().catch(() => {}) }, 20 * 1000)
+}
+
+// ==================== Acompanhamento do teste ====================
+// Uma mensagem por vez, só entre 9h e 20h de Brasília, com pelo menos 12 horas
+// desde a última mensagem para a mesma pessoa. Quem já virou cliente ou teve o
+// teste apagado não recebe mais nada.
+function precoSite() {
+  try { return String(conteudoAtual().conteudo?.precos?.atual || PADRAO.precos?.atual || '') } catch { return '' }
+}
+function etapaDevida(l, hoje) {
+  const feitas = new Set(String(l.seq_enviados || '').split(',').filter(Boolean))
+  const horas = (Date.now() - new Date(String(l.created_at).replace(' ', 'T') + 'Z').getTime()) / 3600000
+  const vespera = somaDias(l.expira_em, -1)
+  if (l.expira_em < hoje) {
+    // terminou: só o recado de fim, e só nos 2 primeiros dias depois do prazo
+    return !feitas.has('expirou') && diasEntre(l.expira_em, hoje) <= 2 ? 'expirou' : null
+  }
+  if (hoje >= vespera && !feitas.has('vespera')) return 'vespera'
+  if (horas >= 72 && !feitas.has('dia3') && hoje < vespera) return 'dia3'
+  if (horas >= 24 && !feitas.has('dia1') && hoje < vespera) return 'dia1'
+  return null
+}
+async function processarAcompanhamento(cfg) {
+  if (!cfg.seq_ativa || !D.bot?.sendText) return
+  const horaBR = new Date(Date.now() - 3 * 3600 * 1000).getUTCHours()
+  if (horaBR < 9 || horaBR >= 20) return
+  sincronizarTestes()
+  const hoje = hojeBR()
+  const linhas = D.db.prepare(`
+    SELECT * FROM testes_gratis
+    WHERE status = 'ativo' AND COALESCE(msg_status,'') <> 'pendente'
+      AND (seq_ultimo_em IS NULL OR seq_ultimo_em <= datetime('now','-12 hours'))
+      AND (seq_tentativa_em IS NULL OR seq_tentativa_em <= datetime('now','-60 minutes'))
+    ORDER BY id LIMIT 200
+  `).all()
+  let enviadas = 0
+  for (const l of linhas) {
+    if (enviadas >= 5) break // poucas por minuto, para o WhatsApp não estranhar
+    const etapa = etapaDevida(l, hoje)
+    if (!etapa) continue
+    D.db.prepare("UPDATE testes_gratis SET seq_tentativa_em=datetime('now') WHERE id=?").run(l.id)
+    try {
+      const r = await D.bot.sendText(l.telefone, textoMensagem(l, cfg, cfg.seq[etapa]), 1200)
+      if (r && r.ok) {
+        // a etapa enviada já cobre as anteriores (quem recebeu a do 3º dia não
+        // recebe depois a do 1º dia fora de ordem)
+        const ordem = ['dia1', 'dia3', 'vespera', 'expirou']
+        const feitas = String(l.seq_enviados || '').split(',').filter(Boolean)
+        for (const e of ordem.slice(0, ordem.indexOf(etapa) + 1)) if (!feitas.includes(e)) feitas.push(e)
+        D.db.prepare("UPDATE testes_gratis SET seq_enviados=?, seq_ultimo_em=datetime('now'), seq_erro=NULL WHERE id=?").run(feitas.join(','), l.id)
+        D.log('🧪', `Acompanhamento do teste (${etapa}) enviado: ${l.restaurante}`)
+        enviadas++
+      } else {
+        D.db.prepare('UPDATE testes_gratis SET seq_erro=? WHERE id=?').run(String((r && (r.error || r.data?.message)) || 'WhatsApp de Suporte e Vendas indisponível').slice(0, 300), l.id)
+      }
+    } catch (e) {
+      D.db.prepare('UPDATE testes_gratis SET seq_erro=? WHERE id=?').run(String(e.message).slice(0, 300), l.id)
+    }
+  }
+  if (enviadas) D.marcarDirty()
+}
+
+// ==================== Meta (API de Conversões) ====================
+// O pixel do navegador só vê o cadastro. A venda acontece depois, dentro do
+// sistema, quando a loja paga a mensalidade: este envio conta para a Meta qual
+// cadastro virou cliente pagante, para os anúncios buscarem gente parecida.
+// Os dados pessoais vão embaralhados (SHA-256), como a Meta exige.
+const sha = v => crypto.createHash('sha256').update(String(v).trim().toLowerCase()).digest('hex')
+function dadosUsuarioMeta(l) {
+  const ud = {}
+  if (l.email) ud.em = [sha(l.email)]
+  const fone = String(l.telefone || '').replace(/\D/g, '')
+  if (fone) ud.ph = [sha(fone.length <= 11 ? '55' + fone : fone)]
+  const pn = String(l.nome || '').trim().split(/\s+/)
+  if (pn[0]) ud.fn = [sha(pn[0])]
+  if (pn.length > 1) ud.ln = [sha(pn[pn.length - 1])]
+  if (l.tenant_id) ud.external_id = [sha(l.tenant_id)]
+  ud.country = [sha('br')]
+  if (l.ip) ud.client_ip_address = String(l.ip).replace(/^::ffff:/, '')
+  if (l.ua) ud.client_user_agent = l.ua
+  if (l.fbp) ud.fbp = l.fbp
+  if (l.fbc) ud.fbc = l.fbc
+  return ud
+}
+async function enviarEventoMeta(nome, l, extra = {}) {
+  const cfg = cfgTeste()
+  if (!cfg.meta_token || !cfg.meta_pixel) return { ok: false, error: 'Token da API de Conversões não configurado' }
+  const evento = {
+    event_name: nome,
+    event_time: Math.floor((extra.quando || Date.now()) / 1000),
+    action_source: 'website',
+    event_source_url: l.origem_url || BASE_URL,
+    user_data: dadosUsuarioMeta(l),
+    ...(extra.event_id ? { event_id: extra.event_id } : {}),
+    ...(extra.custom_data ? { custom_data: extra.custom_data } : {})
+  }
+  const corpo = { data: [evento] }
+  if (cfg.meta_teste) corpo.test_event_code = cfg.meta_teste
+  try {
+    const r = await fetch(`https://graph.facebook.com/${META_GRAPH}/${cfg.meta_pixel}/events?access_token=${encodeURIComponent(cfg.meta_token)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo), signal: AbortSignal.timeout(15000)
+    })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) return { ok: false, error: String(j?.error?.message || `Meta respondeu ${r.status}`).slice(0, 300) }
+    return { ok: true, recebidos: j.events_received }
+  } catch (e) { return { ok: false, error: String(e.message).slice(0, 300) } }
+}
+// Chamado pelo sistema quando uma loja paga a mensalidade (Pix, cartão, fatura,
+// assinatura) ou quando o admin ativa o teste. Só conta lojas que vieram do
+// teste grátis do site, e só uma vez por loja.
+async function registrarCompra(tenantId, valor, origem) {
+  if (!D || !tenantId) return
+  try {
+    const l = D.db.prepare('SELECT * FROM testes_gratis WHERE tenant_id=? AND meta_compra_em IS NULL ORDER BY id DESC LIMIT 1').get(String(tenantId))
+    if (!l) return
+    const v = Math.round((parseFloat(valor) || parseFloat(String(precoSite()).replace(/\./g, '').replace(',', '.')) || 0) * 100) / 100
+    const r = await enviarEventoMeta('Purchase', l, { event_id: 'compra-' + l.id, custom_data: { currency: 'BRL', value: v, content_name: 'Mensalidade EstimaFood', content_category: origem || '' } })
+    if (r.ok) {
+      D.db.prepare("UPDATE testes_gratis SET meta_compra_em=datetime('now'), meta_compra_erro=NULL WHERE id=?").run(l.id)
+      D.log('📈', `Venda enviada para a Meta: ${l.restaurante} R$ ${v.toFixed(2)} (${origem})`)
+    } else {
+      D.db.prepare('UPDATE testes_gratis SET meta_compra_erro=? WHERE id=?').run(r.error, l.id)
+      if (!/não configurado/.test(r.error)) D.log('⚠️', `Venda não enviada para a Meta (${l.restaurante}): ${r.error}`)
+    }
+    D.marcarDirty()
+  } catch (e) { D.log('⚠️', 'registrarCompra:', e.message) }
 }
 
 // ==================== Utilidades ====================
@@ -132,13 +303,21 @@ function cfgTeste() {
     gestor_url: urlSegura(salvo.gestor_url) || '',
     msg_ativa: salvo.msg_ativa !== false,
     msg_minutos: minutos >= 1 && minutos <= 1440 ? minutos : TESTE_PADRAO.msg_minutos,
-    msg_texto: typeof salvo.msg_texto === 'string' && salvo.msg_texto.trim() ? salvo.msg_texto.slice(0, 1500) : MSG_PADRAO
+    msg_texto: typeof salvo.msg_texto === 'string' && salvo.msg_texto.trim() ? salvo.msg_texto.slice(0, 1500) : MSG_PADRAO,
+    seq_ativa: salvo.seq_ativa !== false,
+    seq: Object.fromEntries(SEQ_ETAPAS.map(k => [k, typeof salvo.seq?.[k] === 'string' && salvo.seq[k].trim() ? salvo.seq[k].slice(0, 1500) : SEQ_PADRAO[k]])),
+    meta_pixel: /^\d{6,20}$/.test(String(salvo.meta_pixel || '')) ? String(salvo.meta_pixel) : META_PIXEL_PADRAO,
+    meta_token: typeof salvo.meta_token === 'string' ? salvo.meta_token : '',
+    meta_teste: typeof salvo.meta_teste === 'string' ? salvo.meta_teste.slice(0, 40) : ''
   }
 }
 function downloadUrl(cfg) { return cfg.download_url || `${BASE_URL}/download` }
 function gestorUrl(cfg) { return cfg.gestor_url || `${BASE_URL}/login.html` }
 function cfgParaPainel(cfg) {
-  return { ...cfg, download_padrao: `${BASE_URL}/download`, gestor_padrao: `${BASE_URL}/login.html`, msg_padrao: MSG_PADRAO }
+  // o token da Meta nunca volta inteiro para a tela
+  const { meta_token, ...resto } = cfg
+  return { ...resto, meta_token_salvo: meta_token ? '••••' + meta_token.slice(-4) : '', download_padrao: `${BASE_URL}/download`, gestor_padrao: `${BASE_URL}/login.html`,
+    msg_padrao: MSG_PADRAO, seq_padrao: SEQ_PADRAO }
 }
 
 // ── Senha do cadastro ───────────────────────────────────
@@ -176,7 +355,7 @@ function decifrar(valor) {
 }
 
 // ── Mensagem de boas-vindas no WhatsApp ─────────────────
-function textoMensagem(linha, cfg) {
+function textoMensagem(linha, cfg, texto) {
   let cardapio = ''
   try { cardapio = D.linkCardapioTenant(linha.tenant_id) } catch {}
   const valores = {
@@ -187,9 +366,10 @@ function textoMensagem(linha, cfg) {
     validade: String(linha.expira_em || '').split('-').reverse().join('/'),
     link_gestor: gestorUrl(cfg),
     link_download: downloadUrl(cfg),
-    link_cardapio: cardapio
+    link_cardapio: cardapio,
+    preco: precoSite()
   }
-  return String(cfg.msg_texto || MSG_PADRAO).replace(/\{(\w+)\}/g, (m, k) => (k in valores ? valores[k] : m))
+  return String(texto || cfg.msg_texto || MSG_PADRAO).replace(/\{(\w+)\}/g, (m, k) => (k in valores ? valores[k] : m))
 }
 
 async function enviarMensagem(linha, manual) {
@@ -198,7 +378,7 @@ async function enviarMensagem(linha, manual) {
   if (!D.bot?.sendText) throw new Error('O WhatsApp de Suporte e Vendas não está disponível')
   const r = await D.bot.sendText(linha.telefone, textoMensagem(linha, cfg), 1200)
   if (r && r.ok) {
-    db.prepare("UPDATE testes_gratis SET msg_status='enviada', msg_enviada_em=datetime('now'), msg_erro=NULL WHERE id=?").run(linha.id)
+    db.prepare("UPDATE testes_gratis SET msg_status='enviada', msg_enviada_em=datetime('now'), msg_erro=NULL, seq_ultimo_em=datetime('now') WHERE id=?").run(linha.id)
     D.log('🧪', `Mensagem de boas-vindas enviada: ${linha.restaurante} (${linha.telefone})`)
     return { ok: true }
   }
@@ -233,6 +413,7 @@ async function processarMensagens() {
       }
     }
     if (fila.length) D.marcarDirty()
+    await processarAcompanhamento(cfg)
   } finally { _enviando = false }
 }
 
@@ -272,6 +453,28 @@ function validarConteudo(c) {
     if (!cam.dados || typeof cam.dados !== 'object') return 'Camada sem conteúdo'
   }
   return null
+}
+
+// Conteúdo que vale agora. Se o que está salvo no painel é de uma versão
+// anterior do site (antes das seções da IA, do cardápio por IA e do garçom),
+// usa o padrão novo, mantendo o WhatsApp, os preços e as camadas extras que
+// o admin criou. O conteúdo antigo continua guardado até o admin publicar.
+function conteudoAtual() {
+  const salvo = lerDado('conteudo')
+  const v = salvo?.valor
+  if (!v) return { conteudo: PADRAO, salvo: null, migrado: false }
+  if ((parseInt(v.versao) || 1) >= (parseInt(PADRAO.versao) || 1)) return { conteudo: v, salvo, migrado: false }
+  const novo = JSON.parse(JSON.stringify(PADRAO))
+  const g = v.geral || {}
+  for (const k of ['whatsapp', 'mensagem_whatsapp']) if (g[k]) novo.geral[k] = g[k]
+  if (v.precos && typeof v.precos === 'object') novo.precos = { ...novo.precos, ...v.precos }
+  const ids = new Set(novo.camadas.map(c => c.id))
+  const extras = (Array.isArray(v.camadas) ? v.camadas : []).filter(c => c && c.id && !ids.has(c.id))
+  if (extras.length) {
+    const i = novo.camadas.findIndex(c => c.id === 'faq')
+    novo.camadas.splice(i < 0 ? novo.camadas.length : i, 0, ...extras)
+  }
+  return { conteudo: novo, salvo, migrado: true }
 }
 
 function listarMidias() {
@@ -414,7 +617,7 @@ function emailJaUsado(email) {
   return ''
 }
 
-function criarContaTeste({ nome, restaurante, telefone, email, senha, ip, dias, cfg }) {
+function criarContaTeste({ nome, restaurante, telefone, email, senha, ip, dias, cfg, meta = {} }) {
   const db = D.db
   const hoje = hojeBR()
   const expira = somaDias(hoje, dias)
@@ -437,9 +640,10 @@ function criarContaTeste({ nome, restaurante, telefone, email, senha, ip, dias, 
     const cat = db.prepare("INSERT INTO categories (tenant_id,name,label,type,emoji,sort_order,ativo) VALUES (?,?,?,?,?,?,1)")
     ;[['entradas', 'Entradas', '🥗'], ['pratos', 'Pratos', '🍽️'], ['bebidas', 'Bebidas', '🥤'], ['sobremesas', 'Sobremesas', '🍰']]
       .forEach(([name, label, emoji], i) => cat.run(t.id, name, label, 'Itens principais', emoji, i + 1))
-    db.prepare(`INSERT INTO testes_gratis (tenant_id,nome,restaurante,telefone,email,ip,dias,expira_em,senha_cifrada,msg_status,msg_em)
-      VALUES (?,?,?,?,?,?,?,?,?,?,${cfg.msg_ativa ? `datetime('now','+${cfg.msg_minutos} minutes')` : 'NULL'})`)
-      .run(t.id, nome, restaurante, telefone, email, ip, dias, expira, cifrar(senha), cfg.msg_ativa ? 'pendente' : null)
+    db.prepare(`INSERT INTO testes_gratis (tenant_id,nome,restaurante,telefone,email,ip,dias,expira_em,senha_cifrada,msg_status,msg_em,fbp,fbc,ua,origem_url,ev_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,${cfg.msg_ativa ? `datetime('now','+${cfg.msg_minutos} minutes')` : 'NULL'},?,?,?,?,?)`)
+      .run(t.id, nome, restaurante, telefone, email, ip, dias, expira, cifrar(senha), cfg.msg_ativa ? 'pendente' : null,
+        meta.fbp || null, meta.fbc || null, meta.ua || null, meta.url || null, meta.ev_id || null)
     return t.id
   })
   const tenantId = criar()
@@ -469,6 +673,7 @@ function listarTestes() {
     SELECT g.id, g.tenant_id, g.nome, g.restaurante, g.telefone, g.email, g.dias, g.expira_em, g.status,
            g.convertido_em, g.created_at,
            g.msg_status, g.msg_em, g.msg_enviada_em, g.msg_erro,
+           g.seq_enviados, g.seq_erro, g.meta_compra_em, g.meta_compra_erro,
            (g.senha_cifrada IS NOT NULL) AS tem_senha,
            t.nome AS loja, t.slug, t.ativo AS loja_ativa, t.expires_at AS loja_expira,
            (SELECT COUNT(*) FROM orders o WHERE o.tenant_id = g.tenant_id) AS pedidos,
@@ -524,12 +729,12 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
 
   // ── Público: conteúdo do site ──────────────────────────
   if (metodo === 'GET' && upath === '/api/site/conteudo') {
-    const salvo = lerDado('conteudo')
+    const { conteudo, salvo } = conteudoAtual()
     const teste = cfgTeste()
     res.setHeader('Cache-Control', 'no-cache')
     send(res, 200, {
       ok: true,
-      conteudo: salvo?.valor || PADRAO,
+      conteudo,
       personalizado: !!salvo,
       atualizado_em: salvo?.updated_at || null,
       teste: { ativo: teste.ativo, dias: teste.dias },
@@ -579,7 +784,21 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
       const doDia = db.prepare("SELECT COUNT(*) AS c FROM testes_gratis WHERE created_at >= datetime('now','-1 day')").get().c
       if (doDia >= cfg.limite_dia) { send(res, 429, { error: 'As vagas de teste de hoje acabaram. Fale com a gente pelo WhatsApp para liberar a sua.' }); return true }
 
-      const conta = criarContaTeste({ nome, restaurante, telefone, email, senha, ip, dias: cfg.dias, cfg })
+      const txtMeta = (v, re, max) => { const t = String(v || '').trim().slice(0, max); return re.test(t) ? t : '' }
+      const meta = {
+        fbp: txtMeta(body.fbp, /^fb\.\d\.\d+\.\d+$/, 80),
+        fbc: txtMeta(body.fbc, /^fb\.\d\.\d+\.[\w-]+$/, 300),
+        ev_id: txtMeta(body.ev_id, /^[\w-]{8,64}$/, 64),
+        url: txtMeta(body.url, /^https?:\/\/[^\s"'<>]+$/i, 500),
+        ua: String(req.headers['user-agent'] || '').slice(0, 400)
+      }
+      const conta = criarContaTeste({ nome, restaurante, telefone, email, senha, ip, dias: cfg.dias, cfg, meta })
+      // Mesmo cadastro que o pixel do navegador registrou, agora pelo servidor (mesmo ID: a Meta conta uma vez só)
+      setImmediate(() => {
+        const l = db.prepare('SELECT * FROM testes_gratis WHERE tenant_id=?').get(conta.tenantId)
+        if (l) enviarEventoMeta('CompleteRegistration', l, { event_id: meta.ev_id || undefined, custom_data: { content_name: 'Teste grátis EstimaFood', status: 'true' } })
+          .then(r => { if (!r.ok && !/não configurado/.test(r.error)) D.log('⚠️', 'Cadastro não enviado para a Meta:', r.error) })
+      })
       D.log('🧪', `Teste grátis criado: ${restaurante} (${email}) até ${conta.expira}`)
       try { setTimeout(() => D.fazerBackup(true), 2000) } catch {}
       setImmediate(() => avisarAdmin([
@@ -611,10 +830,11 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
   if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
 
   if (metodo === 'GET' && upath === '/api/admin/site') {
-    const salvo = lerDado('conteudo')
+    const { conteudo, salvo, migrado } = conteudoAtual()
     send(res, 200, {
-      conteudo: salvo?.valor || PADRAO,
+      conteudo,
       personalizado: !!salvo,
+      migrado,
       atualizado_em: salvo?.updated_at || null,
       padrao: PADRAO,
       midias: listarMidias(),
@@ -627,6 +847,7 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
     let body
     try { body = await readBody(req, MAX_CONTEUDO_BYTES) } catch { send(res, 413, { error: 'Conteúdo grande demais' }); return true }
     const conteudo = limpar(body.conteudo)
+    if (conteudo && typeof conteudo === 'object' && !conteudo.versao) conteudo.versao = PADRAO.versao || 1
     const erro = validarConteudo(conteudo)
     if (erro) { send(res, 400, { error: erro }); return true }
     gravarDado('conteudo', conteudo)
@@ -713,6 +934,27 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
       if (txt.length > 1500) { send(res, 400, { error: 'A mensagem pode ter até 1500 caracteres' }); return true }
       novo.msg_texto = txt || MSG_PADRAO
     }
+    if (body.seq_ativa !== undefined) novo.seq_ativa = body.seq_ativa === true
+    if (body.seq && typeof body.seq === 'object') {
+      novo.seq = { ...atual.seq }
+      for (const k of SEQ_ETAPAS) {
+        if (body.seq[k] === undefined) continue
+        const txt = String(body.seq[k] || '').replace(/\r/g, '').trim()
+        if (txt.length > 1500) { send(res, 400, { error: 'Cada mensagem do acompanhamento pode ter até 1500 caracteres' }); return true }
+        novo.seq[k] = txt || SEQ_PADRAO[k]
+      }
+    }
+    if (body.meta_pixel !== undefined) {
+      const px = String(body.meta_pixel || '').replace(/\D/g, '')
+      if (px && !/^\d{6,20}$/.test(px)) { send(res, 400, { error: 'O ID do pixel tem só números' }); return true }
+      novo.meta_pixel = px || META_PIXEL_PADRAO
+    }
+    if (body.meta_token !== undefined && !String(body.meta_token).startsWith('••••')) {
+      const tk = String(body.meta_token || '').trim()
+      if (tk && !/^[A-Za-z0-9_-]{30,600}$/.test(tk)) { send(res, 400, { error: 'Token da API de Conversões inválido: copie de novo no Gerenciador de Eventos' }); return true }
+      novo.meta_token = tk
+    } else novo.meta_token = atual.meta_token
+    if (body.meta_teste !== undefined) novo.meta_teste = String(body.meta_teste || '').trim().slice(0, 40)
     gravarDado('teste', novo)
     D.log('🧪', `Teste grátis no site: ${novo.ativo ? 'LIGADO' : 'desligado'} (${novo.dias} dias, até ${novo.limite_dia}/dia)`)
     send(res, 200, { ok: true, config: cfgParaPainel(cfgTeste()) })
@@ -768,6 +1010,7 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
     })()
     D.marcarDirty()
     D.log('🧪', `Teste virou cliente: ${linha.restaurante} (validade ${validade})`)
+    setImmediate(() => registrarCompra(linha.tenant_id, valor, 'ativado pelo admin'))
     send(res, 200, { ok: true, ...listarTestes() })
     return true
   }
@@ -798,4 +1041,4 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
   return true
 }
 
-module.exports = { init, api, processarMensagens, _internals: { chaveEmail, conferirProvedorEmail, dominioRecebeEmail } }
+module.exports = { init, api, processarMensagens, registrarCompra, _internals: { chaveEmail, conferirProvedorEmail, dominioRecebeEmail, etapaDevida, enviarEventoMeta } }

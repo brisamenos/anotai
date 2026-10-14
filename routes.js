@@ -868,6 +868,12 @@ function _confirmarMensalidadePaga(db, log, marcarDirty, sse, { tenantId, plano,
     // Avisa o gestor aberto (navegador, celular ou app) para sair da tela de cobrança na hora
     try { const ch = sse || _sseAvisoRef; if (ch) ch(`admin-alerts:${tenantId}`, 'admin_alerts:REFRESH', { action: 'plano_renovado', ts: Date.now() }) } catch {}
     log('✅', `PLANO RENOVADO (${origem}): ${r.plano} tenant=${tenantId} novo vencimento=${r.expires_at} mp=${mpPaymentId}`)
+    // Loja que veio do teste grátis do site: conta a venda para a Meta (uma vez só)
+    try {
+      const pg = db.prepare('SELECT valor FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpPaymentId))
+        || db.prepare('SELECT valor FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpPaymentId))
+      _site.registrarCompra(tenantId, pg?.valor, origem)
+    } catch {}
     return r
   } catch (e) {
     log('⚠️', `Renovação da mensalidade falhou tenant=${tenantId} mp=${mpPaymentId}:`, e.message)
@@ -989,6 +995,7 @@ function _processarCobrancaAssinatura(db, log, marcarDirty, ass, paymentId, paym
     .run(idPagamento, ass.id)
   marcarDirty()
   log('OK', `ASSINATURA PLANO PAGA: tenant=${ass.tenant_id} plano=${renovado.plano} vencimento=${renovado.expires_at} mp_payment=${idPagamento}`)
+  try { _site.registrarCompra(ass.tenant_id, ass.valor, 'assinatura no cartão') } catch {}
   return { renewed: true, status: statusRaw, expires_at: renovado.expires_at, plano: renovado.plano }
 }
 
@@ -6338,6 +6345,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
           marcarDirty()
           log('✅', `FATURA PAGA: tenant=${tenant.nome} valor=R$${rowF.valor} plano=${planoNovo} novo_vencimento=${novaExpISO}`)
+          try { _site.registrarCompra(tenant.id, rowF.valor, 'fatura') } catch {}
 
           // Notifica gestor por WhatsApp
           ;(async () => {

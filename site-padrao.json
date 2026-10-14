@@ -1,8 +1,8 @@
 {
-  "versao": 1,
+  "versao": 2,
   "geral": {
-    "titulo_pagina": "EstimaFood Delivery — Saia do papel. Modernize seu delivery.",
-    "descricao_pagina": "Sistema de delivery completo para açaiterias, hamburguerias, pizzarias e restaurantes. Cardápio digital próprio, pedidos no WhatsApp, sem taxas abusivas. R$ {preco}.",
+    "titulo_pagina": "EstimaFood Delivery: atendente com IA no WhatsApp e cardápio próprio",
+    "descricao_pagina": "A IA atende seus clientes no WhatsApp, monta o pedido e manda para a cozinha. Cardápio digital próprio, PIX direto na sua conta e nenhuma comissão por pedido.",
     "whatsapp": "5588981841517",
     "mensagem_whatsapp": "Olá, vim pelo site da EstimaFood e gostaria de receber mais informações sobre o gestor de pedidos.",
     "botao_topo": "Quero saber mais",
@@ -19,43 +19,64 @@
       "tipo": "hero",
       "visivel": true,
       "dados": {
-        "selo": "Disponível para todo o Brasil",
-        "titulo1": "Saia do papel.",
-        "titulo_destaque": "Modernize",
-        "titulo2": "seu delivery hoje.",
-        "texto": "Cardápio digital próprio, pedidos automáticos no WhatsApp e **PIX direto na sua conta** — sem comissão por pedido, sem taxa abusiva, com a sua marca no lugar de honra.",
+        "selo": "Novo: atendente com inteligência artificial",
+        "titulo1": "Seu delivery",
+        "titulo_destaque": "vendendo sozinho",
+        "titulo2": "no WhatsApp, com IA.",
+        "texto": "A IA atende seus clientes no WhatsApp, mostra o cardápio, monta o pedido e manda direto para a cozinha. Cardápio próprio, **PIX direto na sua conta** e nenhuma comissão por pedido.",
         "botao1": "Falar no WhatsApp",
-        "botao2": "Ver como funciona",
+        "botao2": "Ver a IA atendendo",
         "numeros": [
-          {
-            "valor": "R$ {preco}",
-            "rotulo": "Aproveite!"
-          },
           {
             "valor": "0%",
             "rotulo": "comissão por pedido"
           },
           {
-            "valor": "100%",
-            "rotulo": "cliente seu"
+            "valor": "IA",
+            "rotulo": "atende no WhatsApp"
+          },
+          {
+            "valor": "{dias} dias",
+            "rotulo": "grátis para testar"
           }
         ],
-        "flutuante_titulo": "+R$ 4.000/mês",
-        "flutuante_texto": "economia média",
+        "flutuante_titulo": "Pedido anotado pela IA",
+        "flutuante_texto": "e enviado para a cozinha",
         "imagens": [
           {
             "url": "assets/cardapio-lorys-screen.png",
             "alt": "Lory's Burger - cardápio"
           },
           {
-            "url": "assets/cardapio-burger-screen.png",
-            "alt": "Cardápio de hambúrgueres"
-          },
-          {
             "url": "assets/cardapio-acai-screen.png",
             "alt": "Cardápio Açaí da Lory"
+          },
+          {
+            "url": "assets/cardapio-burger-screen.png",
+            "alt": "Cardápio de hambúrgueres"
           }
         ]
+      }
+    },
+    {
+      "id": "ia",
+      "tipo": "ia",
+      "visivel": true,
+      "dados": {
+        "tag": "Atendente com IA",
+        "titulo": "Enquanto você prepara, *a IA atende o próximo cliente.*",
+        "texto": "Seu cliente manda mensagem ou áudio no WhatsApp e a IA responde na hora: mostra o cardápio, tira dúvidas, monta o pedido e manda pronto para a cozinha.",
+        "pontos": [
+          "Responde na hora, mesmo no horário de pico",
+          "Entende mensagem de texto e de áudio",
+          "Monta o pedido com adicionais e calcula a entrega",
+          "Envia o Pix e manda o pedido para a cozinha",
+          "Você assume a conversa quando quiser"
+        ],
+        "video": "assets/videos/ia-whatsapp.mp4",
+        "video_capa": "assets/videos/ia-whatsapp-capa.jpg",
+        "botao": "Quero a IA na minha loja",
+        "botao_link": "teste"
       }
     },
     {
@@ -65,7 +86,7 @@
       "dados": {
         "tag": "Teste grátis",
         "titulo": "Teste o EstimaFood por *{dias} dias*. De graça.",
-        "texto": "Crie sua conta agora e use o sistema completo na sua loja: cardápio digital, painel de pedidos e impressão. Sem cartão de crédito.",
+        "texto": "Crie sua conta agora e use o sistema completo na sua loja: cardápio digital, atendente com IA, painel de pedidos e impressão. Sem cartão de crédito.",
         "botao": "Criar minha conta grátis",
         "miudo": "Vamos te chamar no WhatsApp para ajudar no teste.",
         "chamada": "Testar grátis por {dias} dias",
@@ -76,11 +97,11 @@
         "comanda_topo": "Sistema de delivery",
         "comanda_titulo": "Pedido de teste",
         "itens": [
+          "Atendente com IA no WhatsApp",
           "Cardápio digital com sua marca",
-          "Painel de pedidos em tempo real",
-          "Pedidos pelo WhatsApp",
-          "PIX direto na sua conta",
-          "Impressão automática dos pedidos"
+          "Cardápio criado por IA a partir de fotos",
+          "Painel de pedidos e impressão",
+          "PIX direto na sua conta"
         ],
         "comanda_pe": "Válido por {dias} dias · sem cartão · sem compromisso",
         "dias_rotulo": "{dias} dias",
@@ -89,37 +110,39 @@
       }
     },
     {
-      "id": "demo",
-      "tipo": "demo",
-      "visivel": true,
-      "dados": {
-        "tag": "Demonstração geral",
-        "titulo": "Veja o *gestor de pedidos* funcionando de verdade.",
-        "texto": "Uma visão completa do painel: pedido chegando, organização por etapa, produção acompanhando status e loja controlando a operação com clareza.",
-        "pontos": [
-          "Pedidos em tempo real",
-          "Kanban de produção",
-          "Controle do gestor"
-        ],
-        "video": "RMTYf_eiGO0",
-        "video_titulo": "Assistir demonstração",
-        "video_sub": "Gestor de pedidos EstimaFood",
-        "video_legenda": "Demonstração completa do painel"
-      }
-    },
-    {
       "id": "faixa",
       "tipo": "faixa",
       "visivel": true,
       "dados": {
         "itens": [
-          "Cardápio digital",
-          "WhatsApp automático",
-          "PIX integrado",
+          "Atendente com IA",
+          "Cardápio por IA",
           "Sem comissão",
-          "Cliente é seu",
-          "Suporte humano"
+          "PIX direto na sua conta",
+          "App do garçom",
+          "Impressão automática",
+          "Cliente é seu"
         ]
+      }
+    },
+    {
+      "id": "cardapio-ia",
+      "tipo": "cardapio-ia",
+      "visivel": true,
+      "dados": {
+        "tag": "Cardápio por IA",
+        "titulo": "Tire foto do cardápio. *A IA monta tudo.*",
+        "texto": "Não precisa digitar produto por produto. Envie fotos do seu cardápio impresso ou de outro aplicativo e a IA cria categorias, produtos, preços, tamanhos e adicionais. Você confere e salva.",
+        "pontos": [
+          "Até 10 fotos de uma vez, inclusive do iPhone",
+          "Pizza com tamanhos, borda e meio a meio",
+          "Adicionais e opções já separados",
+          "Você revisa tudo antes de salvar"
+        ],
+        "video": "assets/videos/cardapio-ia.mp4",
+        "video_capa": "assets/videos/cardapio-ia-capa.jpg",
+        "botao": "Criar meu cardápio grátis",
+        "botao_link": "teste"
       }
     },
     {
@@ -128,23 +151,23 @@
       "visivel": true,
       "dados": {
         "tag": "O problema",
-        "titulo": "Ainda anotando pedido *na mão?*",
-        "texto": "Esse processo atrasa o atendimento, aumenta os erros e **faz você perder oportunidades de venda** todo dia.",
+        "titulo": "WhatsApp lotado e *pedido anotado na mão?*",
+        "texto": "No horário de pico, mensagem sem resposta vira cliente perdido. E cada pedido anotado à mão é uma chance de erro.",
         "cards": [
           {
-            "icone": "relogio",
-            "titulo": "Mais demora",
-            "texto": "Pedido escrito à mão, repetido pra cozinha, conferido de novo. O cliente espera e desiste."
+            "icone": "conversa",
+            "titulo": "Cliente esperando resposta",
+            "texto": "Enquanto você responde um, outros três desistem e pedem em outro lugar."
           },
           {
-            "icone": "conversa",
-            "titulo": "Mais confusão",
-            "texto": "Anotação ilegível, troca de pedido, sabor errado. Cada erro é um cliente que não volta."
+            "icone": "relogio",
+            "titulo": "Mais demora e mais erro",
+            "texto": "Pedido escrito à mão, repetido para a cozinha, sabor trocado. Cada erro é um cliente que não volta."
           },
           {
             "icone": "grafico",
-            "titulo": "Menos controle",
-            "texto": "Sem histórico, sem relatório, sem dados. Você gere no escuro e não sabe o que vende mais."
+            "titulo": "Pouco controle",
+            "texto": "Sem histórico e sem relatório, você não sabe o que mais vende nem quem são seus clientes."
           }
         ]
       }
@@ -161,17 +184,18 @@
         "antes_titulo": "Plataforma com taxa\nou caderno na mão",
         "antes_itens": [
           "Comissão de 20% a 30% por pedido",
+          "Você responde cada mensagem na mão",
           "Cliente pertence à plataforma — você não tem o WhatsApp dele",
           "Regras e taxas mudam sem aviso",
           "Cardápio limitado e padronizado",
           "Cupom e desconto saem do seu lucro",
-          "Concorre com vizinho dentro do mesmo app",
-          "Suporte por chatbot automático"
+          "Concorre com vizinho dentro do mesmo app"
         ],
         "depois_rotulo": "Com o EstimaFood",
         "depois_titulo": "Seu próprio sistema,\nsuas próprias regras",
         "depois_itens": [
           "Mensalidade fixa — sem comissão por pedido",
+          "Atendente com IA no seu WhatsApp",
           "Cliente é seu, com WhatsApp e histórico de compras",
           "Você define preço, prazo e área de entrega",
           "Cardápio totalmente livre e visual",
@@ -187,40 +211,69 @@
       "visivel": true,
       "dados": {
         "tag": "Recursos",
-        "titulo": "Tudo o que você precisa, *nada que você não use.*",
-        "texto": "Um sistema completo de delivery pensado pra quem quer crescer com autonomia e praticidade.",
+        "titulo": "Tudo para vender mais, *num sistema só.*",
+        "texto": "Do atendimento no WhatsApp até a impressão na cozinha, sem pagar comissão por pedido.",
         "cards": [
           {
-            "icone": "celular",
-            "titulo": "Cardápio digital profissional",
-            "texto": "Bonito, rápido, com sua marca. Categorias, fotos, adicionais, pizza meio a meio e observações por item."
-          },
-          {
-            "icone": "link",
-            "titulo": "Link próprio pra divulgar",
-            "texto": "Sua URL personalizada. Coloca no Instagram, no Google, na embalagem. Cliente abre direto no celular."
-          },
-          {
             "icone": "conversa",
-            "titulo": "Pedidos no WhatsApp",
-            "texto": "Pedido chega formatado pronto pra produção. Cliente é avisado em cada etapa, automaticamente."
+            "titulo": "Atendente com IA no WhatsApp",
+            "texto": "Responde, monta o pedido, calcula a entrega e envia o Pix. Você assume a conversa quando quiser."
           },
           {
-            "icone": "grafico",
-            "titulo": "Mais controle do negócio",
-            "texto": "Relatórios de vendas, produtos mais pedidos, ticket médio. Você decide com base em dados."
+            "icone": "raio",
+            "titulo": "Cardápio criado por IA",
+            "texto": "Envie fotos do cardápio e a IA cria categorias, produtos, preços e adicionais."
+          },
+          {
+            "icone": "celular",
+            "titulo": "Cardápio digital com sua marca",
+            "texto": "Bonito e rápido, com fotos, adicionais e pizza meio a meio. Link próprio para divulgar."
+          },
+          {
+            "icone": "pessoas",
+            "titulo": "App do garçom",
+            "texto": "Pedido da mesa lançado no celular e impresso na cozinha. Conta pronta para fechar."
+          },
+          {
+            "icone": "impressora",
+            "titulo": "Impressão automática",
+            "texto": "Pedido novo sai impresso sozinho, separado por cozinha, bar ou caixa."
           },
           {
             "icone": "cartao",
             "titulo": "PIX direto na sua conta",
-            "texto": "Sem intermediário, sem prazo de repasse. QR Code gerado no fechamento e o dinheiro cai na hora."
+            "texto": "O dinheiro cai na sua conta, sem intermediário e sem prazo de repasse."
           },
           {
-            "icone": "casa",
-            "titulo": "Personalizado pra você",
-            "texto": "Com a identidade do seu negócio: cor, logo, fotos. Sua marca brilha, não some no feed."
+            "icone": "cupom",
+            "titulo": "Cupons e fidelidade",
+            "texto": "Cupons, cashback e cartão fidelidade controlados por você."
+          },
+          {
+            "icone": "grafico",
+            "titulo": "Relatórios do negócio",
+            "texto": "Vendas, produtos mais pedidos e ticket médio para decidir com dados."
           }
         ]
+      }
+    },
+    {
+      "id": "garcom",
+      "tipo": "garcom",
+      "visivel": true,
+      "dados": {
+        "tag": "App do garçom",
+        "titulo": "Mesa e salão *sem papel e sem erro.*",
+        "texto": "O garçom lança o pedido pelo celular, escolhe a mesa e os adicionais, e o pedido sai impresso na cozinha. A conta da mesa fica pronta para fechar.",
+        "pontos": [
+          "Pedido da mesa direto para a cozinha",
+          "Conta pronta, com divisão por cliente",
+          "Rádio para falar com o caixa"
+        ],
+        "video": "assets/videos/app-garcom.mp4",
+        "video_capa": "assets/videos/app-garcom-capa.jpg",
+        "botao": "",
+        "botao_link": "teste"
       }
     },
     {
@@ -317,16 +370,16 @@
       "visivel": true,
       "dados": {
         "tag": "A conta na ponta do lápis",
-        "titulo": "Quanto você está *doando* de graça hoje?",
-        "texto": "Simulação real para quem fatura **R$ 20 mil por mês** em pedidos delivery.",
-        "a_rotulo": "Plataforma com taxa",
+        "titulo": "Quanto a taxa do aplicativo *leva do seu caixa?*",
+        "texto": "Simulação para uma loja que fatura **R$ 20 mil por mês** com delivery.",
+        "a_rotulo": "Aplicativo com comissão",
         "a_linhas": [
           {
             "nome": "Faturamento mensal",
             "valor": "R$ 20.000"
           },
           {
-            "nome": "Comissão (~20%)",
+            "nome": "Comissão (cerca de 20%)",
             "valor": "– R$ 4.000"
           },
           {
@@ -334,23 +387,27 @@
             "valor": "– R$ 400"
           }
         ],
-        "a_total_rotulo": "Você perde",
+        "a_total_rotulo": "Sai do seu caixa",
         "a_total_valor": "R$ 4.400",
-        "b_rotulo": "EstimaFood Delivery",
+        "b_rotulo": "EstimaFood",
         "b_linhas": [
           {
             "nome": "Faturamento mensal",
             "valor": "R$ 20.000"
           },
           {
-            "nome": "PIX direto na sua conta",
+            "nome": "Mensalidade (1º mês)",
+            "valor": "– R$ {preco}"
+          },
+          {
+            "nome": "Comissão por pedido",
             "valor": "R$ 0"
           }
         ],
         "b_total_rotulo": "Fica com você",
-        "b_total_valor": "R$ 19.950",
-        "conclusao_titulo": "A diferença paga *um funcionário*. Por mês.",
-        "conclusao_texto": "No ano, isso vira mais de R$ 48.000 que continuam no seu caixa em vez de financiar quem te cobra taxa abusiva."
+        "b_total_valor": "R$ {sobra_20k}",
+        "conclusao_titulo": "Na simulação, a diferença passa de *R$ 4.000 por mês.*",
+        "conclusao_texto": "É dinheiro que continua no seu caixa em vez de virar comissão para o aplicativo."
       }
     },
     {
@@ -358,24 +415,27 @@
       "tipo": "oferta",
       "visivel": true,
       "dados": {
-        "selo": "Vagas\nlimitadas\n· Brasil ·",
-        "tag": "★ Promoção de lançamento",
-        "titulo": "Comece hoje. *Pague menos que um almoço* no primeiro mês.",
+        "selo": "Oferta\nde boas-\nvindas",
+        "tag": "Promoção de lançamento",
+        "titulo": "Comece hoje com *preço de lançamento.*",
         "preco_de": "de R$ {preco_de}",
         "periodo": "no primeiro mês",
-        "periodo_sub": "depois mensalidade fixa — sem comissão por pedido",
+        "periodo_sub": "mensalidade fixa, sem comissão por pedido",
         "itens": [
+          "Atendente com IA no WhatsApp",
+          "Cardápio criado por IA a partir de fotos",
           "Cardápio digital com sua marca",
-          "Pedidos automáticos no WhatsApp",
+          "App do garçom e impressão automática",
           "PIX direto na sua conta",
-          "Painel do gestor + impressão",
           "Cupons, fidelidade e indicações",
-          "Suporte humano local",
-          "Setup e migração com a gente",
+          "Suporte humano para montar tudo",
           "Sem fidelidade, cancela quando quiser"
         ],
-        "botao": "Quero garantir minha vaga",
-        "nota": "A oferta R$ {preco} vale apenas para as primeiras lojas cadastradas em todo o Brasil."
+        "botao": "Quero garantir esse preço",
+        "nota": "Garanta o preço promocional enquanto o cronômetro estiver correndo.",
+        "botao_link": "whatsapp",
+        "cronometro_minutos": "7",
+        "encerrada": "O tempo desta oferta acabou. Fale com a gente para ver as condições de hoje."
       }
     },
     {
@@ -386,6 +446,18 @@
         "tag": "Dúvidas comuns",
         "titulo": "Respondendo o que você *provavelmente está pensando.*",
         "itens": [
+          {
+            "pergunta": "A IA atende sozinha mesmo?",
+            "resposta": "Sim. A IA responde no WhatsApp da sua loja, mostra o cardápio, monta o pedido com os adicionais, calcula a entrega e envia o pedido para a cozinha. Ela entende mensagens de texto e de áudio."
+          },
+          {
+            "pergunta": "E se o cliente quiser falar com uma pessoa?",
+            "resposta": "Quando você ou sua equipe respondem o cliente pelo WhatsApp, a IA pausa o atendimento daquele cliente e deixa a conversa com vocês."
+          },
+          {
+            "pergunta": "Preciso digitar o cardápio inteiro?",
+            "resposta": "Não. Envie até 10 fotos do seu cardápio e a IA monta categorias, produtos, preços, tamanhos e adicionais. Você confere e salva. Se preferir, a nossa equipe ajuda a montar."
+          },
           {
             "pergunta": "Funciona pro meu segmento? (hambúrguer, açaí, pizza, marmita, açougue…)",
             "resposta": "Funciona. O sistema foi desenhado pra adaptar fluxos diferentes: hamburgueria com adicionais, pizzaria com meio a meio, açougue com peso variável, açaiteria com complementos por nível, marmitaria com kit semanal. Se opera com delivery, opera aqui."
@@ -407,10 +479,6 @@
             "resposta": "Não. Você paga mês a mês. Se quiser sair, sai. Nenhuma multa, nenhum contrato amarrado. Confiamos que o sistema vale a pena pelo que entrega, não por trava jurídica."
           },
           {
-            "pergunta": "Depois do primeiro mês promocional, quanto fica?",
-            "resposta": "Mensalidade fixa, sem percentual por pedido. Quando a gente conversar, eu te passo o valor exato do plano que combina com o tamanho da sua operação. Mesmo no plano cheio, geralmente cabe no que você gasta em uma única semana de taxa de plataforma."
-          },
-          {
             "pergunta": "Vocês ajudam a montar o cardápio e migrar?",
             "resposta": "Ajudamos sim. Setup e migração estão incluídos. Você manda fotos e descrições (ou a gente extrai do seu cardápio atual), montamos a estrutura, configuramos pagamento, área de entrega e treinamos sua equipe."
           }
@@ -424,7 +492,7 @@
       "dados": {
         "tag": "Fale com a gente",
         "titulo": "Quer *saber mais?*",
-        "texto": "Fale com a nossa equipe e descubra como ter seu próprio sistema de delivery. Sem enrolação, sem vendedor robô. Demonstração ao vivo em 10 minutos.",
+        "texto": "Fale com a nossa equipe e veja a IA atendendo ao vivo. Sem enrolação: a gente mostra o sistema funcionando em 10 minutos.",
         "botao": "Chame agora no WhatsApp",
         "segmentos": [
           "Hamburguerias",
@@ -435,6 +503,25 @@
           "Açougues"
         ],
         "nota": "Atendimento para todo o Brasil · Resposta em até 30 minutos em horário comercial"
+      }
+    },
+    {
+      "id": "demo",
+      "tipo": "demo",
+      "visivel": false,
+      "dados": {
+        "tag": "Demonstração geral",
+        "titulo": "Veja o *gestor de pedidos* funcionando de verdade.",
+        "texto": "Uma visão completa do painel: pedido chegando, organização por etapa, produção acompanhando status e loja controlando a operação com clareza.",
+        "pontos": [
+          "Pedidos em tempo real",
+          "Kanban de produção",
+          "Controle do gestor"
+        ],
+        "video": "RMTYf_eiGO0",
+        "video_titulo": "Assistir demonstração",
+        "video_sub": "Gestor de pedidos EstimaFood",
+        "video_legenda": "Demonstração completa do painel"
       }
     }
   ]

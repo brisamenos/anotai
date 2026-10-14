@@ -195,6 +195,15 @@ body.theme-light .sa-chave span{background:#cbd5e1}
     if (x.msg_status === 'falhou') return `<div class="sa-sub" title="${esc(x.msg_erro || '')}"><span style="color:var(--danger);font-weight:600">WhatsApp não enviou</span> · ${enviar}</div>`;
     return `<div class="sa-sub">Sem mensagem · ${enviar}</div>`;
   }
+  const NOME_ETAPA = { dia1: '1º dia', dia3: '3º dia', vespera: 'véspera', expirou: 'fim' };
+  function linhaAcompanhamento(x) {
+    const feitas = String(x.seq_enviados || '').split(',').filter(Boolean);
+    let h = feitas.length ? `<div class="sa-sub">Acompanhamento: ${feitas.map(k => NOME_ETAPA[k] || k).join(', ')}</div>` : '';
+    if (x.seq_erro) h += `<div class="sa-sub" title="${esc(x.seq_erro)}" style="color:var(--danger)">Acompanhamento não enviou</div>`;
+    if (x.meta_compra_em) h += '<div class="sa-sub" style="color:var(--success);font-weight:600">Venda enviada à Meta</div>';
+    else if (x.meta_compra_erro && !/não configurado/.test(x.meta_compra_erro)) h += `<div class="sa-sub" title="${esc(x.meta_compra_erro)}" style="color:var(--danger)">Venda não chegou à Meta</div>`;
+    return h;
+  }
 
   function uso(t) {
     const partes = [
@@ -223,6 +232,7 @@ body.theme-light .sa-chave span{background:#cbd5e1}
     // campos de configuração ainda não salvos sobrevivem aos redesenhos da tela
     const v = (id, salvo) => (id in T.rascunho ? T.rascunho[id] : (salvo ?? ''));
     const msgAtiva = 'sa-teste-msg-ativa' in T.rascunho ? T.rascunho['sa-teste-msg-ativa'] : c.msg_ativa;
+    const seqAtiva = 'sa-teste-seq-ativa' in T.rascunho ? T.rascunho['sa-teste-seq-ativa'] : c.seq_ativa !== false;
 
     sec.innerHTML = `
       <div class="sec-head">
@@ -266,6 +276,33 @@ body.theme-light .sa-chave span{background:#cbd5e1}
               <div class="sa-dica">Use {nome}, {loja}, {email}, {validade}, {dias}, {link_gestor}, {link_download} e {link_cardapio}: cada um é trocado pelo dado do cliente. No WhatsApp, *asteriscos* deixam o trecho em negrito. <button class="sa-link" data-acao="msg-padrao">Voltar ao texto padrão</button></div></div>
           </div>
         </div>
+        <div class="sa-msg ${seqAtiva ? '' : 'desligada'}">
+          <div class="sa-msg-topo">
+            <div><b>Acompanhamento do teste no WhatsApp</b>
+              <div class="sa-dica" style="margin-top:3px">Mensagens automáticas ao longo do teste, entre 9h e 20h, com pelo menos 12 horas entre uma e outra. Quem vira cliente para de receber.</div></div>
+            <label class="toggle" title="${seqAtiva ? 'Desligar o acompanhamento' : 'Ligar o acompanhamento'}"><input type="checkbox" id="sa-teste-seq-ativa" ${seqAtiva ? 'checked' : ''} aria-label="Acompanhamento do teste"><span class="toggle-slider"></span></label>
+          </div>
+          ${[['dia1', '1 dia depois do cadastro'], ['dia3', '3 dias depois do cadastro'], ['vespera', 'Véspera do fim do teste'], ['expirou', 'Depois que o teste acaba']].map(([k, rot]) => `
+          <div class="sa-msg-corpo">
+            <div class="sa-campo"><label for="sa-seq-${k}">${rot}</label><div class="sa-dica" style="margin-top:6px"><button class="sa-link" data-acao="seq-padrao" data-etapa="${k}">Voltar ao texto padrão</button></div></div>
+            <div class="sa-campo"><textarea class="minput" id="sa-seq-${k}" maxlength="1500" style="min-height:130px" aria-label="${rot}">${esc(v('sa-seq-' + k, c.seq?.[k]))}</textarea></div>
+          </div>`).join('')}
+          <div class="sa-dica" style="margin-top:8px">Além dos códigos da mensagem de boas-vindas, aqui também vale {preco}: o preço do 1º mês mostrado no site.</div>
+        </div>
+
+        <div class="sa-msg">
+          <div class="sa-msg-topo">
+            <div><b>Venda nos anúncios da Meta (API de Conversões)</b>
+              <div class="sa-dica" style="margin-top:3px">Quando uma loja que veio do teste grátis paga a mensalidade, o sistema avisa a Meta. Assim os anúncios aprendem a buscar quem compra, e não só quem testa. Gere o token no Gerenciador de Eventos: pixel > Configurações > API de Conversões > Gerar token de acesso.</div></div>
+          </div>
+          <div class="sa-cfg" style="margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+            <div class="sa-campo"><label for="sa-meta-pixel">ID do pixel</label><input class="minput" id="sa-meta-pixel" inputmode="numeric" value="${esc(v('sa-meta-pixel', c.meta_pixel))}"></div>
+            <div class="sa-campo"><label for="sa-meta-token">Token da API de Conversões</label><input class="minput" id="sa-meta-token" type="password" autocomplete="off" value="${esc(v('sa-meta-token', ''))}" placeholder="${c.meta_token_salvo ? 'Salvo ' + esc(c.meta_token_salvo) + ' (vazio mantém)' : 'Cole aqui o token'}"></div>
+            <div class="sa-campo"><label for="sa-meta-teste">Código de teste (opcional)</label><input class="minput" id="sa-meta-teste" value="${esc(v('sa-meta-teste', c.meta_teste))}" placeholder="TEST12345"></div>
+          </div>
+          <div class="sa-dica" style="margin-top:8px">${c.meta_token_salvo ? 'Ligado: cadastros e vendas estão sendo enviados para a Meta.' : 'Desligado até você colar o token.'} O código de teste só serve para conferir na aba "Testar eventos"; apague depois.</div>
+        </div>
+
         <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:16px">
           ${Object.keys(T.rascunho).length ? '<span class="sa-estado pendente">Alterações ainda não salvas</span>' : ''}
           <button class="btn bp" data-acao="salvar-config">Salvar configuração</button>
@@ -298,7 +335,7 @@ body.theme-light .sa-chave span{background:#cbd5e1}
             return `<tr>
               <td><div class="sa-loja">${esc(t.loja || t.restaurante)}</div><div class="sa-sub">${esc(t.nome)}</div></td>
               <td>${wa ? `<a href="${wa}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">${esc(t.telefone)}</a>` : '—'}<div class="sa-sub">${esc(t.email)}</div>${linhaSenha(t)}</td>
-              <td>${dataBR(t.created_at)}${linhaMensagem(t)}</td>
+              <td>${dataBR(t.created_at)}${linhaMensagem(t)}${linhaAcompanhamento(t)}</td>
               <td>${situacao(t)}<div class="sa-sub">até ${dataBR(t.situacao === 'cliente' ? (t.loja_expira || t.expira_em) : t.expira_em)}</div></td>
               <td>${uso(t)}</td>
               <td><div class="sa-acoes">${t.situacao === 'cliente' ? '<span class="sa-sub">em Clientes</span>' : `
@@ -420,9 +457,14 @@ body.theme-light .sa-chave span{background:#cbd5e1}
       if (a.dataset.acao === 'salvar-config') salvarConfig({
         dias: $('sa-teste-dias').value, limite_dia: $('sa-teste-limite').value,
         gestor_url: $('sa-teste-gestor').value.trim(), download_url: $('sa-teste-download').value.trim(),
-        msg_ativa: $('sa-teste-msg-ativa').checked, msg_minutos: $('sa-teste-msg-min').value, msg_texto: $('sa-teste-msg-texto').value
+        msg_ativa: $('sa-teste-msg-ativa').checked, msg_minutos: $('sa-teste-msg-min').value, msg_texto: $('sa-teste-msg-texto').value,
+        seq_ativa: $('sa-teste-seq-ativa').checked,
+        seq: { dia1: $('sa-seq-dia1').value, dia3: $('sa-seq-dia3').value, vespera: $('sa-seq-vespera').value, expirou: $('sa-seq-expirou').value },
+        meta_pixel: $('sa-meta-pixel').value.trim(), meta_teste: $('sa-meta-teste').value.trim(),
+        ...($('sa-meta-token').value.trim() ? { meta_token: $('sa-meta-token').value.trim() } : {})
       }, 'Configuração do teste salva');
       if (a.dataset.acao === 'msg-padrao') { T.rascunho['sa-teste-msg-texto'] = T.dados.config.msg_padrao; renderTestes(); }
+      if (a.dataset.acao === 'seq-padrao') { T.rascunho['sa-seq-' + a.dataset.etapa] = T.dados.config.seq_padrao?.[a.dataset.etapa] || ''; renderTestes(); }
       if (a.dataset.acao === 'senha') verSenha(id);
       if (a.dataset.acao === 'ocultar-senha') { delete T.senhas[id]; renderTestes(); }
       if (a.dataset.acao === 'copiar-senha') {
@@ -437,9 +479,10 @@ body.theme-light .sa-chave span{background:#cbd5e1}
         salvarConfig({ ativo: ligar }, ligar ? 'Teste grátis ligado: o site já está oferecendo' : 'Teste grátis desligado: o site parou de oferecer', true);
       }
       if (ev.target.id === 'sa-teste-msg-ativa') { T.rascunho['sa-teste-msg-ativa'] = ev.target.checked; renderTestes(); }
+      if (ev.target.id === 'sa-teste-seq-ativa') { T.rascunho['sa-teste-seq-ativa'] = ev.target.checked; renderTestes(); }
     });
     sec.addEventListener('input', ev => {
-      if (/^sa-teste-(dias|limite|gestor|download|msg-min|msg-texto)$/.test(ev.target.id)) { T.rascunho[ev.target.id] = ev.target.value; return; }
+      if (/^sa-teste-(dias|limite|gestor|download|msg-min|msg-texto)$/.test(ev.target.id) || /^sa-(seq-(dia1|dia3|vespera|expirou)|meta-(pixel|token|teste))$/.test(ev.target.id)) { T.rascunho[ev.target.id] = ev.target.value; return; }
       if (ev.target.id !== 'sa-teste-busca') return;
       T.busca = ev.target.value;
       const pos = ev.target.selectionStart;
@@ -475,13 +518,18 @@ body.theme-light .sa-chave span{background:#cbd5e1}
   const cabecalho = [t('tag', 'Etiqueta acima do título'), t('titulo', 'Título'), a('texto', 'Texto')];
   const telas = (k, label) => itens(k, label, [img('url', 'Imagem'), t('alt', 'Descrição da imagem')], { fixo: true, duas: false });
   const botaoExtra = [t('botao', 'Texto do botão (em branco = sem botão)'), sel('botao_link', 'O botão leva para', DESTINOS)];
+  const secaoVideo = [...cabecalho, lista('pontos', 'Pontos com check', { max: 6 }),
+    { k: 'video', label: 'Vídeo MP4 (toca sem som quando aparece na tela)', t: 'img', video: true }, img('video_capa', 'Capa do vídeo'), ...botaoExtra];
 
   const TIPOS = {
     hero: { nome: 'Abertura', campos: [t('selo', 'Selo acima do título'), t('titulo1', 'Título, 1ª linha'), t('titulo_destaque', 'Título, linha em laranja'), t('titulo2', 'Título, 3ª linha'), a('texto', 'Texto'),
       t('botao1', 'Botão principal'), t('botao2', 'Botão secundário'),
       itens('numeros', 'Números em destaque', [t('valor', 'Valor'), t('rotulo', 'Legenda')], { max: 4, duas: true }),
       t('flutuante_titulo', 'Etiqueta flutuante: valor'), t('flutuante_texto', 'Etiqueta flutuante: legenda'),
-      telas('imagens', 'Telas dos celulares (a 1ª fica na frente)')] },
+      telas('imagens', 'Telas dos celulares atrás da conversa com a IA')] },
+    ia: { nome: 'Atendente com IA (vídeo)', campos: secaoVideo },
+    'cardapio-ia': { nome: 'Cardápio por IA (vídeo)', campos: secaoVideo },
+    garcom: { nome: 'App do garçom (vídeo)', campos: secaoVideo },
     teste: { nome: 'Teste grátis', campos: [t('tag', 'Etiqueta acima do título'), t('titulo', 'Título'), a('texto', 'Texto'), t('botao', 'Botão do cadastro'), t('miudo', 'Frase abaixo do botão'),
       t('chamada', 'Chamada nos botões do site'), t('chamada_curta', 'Chamada curta (botão do topo)'), t('nota_hero', 'Frase abaixo do botão da abertura'),
       t('barra', 'Barra do topo: texto'), t('barra_botao', 'Barra do topo: botão'),
@@ -508,7 +556,8 @@ body.theme-light .sa-chave span{background:#cbd5e1}
       t('conclusao_titulo', 'Conclusão: título'), a('conclusao_texto', 'Conclusão: texto')] },
     oferta: { nome: 'Oferta e preço', campos: [a('selo', 'Selo redondo (uma palavra por linha)'), t('tag', 'Etiqueta'), t('titulo', 'Título'),
       t('preco_de', 'Linha do preço antigo'), t('periodo', 'Ao lado do preço'), t('periodo_sub', 'Ao lado do preço: linha menor'),
-      lista('itens', 'O que está incluso', { max: 12 }), t('botao', 'Botão'), a('nota', 'Nota abaixo do botão')] },
+      lista('itens', 'O que está incluso', { max: 12 }), t('botao', 'Botão'), sel('botao_link', 'O botão leva para', DESTINOS), a('nota', 'Nota abaixo do botão'),
+      t('cronometro_minutos', 'Cronômetro da oferta, em minutos (0 = sem cronômetro)'), a('encerrada', 'Mensagem quando o tempo acaba')] },
     faq: { nome: 'Dúvidas', campos: [t('tag', 'Etiqueta acima do título'), t('titulo', 'Título'), itens('itens', 'Perguntas', [t('pergunta', 'Pergunta'), a('resposta', 'Resposta')], { max: 20 })] },
     contato: { nome: 'Contato', campos: [...cabecalho, t('botao', 'Botão do WhatsApp'), lista('segmentos', 'Segmentos atendidos', { max: 12 }), t('nota', 'Nota final')] },
 
