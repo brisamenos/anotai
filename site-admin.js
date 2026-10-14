@@ -78,7 +78,7 @@ const META_PIXEL_PADRAO = '3403468509829400' // pixel "estima" (conta de anúnci
 const META_PIXEL_ANTIGO = '1075636798774814' // pixel usado antes; quem salvou com ele passa a usar o novo
 const META_GRAPH = process.env.META_GRAPH_VERSION || 'v23.0'
 const TESTE_PADRAO = { ativo: false, dias: 7, limite_dia: 30, download_url: '', gestor_url: '', msg_ativa: true, msg_minutos: 2, msg_texto: MSG_PADRAO,
-  seq_ativa: true, seq: SEQ_PADRAO, meta_pixel: META_PIXEL_PADRAO, meta_token: '', meta_teste: '', ia_teste: true }
+  seq_ativa: true, seq: SEQ_PADRAO, meta_pixel: META_PIXEL_PADRAO, meta_token: '', meta_teste: '', ia_teste: true, compra_ativa: true }
 const MSG_TENTATIVAS = 5        // quantas vezes tenta enviar antes de marcar como falha
 const MSG_NOVA_TENTATIVA = 5    // minutos entre uma tentativa e outra
 const MAX_CONTEUDO_BYTES = 600 * 1024
@@ -150,6 +150,21 @@ function init(deps) {
       PRIMARY KEY (dia, visitante)
     );
     CREATE INDEX IF NOT EXISTS idx_site_visitas_dia ON site_visitas(dia);
+    CREATE TABLE IF NOT EXISTS site_compras (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chave TEXT NOT NULL,
+      nome TEXT, restaurante TEXT, telefone TEXT, email TEXT, senha_cifrada TEXT,
+      valor REAL, metodo TEXT,
+      status TEXT DEFAULT 'pendente',
+      status_detalhe TEXT, erro TEXT,
+      mp_payment_id TEXT, mp_ref TEXT, bandeira TEXT,
+      qr_code TEXT, qr_code_base64 TEXT, pix_expira TEXT,
+      tenant_id TEXT, expira_em TEXT,
+      ip TEXT, ua TEXT, fbp TEXT, fbc TEXT, origem_url TEXT, ev_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      conferido_em TEXT, aprovado_em TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_site_compras_mp ON site_compras(mp_payment_id);
   `)
   try { D.db.prepare("DELETE FROM site_visitas WHERE dia < ?").run(somaDias(hojeBR(), -400)) } catch {}
   // Confere a cada minuto se há mensagem de boas-vindas na hora de sair
@@ -327,7 +342,8 @@ function cfgTeste() {
     meta_pixel: /^\d{6,20}$/.test(String(salvo.meta_pixel || '')) && String(salvo.meta_pixel) !== META_PIXEL_ANTIGO ? String(salvo.meta_pixel) : META_PIXEL_PADRAO,
     meta_token: typeof salvo.meta_token === 'string' ? salvo.meta_token : '',
     meta_teste: typeof salvo.meta_teste === 'string' ? salvo.meta_teste.slice(0, 40) : '',
-    ia_teste: salvo.ia_teste !== false
+    ia_teste: salvo.ia_teste !== false,
+    compra_ativa: salvo.compra_ativa !== false
   }
 }
 function downloadUrl(cfg) { return cfg.download_url || `${BASE_URL}/download` }
@@ -433,6 +449,7 @@ async function processarMensagens() {
     }
     if (fila.length) D.marcarDirty()
     await processarAcompanhamento(cfg)
+    await conferirComprasPendentes()
   } finally { _enviando = false }
 }
 
@@ -671,6 +688,35 @@ function emailJaUsado(email) {
   return ''
 }
 
+// Cria a loja com o gestor e as categorias iniciais (teste grátis e compra pelo site).
+// Precisa rodar dentro de uma transação de quem chama.
+function criarLoja({ nome, restaurante, slug, foneCobranca, email, senha, expira, robo }) {
+  const db = D.db
+  db.prepare('INSERT INTO tenants (nome,plano,slug,segmento,expires_at,telefone_cobranca) VALUES (?,?,?,?,?,?)')
+    .run(restaurante, 'premium', slug, 'restaurante', expira, foneCobranca)
+  const t = db.prepare('SELECT id FROM tenants WHERE slug=?').get(slug)
+  db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(t.id)
+  // Mesmo acerto do cadastro pelo admin: o 1º pedido da loja começa em #1.
+  const maxOrderId = db.prepare('SELECT COALESCE(MAX(id),0) AS m FROM orders').get()?.m || 0
+  db.prepare('UPDATE store_config SET order_num_offset=?, store_name=? WHERE tenant_id=?').run(maxOrderId, restaurante, t.id)
+  // Teste com a atendente com IA: o robô do WhatsApp da loja já começa ligado
+  // (só responde depois que a loja conectar o WhatsApp no painel)
+  if (robo) db.prepare("UPDATE store_config SET ia_config=? WHERE tenant_id=? AND (ia_config IS NULL OR ia_config='')").run(JSON.stringify({ ativo: true }), t.id)
+  db.prepare('INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)')
+    .run(nome, email, D.hashPassword(senha), 'gestor', t.id)
+  const cat = db.prepare("INSERT INTO categories (tenant_id,name,label,type,emoji,sort_order,ativo) VALUES (?,?,?,?,?,?,1)")
+  ;[['entradas', 'Entradas', '🥗'], ['pratos', 'Pratos', '🍽️'], ['bebidas', 'Bebidas', '🥤'], ['sobremesas', 'Sobremesas', '🍰']]
+    .forEach(([name, label, emoji], i) => cat.run(t.id, name, label, 'Itens principais', emoji, i + 1))
+  return t.id
+}
+
+function slugLivre(restaurante) {
+  const base = slugDe(restaurante)
+  let slug = base, n = 2
+  while (D.db.prepare('SELECT id FROM tenants WHERE slug=?').get(slug)) slug = `${base}-${n++}`
+  return slug
+}
+
 function criarContaTeste({ nome, restaurante, telefone, email, senha, ip, dias, cfg, meta = {} }) {
   const db = D.db
   const hoje = hojeBR()
@@ -682,21 +728,7 @@ function criarContaTeste({ nome, restaurante, telefone, email, senha, ip, dias, 
   const foneCobranca = (fone11.length === 10 || fone11.length === 11) ? fone11 : null
 
   const criar = db.transaction(() => {
-    db.prepare('INSERT INTO tenants (nome,plano,slug,segmento,expires_at,telefone_cobranca) VALUES (?,?,?,?,?,?)')
-      .run(restaurante, 'premium', slug, 'restaurante', expira, foneCobranca)
-    const t = db.prepare('SELECT id FROM tenants WHERE slug=?').get(slug)
-    db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(t.id)
-    // Mesmo acerto do cadastro pelo admin: o 1º pedido da loja começa em #1.
-    const maxOrderId = db.prepare('SELECT COALESCE(MAX(id),0) AS m FROM orders').get()?.m || 0
-    db.prepare('UPDATE store_config SET order_num_offset=?, store_name=? WHERE tenant_id=?').run(maxOrderId, restaurante, t.id)
-    // Teste com a atendente com IA: o robô do WhatsApp da loja já começa ligado
-    // (só responde depois que a loja conectar o WhatsApp no painel)
-    if (cfg.ia_teste) db.prepare("UPDATE store_config SET ia_config=? WHERE tenant_id=? AND (ia_config IS NULL OR ia_config='')").run(JSON.stringify({ ativo: true }), t.id)
-    db.prepare('INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)')
-      .run(nome, email, D.hashPassword(senha), 'gestor', t.id)
-    const cat = db.prepare("INSERT INTO categories (tenant_id,name,label,type,emoji,sort_order,ativo) VALUES (?,?,?,?,?,?,1)")
-    ;[['entradas', 'Entradas', '🥗'], ['pratos', 'Pratos', '🍽️'], ['bebidas', 'Bebidas', '🥤'], ['sobremesas', 'Sobremesas', '🍰']]
-      .forEach(([name, label, emoji], i) => cat.run(t.id, name, label, 'Itens principais', emoji, i + 1))
+    const t = { id: criarLoja({ nome, restaurante, slug, foneCobranca, email, senha, expira, robo: cfg.ia_teste }) }
     db.prepare(`INSERT INTO testes_gratis (tenant_id,nome,restaurante,telefone,email,ip,dias,expira_em,senha_cifrada,msg_status,msg_em,fbp,fbc,ua,origem_url,ev_id,ia_teste)
       VALUES (?,?,?,?,?,?,?,?,?,?,${cfg.msg_ativa ? `datetime('now','+${cfg.msg_minutos} minutes')` : 'NULL'},?,?,?,?,?,?)`)
       .run(t.id, nome, restaurante, telefone, email, ip, dias, expira, cifrar(senha), cfg.msg_ativa ? 'pendente' : null,
@@ -721,6 +753,298 @@ function sincronizarTestes() {
     if (!l.t_id) db.prepare("UPDATE testes_gratis SET status='excluido', excluido_em=datetime('now') WHERE id=?").run(l.id)
     else if (!l.t_expira || l.t_expira > l.expira_em) db.prepare("UPDATE testes_gratis SET status='convertido', convertido_em=datetime('now') WHERE id=?").run(l.id)
   }
+}
+
+// ==================== Compra do plano pelo site ====================
+// A pessoa preenche os mesmos dados do teste grátis e paga o 1º mês (preço do
+// site) com Pix ou cartão, no Mercado Pago da plataforma. A conta só é criada
+// quando o pagamento é aprovado — confirmação pela tela do site, pelo aviso do
+// Mercado Pago (webhook) ou pela conferência a cada minuto, o que vier primeiro.
+const PIX_MINUTOS = 30
+const MSG_COMPRA = [
+  'Oi, {nome}! Pagamento confirmado. Seja bem-vindo(a) ao EstimaFood.',
+  '',
+  'A loja *{loja}* já está ativa até {validade}.',
+  '',
+  'Para entrar no painel:',
+  '{link_gestor}',
+  'E-mail: {email}',
+  '',
+  'Para imprimir os pedidos sozinho no computador, baixe o programa:',
+  '{link_download}',
+  '',
+  'Qualquer dúvida, é só responder aqui que a gente te ajuda a montar o cardápio.'
+].join('\n')
+const RECUSA_CARTAO = {
+  cc_rejected_bad_filled_card_number: 'Confira o número do cartão.',
+  cc_rejected_bad_filled_date: 'Confira a data de validade do cartão.',
+  cc_rejected_bad_filled_security_code: 'Confira o código de segurança (CVV) do cartão.',
+  cc_rejected_bad_filled_other: 'Confira os dados do cartão.',
+  cc_rejected_insufficient_amount: 'O cartão não tem limite suficiente. Tente outro cartão ou pague com Pix.',
+  cc_rejected_call_for_authorize: 'O banco pediu autorização. Ligue para o banco, libere a compra e tente de novo.',
+  cc_rejected_card_disabled: 'O cartão está bloqueado. Fale com o banco ou use outro cartão.',
+  cc_rejected_duplicated_payment: 'Esse pagamento já foi feito. Confira o WhatsApp que você informou.',
+  cc_rejected_max_attempts: 'Muitas tentativas com este cartão. Use outro cartão ou pague com Pix.'
+}
+const RECUSA_PADRAO = 'O banco recusou o pagamento. Tente outro cartão ou pague com Pix.'
+
+function valorCompra() {
+  const v = parseFloat(String(precoSite() || '').replace(/[^\d,.]/g, '').replace(/\.(?=\d{3})/g, '').replace(',', '.'))
+  return Number.isFinite(v) && v >= 1 ? Math.round(v * 100) / 100 : 0
+}
+function infoCompra(cfg) {
+  const token = D.mpToken ? D.mpToken() : ''
+  const valor = valorCompra()
+  const pk = D.mpPublicKey ? D.mpPublicKey() : ''
+  return { ativo: !!(cfg.compra_ativa && token && valor), valor, public_key: pk, cartao: !!pk }
+}
+// "2026-10-14T18:30:00.000-03:00" (formato que o Mercado Pago aceita para o vencimento do Pix)
+function isoBrasilia(ms) {
+  return new Date(ms - 3 * 3600 * 1000).toISOString().replace('Z', '-03:00')
+}
+async function mpPagamento(metodo, caminho, corpo, chaveIdem) {
+  const token = D.mpToken ? D.mpToken() : ''
+  if (!token) throw new Error('Mercado Pago não configurado')
+  const r = await fetch('https://api.mercadopago.com/v1/payments' + (caminho || ''), {
+    method: metodo,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(chaveIdem ? { 'X-Idempotency-Key': chaveIdem } : {}) },
+    body: corpo ? JSON.stringify(corpo) : undefined,
+    signal: AbortSignal.timeout(25000)
+  })
+  const j = await r.json().catch(() => ({}))
+  return { ok: r.ok, status: r.status, data: j }
+}
+
+function respostaCompra(c) {
+  const out = { ok: true, id: c.id, chave: c.chave, status: c.status, metodo: c.metodo, valor: c.valor }
+  if (c.status === 'pendente' && c.metodo === 'pix') Object.assign(out, { qr_code: c.qr_code, qr_code_base64: c.qr_code_base64, pix_expira: c.pix_expira })
+  if (c.status === 'recusado') out.mensagem = c.status_detalhe || RECUSA_PADRAO
+  if (c.status === 'analise') out.mensagem = 'O banco está analisando o pagamento. Assim que aprovar, sua conta é criada e você recebe o acesso no WhatsApp.'
+  if (c.status === 'expirado') out.mensagem = 'O Pix venceu sem pagamento. Gere um novo para continuar.'
+  if (c.status === 'erro') out.mensagem = 'Recebemos o pagamento, mas houve um problema ao criar a conta. A nossa equipe já foi avisada e vai te chamar no WhatsApp.'
+  if (c.status === 'aprovado') {
+    const cfg = cfgTeste()
+    let cardapio = ''
+    try { cardapio = D.linkCardapioTenant(c.tenant_id) } catch {}
+    Object.assign(out, { loja: c.restaurante, email: c.email, expira_em: c.expira_em, login_url: gestorUrl(cfg), cardapio_url: cardapio, download_url: downloadUrl(cfg), ev_id: 'venda-' + c.id })
+  }
+  return out
+}
+
+async function iniciarCompra(req, body) {
+  const cfg = cfgTeste()
+  const info = infoCompra(cfg)
+  if (!info.ativo) return { http: 403, json: { error: 'A compra pelo site não está disponível agora. Fale com a gente pelo WhatsApp.' } }
+  if (String(body.website || '').trim()) return { http: 400, json: { error: 'Não foi possível concluir.' } }
+  const nome = String(body.nome || '').trim().replace(/\s+/g, ' ').slice(0, 80)
+  const restaurante = String(body.restaurante || '').trim().replace(/\s+/g, ' ').slice(0, 80)
+  let telefone = String(body.telefone || '').replace(/\D/g, '').slice(0, 13)
+  if (telefone.length > 11 && telefone.startsWith('55')) telefone = telefone.slice(2)
+  const email = String(body.email || '').trim().toLowerCase().slice(0, 120)
+  const senha = String(body.senha || '')
+  const metodo = body.metodo === 'cartao' ? 'cartao' : 'pix'
+  const erro = (msg, campo) => ({ http: 400, json: { error: msg, campo } })
+  if (nome.length < 2) return erro('Informe o seu nome', 'nome')
+  if (restaurante.length < 2) return erro('Informe o nome do restaurante', 'restaurante')
+  if (!/^[1-9][1-9]\d{8,9}$/.test(telefone)) return erro('Informe o WhatsApp com DDD, por exemplo (88) 99999-0000', 'telefone')
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return erro('Informe um e-mail válido', 'email')
+  if (senha.length < 6 || senha.length > 72) return erro('A senha precisa ter pelo menos 6 caracteres', 'senha')
+  const cpf = String(body.cpf || '').replace(/\D/g, '')
+  if (metodo === 'cartao') {
+    if (!info.cartao) return erro('O pagamento com cartão não está disponível agora. Use o Pix.')
+    if (!/^[\w-]{16,}$/.test(String(body.card_token || ''))) return erro('Não foi possível ler o cartão. Confira os dados e tente de novo.')
+    if (!/^[a-z_]{2,30}$/.test(String(body.payment_method_id || ''))) return erro('Bandeira do cartão não reconhecida. Confira o número do cartão.')
+    if (cpf.length !== 11) return erro('Informe o CPF do dono do cartão', 'cpf')
+  }
+
+  const db = D.db
+  const ip = D.clientIp(req)
+  try {
+    if (emailJaUsado(email) === 'conta') {
+      return { http: 409, json: { error: 'Este e-mail já tem uma conta. Entre no painel e pague em "Meu plano".', campo: 'email', login_url: gestorUrl(cfg) } }
+    }
+    const provedor = await conferirProvedorEmail(email)
+    if (provedor) return { http: 400, json: { error: provedor.error, campo: 'email', sugestao: provedor.sugestao } }
+    const doIp = db.prepare("SELECT COUNT(*) AS c FROM site_compras WHERE ip=? AND created_at >= datetime('now','-1 hour')").get(ip).c
+    if (doIp >= 6) return { http: 429, json: { error: 'Muitas tentativas a partir desta conexão. Espere alguns minutos ou fale com a gente pelo WhatsApp.' } }
+
+    const txtMeta = (v, re, max) => { const t = String(v || '').trim().slice(0, max); return re.test(t) ? t : '' }
+    const chave = crypto.randomBytes(16).toString('hex')
+    const ins = db.prepare(`INSERT INTO site_compras (chave,nome,restaurante,telefone,email,senha_cifrada,valor,metodo,ip,ua,fbp,fbc,origem_url,ev_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(chave, nome, restaurante, telefone, email, cifrar(senha), info.valor, metodo, ip,
+      String(req.headers['user-agent'] || '').slice(0, 400),
+      txtMeta(body.fbp, /^fb\.\d\.\d+\.\d+$/, 80) || null, txtMeta(body.fbc, /^fb\.\d\.\d+\.[\w-]+$/, 300) || null,
+      txtMeta(body.url, /^https?:\/\/[^\s"'<>]+$/i, 500) || null, txtMeta(body.ev_id, /^[\w-]{8,64}$/, 64) || null)
+    const id = ins.lastInsertRowid
+    const ref = 'site-compra-' + id
+    const pn = nome.split(' ')
+    const pagamento = {
+      transaction_amount: info.valor,
+      description: 'EstimaFood - primeiro mês',
+      external_reference: ref,
+      notification_url: `${D.urlBase ? D.urlBase(req) : BASE_URL}/webhook/mercadopago`,
+      statement_descriptor: 'ESTIMAFOOD',
+      payer: { email, first_name: pn[0], last_name: pn.slice(1).join(' ') || pn[0] }
+    }
+    if (metodo === 'pix') {
+      pagamento.payment_method_id = 'pix'
+      pagamento.date_of_expiration = isoBrasilia(Date.now() + PIX_MINUTOS * 60000)
+    } else {
+      Object.assign(pagamento, { token: String(body.card_token), installments: 1, payment_method_id: String(body.payment_method_id) })
+      if (/^\d{1,10}$/.test(String(body.issuer_id || ''))) pagamento.issuer_id = String(body.issuer_id)
+      pagamento.payer.identification = { type: 'CPF', number: cpf }
+    }
+    const mp = await mpPagamento('POST', '', pagamento, ref)
+    if (!mp.ok || !mp.data?.id) {
+      const msg = metodo === 'cartao' ? (RECUSA_CARTAO[mp.data?.cause?.[0]?.code] || 'Não foi possível processar o cartão. Confira os dados ou pague com Pix.') : 'Não foi possível gerar o Pix agora. Tente de novo em instantes.'
+      db.prepare("UPDATE site_compras SET status='recusado', status_detalhe=?, erro=? WHERE id=?").run(msg, String(mp.data?.message || mp.status).slice(0, 300), id)
+      D.log('❌', `Compra pelo site (${metodo}) recusada pelo Mercado Pago:`, mp.data?.message || mp.status)
+      return { http: 400, json: { error: msg } }
+    }
+    const d = mp.data
+    db.prepare('UPDATE site_compras SET mp_payment_id=?, mp_ref=?, bandeira=?, qr_code=?, qr_code_base64=?, pix_expira=? WHERE id=?')
+      .run(String(d.id), ref, d.payment_method_id || null, d.point_of_interaction?.transaction_data?.qr_code || null,
+        d.point_of_interaction?.transaction_data?.qr_code_base64 || null, metodo === 'pix' ? new Date(Date.now() + PIX_MINUTOS * 60000).toISOString() : null, id)
+    D.log('🛒', `Compra pelo site iniciada: ${restaurante} (${email}) ${metodo} R$ ${info.valor.toFixed(2)} mp=${d.id}`)
+    await aplicarStatusMp(id, d)
+    return { http: 200, json: respostaCompra(D.db.prepare('SELECT * FROM site_compras WHERE id=?').get(id)) }
+  } catch (e) {
+    D.log('❌', 'Compra pelo site falhou:', e.message)
+    return { http: 500, json: { error: 'Não foi possível iniciar o pagamento agora. Tente de novo em instantes.' } }
+  }
+}
+
+// Atualiza a compra conforme o status do Mercado Pago
+async function aplicarStatusMp(id, pd) {
+  const c = D.db.prepare('SELECT * FROM site_compras WHERE id=?').get(id)
+  if (!c || !pd) return
+  const st = String(pd.status || '')
+  D.db.prepare("UPDATE site_compras SET conferido_em=datetime('now') WHERE id=?").run(id)
+  if (st === 'approved') return finalizarCompra(id)
+  if (!['pendente', 'analise'].includes(c.status)) return
+  if (st === 'rejected') {
+    D.db.prepare("UPDATE site_compras SET status='recusado', status_detalhe=? WHERE id=?").run(RECUSA_CARTAO[pd.status_detail] || RECUSA_PADRAO, id)
+  } else if (st === 'cancelled' || st === 'expired') {
+    D.db.prepare("UPDATE site_compras SET status='expirado' WHERE id=?").run(id)
+  } else if (c.metodo === 'cartao' && (st === 'in_process' || st === 'pending' || st === 'authorized')) {
+    D.db.prepare("UPDATE site_compras SET status='analise' WHERE id=?").run(id)
+  }
+}
+
+async function finalizarCompra(id) {
+  const db = D.db
+  if (!db.prepare("UPDATE site_compras SET status='processando' WHERE id=? AND status IN ('pendente','analise','recusado','expirado')").run(id).changes) return
+  const c = db.prepare('SELECT * FROM site_compras WHERE id=?').get(id)
+  try {
+    let tenantId = db.prepare('SELECT tenant_id FROM sys_users WHERE email=?').get(c.email)?.tenant_id || null
+    const novaConta = !tenantId
+    if (novaConta) {
+      const senha = decifrar(c.senha_cifrada)
+      if (!senha) throw new Error('senha da compra ilegível')
+      const fone11 = c.telefone.length > 11 && c.telefone.startsWith('55') ? c.telefone.slice(2) : c.telefone
+      tenantId = db.transaction(() => criarLoja({
+        nome: c.nome, restaurante: c.restaurante, slug: slugLivre(c.restaurante),
+        foneCobranca: (fone11.length === 10 || fone11.length === 11) ? fone11 : null,
+        email: c.email, senha, expira: hojeBR(), robo: false
+      }))()
+    }
+    // registra o pagamento no histórico do plano e soma 1 mês a partir de hoje
+    const ren = D.confirmarPlano ? D.confirmarPlano({ tenantId, mpPaymentId: c.mp_payment_id, valor: c.valor, metodo: c.metodo, extRef: c.mp_ref, bandeira: c.bandeira }) : null
+    if (!ren) {
+      const t = db.prepare('SELECT expires_at FROM tenants WHERE id=?').get(tenantId)
+      if (!t?.expires_at || t.expires_at <= hojeBR()) db.prepare("UPDATE tenants SET expires_at=?, ativo=1 WHERE id=?").run(somaDias(hojeBR(), 30), tenantId)
+    }
+    const expira = db.prepare('SELECT expires_at FROM tenants WHERE id=?').get(tenantId)?.expires_at || ''
+    db.prepare("UPDATE site_compras SET status='aprovado', aprovado_em=datetime('now'), tenant_id=?, expira_em=?, senha_cifrada=NULL WHERE id=?")
+      .run(tenantId, String(expira).slice(0, 10), id)
+    D.marcarDirty()
+    try { setTimeout(() => D.fazerBackup(true), 2000) } catch {}
+    D.log('🛒', `VENDA PELO SITE: ${c.restaurante} (${c.email}) R$ ${Number(c.valor).toFixed(2)} ${c.metodo} — conta ${novaConta ? 'criada' : 'existente renovada'} até ${expira}`)
+    const f = db.prepare('SELECT * FROM site_compras WHERE id=?').get(id)
+    setImmediate(async () => {
+      const cfg = cfgTeste()
+      // boas-vindas com o acesso
+      try {
+        if (D.bot?.sendText && novaConta) {
+          const v = { nome: String(f.nome || '').split(' ')[0], loja: f.restaurante, email: f.email, validade: String(f.expira_em || '').split('-').reverse().join('/'),
+            link_gestor: gestorUrl(cfg), link_download: downloadUrl(cfg) }
+          await D.bot.sendText(f.telefone, MSG_COMPRA.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m)), 1200)
+        }
+      } catch (e) { D.log('⚠️', 'Boas-vindas da compra não enviadas:', e.message) }
+      avisarAdmin([
+        '*🛒 NOVA VENDA PELO SITE*', '',
+        `*Loja:* ${f.restaurante}`, `*Responsável:* ${f.nome}`, `*WhatsApp:* ${f.telefone}`, `*E-mail:* ${f.email}`,
+        `*Valor:* R$ ${Number(f.valor).toFixed(2).replace('.', ',')} (${f.metodo === 'pix' ? 'Pix' : 'cartão'})`,
+        `*Ativa até:* ${String(f.expira_em || '').split('-').reverse().join('/')}`, '',
+        novaConta ? '_Conta criada automaticamente_' : '_E-mail já tinha conta: a loja foi renovada_'
+      ].join('\n'))
+      // venda para a Meta (mesmo ID do pixel do navegador; quem veio do teste já é contado pelo sistema)
+      if (novaConta) {
+        const r = await enviarEventoMeta('Purchase', { ...f, origem_url: f.origem_url }, { event_id: 'venda-' + f.id, custom_data: { currency: 'BRL', value: Number(f.valor), content_name: 'Mensalidade EstimaFood', content_category: 'site' } })
+        if (!r.ok && !/não configurado/.test(r.error)) D.log('⚠️', 'Venda do site não enviada para a Meta:', r.error)
+      }
+    })
+  } catch (e) {
+    db.prepare("UPDATE site_compras SET status='erro', erro=? WHERE id=?").run(String(e.message).slice(0, 300), id)
+    D.log('❌', `Compra pelo site aprovada mas a conta não foi criada (id ${id}):`, e.message)
+    avisarAdmin(`*⚠️ VENDA PELO SITE COM PROBLEMA*\n\nO pagamento de *${c.restaurante}* (${c.email}, ${c.telefone}) foi aprovado, mas a conta não foi criada automaticamente: ${e.message}\n\nCrie a conta pelo painel e avise o cliente.`)
+  }
+}
+
+async function statusCompra(id, chave) {
+  const c = id ? D.db.prepare('SELECT * FROM site_compras WHERE id=?').get(id) : null
+  if (!c || !chave || c.chave !== chave) return { http: 404, json: { error: 'Compra não encontrada' } }
+  // Pix ou cartão em análise: confere no Mercado Pago, no máximo a cada 4 segundos
+  if (['pendente', 'analise'].includes(c.status) && c.mp_payment_id) {
+    const ultimo = c.conferido_em ? new Date(c.conferido_em.replace(' ', 'T') + 'Z').getTime() : 0
+    if (Date.now() - ultimo > 4000) {
+      try {
+        const mp = await mpPagamento('GET', '/' + c.mp_payment_id)
+        if (mp.ok) await aplicarStatusMp(c.id, mp.data)
+      } catch {}
+    }
+    const atual = D.db.prepare('SELECT * FROM site_compras WHERE id=?').get(c.id)
+    if (atual.status === 'pendente' && atual.metodo === 'pix' && atual.pix_expira && Date.parse(atual.pix_expira) < Date.now() - 60000) {
+      D.db.prepare("UPDATE site_compras SET status='expirado' WHERE id=? AND status='pendente'").run(c.id)
+    }
+  }
+  return { http: 200, json: respostaCompra(D.db.prepare('SELECT * FROM site_compras WHERE id=?').get(c.id)) }
+}
+
+// Aviso do Mercado Pago (webhook): devolve true se o pagamento é de uma compra do site
+async function pagamentoDoSite(mpId, pd) {
+  if (!D) return false
+  const c = D.db.prepare('SELECT id FROM site_compras WHERE mp_payment_id=?').get(String(mpId))
+  if (!c) return false
+  await aplicarStatusMp(c.id, pd)
+  return true
+}
+
+// A cada minuto: Pix ainda pendentes (até 2 horas) e cartões em análise (até 3 dias)
+async function conferirComprasPendentes() {
+  let linhas = []
+  try {
+    linhas = D.db.prepare(`SELECT id, mp_payment_id FROM site_compras
+      WHERE mp_payment_id IS NOT NULL AND (
+        (status='pendente' AND created_at >= datetime('now','-2 hours')) OR
+        (status='analise' AND created_at >= datetime('now','-3 days')))
+        AND (conferido_em IS NULL OR conferido_em <= datetime('now','-90 seconds'))
+      ORDER BY id LIMIT 20`).all()
+  } catch { return }
+  for (const l of linhas) {
+    try {
+      const mp = await mpPagamento('GET', '/' + l.mp_payment_id)
+      if (mp.ok) await aplicarStatusMp(l.id, mp.data)
+    } catch {}
+  }
+  try { D.db.prepare("UPDATE site_compras SET status='expirado' WHERE status='pendente' AND metodo='pix' AND created_at < datetime('now','-2 hours')").run() } catch {}
+}
+
+function listarCompras() {
+  return D.db.prepare(`SELECT c.id, c.nome, c.restaurante, c.telefone, c.email, c.valor, c.metodo, c.status, c.status_detalhe, c.erro,
+      c.created_at, c.aprovado_em, c.expira_em, c.tenant_id, t.nome AS loja
+    FROM site_compras c LEFT JOIN tenants t ON t.id = c.tenant_id
+    ORDER BY c.id DESC LIMIT 40`).all()
 }
 
 // ==================== Visitas do site ====================
@@ -768,7 +1092,9 @@ function resumoVisitas() {
     db.prepare('SELECT origem, COUNT(DISTINCT visitante) AS c FROM site_visitas WHERE dia >= ? GROUP BY origem').all(ini)
       .forEach(o => { origens[ORIGENS.has(o.origem) ? o.origem : 'direto'] += o.c })
     const cadastros = db.prepare("SELECT COUNT(*) AS c FROM testes_gratis WHERE date(created_at,'-3 hours') >= ?").get(ini).c
-    return { ...r, cadastros, origens }
+    let compras = 0
+    try { compras = db.prepare("SELECT COUNT(*) AS c FROM site_compras WHERE status='aprovado' AND date(aprovado_em,'-3 hours') >= ?").get(ini).c } catch {}
+    return { ...r, cadastros, compras, origens }
   }
   const ini30 = somaDias(hoje, -29)
   const porDia = new Map(db.prepare('SELECT dia, COUNT(*) AS pessoas, SUM(paginas) AS acessos FROM site_visitas WHERE dia >= ? GROUP BY dia').all(ini30).map(r => [r.dia, r]))
@@ -855,8 +1181,25 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
       personalizado: !!salvo,
       atualizado_em: salvo?.updated_at || null,
       teste: { ativo: teste.ativo, dias: teste.dias },
+      compra: infoCompra(teste),
       download_url: downloadUrl(teste)
     })
+    return true
+  }
+
+  // ── Público: comprar o plano pelo site ────────────────
+  if (metodo === 'POST' && upath === '/api/site/compra') {
+    let body
+    try { body = await readBody(req, 20 * 1024) } catch { send(res, 400, { error: 'Dados inválidos' }); return true }
+    const r = await iniciarCompra(req, body)
+    send(res, r.http || 200, r.json)
+    return true
+  }
+  if (metodo === 'GET' && upath === '/api/site/compra') {
+    const q = new URL(req.url, 'http://x').searchParams
+    const r = await statusCompra(parseInt(q.get('id'), 10) || 0, String(q.get('chave') || ''))
+    res.setHeader('Cache-Control', 'no-store')
+    send(res, r.http || 200, r.json)
     return true
   }
 
@@ -1022,7 +1365,9 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
     const cfg = cfgTeste()
     let visitas = null
     try { visitas = resumoVisitas() } catch (e) { D.log('⚠️', 'Visitas do site:', e.message) }
-    send(res, 200, { ...listarTestes(), config: cfgParaPainel(cfg), hoje: hojeBR(), visitas })
+    let compras = []
+    try { compras = listarCompras() } catch (e) { D.log('⚠️', 'Compras do site:', e.message) }
+    send(res, 200, { ...listarTestes(), config: cfgParaPainel(cfg), hoje: hojeBR(), visitas, compras, compra: infoCompra(cfg) })
     return true
   }
 
@@ -1084,6 +1429,7 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
     } else novo.meta_token = atual.meta_token
     if (body.meta_teste !== undefined) novo.meta_teste = String(body.meta_teste || '').trim().slice(0, 40)
     if (body.ia_teste !== undefined) novo.ia_teste = body.ia_teste === true
+    if (body.compra_ativa !== undefined) novo.compra_ativa = body.compra_ativa === true
     gravarDado('teste', novo)
     D.log('🧪', `Teste grátis no site: ${novo.ativo ? 'LIGADO' : 'desligado'} (${novo.dias} dias, até ${novo.limite_dia}/dia)`)
     send(res, 200, { ok: true, config: cfgParaPainel(cfgTeste()) })
@@ -1170,4 +1516,4 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
   return true
 }
 
-module.exports = { init, api, processarMensagens, registrarCompra, _internals: { chaveEmail, conferirProvedorEmail, dominioRecebeEmail, etapaDevida, enviarEventoMeta } }
+module.exports = { init, api, processarMensagens, registrarCompra, pagamentoDoSite, _internals: { chaveEmail, conferirProvedorEmail, dominioRecebeEmail, etapaDevida, enviarEventoMeta } }

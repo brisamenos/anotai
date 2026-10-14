@@ -194,7 +194,7 @@ body.theme-light .sa-chave span{background:#cbd5e1}
         <div class="stats-grid" style="margin:16px 0 0">
           <div class="stat-card" style="--ca:var(--accent)"><div class="stat-card-label">Pessoas no site</div><div class="stat-card-val">${fmtN(per.pessoas)}</div><div class="stat-card-sub">${fmtN(per.acessos)} ${plural(per.acessos, 'acesso', 'acessos')} · ${per.pessoas ? Math.round(per.celular / per.pessoas * 100) : 0}% pelo celular</div></div>
           <div class="stat-card" style="--ca:var(--success)"><div class="stat-card-label">Chamaram no WhatsApp</div><div class="stat-card-val">${fmtN(per.whats)}</div><div class="stat-card-sub">tocaram em algum botão do WhatsApp</div></div>
-          <div class="stat-card" style="--ca:var(--orange)"><div class="stat-card-label">Criaram o teste grátis</div><div class="stat-card-val">${fmtN(per.cadastros)}</div><div class="stat-card-sub">contas novas pelo site</div></div>
+          <div class="stat-card" style="--ca:var(--orange)"><div class="stat-card-label">Criaram o teste grátis</div><div class="stat-card-val">${fmtN(per.cadastros)}</div><div class="stat-card-sub">${per.compras ? fmtN(per.compras) + ' ' + plural(per.compras, 'comprou', 'compraram') + ' direto pelo site' : 'contas novas pelo site'}</div></div>
           <div class="stat-card" style="--ca:#a855f7"><div class="stat-card-label">Taxa de cadastro</div><div class="stat-card-val">${taxaTxt}</div><div class="stat-card-sub">de cada 100 pessoas que entram</div></div>
         </div>
         <div class="sa-vis-baixo">
@@ -276,6 +276,52 @@ body.theme-light .sa-chave span{background:#cbd5e1}
     if (x.meta_compra_em) h += '<div class="sa-sub" style="color:var(--success);font-weight:600">Venda enviada à Meta</div>';
     else if (x.meta_compra_erro && !/não configurado/.test(x.meta_compra_erro)) h += `<div class="sa-sub" title="${esc(x.meta_compra_erro)}" style="color:var(--danger)">Venda não chegou à Meta</div>`;
     return h;
+  }
+
+  const ST_COMPRA = {
+    aprovado: '<span class="badge bg-green">Pago</span>', pendente: '<span class="badge bg-orange">Aguardando Pix</span>',
+    analise: '<span class="badge bg-orange">Cartão em análise</span>', processando: '<span class="badge bg-orange">Criando a conta</span>',
+    recusado: '<span class="badge bg-red">Recusado</span>', expirado: '<span class="badge bg-gray">Pix vencido</span>', erro: '<span class="badge bg-red">Pago, conta não criada</span>'
+  };
+  function blocoCompras() {
+    const c = T.dados?.config || {};
+    const info = T.dados?.compra || {};
+    const lista = T.dados?.compras || [];
+    const pagos = lista.filter(x => x.status === 'aprovado');
+    const total = pagos.reduce((a, x) => a + (Number(x.valor) || 0), 0);
+    const aviso = !info.valor ? 'O preço do 1º mês não está preenchido na camada "Oferta e preço" do site.'
+      : (c.compra_ativa && !info.ativo) ? 'O Mercado Pago da plataforma não está configurado: confira o token em Configurações do admin.'
+      : (c.compra_ativa && !info.cartao) ? 'Só Pix por enquanto: para aceitar cartão, falta a chave pública (public key) do Mercado Pago da plataforma.' : '';
+    return `
+      <div class="card">
+        <div class="sa-liga">
+          <div>
+            <div class="sa-liga-titulo">Compra direto pelo site ${c.compra_ativa ? (info.ativo ? '<span class="badge bg-green">Ligada</span>' : '<span class="badge bg-orange">Ligada, mas indisponível</span>') : '<span class="badge bg-gray">Desligada</span>'}</div>
+            <div class="sa-liga-texto">O botão da oferta abre uma tela de pagamento com Pix ou cartão, no Mercado Pago da plataforma, pelo preço do 1º mês mostrado no site${info.valor ? ' (R$ ' + Number(info.valor).toFixed(2).replace('.', ',') + ')' : ''}. A conta é criada sozinha quando o pagamento é aprovado, o cliente recebe o acesso no WhatsApp e você recebe um aviso.</div>
+            ${aviso ? `<div class="sa-dica" style="margin-top:8px;color:var(--orange);font-weight:600">${aviso}</div>` : ''}
+          </div>
+          <label class="sa-chave" title="${c.compra_ativa ? 'Desligar a compra pelo site' : 'Ligar a compra pelo site'}">
+            <input type="checkbox" id="sa-compra-ativa" ${c.compra_ativa ? 'checked' : ''} aria-label="Compra direto pelo site">
+            <span></span>
+          </label>
+        </div>
+        ${lista.length ? `
+        <div class="sa-vis-sub" style="margin-top:18px">Últimas compras pelo site · ${pagos.length} ${plural(pagos.length, 'paga', 'pagas')}, R$ ${total.toFixed(2).replace('.', ',')}</div>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>Loja</th><th>Contato</th><th>Valor</th><th>Situação</th><th>Data</th></tr></thead>
+          <tbody>${lista.slice(0, 15).map(x => {
+            const fone = String(x.telefone || '').replace(/\D/g, '');
+            const wa = fone ? 'https://wa.me/' + (fone.length <= 11 ? '55' + fone : fone) : '';
+            return `<tr>
+              <td><div class="sa-loja">${esc(x.loja || x.restaurante)}</div><div class="sa-sub">${esc(x.nome)}</div></td>
+              <td>${wa ? `<a href="${wa}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">${esc(x.telefone)}</a>` : '—'}<div class="sa-sub">${esc(x.email)}</div></td>
+              <td>R$ ${Number(x.valor || 0).toFixed(2).replace('.', ',')}<div class="sa-sub">${x.metodo === 'pix' ? 'Pix' : 'Cartão'}</div></td>
+              <td>${ST_COMPRA[x.status] || esc(x.status)}${x.status === 'aprovado' && x.expira_em ? `<div class="sa-sub">ativa até ${dataBR(x.expira_em)}</div>` : ''}${x.status === 'recusado' && x.status_detalhe ? `<div class="sa-sub">${esc(x.status_detalhe)}</div>` : ''}${x.status === 'erro' ? `<div class="sa-sub" title="${esc(x.erro || '')}">crie a conta em Clientes</div>` : ''}</td>
+              <td>${horaLocal(x.aprovado_em || x.created_at)}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>` : '<div class="sa-dica" style="margin-top:12px">Nenhuma compra pelo site ainda.</div>'}
+      </div>`;
   }
 
   function linhaIA(t) {
@@ -405,6 +451,8 @@ body.theme-light .sa-chave span{background:#cbd5e1}
         <div class="stat-card" style="--ca:var(--danger)"><div class="stat-card-label">Expirados</div><div class="stat-card-val">${r.expirados}</div><div class="stat-card-sub">prazo acabou, sem assinar</div></div>
         <div class="stat-card" style="--ca:var(--accent)"><div class="stat-card-label">Viraram clientes</div><div class="stat-card-val">${r.convertidos}</div><div class="stat-card-sub">${r.total ? taxa + '% de ' + r.total + ' ' + plural(r.total, 'teste criado', 'testes criados') : 'nenhum teste criado ainda'}</div></div>
       </div>
+
+      ${blocoCompras()}
 
       <div class="tw">
         <div class="tmeta">
@@ -570,6 +618,10 @@ body.theme-light .sa-chave span{background:#cbd5e1}
         const ligar = ev.target.checked;
         salvarConfig({ ativo: ligar }, ligar ? 'Teste grátis ligado: o site já está oferecendo' : 'Teste grátis desligado: o site parou de oferecer', true);
       }
+      if (ev.target.id === 'sa-compra-ativa') {
+        const ligar = ev.target.checked;
+        salvarConfig({ compra_ativa: ligar }, ligar ? 'Compra pelo site ligada: o botão da oferta abre o pagamento' : 'Compra pelo site desligada: o botão da oferta volta para o WhatsApp', true).then(() => carregarTestes(true));
+      }
       if (ev.target.id === 'sa-teste-ia') {
         const ligar = ev.target.checked;
         salvarConfig({ ia_teste: ligar }, ligar ? 'Atendente com IA liberada nos próximos testes' : 'Os próximos testes vêm sem a atendente com IA', true);
@@ -602,7 +654,7 @@ body.theme-light .sa-chave span{background:#cbd5e1}
   const ICONES = ['relogio', 'conversa', 'grafico', 'celular', 'link', 'cartao', 'casa', 'check', 'estrela', 'caminhao', 'impressora', 'cupom', 'raio', 'coracao', 'mapa', 'pessoas', 'lista', 'pulso', 'barras'];
   const NOME_ICONE = { relogio: 'Relógio', conversa: 'Conversa', grafico: 'Gráfico', celular: 'Celular', link: 'Link', cartao: 'Cartão', casa: 'Casa', check: 'Certo', estrela: 'Estrela', caminhao: 'Entrega', impressora: 'Impressora', cupom: 'Cupom', raio: 'Raio', coracao: 'Coração', mapa: 'Local', pessoas: 'Pessoas', lista: 'Lista', pulso: 'Pulso', barras: 'Barras' };
   const FUNDOS = [['claro', 'Branco'], ['suave', 'Creme'], ['escuro', 'Roxo escuro']];
-  const DESTINOS = [['whatsapp', 'Abrir o WhatsApp'], ['teste', 'Ir para o teste grátis'], ['oferta', 'Ir para a oferta']];
+  const DESTINOS = [['whatsapp', 'Abrir o WhatsApp'], ['teste', 'Ir para o teste grátis'], ['oferta', 'Ir para a oferta'], ['comprar', 'Abrir a compra pelo site (Pix ou cartão)']];
 
   const t = (k, label, extra) => ({ k, label, t: 'texto', ...extra });
   const a = (k, label, extra) => ({ k, label, t: 'area', ...extra });

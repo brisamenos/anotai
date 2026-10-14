@@ -396,7 +396,23 @@ function _svBotInit(ctx) {
   })
   _mkt.init({ db: ctx.db, log: ctx.log, bot: _svBot, uploadsDir: ctx.UPLOADS_DIR })
   _site.init({ db: ctx.db, log: ctx.log, marcarDirty: ctx.marcarDirty, fazerBackup: ctx.fazerBackup, hashPassword: ctx.hashPassword, verifyPassword: ctx.verifyPassword,
-    clientIp: ctx.clientIp, linkCardapioTenant: ctx.linkCardapioTenant, uploadsDir: ctx.UPLOADS_DIR, bot: _svBot })
+    clientIp: ctx.clientIp, linkCardapioTenant: ctx.linkCardapioTenant, uploadsDir: ctx.UPLOADS_DIR, bot: _svBot,
+    // compra do plano direto pelo site (Mercado Pago da plataforma)
+    mpToken: () => _resolveMpGlobal(ctx.db, ctx.MP_TOKEN),
+    mpPublicKey: () => { try { const r = ctx.db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); return (r?.ia_config ? JSON.parse(r.ia_config) : {}).mp_public_key || '' } catch { return '' } },
+    urlBase: req => _urlBasePublica(req),
+    confirmarPlano: ({ tenantId, mpPaymentId, valor, metodo, extRef, bandeira }) => {
+      try {
+        if (metodo === 'pix') {
+          ctx.db.prepare(`INSERT OR IGNORE INTO pagamentos_pix (tenant_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,paid_at)
+            VALUES (?,?,?,?,0,0,'aprovado','PLANO:premium',datetime('now'))`).run(tenantId, String(mpPaymentId), extRef || '', parseFloat(valor) || 0)
+        } else {
+          ctx.db.prepare(`INSERT OR IGNORE INTO pagamentos_cartao (tenant_id,mp_payment_id,mp_external_ref,valor,status,status_detail,payer_name,payment_method_id)
+            VALUES (?,?,?,?,'aprovado','accredited','PLANO:premium',?)`).run(tenantId, String(mpPaymentId), extRef || '', parseFloat(valor) || 0, bandeira || '')
+        }
+      } catch (e) { ctx.log('⚠️', 'Compra pelo site: pagamento não registrado no histórico:', e.message) }
+      return _confirmarMensalidadePaga(ctx.db, ctx.log, ctx.marcarDirty, null, { tenantId, plano: 'premium', mpPaymentId, origem: 'site' })
+    } })
 }
 
 let _tenantWaPronto = false
@@ -6203,6 +6219,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const pd = await r.json()
       if (!r.ok) { send(res, 200, { ok: true }); return true }
       const novoStatus = pd.status === 'approved' ? 'aprovado' : pd.status === 'rejected' ? 'rejeitado' : pd.status === 'cancelled' ? 'cancelado' : 'pendente'
+
+      // ── Compra do plano feita no site de vendas (conta é criada aqui) ───────
+      try {
+        if (await _site.pagamentoDoSite(String(mpId), pd)) { send(res, 200, { ok: true }); return true }
+      } catch (e) { log('⚠️', 'Webhook compra do site:', e.message) }
 
       // ── Rota 1: PIX (pagamentos_pix) ──────────────────────────────────────
       const row = db.prepare('SELECT status,valor,tenant_id,order_id,payer_name FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
