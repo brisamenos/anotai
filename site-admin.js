@@ -74,7 +74,8 @@ const SEQ_PADRAO = {
   ].join('\n')
 }
 const SEQ_ETAPAS = ['dia1', 'dia3', 'vespera', 'expirou']
-const META_PIXEL_PADRAO = '1075636798774814'
+const META_PIXEL_PADRAO = '3403468509829400' // pixel "estima" (conta de anúncios Solução Brisanet)
+const META_PIXEL_ANTIGO = '1075636798774814' // pixel usado antes; quem salvou com ele passa a usar o novo
 const META_GRAPH = process.env.META_GRAPH_VERSION || 'v23.0'
 const TESTE_PADRAO = { ativo: false, dias: 7, limite_dia: 30, download_url: '', gestor_url: '', msg_ativa: true, msg_minutos: 2, msg_texto: MSG_PADRAO,
   seq_ativa: true, seq: SEQ_PADRAO, meta_pixel: META_PIXEL_PADRAO, meta_token: '', meta_teste: '' }
@@ -306,7 +307,7 @@ function cfgTeste() {
     msg_texto: typeof salvo.msg_texto === 'string' && salvo.msg_texto.trim() ? salvo.msg_texto.slice(0, 1500) : MSG_PADRAO,
     seq_ativa: salvo.seq_ativa !== false,
     seq: Object.fromEntries(SEQ_ETAPAS.map(k => [k, typeof salvo.seq?.[k] === 'string' && salvo.seq[k].trim() ? salvo.seq[k].slice(0, 1500) : SEQ_PADRAO[k]])),
-    meta_pixel: /^\d{6,20}$/.test(String(salvo.meta_pixel || '')) ? String(salvo.meta_pixel) : META_PIXEL_PADRAO,
+    meta_pixel: /^\d{6,20}$/.test(String(salvo.meta_pixel || '')) && String(salvo.meta_pixel) !== META_PIXEL_ANTIGO ? String(salvo.meta_pixel) : META_PIXEL_PADRAO,
     meta_token: typeof salvo.meta_token === 'string' ? salvo.meta_token : '',
     meta_teste: typeof salvo.meta_teste === 'string' ? salvo.meta_teste.slice(0, 40) : ''
   }
