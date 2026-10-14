@@ -1384,6 +1384,8 @@ function subscribeOrders() {
       if (p.new.status === 'mesa_aberta') {
         // Comanda única de mesa — vai ao cache do salão, não ao kanban
         const hasFoodItems = Array.isArray(p.new.items) && p.new.items.some(i => i.item_status === 'producao');
+        // Comanda lançada pelo próprio gestor (Salão) já entrou no cache e já foi impressa lá
+        const _prevIns = mesaOrdersCache.find(o => o.id === p.new.id);
         _patchOrderInCache(p.new);
         _renderMesaPageFromCache();
         // Impressão por computador: comida E bebida entram (cada PC filtra
@@ -1399,12 +1401,13 @@ function subscribeOrders() {
           sendBrowserNotif('\uD83C\uDF74 Pedido Mesa ' + p.new.mesa_num, foodList);
           const nc = document.getElementById('notif-count');
           if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
-          // Auto-impressão para pedidos de mesa — só imprime itens NOVOS (producao)
-          if ((window._printMode || _printMode) === "auto" && !window._printModoPCAtivo?.()) {
-            const _mapped = mapOrder(p.new);
-            const _onlyNew = (Array.isArray(p.new.items) ? p.new.items : []).filter(i => i.item_status === 'producao');
-            if (_onlyNew.length) { const _clone = Object.assign({}, _mapped, { items: _onlyNew }); printOrder(_clone); }
-          }
+        }
+        // Auto-impressão para pedidos de mesa — só itens NOVOS (produção e,
+        // com "Imprimir bebidas" ligado, as bebidas prontas da rodada)
+        if ((window._printMode || _printMode) === "auto" && !window._printModoPCAtivo?.()) {
+          const _itensIns = _parseItems(p.new.items);
+          const _onlyNew = [..._itensIns.filter(i => i.item_status === 'producao'), ..._mesaBebidasNovasParaImprimir(_itensIns, _prevIns ? _parseItems(_prevIns.items) : [])];
+          if (_onlyNew.length) printOrder(Object.assign({}, mapOrder(p.new), { items: _onlyNew }));
         }
         renderKanban();
         return;
@@ -1543,6 +1546,11 @@ function subscribeOrders() {
           const prev = mesaOrdersCache.find(o => o.id === p.new.id);
           const prevProducao = prev ? _parseItems(prev.items).filter(i => i.item_status === 'producao').length : 0;
           const newProducao  = _pNewItems.filter(i => i.item_status === 'producao').length;
+          const _bebidasNovas = prev ? _mesaBebidasNovasParaImprimir(_pNewItems, _parseItems(prev.items)) : [];
+          // Rodada só de bebida: não tem comida nova, mas a bebida precisa sair no papel
+          if (newProducao <= prevProducao && _bebidasNovas.length && (window._printMode || _printMode) === "auto" && !window._printModoPCAtivo?.()) {
+            printOrder(Object.assign({}, mapOrder(p.new), { items: _bebidasNovas }));
+          }
           if (newProducao > prevProducao) {
             playOrderSound();
             const _newFoodItems = _pNewItems.filter(i => i.item_status === 'producao').slice(-(newProducao - prevProducao));
@@ -1551,7 +1559,7 @@ function subscribeOrders() {
             sendBrowserNotif('\uD83C\uDF74 Mesa ' + p.new.mesa_num, newFoods);
             // Auto-impressão — só os itens NOVOS desta rodada
             if ((window._printMode || _printMode) === "auto" && _newFoodItems.length && !window._printModoPCAtivo?.()) {
-              const _clone = Object.assign({}, mapOrder(p.new), { items: _newFoodItems });
+              const _clone = Object.assign({}, mapOrder(p.new), { items: [..._newFoodItems, ..._bebidasNovas] });
               printOrder(_clone);
             }
           }
@@ -3770,6 +3778,19 @@ async function salvarTemposPedido() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Salvar tempos'; }
   }
+}
+
+// Bebida pronta lançada na mesa (garçom ou gestor) nasce como "pronto para
+// servir" e não passa pela produção. A impressão automática da mesa só pegava
+// itens em produção, então a bebida nunca saía no papel. Com "Imprimir
+// bebidas" ligado, as bebidas novas desta rodada entram na impressão.
+function _mesaBebidasNovasParaImprimir(itens, prevItens) {
+  if (localStorage.getItem('printBebidaSolo') === '0') return [];
+  const ja = new Set((Array.isArray(prevItens) ? prevItens : []).map(i => i && i.item_id).filter(Boolean));
+  const lim = Date.now() - 10 * 60 * 1000;
+  return (Array.isArray(itens) ? itens : []).filter(i => i && i.item_status === 'pronto' && i.item_id && !ja.has(i.item_id)
+    && (i.drink === true || (typeof _printItemEhIndustrializado === 'function' && _printItemEhIndustrializado(i)))
+    && new Date(i.added_at || 0).getTime() >= lim);
 }
 
 // Retorna true se o pedido contém APENAS bebidas industrializadas (não imprime na cozinha)
