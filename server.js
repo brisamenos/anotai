@@ -5006,11 +5006,15 @@ async function handleOrderStatus(req, res) {
             : isDelivery==='🪴 Mesa'
             ? '🪴 Pode ficar à vontade, logo trazemos até você!'
             : '🏪 Pode retirar no balcão quando quiser!'
+          // Em preparo ainda não dá para retirar: só avisa que vai chamar quando ficar pronto
+          const _tipoLocalPreparo = isDelivery==='🏪 Retirada'
+            ? '🏪 Assim que ficar pronto, avisamos por aqui para você retirar no balcão.'
+            : _tipoLocal
           const msgPadrao = {}
           const rodLimpo = '\n\n_Dúvidas? É só responder esta mensagem._'
           const msgPadraoOrganizado = {
             analise: `${cab}\n\n📥 *Pedido recebido - #${idStr}*\n\nOlá, *${_primeiroNome}*! Recebemos seu pedido.\n\n*Itens*\n${items}\n\n*Total:* R$ ${total}\n\nEm breve confirmaremos por aqui.${rodLimpo}`,
-            producao: `${cab}\n\n✅ *Pedido confirmado - #${idStr}*\n\nOlá, *${_primeiroNome}*! Seu pedido já está em preparo.\n\n*Itens*\n${items}\n\n*Total:* R$ ${total}\n\n${_tipoLocal}${rodLimpo}`,
+            producao: `${cab}\n\n✅ *Pedido confirmado - #${idStr}*\n\nOlá, *${_primeiroNome}*! Seu pedido já está em preparo.\n\n*Itens*\n${items}\n\n*Total:* R$ ${total}\n\n${_tipoLocalPreparo}${rodLimpo}`,
             pronto: `${cab}\n\n🔔 *Pedido pronto - #${idStr}*\n\n*${_primeiroNome}*, seu pedido está pronto.\n\n${_tipoLocal}${rodLimpo}`,
             saiu: `${cab}\n\n🛵 *Saiu para entrega - #${idStr}*\n\n*${_primeiroNome}*, seu pedido está a caminho.\n\n*Endereço*\n${order.addr || ''}\n\nFique de olho por aí.${rodLimpo}`,
             entregue: `${cab}\n\n✅ *Pedido entregue - #${idStr}*\n\n*${_primeiroNome}*, obrigado pela preferência.\n\nEsperamos que tenha gostado. Até a próxima!`,
