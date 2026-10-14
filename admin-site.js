@@ -519,7 +519,8 @@ body.theme-light .sa-chave span{background:#cbd5e1}
   const telas = (k, label) => itens(k, label, [img('url', 'Imagem'), t('alt', 'Descrição da imagem')], { fixo: true, duas: false });
   const botaoExtra = [t('botao', 'Texto do botão (em branco = sem botão)'), sel('botao_link', 'O botão leva para', DESTINOS)];
   const secaoVideo = [...cabecalho, lista('pontos', 'Pontos com check', { max: 6 }),
-    { k: 'video', label: 'Vídeo MP4 (toca sem som quando aparece na tela)', t: 'img', video: true }, img('video_capa', 'Capa do vídeo'), ...botaoExtra];
+    { k: 'video', label: 'Vídeo MP4 (toca sem som quando aparece na tela)', t: 'img', video: true }, img('video_capa', 'Capa do vídeo'),
+    { k: 'video_celular', label: 'Vídeo em pé para celular (opcional; no celular entra no lugar do vídeo acima)', t: 'img', video: true }, img('video_celular_capa', 'Capa do vídeo para celular'), ...botaoExtra];
 
   const TIPOS = {
     hero: { nome: 'Abertura', campos: [t('selo', 'Selo acima do título'), t('titulo1', 'Título, 1ª linha'), t('titulo_destaque', 'Título, linha em laranja'), t('titulo2', 'Título, 3ª linha'), a('texto', 'Texto'),
@@ -549,6 +550,7 @@ body.theme-light .sa-chave span{background:#cbd5e1}
       t('flutuante_rotulo', 'Cartão flutuante: etiqueta'), t('flutuante_titulo', 'Cartão flutuante: título'), t('flutuante_texto', 'Cartão flutuante: rodapé'),
       itens('passos', 'Os três passos', [t('titulo', 'Título'), t('texto', 'Texto')], { fixo: true, duas: true }),
       t('videos_tag', 'Vídeos: etiqueta'), t('videos_titulo', 'Vídeos: título'), a('videos_texto', 'Vídeos: texto'), lista('videos_selos', 'Vídeos: selos', { max: 5 }),
+      sel('videos_visivel', 'Bloco "Apresentação do gestor" (vídeos do YouTube)', [['nao', 'Esconder'], ['sim', 'Mostrar']]),
       itens('videos', 'Vídeos curtos (YouTube)', [t('video', 'Link ou código do vídeo'), t('legenda', 'Legenda')], { fixo: true, duas: true })] },
     conta: { nome: 'A conta', campos: [...cabecalho,
       t('a_rotulo', 'Lado da plataforma: etiqueta'), itens('a_linhas', 'Lado da plataforma: linhas', [t('nome', 'Descrição'), t('valor', 'Valor')], { max: 6, duas: true }), t('a_total_rotulo', 'Lado da plataforma: total (texto)'), t('a_total_valor', 'Lado da plataforma: total (valor)'),

@@ -1,5 +1,5 @@
 {
-  "versao": 2,
+  "versao": 3,
   "geral": {
     "titulo_pagina": "EstimaFood Delivery: atendente com IA no WhatsApp e cardápio próprio",
     "descricao_pagina": "A IA atende seus clientes no WhatsApp, monta o pedido e manda para a cozinha. Cardápio digital próprio, PIX direto na sua conta e nenhuma comissão por pedido.",
@@ -141,6 +141,8 @@
         ],
         "video": "assets/videos/cardapio-ia.mp4",
         "video_capa": "assets/videos/cardapio-ia-capa.jpg",
+        "video_celular": "assets/videos/cardapio-ia-celular.mp4",
+        "video_celular_capa": "assets/videos/cardapio-ia-celular-capa.jpg",
         "botao": "Criar meu cardápio grátis",
         "botao_link": "teste"
       }
@@ -344,6 +346,7 @@
             "texto": "Caixa, entrega e histórico."
           }
         ],
+        "videos_visivel": "nao",
         "videos_tag": "Apresentação do gestor",
         "videos_titulo": "Veja o sistema *rodando na prática.*",
         "videos_texto": "Do pedido entrando ao acompanhamento da produção, os vídeos mostram a experiência real que a equipe usa no dia a dia para vender, organizar e entregar melhor.",
@@ -408,6 +411,17 @@
         "b_total_valor": "R$ {sobra_20k}",
         "conclusao_titulo": "Na simulação, a diferença passa de *R$ 4.000 por mês.*",
         "conclusao_texto": "É dinheiro que continua no seu caixa em vez de virar comissão para o aplicativo."
+      }
+    },
+    {
+      "id": "depoimentos",
+      "tipo": "depoimentos",
+      "visivel": true,
+      "dados": {
+        "tag": "Quem já usa",
+        "titulo": "Quem usa, *recomenda.*",
+        "itens": [],
+        "fundo": "suave"
       }
     },
     {

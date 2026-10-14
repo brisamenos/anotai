@@ -459,11 +459,46 @@ function validarConteudo(c) {
 // anterior do site (antes das seções da IA, do cardápio por IA e do garçom),
 // usa o padrão novo, mantendo o WhatsApp, os preços e as camadas extras que
 // o admin criou. O conteúdo antigo continua guardado até o admin publicar.
+function completarComPadrao(v) {
+  const novo = JSON.parse(JSON.stringify(v))
+  const pad = JSON.parse(JSON.stringify(PADRAO))
+  novo.versao = pad.versao
+  for (const bloco of ['geral', 'precos']) {
+    if (!novo[bloco] || typeof novo[bloco] !== 'object') novo[bloco] = {}
+    for (const [k, val] of Object.entries(pad[bloco] || {})) if (!(k in novo[bloco])) novo[bloco][k] = val
+  }
+  if (!Array.isArray(novo.camadas)) novo.camadas = []
+  const padPorId = new Map((pad.camadas || []).map(c => [c.id, c]))
+  for (const c of novo.camadas) {
+    const p = c && padPorId.get(c.id)
+    if (!p || !p.dados) continue
+    if (!c.dados || typeof c.dados !== 'object') c.dados = {}
+    for (const [k, val] of Object.entries(p.dados)) if (!(k in c.dados)) c.dados[k] = val
+  }
+  // camadas que o padrão ganhou: entram logo depois da camada que vem antes delas no padrão
+  const ids = new Set(novo.camadas.map(c => c && c.id))
+  ;(pad.camadas || []).forEach((p, i) => {
+    if (ids.has(p.id)) return
+    let pos = 0
+    for (let j = i - 1; j >= 0; j--) {
+      const k = novo.camadas.findIndex(c => c && c.id === pad.camadas[j].id)
+      if (k >= 0) { pos = k + 1; break }
+    }
+    novo.camadas.splice(pos, 0, p)
+    ids.add(p.id)
+  })
+  return novo
+}
+
 function conteudoAtual() {
   const salvo = lerDado('conteudo')
   const v = salvo?.valor
   if (!v) return { conteudo: PADRAO, salvo: null, migrado: false }
-  if ((parseInt(v.versao) || 1) >= (parseInt(PADRAO.versao) || 1)) return { conteudo: v, salvo, migrado: false }
+  const vSalvo = parseInt(v.versao) || 1
+  if (vSalvo >= (parseInt(PADRAO.versao) || 1)) return { conteudo: v, salvo, migrado: false }
+  // A partir da versão 2 o texto salvo no painel é mantido: só entram os
+  // campos e as camadas novas do padrão, no lugar em que o padrão os coloca.
+  if (vSalvo >= 2) return { conteudo: completarComPadrao(v), salvo, migrado: true }
   const novo = JSON.parse(JSON.stringify(PADRAO))
   const g = v.geral || {}
   for (const k of ['whatsapp', 'mensagem_whatsapp']) if (g[k]) novo.geral[k] = g[k]
