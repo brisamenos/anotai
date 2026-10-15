@@ -23,7 +23,9 @@
   ];
   const OPS = [['igual', 'é igual a'], ['contem', 'contém'], ['comeca', 'começa com'], ['termina', 'termina com'], ['regex', 'combina com regex'], ['numero', 'é um número'], ['email', 'é um e-mail'], ['telefone', 'é um telefone'], ['maior', 'é maior que'], ['menor', 'é menor que'], ['vazio', 'está vazio'], ['preenchido', 'está preenchido']];
   const OPS_SEM_VALOR = ['numero', 'email', 'telefone', 'vazio', 'preenchido'];
-  const VARS_BASE = ['primeiro_nome', 'nome', 'loja', 'saudacao', 'pix', 'pix_chave', 'telefone', 'link_demo', 'cliente', 'hora', 'dia_semana'];
+  const VARS_BASE = ['primeiro_nome', 'nome', 'loja', 'saudacao', 'pix', 'pix_chave', 'telefone', 'link_demo', 'cliente', 'hora', 'dia_semana',
+    // só nos fluxos do acompanhamento do teste grátis
+    'validade', 'dias', 'email', 'link_gestor', 'link_cardapio', 'link_download', 'preco', 'ia_liberada'];
 
   const novoCartao = () => ({ midia: '', nome: '', texto: '', rodape: '', botoes: [{ tipo: 'resposta', titulo: '', valor: '' }] });
   const NOVO = {
@@ -735,7 +737,7 @@
   }
 
   function fmt(t) {
-    const vars = { nome: 'Maria Souza', primeiro_nome: 'Maria', loja: 'Pizzaria Bom Sabor', saudacao: 'Bom dia', telefone: '5585991234567', pix: '12.345.678/0001-90', pix_chave: '12345678000190', link_demo: 'https://...' };
+    const vars = { nome: 'Maria Souza', primeiro_nome: 'Maria', loja: 'Pizzaria Bom Sabor', saudacao: 'Bom dia', telefone: '5585991234567', pix: '12.345.678/0001-90', pix_chave: '12345678000190', link_demo: 'https://...', validade: '22/10/2026', dias: '7', email: 'maria@email.com', link_gestor: 'https://...', link_cardapio: 'https://...', link_download: 'https://...', preco: '99,90', ia_liberada: 'sim' };
     return esc(String(t || '').replace(/\{\{\s*([a-z][a-z0-9_]*)\s*(?:\|([^}]*))?\}\}/gi, (_, k, pad) => vars[k.toLowerCase()] || (pad || '').trim() || '...')).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/_([^_\n]+)_/g, '<i>$1</i>');
   }
   function bolha(n) {

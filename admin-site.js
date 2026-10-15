@@ -268,7 +268,8 @@ body.theme-light .sa-chave span{background:#cbd5e1}
     if (x.msg_status === 'falhou') return `<div class="sa-sub" title="${esc(x.msg_erro || '')}"><span style="color:var(--danger);font-weight:600">WhatsApp não enviou</span> · ${enviar}</div>`;
     return `<div class="sa-sub">Sem mensagem · ${enviar}</div>`;
   }
-  const NOME_ETAPA = { dia1: '1º dia', dia3: '3º dia', vespera: 'véspera', expirou: 'fim' };
+  const ETAPAS_UI = [['dia1', '1 dia depois do cadastro'], ['dia2', '2 dias depois do cadastro'], ['dia3', '3 dias depois do cadastro'], ['dia5', '5 dias depois do cadastro'], ['vespera', 'Véspera do fim do teste'], ['expirou', 'Depois que o teste acaba']];
+  const NOME_ETAPA = { dia1: '1º dia', dia2: '2º dia', dia3: '3º dia', dia5: '5º dia', vespera: 'véspera', expirou: 'fim' };
   function linhaAcompanhamento(x) {
     const feitas = String(x.seq_enviados || '').split(',').filter(Boolean);
     let h = feitas.length ? `<div class="sa-sub">Acompanhamento: ${feitas.map(k => NOME_ETAPA[k] || k).join(', ')}</div>` : '';
@@ -322,6 +323,33 @@ body.theme-light .sa-chave span{background:#cbd5e1}
           }).join('')}</tbody>
         </table></div>` : '<div class="sa-dica" style="margin-top:12px">Nenhuma compra pelo site ainda.</div>'}
       </div>`;
+  }
+
+  // Escolha do fluxo do Marketing (vídeo, imagem e botões) de uma etapa do teste
+  function seletorFluxo(k) {
+    const lista = T.dados?.fluxos_mkt || [];
+    const chave = 'sa-fluxo-' + k;
+    const atual = String(chave in T.rascunho ? T.rascunho[chave] : (T.dados?.config?.fluxos?.[k] || ''));
+    const existe = !atual || lista.some(f => String(f.id) === atual);
+    return `<label class="sa-sub" for="sa-fluxo-${k}" style="display:block;margin:10px 0 4px;font-weight:600">Enviar</label>
+      <select class="minput" id="sa-fluxo-${k}" style="font-size:12.5px">
+        <option value="">Só o texto</option>
+        ${lista.map(f => `<option value="${f.id}" ${String(f.id) === atual ? 'selected' : ''}>Fluxo: ${esc(f.nome)}${f.ativo ? '' : ' (desligado)'}</option>`).join('')}
+        ${existe ? '' : `<option value="${esc(atual)}" selected>Fluxo apagado (vai o texto)</option>`}
+      </select>
+      ${atual && existe ? '<div class="sa-dica" style="margin-top:6px"><button class="sa-link" data-acao="ir-marketing">Editar no Marketing</button></div>' : ''}`;
+  }
+  function avisoFluxos() {
+    const d = T.dados || {};
+    const usados = Object.values(d.config?.fluxos || {}).filter(Boolean).length;
+    const canal = d.canal_fluxos;
+    return `<div class="sa-dica" style="margin-top:12px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--s2,rgba(127,127,127,.06));line-height:1.55">
+      <b style="color:var(--text)">Mensagens com vídeo, imagem e botões.</b> Cada etapa pode enviar um fluxo do Marketing no lugar do texto. Os fluxos prontos já vêm com os vídeos e as imagens, e você edita tudo em Marketing. O texto de cada etapa fica como reserva: vai se o fluxo não puder ser enviado.
+      ${canal ? '' : '<div style="margin-top:6px;color:var(--orange);font-weight:600">Os fluxos saem pelo WhatsApp de Suporte e Vendas na conexão WuzAPI, que não está ativa agora. Enquanto isso, vai o texto de cada etapa.</div>'}
+      <div style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap">${usados ? `<span>${usados} ${plural(usados, 'etapa usa', 'etapas usam')} fluxo</span>` : ''}
+        ${d.midia_teste ? '<button class="sa-link" data-acao="fluxos-prontos">Criar os fluxos prontos de novo</button>' : ''}
+        <button class="sa-link" data-acao="ir-marketing">Abrir o Marketing</button></div>
+    </div>`;
   }
 
   function linhaIA(t) {
@@ -399,7 +427,7 @@ body.theme-light .sa-chave span{background:#cbd5e1}
             <label class="toggle" title="${msgAtiva ? 'Desligar a mensagem' : 'Ligar a mensagem'}"><input type="checkbox" id="sa-teste-msg-ativa" ${msgAtiva ? 'checked' : ''} aria-label="Enviar mensagem depois do cadastro"><span class="toggle-slider"></span></label>
           </div>
           <div class="sa-msg-corpo">
-            <div class="sa-campo"><label for="sa-teste-msg-min">Enviar depois de (minutos)</label><input class="minput" id="sa-teste-msg-min" type="number" min="1" max="1440" value="${esc(v('sa-teste-msg-min', c.msg_minutos))}"></div>
+            <div class="sa-campo"><label for="sa-teste-msg-min">Enviar depois de (minutos)</label><input class="minput" id="sa-teste-msg-min" type="number" min="1" max="1440" value="${esc(v('sa-teste-msg-min', c.msg_minutos))}">${seletorFluxo('boasvindas')}</div>
             <div class="sa-campo"><label for="sa-teste-msg-texto">Texto da mensagem</label><textarea class="minput" id="sa-teste-msg-texto" maxlength="1500">${esc(v('sa-teste-msg-texto', c.msg_texto))}</textarea>
               <div class="sa-dica">Use {nome}, {loja}, {email}, {validade}, {dias}, {link_gestor}, {link_download} e {link_cardapio}: cada um é trocado pelo dado do cliente. No WhatsApp, *asteriscos* deixam o trecho em negrito. <button class="sa-link" data-acao="msg-padrao">Voltar ao texto padrão</button></div></div>
           </div>
@@ -410,9 +438,10 @@ body.theme-light .sa-chave span{background:#cbd5e1}
               <div class="sa-dica" style="margin-top:3px">Mensagens automáticas ao longo do teste, entre 9h e 20h, com pelo menos 12 horas entre uma e outra. Quem vira cliente para de receber.</div></div>
             <label class="toggle" title="${seqAtiva ? 'Desligar o acompanhamento' : 'Ligar o acompanhamento'}"><input type="checkbox" id="sa-teste-seq-ativa" ${seqAtiva ? 'checked' : ''} aria-label="Acompanhamento do teste"><span class="toggle-slider"></span></label>
           </div>
-          ${[['dia1', '1 dia depois do cadastro'], ['dia3', '3 dias depois do cadastro'], ['vespera', 'Véspera do fim do teste'], ['expirou', 'Depois que o teste acaba']].map(([k, rot]) => `
+          ${avisoFluxos()}
+          ${ETAPAS_UI.map(([k, rot]) => `
           <div class="sa-msg-corpo">
-            <div class="sa-campo"><label for="sa-seq-${k}">${rot}</label><div class="sa-dica" style="margin-top:6px"><button class="sa-link" data-acao="seq-padrao" data-etapa="${k}">Voltar ao texto padrão</button></div></div>
+            <div class="sa-campo"><label for="sa-seq-${k}">${rot}</label>${seletorFluxo(k)}<div class="sa-dica" style="margin-top:6px"><button class="sa-link" data-acao="seq-padrao" data-etapa="${k}">Voltar ao texto padrão</button></div></div>
             <div class="sa-campo"><textarea class="minput" id="sa-seq-${k}" maxlength="1500" style="min-height:130px" aria-label="${rot}">${esc(v('sa-seq-' + k, c.seq?.[k]))}</textarea></div>
           </div>`).join('')}
           <div class="sa-dica" style="margin-top:8px">Além dos códigos da mensagem de boas-vindas, aqui também vale {preco}: o preço do 1º mês mostrado no site.</div>
@@ -616,10 +645,17 @@ body.theme-light .sa-chave span{background:#cbd5e1}
         gestor_url: $('sa-teste-gestor').value.trim(), download_url: $('sa-teste-download').value.trim(),
         msg_ativa: $('sa-teste-msg-ativa').checked, msg_minutos: $('sa-teste-msg-min').value, msg_texto: $('sa-teste-msg-texto').value,
         seq_ativa: $('sa-teste-seq-ativa').checked,
-        seq: { dia1: $('sa-seq-dia1').value, dia3: $('sa-seq-dia3').value, vespera: $('sa-seq-vespera').value, expirou: $('sa-seq-expirou').value },
+        seq: Object.fromEntries(ETAPAS_UI.map(([k]) => [k, $('sa-seq-' + k).value])),
+        fluxos: Object.fromEntries(['boasvindas', ...ETAPAS_UI.map(([k]) => k)].map(k => [k, $('sa-fluxo-' + k) ? ($('sa-fluxo-' + k).value || null) : undefined]).filter(([, x]) => x !== undefined)),
         meta_pixel: $('sa-meta-pixel').value.trim(), meta_teste: $('sa-meta-teste').value.trim(),
         ...($('sa-meta-token').value.trim() ? { meta_token: $('sa-meta-token').value.trim() } : {})
       }, 'Configuração do teste salva');
+      if (a.dataset.acao === 'ir-marketing') { navTo('marketing'); return; }
+      if (a.dataset.acao === 'fluxos-prontos') {
+        if (!confirm('Criar de novo os fluxos prontos do teste grátis (com os vídeos e as imagens)? Eles entram no Marketing como fluxos novos e passam a ser usados em todas as etapas. Os fluxos que você já tem não são apagados.')) return;
+        api('POST', '/api/admin/testes/fluxos-prontos', {}).then(() => { toast('ok', 'Fluxos prontos criados e ligados às etapas'); ['boasvindas', ...ETAPAS_UI.map(([k]) => k)].forEach(k => delete T.rascunho['sa-fluxo-' + k]); carregarTestes(); }).catch(e => toast('err', e.message));
+        return;
+      }
       if (a.dataset.acao === 'msg-padrao') { T.rascunho['sa-teste-msg-texto'] = T.dados.config.msg_padrao; renderTestes(); }
       if (a.dataset.acao === 'seq-padrao') { T.rascunho['sa-seq-' + a.dataset.etapa] = T.dados.config.seq_padrao?.[a.dataset.etapa] || ''; renderTestes(); }
       if (a.dataset.acao === 'senha') verSenha(id);
@@ -651,11 +687,12 @@ body.theme-light .sa-chave span{background:#cbd5e1}
         const ligar = ev.target.checked;
         salvarConfig({ aviso_wa_clientes: ligar }, ligar ? 'Aviso do robô ligado para os clientes' : 'Aviso do robô desligado para os clientes', true);
       }
+      if (/^sa-fluxo-/.test(ev.target.id)) { T.rascunho[ev.target.id] = ev.target.value; renderTestes(); return; }
       if (ev.target.id === 'sa-teste-msg-ativa') { T.rascunho['sa-teste-msg-ativa'] = ev.target.checked; renderTestes(); }
       if (ev.target.id === 'sa-teste-seq-ativa') { T.rascunho['sa-teste-seq-ativa'] = ev.target.checked; renderTestes(); }
     });
     sec.addEventListener('input', ev => {
-      if (/^sa-teste-(dias|limite|gestor|download|msg-min|msg-texto)$/.test(ev.target.id) || /^sa-(seq-(dia1|dia3|vespera|expirou)|meta-(pixel|token|teste))$/.test(ev.target.id)) { T.rascunho[ev.target.id] = ev.target.value; return; }
+      if (/^sa-teste-(dias|limite|gestor|download|msg-min|msg-texto)$/.test(ev.target.id) || /^sa-(seq-(dia1|dia2|dia3|dia5|vespera|expirou)|meta-(pixel|token|teste))$/.test(ev.target.id)) { T.rascunho[ev.target.id] = ev.target.value; return; }
       if (ev.target.id !== 'sa-teste-busca') return;
       T.busca = ev.target.value;
       const pos = ev.target.selectionStart;

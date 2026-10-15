@@ -397,6 +397,7 @@ function _svBotInit(ctx) {
   _mkt.init({ db: ctx.db, log: ctx.log, bot: _svBot, uploadsDir: ctx.UPLOADS_DIR })
   _site.init({ db: ctx.db, log: ctx.log, marcarDirty: ctx.marcarDirty, fazerBackup: ctx.fazerBackup, hashPassword: ctx.hashPassword, verifyPassword: ctx.verifyPassword,
     clientIp: ctx.clientIp, linkCardapioTenant: ctx.linkCardapioTenant, uploadsDir: ctx.UPLOADS_DIR, bot: _svBot,
+    marketing: _mkt, // fluxos do Marketing usados no acompanhamento do teste grátis
     // compra do plano direto pelo site (Mercado Pago da plataforma)
     mpToken: () => _resolveMpGlobal(ctx.db, ctx.MP_TOKEN),
     mpPublicKey: () => { try { const r = ctx.db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); return (r?.ia_config ? JSON.parse(r.ia_config) : {}).mp_public_key || '' } catch { return '' } },

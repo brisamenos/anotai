@@ -520,7 +520,7 @@ function problemas(f) {
       if (!c.botoes.length) erros.push(`${rot}: adicione pelo menos um botão`)
       c.botoes.forEach((b, j) => {
         if (!b.titulo) erros.push(`${rot}, botão ${j + 1}: falta o título`)
-        if (b.tipo === 'link' && !/^(https?:\/\/\S+|{{link_demo}})$/i.test(b.valor)) erros.push(`${rot}, botão ${j + 1}: o link precisa começar com http:// ou https://`)
+        if (b.tipo === 'link' && !/^(https?:\/\/\S+|\{\{\s*[a-z][a-z0-9_]*\s*\}\})$/i.test(b.valor)) erros.push(`${rot}, botão ${j + 1}: o link precisa começar com http:// ou https://`)
         if (b.tipo === 'copiar' && !b.valor) erros.push(`${rot}, botão ${j + 1}: falta o texto a copiar`)
         if (b.tipo === 'ligar' && b.valor.replace(/\D/g, '').length < 8) erros.push(`${rot}, botão ${j + 1}: telefone inválido`)
       })
@@ -533,7 +533,7 @@ function problemas(f) {
         if (!k.botoes.length) erros.push(`${r2}: adicione pelo menos um botão`)
         k.botoes.forEach((b, j) => {
           if (!b.titulo) erros.push(`${r2}, botão ${j + 1}: falta o título`)
-          if (b.tipo === 'link' && !/^(https?:\/\/\S+|{{link_demo}})$/i.test(b.valor)) erros.push(`${r2}, botão ${j + 1}: o link precisa começar com http:// ou https://`)
+          if (b.tipo === 'link' && !/^(https?:\/\/\S+|\{\{\s*[a-z][a-z0-9_]*\s*\}\})$/i.test(b.valor)) erros.push(`${r2}, botão ${j + 1}: o link precisa começar com http:// ou https://`)
           if (b.tipo === 'copiar' && !b.valor) erros.push(`${r2}, botão ${j + 1}: falta o texto a copiar`)
           if (b.tipo === 'ligar' && b.valor.replace(/\D/g, '').length < 8) erros.push(`${r2}, botão ${j + 1}: telefone inválido`)
         })
@@ -1071,11 +1071,11 @@ function fluxoVivo(id, tel) {
   return f && (f.ativo || emTeste(id, tel)) ? f : null
 }
 
-async function executarFluxo(flow, tel, { origem = 'palavra', nome = '', rodape = '', pushName = '' } = {}) {
+async function executarFluxo(flow, tel, { origem = 'palavra', nome = '', rodape = '', pushName = '', vars = null } = {}) {
   if (origem === 'teste') testes.set(`${flow.id}:${tel}`, Date.now())
   await rodar(flow, tel, origem, async () => {
     limparAguardo(tel)
-    const ctx = await novoCtx(flow, tel, { nome, pushName })
+    const ctx = await novoCtx(flow, tel, { nome, pushName, custom: vars && typeof vars === 'object' ? vars : {} })
     await correr(flow, tel, ctx, mapaGrafo(flow).prox('inicio', 'out'))
     if (rodape) {
       if (ctx.presenca) await presenca(tel, '', 700)
@@ -1641,8 +1641,20 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
   return true
 }
 
+// Para outros módulos (ex.: acompanhamento do teste grátis): roda um fluxo salvo para um
+// telefone, com variáveis extras ({{validade}}, {{link_gestor}}...). Lança erro se o fluxo não
+// existir, se o canal WuzAPI não estiver ativo ou se algum passo falhar.
+async function executarFluxoId(id, tel, { origem = 'sistema', vars = {} } = {}) {
+  const f = obterFluxo(parseInt(id, 10))
+  if (!f) throw new Error('Fluxo não encontrado')
+  const fone = n55(tel)
+  return enfileirar(fone, () => executarFluxo(f, fone, { origem, vars }))
+}
+const canalFluxosAtivo = () => { try { return D.bot.provider() === 'wuzapi' } catch { return false } }
+
 module.exports = {
   init, api, onMessage, naoCliente, atalhoMenu,
+  executarFluxoId, canalFluxosAtivo, listarFluxos, obterFluxo, salvarFluxo, definirAtivo, salvarMidia,
   // uteis para testes
   _internals: { definirInicio, ligarParaUso, varrerTimeouts, sanitizarFluxo, sanitizarGrafo, passosParaGrafo, portasDe, problemas, casaGatilho, aplicarVars, norm, contatosDoPublico, executarFluxo, obterFluxo, salvarFluxo, criarDisparo, iniciarWorker, salvarMidia, definirAtivo, lerConfigNaoCliente, salvarConfigNaoCliente, situacaoNaoCliente, salvarMenuRobo, situacaoMenuRobo }
 }

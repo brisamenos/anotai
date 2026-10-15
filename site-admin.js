@@ -51,6 +51,13 @@ const SEQ_PADRAO = {
     '',
     'Se preferir, responda esta mensagem que a gente ajuda a montar.'
   ].join('\n'),
+  dia2: [
+    '{nome}, a *{loja}* pode atender no WhatsApp sem você parar o que está fazendo.',
+    '',
+    'Conecte o WhatsApp da loja: no painel, abra *Robô* e leia o QR Code com o celular da loja. Leva menos de 1 minuto e a atendente com IA já começa a responder seus clientes.',
+    '',
+    'Entrar no painel: {link_gestor}'
+  ].join('\n'),
   dia3: [
     '{nome}, que tal ver um pedido chegando?',
     '',
@@ -59,6 +66,13 @@ const SEQ_PADRAO = {
     'Seu cardápio: {link_cardapio}',
     '',
     'Qualquer dúvida, é só responder aqui.'
+  ].join('\n'),
+  dia5: [
+    '{nome}, a *{loja}* também atende mesas ou balcão?',
+    '',
+    'No seu teste já estão liberados o app do garçom, o caixa e os relatórios de vendas. O pedido do salão vai direto para a cozinha e a conta sai pronta.',
+    '',
+    'Quer que a gente te mostre como configurar? É só responder esta mensagem.'
   ].join('\n'),
   vespera: [
     '{nome}, o teste da *{loja}* termina amanhã ({validade}).',
@@ -73,7 +87,9 @@ const SEQ_PADRAO = {
     'Quer continuar? Responda esta mensagem que a gente libera a sua loja.'
   ].join('\n')
 }
-const SEQ_ETAPAS = ['dia1', 'dia3', 'vespera', 'expirou']
+const SEQ_ETAPAS = ['dia1', 'dia2', 'dia3', 'dia5', 'vespera', 'expirou']
+// Etapas que podem enviar um fluxo do Marketing (com vídeo, imagem e botões) no lugar do texto
+const ETAPAS_FLUXO = ['boasvindas', ...SEQ_ETAPAS]
 const META_PIXEL_PADRAO = '3403468509829400' // pixel "estima" (conta de anúncios Solução Brisanet)
 const META_PIXEL_ANTIGO = '1075636798774814' // pixel usado antes; quem salvou com ele passa a usar o novo
 const META_GRAPH = process.env.META_GRAPH_VERSION || 'v23.0'
@@ -196,6 +212,8 @@ function init(deps) {
   const relogio = setInterval(() => { processarMensagens().catch(() => {}) }, 60 * 1000)
   if (relogio.unref) relogio.unref()
   setTimeout(() => { processarMensagens().catch(() => {}) }, 20 * 1000)
+  // fluxos prontos (vídeo, imagem e botões) do acompanhamento do teste, criados uma vez no Marketing
+  setTimeout(() => { instalarFluxosTeste().catch(() => {}) }, 8 * 1000)
 }
 
 // ==================== Acompanhamento do teste ====================
@@ -214,7 +232,9 @@ function etapaDevida(l, hoje) {
     return !feitas.has('expirou') && diasEntre(l.expira_em, hoje) <= 2 ? 'expirou' : null
   }
   if (hoje >= vespera && !feitas.has('vespera')) return 'vespera'
+  if (horas >= 120 && !feitas.has('dia5') && hoje < vespera) return 'dia5'
   if (horas >= 72 && !feitas.has('dia3') && hoje < vespera) return 'dia3'
+  if (horas >= 48 && !feitas.has('dia2') && hoje < vespera) return 'dia2'
   if (horas >= 24 && !feitas.has('dia1') && hoje < vespera) return 'dia1'
   return null
 }
@@ -238,15 +258,15 @@ async function processarAcompanhamento(cfg) {
     if (!etapa) continue
     D.db.prepare("UPDATE testes_gratis SET seq_tentativa_em=datetime('now') WHERE id=?").run(l.id)
     try {
-      const r = await D.bot.sendText(l.telefone, textoMensagem(l, cfg, cfg.seq[etapa]), 1200)
+      const r = await enviarEtapa(l, cfg, etapa, textoMensagem(l, cfg, cfg.seq[etapa]))
       if (r && r.ok) {
         // a etapa enviada já cobre as anteriores (quem recebeu a do 3º dia não
         // recebe depois a do 1º dia fora de ordem)
-        const ordem = ['dia1', 'dia3', 'vespera', 'expirou']
+        const ordem = SEQ_ETAPAS
         const feitas = String(l.seq_enviados || '').split(',').filter(Boolean)
         for (const e of ordem.slice(0, ordem.indexOf(etapa) + 1)) if (!feitas.includes(e)) feitas.push(e)
         D.db.prepare("UPDATE testes_gratis SET seq_enviados=?, seq_ultimo_em=datetime('now'), seq_erro=NULL WHERE id=?").run(feitas.join(','), l.id)
-        D.log('🧪', `Acompanhamento do teste (${etapa}) enviado: ${l.restaurante}`)
+        D.log('🧪', `Acompanhamento do teste (${etapa}${r.fluxo ? ', fluxo' : ''}) enviado: ${l.restaurante}`)
         enviadas++
       } else {
         D.db.prepare('UPDATE testes_gratis SET seq_erro=? WHERE id=?').run(String((r && (r.error || r.data?.message)) || 'WhatsApp de Suporte e Vendas indisponível').slice(0, 300), l.id)
@@ -369,6 +389,7 @@ function cfgTeste() {
     meta_teste: typeof salvo.meta_teste === 'string' ? salvo.meta_teste.slice(0, 40) : '',
     ia_teste: salvo.ia_teste !== false,
     compra_ativa: salvo.compra_ativa !== false,
+    fluxos: Object.fromEntries(ETAPAS_FLUXO.map(k => { const n = parseInt(salvo.fluxos?.[k], 10); return [k, n > 0 ? n : null] })),
     aviso_wa_teste: salvo.aviso_wa_teste !== false,
     aviso_wa_clientes: salvo.aviso_wa_clientes === true
   }
@@ -459,11 +480,143 @@ function textoMensagem(linha, cfg, texto) {
   return String(texto || cfg.msg_texto || MSG_PADRAO).replace(/\{(\w+)\}/g, (m, k) => (k in valores ? valores[k] : m))
 }
 
+// ==================== Mensagens com vídeo, imagem e botões ====================
+// Cada etapa do teste (boas-vindas, 1º, 2º, 3º e 5º dia, véspera e fim) pode enviar
+// um fluxo do Marketing no lugar do texto. O fluxo recebe as variáveis do teste
+// ({{primeiro_nome}}, {{loja}}, {{validade}}, {{link_gestor}}...). Se o canal de
+// fluxos (WuzAPI) não estiver ativo ou o fluxo falhar, vai o texto da etapa.
+function varsTeste(l, cfg) {
+  let cardapio = ''
+  try { cardapio = D.linkCardapioTenant(l.tenant_id) } catch {}
+  const nome = String(l.nome || '').trim()
+  const fone = String(l.telefone || '').replace(/\D/g, '')
+  return {
+    nome, primeiro_nome: nome.split(/\s+/)[0] || '', loja: l.restaurante || '', email: l.email || '',
+    telefone: fone, dias: String(l.dias || cfg.dias), validade: String(l.expira_em || '').split('-').reverse().join('/'),
+    link_gestor: gestorUrl(cfg), link_download: downloadUrl(cfg), link_cardapio: cardapio || gestorUrl(cfg),
+    preco: precoSite(), ia_liberada: l.ia_teste && String(l.expira_em || '') >= hojeBR() ? 'sim' : 'nao'
+  }
+}
+
+async function enviarEtapa(l, cfg, etapa, texto) {
+  const fid = cfg.fluxos?.[etapa]
+  if (fid && D.marketing?.executarFluxoId && D.marketing.canalFluxosAtivo()) {
+    try {
+      await D.marketing.executarFluxoId(fid, l.telefone, { origem: 'teste_' + etapa, vars: varsTeste(l, cfg) })
+      return { ok: true, fluxo: true }
+    } catch (e) {
+      D.log('⚠️', `Teste grátis: fluxo da etapa ${etapa} falhou (${e.message}); enviando o texto`)
+    }
+  }
+  return D.bot.sendText(l.telefone, texto, 1200)
+}
+
+// Fluxos prontos que acompanham o sistema (pasta midia-teste). Criados uma vez no
+// Marketing e ligados às etapas; depois o admin edita à vontade no editor de fluxos.
+const PASTA_MIDIA_TESTE = path.join(__dirname, 'midia-teste')
+function fluxosProntosTeste(m) {
+  const g = (nodes, edges) => ({ nodes: [{ id: 'inicio', tipo: 'gatilho', x: 40, y: 160, cfg: {} }, ...nodes], edges: edges.map(([de, porta, para]) => ({ de, porta, para })) })
+  const ajuda = (x, y, motivo) => [
+    { id: 'av', tipo: 'notificar', x, y, cfg: { texto: `Teste grátis: *{{loja}}* ({{telefone}}) ${motivo}` } },
+    { id: 'ok', tipo: 'texto', x: x + 320, y, cfg: { texto: 'Combinado, {{primeiro_nome}}! Já avisei a nossa equipe. Alguém vai te chamar aqui em instantes.' } }
+  ]
+  const link = (titulo, valor) => ({ tipo: 'link', titulo, valor })
+  const resp = titulo => ({ tipo: 'resposta', titulo, valor: '' })
+  return [
+    { etapa: 'boasvindas', nome: 'Teste grátis: boas-vindas', grafo: g([
+      { id: 'n1', tipo: 'imagem', x: 360, y: 160, cfg: { midia: m.boasvindas, nome: 'boas-vindas.jpg', legenda: 'Olá, {{primeiro_nome}}! Aqui é da EstimaFood.\n\nSua conta de teste da *{{loja}}* está pronta e vale até {{validade}}.' } },
+      { id: 'n2', tipo: 'botoes', x: 680, y: 160, cfg: { texto: 'Para entrar, use o e-mail {{email}} e a senha que você criou.\n\nPainel: {{link_gestor}}', rodape: 'Quer ajuda para montar? Toque em Quero ajuda.', botoes: [link('Entrar no painel', '{{link_gestor}}'), link('Baixar impressão', '{{link_download}}'), resp('Quero ajuda')] } },
+      ...ajuda(1000, 360, 'pediu ajuda para começar.')
+    ], [['inicio', 'out', 'n1'], ['n1', 'out', 'n2'], ['n2', 'b2', 'av'], ['av', 'out', 'ok']]) },
+
+    { etapa: 'dia1', nome: 'Teste grátis: 1º dia (cardápio por IA)', grafo: g([
+      { id: 'n1', tipo: 'texto', x: 360, y: 160, cfg: { texto: 'Oi, {{primeiro_nome}}! Já montou o cardápio da *{{loja}}*? Olha como é rápido com a IA:' } },
+      { id: 'n2', tipo: 'video', x: 680, y: 160, cfg: { midia: m.cardapio, nome: 'cardapio-por-ia.mp4', legenda: 'No painel, abra *Gestor de cardápio* > *Criar por IA* e envie fotos do seu cardápio. A IA cria produtos, preços e adicionais em poucos minutos.' } },
+      { id: 'n3', tipo: 'botoes', x: 1000, y: 160, cfg: { texto: 'Quer fazer agora? Leva só alguns minutos.', rodape: '', botoes: [link('Criar meu cardápio', '{{link_gestor}}'), resp('Me ajuda a montar')] } },
+      ...ajuda(1320, 360, 'pediu ajuda para montar o cardápio.')
+    ], [['inicio', 'out', 'n1'], ['n1', 'out', 'n2'], ['n2', 'out', 'n3'], ['n3', 'b1', 'av'], ['av', 'out', 'ok']]) },
+
+    { etapa: 'dia2', nome: 'Teste grátis: 2º dia (pedidos por IA)', grafo: g([
+      { id: 'n1', tipo: 'video', x: 360, y: 160, cfg: { midia: m.ia, nome: 'atendente-ia.mp4', legenda: '{{primeiro_nome}}, imagina a *{{loja}}* atendendo no WhatsApp sem você parar o que está fazendo.' } },
+      { id: 'c1', tipo: 'condicao', x: 680, y: 160, cfg: { casos: [{ variavel: 'ia_liberada', op: 'igual', valor: 'sim' }] } },
+      { id: 'n2', tipo: 'botoes', x: 1000, y: 40, cfg: { texto: 'No seu teste, os *pedidos por IA* estão liberados: o cliente manda texto ou áudio e a IA monta o pedido e manda para o seu painel.\n\nÉ só conectar o WhatsApp da loja: no painel, abra *Robô* e leia o QR Code com o celular da loja. Leva menos de 1 minuto.', rodape: '', botoes: [link('Conectar WhatsApp', '{{link_gestor}}'), resp('Tenho uma dúvida')] } },
+      { id: 'n3', tipo: 'botoes', x: 1000, y: 330, cfg: { texto: 'Conecte o WhatsApp da loja e a atendente com IA responde seus clientes na hora: cardápio, horário, taxa de entrega e promoções.\n\nNo painel, abra *Robô* e leia o QR Code com o celular da loja. Leva menos de 1 minuto.', rodape: '', botoes: [link('Conectar WhatsApp', '{{link_gestor}}'), resp('Tenho uma dúvida')] } },
+      ...ajuda(1320, 560, 'tem uma dúvida sobre a IA no WhatsApp.')
+    ], [['inicio', 'out', 'n1'], ['n1', 'out', 'c1'], ['c1', 'c0', 'n2'], ['c1', 'else', 'n3'], ['n2', 'b1', 'av'], ['n3', 'b1', 'av'], ['av', 'out', 'ok']]) },
+
+    { etapa: 'dia3', nome: 'Teste grátis: 3º dia (pedido de teste)', grafo: g([
+      { id: 'n1', tipo: 'imagem', x: 360, y: 160, cfg: { midia: m.pedido, nome: 'pedido-de-teste.jpg', legenda: '{{primeiro_nome}}, que tal ver um pedido chegando?\n\nAbra o seu cardápio no celular, faça um pedido de teste e acompanhe ele aparecendo no painel e saindo na impressora.' } },
+      { id: 'n2', tipo: 'botoes', x: 680, y: 160, cfg: { texto: 'Seu cardápio digital já está no ar. Depois é só divulgar o link no Instagram e no WhatsApp.', rodape: '', botoes: [link('Abrir meu cardápio', '{{link_cardapio}}'), link('Abrir o painel', '{{link_gestor}}')] } }
+    ], [['inicio', 'out', 'n1'], ['n1', 'out', 'n2']]) },
+
+    { etapa: 'dia5', nome: 'Teste grátis: 5º dia (salão e garçom)', grafo: g([
+      { id: 'n1', tipo: 'video', x: 360, y: 160, cfg: { midia: m.garcom, nome: 'app-do-garcom.mp4', legenda: '{{primeiro_nome}}, a *{{loja}}* também atende mesas? Com o app do garçom o pedido vai direto para a cozinha e a conta sai pronta.' } },
+      { id: 'n2', tipo: 'botoes', x: 680, y: 160, cfg: { texto: 'Tudo isso já está liberado no seu teste, junto com o caixa e os relatórios de vendas.', rodape: '', botoes: [resp('Quero ver como faz'), link('Abrir o painel', '{{link_gestor}}')] } },
+      ...ajuda(1000, 360, 'quer ver como configurar o salão e o garçom.')
+    ], [['inicio', 'out', 'n1'], ['n1', 'out', 'n2'], ['n2', 'b0', 'av'], ['av', 'out', 'ok']]) },
+
+    { etapa: 'vespera', nome: 'Teste grátis: véspera (continuar)', grafo: g([
+      { id: 'n1', tipo: 'imagem', x: 360, y: 160, cfg: { midia: m.vespera, nome: 'teste-acaba-amanha.jpg', legenda: '{{primeiro_nome}}, o teste da *{{loja}}* termina amanhã ({{validade}}).' } },
+      { id: 'n2', tipo: 'botoes', x: 680, y: 160, cfg: { texto: 'Para continuar sem perder nada do que você montou, garanta o primeiro mês por *R$ {{preco}}*.\n\nVocê pode pagar em *Meu plano*, dentro do painel, ou tocar em *Quero continuar* que a gente ativa para você.', rodape: '', botoes: [resp('Quero continuar'), link('Pagar no painel', '{{link_gestor}}'), resp('Tenho uma dúvida')] } },
+      { id: 'av', tipo: 'notificar', x: 1000, y: 40, cfg: { texto: 'Teste grátis: *{{loja}}* ({{telefone}}) quer CONTINUAR. Teste vence em {{validade}}.' } },
+      { id: 'ok', tipo: 'texto', x: 1320, y: 40, cfg: { texto: 'Perfeito, {{primeiro_nome}}! Já avisei a nossa equipe e vamos te chamar aqui para ativar a sua loja, sem perder nada.' } },
+      { id: 'av2', tipo: 'notificar', x: 1000, y: 360, cfg: { texto: 'Teste grátis: *{{loja}}* ({{telefone}}) tem uma dúvida antes de assinar. Teste vence em {{validade}}.' } },
+      { id: 'ok2', tipo: 'texto', x: 1320, y: 360, cfg: { texto: 'Claro, {{primeiro_nome}}! Já avisei a nossa equipe. Pode mandar a sua dúvida aqui que a gente responde.' } }
+    ], [['inicio', 'out', 'n1'], ['n1', 'out', 'n2'], ['n2', 'b0', 'av'], ['av', 'out', 'ok'], ['n2', 'b2', 'av2'], ['av2', 'out', 'ok2']]) },
+
+    { etapa: 'expirou', nome: 'Teste grátis: fim do teste', grafo: g([
+      { id: 'n1', tipo: 'imagem', x: 360, y: 160, cfg: { midia: m.fim, nome: 'loja-guardada.jpg', legenda: '{{primeiro_nome}}, o teste da *{{loja}}* terminou, mas o seu cardápio e as configurações continuam guardados.' } },
+      { id: 'n2', tipo: 'botoes', x: 680, y: 160, cfg: { texto: 'Quer voltar a vender hoje? Toque em *Quero continuar* e a gente libera a sua loja.', rodape: '', botoes: [resp('Quero continuar'), link('Pagar no painel', '{{link_gestor}}')] } },
+      { id: 'av', tipo: 'notificar', x: 1000, y: 360, cfg: { texto: 'Teste grátis: *{{loja}}* ({{telefone}}) quer CONTINUAR depois que o teste acabou.' } },
+      { id: 'ok', tipo: 'texto', x: 1320, y: 360, cfg: { texto: 'Perfeito, {{primeiro_nome}}! Já avisei a nossa equipe e vamos te chamar aqui para liberar a sua loja.' } }
+    ], [['inicio', 'out', 'n1'], ['n1', 'out', 'n2'], ['n2', 'b0', 'av'], ['av', 'out', 'ok']]) }
+  ]
+}
+
+const ARQUIVOS_MIDIA_TESTE = {
+  boasvindas: ['boas-vindas.jpg', 'imagem'], pedido: ['pedido-de-teste.jpg', 'imagem'], vespera: ['teste-acaba-amanha.jpg', 'imagem'], fim: ['loja-guardada.jpg', 'imagem'],
+  cardapio: ['cardapio-por-ia.mp4', 'video'], ia: ['atendente-ia.mp4', 'video'], garcom: ['app-do-garcom.mp4', 'video']
+}
+
+// Cria os fluxos prontos no Marketing. Com substituir=false só liga às etapas que estão sem fluxo.
+async function criarFluxosProntosTeste(substituir) {
+  const mk = D.marketing
+  if (!mk?.salvarFluxo || !mk?.salvarMidia) throw new Error('O módulo de fluxos do Marketing não está disponível')
+  const m = {}
+  for (const [k, [arquivo, tipo]] of Object.entries(ARQUIVOS_MIDIA_TESTE)) {
+    const fpath = path.join(PASTA_MIDIA_TESTE, arquivo)
+    if (!fs.existsSync(fpath)) throw new Error(`Arquivo ${arquivo} não encontrado na pasta midia-teste do sistema`)
+    m[k] = (await mk.salvarMidia({ nome: arquivo, tipo, buffer: fs.readFileSync(fpath) })).arquivo
+  }
+  const cfg = cfgTeste()
+  const fluxos = { ...cfg.fluxos }
+  const criados = []
+  for (const f of fluxosProntosTeste(m)) {
+    const novo = mk.salvarFluxo(null, { nome: f.nome, gatilho: { tipo: 'manual', palavras: [] }, opcoes: { presenca: true }, grafo: f.grafo })
+    try { mk.definirAtivo(novo.id, true) } catch (e) { D.log('⚠️', `Fluxo pronto "${f.nome}" criado, mas não ligou: ${e.message}`) }
+    criados.push({ etapa: f.etapa, id: novo.id, nome: f.nome })
+    if (substituir || !fluxos[f.etapa] || !mk.obterFluxo(fluxos[f.etapa])) fluxos[f.etapa] = novo.id
+  }
+  const salvo = lerDado('teste')?.valor || {}
+  gravarDado('teste', { ...salvo, fluxos })
+  gravarDado('fluxos_teste', { versao: 1, criados, em: new Date().toISOString() })
+  D.log('🎬', `Fluxos prontos do teste grátis criados no Marketing: ${criados.map(c => c.id).join(', ')}`)
+  return criados
+}
+
+async function instalarFluxosTeste() {
+  try {
+    if (lerDado('fluxos_teste')?.valor?.versao) return
+    if (!fs.existsSync(PASTA_MIDIA_TESTE)) return
+    await criarFluxosProntosTeste(false)
+  } catch (e) { D.log('⚠️', 'Fluxos prontos do teste grátis não foram criados:', e.message) }
+}
+
 async function enviarMensagem(linha, manual) {
   const db = D.db
   const cfg = cfgTeste()
   if (!D.bot?.sendText) throw new Error('O WhatsApp de Suporte e Vendas não está disponível')
-  const r = await D.bot.sendText(linha.telefone, textoMensagem(linha, cfg), 1200)
+  const r = await enviarEtapa(linha, cfg, 'boasvindas', textoMensagem(linha, cfg))
   if (r && r.ok) {
     db.prepare("UPDATE testes_gratis SET msg_status='enviada', msg_enviada_em=datetime('now'), msg_erro=NULL, seq_ultimo_em=datetime('now') WHERE id=?").run(linha.id)
     D.log('🧪', `Mensagem de boas-vindas enviada: ${linha.restaurante} (${linha.telefone})`)
@@ -1132,8 +1285,6 @@ function mensalidadeBase(t) {
   if (plano !== 'fiscal' && t.valor_mensalidade !== null && t.valor_mensalidade !== undefined && t.valor_mensalidade !== '') valor = num(t.valor_mensalidade, valor)
   return Math.round(valor * 100) / 100
 }
-function diasEntre(de, ate) { return Math.round((Date.parse(ate + 'T12:00:00Z') - Date.parse(de + 'T12:00:00Z')) / 86400000) }
-
 // Loja pode receber a oferta? (cliente ativo, sem o adicional, fora do teste grátis, em dia)
 function upgradeElegivel(t, hoje) {
   if (!t || SLUGS_SISTEMA.has(String(t.slug || '')) || SLUGS_SISTEMA.has(String(t.id))) return false
@@ -1767,7 +1918,10 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin, valida
     try { visitas = resumoVisitas() } catch (e) { D.log('⚠️', 'Visitas do site:', e.message) }
     let compras = []
     try { compras = listarCompras() } catch (e) { D.log('⚠️', 'Compras do site:', e.message) }
-    send(res, 200, { ...listarTestes(), config: cfgParaPainel(cfg), hoje: hojeBR(), visitas, compras, compra: infoCompra(cfg) })
+    let fluxosMkt = []
+    try { fluxosMkt = D.marketing ? D.marketing.listarFluxos().map(f => ({ id: f.id, nome: f.nome, ativo: f.ativo })) : [] } catch {}
+    send(res, 200, { ...listarTestes(), config: cfgParaPainel(cfg), hoje: hojeBR(), visitas, compras, compra: infoCompra(cfg),
+      fluxos_mkt: fluxosMkt, canal_fluxos: !!(D.marketing && D.marketing.canalFluxosAtivo()), midia_teste: fs.existsSync(PASTA_MIDIA_TESTE) })
     return true
   }
 
@@ -1830,11 +1984,28 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin, valida
     if (body.meta_teste !== undefined) novo.meta_teste = String(body.meta_teste || '').trim().slice(0, 40)
     if (body.ia_teste !== undefined) novo.ia_teste = body.ia_teste === true
     if (body.compra_ativa !== undefined) novo.compra_ativa = body.compra_ativa === true
+    if (body.fluxos && typeof body.fluxos === 'object') {
+      novo.fluxos = { ...atual.fluxos }
+      for (const k of ETAPAS_FLUXO) {
+        if (body.fluxos[k] === undefined) continue
+        const n = parseInt(body.fluxos[k], 10)
+        if (n > 0 && D.marketing && !D.marketing.obterFluxo(n)) { send(res, 400, { error: 'O fluxo escolhido não existe mais. Atualize a página.' }); return true }
+        novo.fluxos[k] = n > 0 ? n : null
+      }
+    }
     if (body.aviso_wa_teste !== undefined) novo.aviso_wa_teste = body.aviso_wa_teste === true
     if (body.aviso_wa_clientes !== undefined) novo.aviso_wa_clientes = body.aviso_wa_clientes === true
     gravarDado('teste', novo)
     D.log('🧪', `Teste grátis no site: ${novo.ativo ? 'LIGADO' : 'desligado'} (${novo.dias} dias, até ${novo.limite_dia}/dia)`)
     send(res, 200, { ok: true, config: cfgParaPainel(cfgTeste()) })
+    return true
+  }
+
+  if (metodo === 'POST' && upath === '/api/admin/testes/fluxos-prontos') {
+    try {
+      const criados = await criarFluxosProntosTeste(true)
+      send(res, 200, { ok: true, criados, config: cfgParaPainel(cfgTeste()) })
+    } catch (e) { send(res, 400, { error: e.message }) }
     return true
   }
 
