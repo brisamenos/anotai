@@ -822,6 +822,9 @@ td{padding:12px 16px;color:#dce6f7}
         <span class="sb-icon"><svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="9" r="5"/><path d="M8 6.4V9l1.8 1.1M6.3 1.8h3.4M8 1.8V4"/></svg></span> Testes grátis
         <span id="nav-testes-badge" style="display:none;margin-left:auto;background:var(--success);color:#fff;font-size:10.5px;font-weight:800;border-radius:99px;min-width:19px;padding:1px 6px;text-align:center"></span>
       </button>
+      <button class="sb-item" id="nav-upgrade" onclick="navTo('upgrade')">
+        <span class="sb-icon"><svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8.6 1.5L3 9h4.4l-.9 5.5L13 7H8.6z"/></svg></span> Upgrade IA
+      </button>
       <button class="sb-item" id="nav-site" onclick="navTo('site')">
         <span class="sb-icon"><svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.8"/><path d="M2.2 8h11.6M8 2.2c1.9 2 1.9 9.6 0 11.6M8 2.2c-1.9 2-1.9 9.6 0 11.6"/></svg></span> Site
       </button>
@@ -1276,6 +1279,7 @@ td{padding:12px 16px;color:#dce6f7}
       <!-- Testes grátis e editor do site: montados por admin-site.js -->
       <div id="sec-testes" style="display:none" class="sec-page"></div>
       <div id="sec-site" style="display:none" class="sec-page"></div>
+      <div id="sec-upgrade" style="display:none" class="sec-page"></div>
 
       <!-- COMUNICADOS -->
       <div id="sec-comunicados" style="display:none" class="sec-page">
@@ -2570,6 +2574,18 @@ td{padding:12px 16px;color:#dce6f7}
       </div>
       <span style="font-size:11.5px;color:var(--muted)">Cliente manda áudio no WhatsApp e o sistema monta o pedido sozinho. Ao marcar, o valor entra automaticamente na próxima fatura deste cliente.</span>
     </div>
+    <div class="mrow2" style="margin-top:12px" id="cli-ia-teste-row">
+      <div class="mrow" style="margin:0">
+        <label class="mlabel" for="cli-ia-teste-ate">Teste do pedido por IA até <span style="color:var(--muted);font-weight:400">(opcional, sem cobrança)</span></label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <input class="minput" id="cli-ia-teste-ate" type="date" style="flex:1;min-width:150px">
+          <button type="button" class="btn bg" style="font-size:12px;padding:6px 10px" onclick="cliIaTesteDias(7)">7 dias</button>
+          <button type="button" class="btn bg" style="font-size:12px;padding:6px 10px" onclick="cliIaTesteDias(15)">15 dias</button>
+          <button type="button" class="btn bg" style="font-size:12px;padding:6px 10px" onclick="document.getElementById('cli-ia-teste-ate').value='';cliIaTesteStatus()">Encerrar</button>
+        </div>
+        <span id="cli-ia-teste-status" style="font-size:11.5px;color:var(--muted)">Libera o pedido por IA no WhatsApp para este cliente experimentar. No dia seguinte à data, desliga sozinho e não entra na fatura.</span>
+      </div>
+    </div>
     <div class="mrow2" style="margin-top:12px" id="cli-valor-validade-row">
       <div class="mrow" style="margin:0">
         <label class="mlabel">Preço personalizado válido até <span style="color:var(--muted);font-weight:400">(opcional — ex: promoção de 6 meses)</span></label>
@@ -3324,7 +3340,7 @@ function polishAdminUI(root = document) {
 window.addEventListener('DOMContentLoaded', () => polishAdminUI());
 
 function navTo(id) {
-  ['dash','clientes','ia','backup','saques','pix-geral','planos','comunicados','marketing','testes','site','faturamento','fiscal-uso','indicacoes','auditoria','icones','operacao'].forEach(s => {
+  ['dash','clientes','ia','backup','saques','pix-geral','planos','comunicados','marketing','testes','site','upgrade','faturamento','fiscal-uso','indicacoes','auditoria','icones','operacao'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
     if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
@@ -3334,6 +3350,7 @@ function navTo(id) {
   titles.marketing = 'Marketing';
   titles.testes = 'Testes grátis';
   titles.site = 'Site';
+  titles.upgrade = 'Upgrade IA';
   titles['pix-geral'] = 'Pix online geral';
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
@@ -3344,6 +3361,7 @@ function navTo(id) {
   if (id==='marketing')   { window.MKUI && MKUI.init(); }
   if (id==='testes')      { window.SITEUI && SITEUI.initTestes(); }
   if (id==='site')        { window.SITEUI && SITEUI.initSite(); }
+  if (id==='upgrade')     { window.SITEUI && SITEUI.initUpgrade && SITEUI.initUpgrade(); }
   if (id==='comunicados') { renderComunicadoTargetsAdmin(); carregarComunicadosAdmin(); }
   if (id==='faturamento') { carregarFaturamento(); }
   if (id==='fiscal-uso')  { carregarFiscalUso(); }
@@ -4103,6 +4121,8 @@ async function _abrirModalClienteAsync(id) {
   document.getElementById('m-cli-titulo').textContent = id ? 'Editar Cliente' : 'Novo Cliente';
   ['cli-id','cli-nome','cli-slug','cli-email','cli-senha','cli-gestor-nome','cli-expira','cli-valor-personalizado','cli-valor-expira','cli-telefone-cobranca'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
   document.getElementById('cli-voz-ativo').checked = false;
+  document.getElementById('cli-ia-teste-ate').value = '';
+  document.getElementById('cli-ia-teste-row').style.display = id ? '' : 'none';
   _atualizarLabelPrecoVoz();
   document.getElementById('cli-plano').value    = 'premium';
   document.getElementById('cli-segmento').value = 'restaurante';
@@ -4128,6 +4148,7 @@ async function _abrirModalClienteAsync(id) {
       document.getElementById('cli-valor-expira').value = c.valor_mensalidade_expira_em ? String(c.valor_mensalidade_expira_em).slice(0,10) : '';
       document.getElementById('cli-telefone-cobranca').value = c.telefone_cobranca || '';
       document.getElementById('cli-voz-ativo').checked = !!c.voz_ativo;
+      document.getElementById('cli-ia-teste-ate').value = c.ia_teste_ate ? String(c.ia_teste_ate).slice(0,10) : '';
     }
     try {
       const r = await fetch('/api/admin-backup/ia-config?tenant_id='+id, { headers: adminAuthHeader() });
@@ -4146,9 +4167,28 @@ async function _abrirModalClienteAsync(id) {
       }
     } catch(e) {}
   }
+  cliIaTesteStatus();
   abrirModal('m-cliente');
 }
 function editarCliente(id) { abrirModalCliente(id); }
+
+// Teste do pedido por IA para um cliente que já existe (sem cobrança)
+function _hojeBRISO() { return new Date(Date.now() - 3*3600*1000).toISOString().slice(0,10); }
+function cliIaTesteDias(n) {
+  const d = new Date(_hojeBRISO() + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n - 1);
+  document.getElementById('cli-ia-teste-ate').value = d.toISOString().slice(0,10);
+  cliIaTesteStatus();
+}
+function cliIaTesteStatus() {
+  const el = document.getElementById('cli-ia-teste-status'); if (!el) return;
+  const v = document.getElementById('cli-ia-teste-ate').value;
+  const padrao = 'Libera o pedido por IA no WhatsApp para este cliente experimentar. No dia seguinte à data, desliga sozinho e não entra na fatura.';
+  if (!v) { el.textContent = padrao; el.style.color = 'var(--muted)'; return; }
+  const br = v.split('-').reverse().join('/');
+  if (v >= _hojeBRISO()) { el.textContent = 'Teste liberado até ' + br + '. Clique em Salvar para valer.'; el.style.color = 'var(--success)'; }
+  else { el.textContent = 'O teste terminou em ' + br + '.'; el.style.color = 'var(--muted)'; }
+}
+document.addEventListener('change', e => { if (e.target && e.target.id === 'cli-ia-teste-ate') cliIaTesteStatus(); });
 
 async function salvarCliente() {
   const id         = document.getElementById('cli-id').value;
@@ -4169,12 +4209,13 @@ async function salvarCliente() {
   if (telefoneCobrancaRaw && telefoneCobrancaRaw.length !== 10 && telefoneCobrancaRaw.length !== 11) { toast('err','Telefone de cobrança inválido — use DDD + número (10 ou 11 dígitos)'); return; }
   const telefoneCobranca = telefoneCobrancaRaw || null;
   const vozAtivo = document.getElementById('cli-voz-ativo').checked;
+  const iaTesteAte = document.getElementById('cli-ia-teste-ate').value || null;
   if (!nome||!slug) { toast('err','Preencha nome e slug'); return; }
   if (!id && (!gestorNome||!email||!senha)) { toast('err','Preencha todos os dados do gestor'); return; }
   let error;
   if (id) {
-    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segmento, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira, telefone_cobranca: telefoneCobranca, voz_ativo: vozAtivo }).eq('id',id));
-    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segmento,valor_mensalidade:valorPersonalizado,valor_mensalidade_expira_em:valorExpira,telefone_cobranca:telefoneCobranca,voz_ativo:vozAtivo}; }
+    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segmento, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira, telefone_cobranca: telefoneCobranca, voz_ativo: vozAtivo, ia_teste_ate: iaTesteAte }).eq('id',id));
+    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segmento,valor_mensalidade:valorPersonalizado,valor_mensalidade_expira_em:valorExpira,telefone_cobranca:telefoneCobranca,voz_ativo:vozAtivo,ia_teste_ate:iaTesteAte}; }
     const iaKeyVal = (document.getElementById('cli-ia-key')?.value || '').trim();
     if (!error && iaKeyVal && !iaKeyVal.startsWith('•')) {
       try {

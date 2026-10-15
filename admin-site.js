@@ -426,6 +426,23 @@ body.theme-light .sa-chave span{background:#cbd5e1}
           </div>
         </div>
 
+        <div class="sa-msg ${c.aviso_wa_teste || c.aviso_wa_clientes ? '' : 'desligada'}">
+          <div class="sa-msg-topo">
+            <div><b>Aviso do robô para conectar o WhatsApp</b>
+              <div class="sa-dica" style="margin-top:3px">Quando o gestor abre o painel com o WhatsApp da loja desconectado, aparece um aviso com um robô animado e o botão "Conectar agora", que já abre o QR Code. Ao conectar, o Agente IA liga com todas as opções. Se o gestor tocar em "Agora não", o aviso volta no dia seguinte.</div></div>
+          </div>
+          <div class="sa-msg-topo" style="margin-top:12px">
+            <div><b style="font-weight:600">Para quem está em teste</b>
+              <div class="sa-dica" style="margin-top:3px">Teste grátis do site e clientes com teste da IA liberado em Clientes.</div></div>
+            <label class="toggle" title="${c.aviso_wa_teste ? 'Desligar o aviso para quem está em teste' : 'Ligar o aviso para quem está em teste'}"><input type="checkbox" id="sa-aviso-wa-teste" ${c.aviso_wa_teste ? 'checked' : ''} aria-label="Aviso do robô para quem está em teste"><span class="toggle-slider"></span></label>
+          </div>
+          <div class="sa-msg-topo" style="margin-top:12px">
+            <div><b style="font-weight:600">Para os clientes</b>
+              <div class="sa-dica" style="margin-top:3px">Todas as outras lojas que ainda não conectaram o WhatsApp.</div></div>
+            <label class="toggle" title="${c.aviso_wa_clientes ? 'Desligar o aviso para os clientes' : 'Ligar o aviso para os clientes'}"><input type="checkbox" id="sa-aviso-wa-clientes" ${c.aviso_wa_clientes ? 'checked' : ''} aria-label="Aviso do robô para os clientes"><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+
         <div class="sa-msg">
           <div class="sa-msg-topo">
             <div><b>Venda nos anúncios da Meta (API de Conversões)</b>
@@ -625,6 +642,14 @@ body.theme-light .sa-chave span{background:#cbd5e1}
       if (ev.target.id === 'sa-teste-ia') {
         const ligar = ev.target.checked;
         salvarConfig({ ia_teste: ligar }, ligar ? 'Atendente com IA liberada nos próximos testes' : 'Os próximos testes vêm sem a atendente com IA', true);
+      }
+      if (ev.target.id === 'sa-aviso-wa-teste') {
+        const ligar = ev.target.checked;
+        salvarConfig({ aviso_wa_teste: ligar }, ligar ? 'Aviso do robô ligado para quem está em teste' : 'Aviso do robô desligado para quem está em teste', true);
+      }
+      if (ev.target.id === 'sa-aviso-wa-clientes') {
+        const ligar = ev.target.checked;
+        salvarConfig({ aviso_wa_clientes: ligar }, ligar ? 'Aviso do robô ligado para os clientes' : 'Aviso do robô desligado para os clientes', true);
       }
       if (ev.target.id === 'sa-teste-msg-ativa') { T.rascunho['sa-teste-msg-ativa'] = ev.target.checked; renderTestes(); }
       if (ev.target.id === 'sa-teste-seq-ativa') { T.rascunho['sa-teste-seq-ativa'] = ev.target.checked; renderTestes(); }
@@ -1107,7 +1132,149 @@ body.theme-light .sa-chave span{background:#cbd5e1}
     if (!T.dados) carregarTestes(true);
   }
 
-  window.SITEUI = { initTestes, initSite, badge: () => carregarTestes(true), emTeste: EM_TESTE };
+  // ════════════════════════════════════════════════════
+  // UPGRADE IA — oferta de pedidos por IA para quem já é cliente
+  // ════════════════════════════════════════════════════
+  const U = { dados: null, carregando: false, filtro: 'todos' };
+  const brl = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+  async function carregarUpgrade() {
+    U.carregando = true;
+    try { U.dados = await api('GET', '/api/admin/upgrade-ia'); }
+    catch (e) { toast('err', e.message); }
+    U.carregando = false;
+    renderUpgrade();
+  }
+
+  function situacaoUpgrade(l, vezes) {
+    if (l.comprou_em) return `<span class="badge bg-green">Upgrade feito</span><div class="sa-sub">${horaLocal(l.comprou_em)}</div>`;
+    const p = l.pagamento;
+    if (p && p.status === 'pendente') return `<span class="badge bg-orange">Pix gerado</span><div class="sa-sub">${brl(p.valor)} aguardando</div>`;
+    if (p && p.status === 'erro') return '<span class="badge bg-red">Pago, não ativou</span><div class="sa-sub">ligue "Pedido por voz" em Clientes</div>';
+    if (l.clicou_em) return `<span class="badge bg-orange">Clicou em ativar</span><div class="sa-sub">viu ${l.vistas} de ${vezes}</div>`;
+    if (l.vistas >= vezes) return `<span class="badge bg-gray">Viu ${l.vistas} de ${vezes}</span><div class="sa-sub">não aparece mais</div>`;
+    if (l.vistas) return `<span class="badge bg-blue" style="background:rgba(59,130,246,.14);color:var(--accent)">Viu ${l.vistas} de ${vezes}</span><div class="sa-sub">última em ${dataBR(l.ultima_vista)}</div>`;
+    return '<span class="badge bg-gray">Ainda não viu</span>';
+  }
+
+  function renderUpgrade() {
+    const sec = $('sec-upgrade');
+    if (!sec) return;
+    const d = U.dados;
+    if (!d) { sec.innerHTML = `<div class="card"><div class="sa-dica">${U.carregando ? 'Carregando...' : 'Não foi possível carregar.'}</div></div>`; return; }
+    const c = d.config, r = d.resumo;
+    const lista = d.lista.filter(l => U.filtro === 'todos' ? true : U.filtro === 'feitos' ? !!l.comprou_em : !l.comprou_em);
+    const exBase = 99.90;
+    sec.innerHTML = `
+      <div class="card">
+        <div class="sa-liga">
+          <div>
+            <div class="sa-liga-titulo">Oferta de upgrade: pedidos por IA ${c.ativo ? (d.mp_ok ? '<span class="badge bg-green">Ligada</span>' : '<span class="badge bg-orange">Ligada, mas sem Mercado Pago</span>') : '<span class="badge bg-gray">Desligada</span>'}</div>
+            <div class="sa-liga-texto">Quando ligada, os clientes que ainda não têm os pedidos por IA veem ao abrir o painel uma tela mostrando como funciona, com a nova mensalidade e o valor proporcional para ativar hoje. Eles pagam por Pix na plataforma e o adicional liga sozinho, já entrando nas próximas faturas. Aparece no máximo uma vez por dia, até o limite de vezes abaixo, e fica sempre disponível na aba Agente IA do painel.</div>
+            ${!d.mp_ok ? '<div class="sa-dica" style="margin-top:8px;color:var(--orange);font-weight:600">O Mercado Pago da plataforma não está configurado: confira o token em Saques PIX > Mercado Pago.</div>' : ''}
+          </div>
+          <label class="sa-chave" title="${c.ativo ? 'Desligar a oferta' : 'Ligar a oferta'}">
+            <input type="checkbox" id="up-ativo" ${c.ativo ? 'checked' : ''} aria-label="Oferta de upgrade ligada">
+            <span></span>
+          </label>
+        </div>
+        <div class="up-cfg">
+          <div class="sa-campo"><label for="up-preco">Preço do adicional (por mês)</label><input class="minput" id="up-preco" inputmode="decimal" value="${String(d.preco.toFixed(2)).replace('.', ',')}"></div>
+          <div class="sa-campo"><label for="up-vezes">Mostrar para cada cliente</label><select class="minput" id="up-vezes">${[1, 2, 3, 4, 5].map(n => `<option value="${n}" ${n === c.vezes ? 'selected' : ''}>${n} ${plural(n, 'vez', 'vezes')}</option>`).join('')}</select></div>
+          <div class="sa-campo"><button class="btn bp" data-up="salvar" style="height:42px">Salvar</button></div>
+        </div>
+        <div class="sa-dica" style="margin-top:10px">Exemplo: uma mensalidade de ${brl(exBase)} passa para ${brl(exBase + d.preco)}. Este é o mesmo preço somado nas faturas de quem já tem o pedido por IA, então mudar aqui muda também a próxima fatura deles.</div>
+      </div>
+
+      <div class="stats-grid" style="margin:16px 0">
+        <div class="stat-card" style="--ca:var(--accent)"><div class="stat-card-label">Podem fazer o upgrade</div><div class="stat-card-val">${r.podem}</div><div class="stat-card-sub">clientes ativos sem a IA</div></div>
+        <div class="stat-card" style="--ca:#a855f7"><div class="stat-card-label">Já viram a oferta</div><div class="stat-card-val">${r.viram}</div><div class="stat-card-sub">${r.clicaram} ${plural(r.clicaram, 'clicou', 'clicaram')} em ativar</div></div>
+        <div class="stat-card" style="--ca:var(--success)"><div class="stat-card-label">Fizeram o upgrade</div><div class="stat-card-val">${r.fizeram}</div><div class="stat-card-sub">${brl(r.recebido)} recebidos na hora</div></div>
+        <div class="stat-card" style="--ca:var(--orange)"><div class="stat-card-label">Receita extra por mês</div><div class="stat-card-val" style="font-size:24px">${brl(r.receita_mes)}</div><div class="stat-card-sub">${r.com_adicional} ${plural(r.com_adicional, 'loja', 'lojas')} com o adicional</div></div>
+      </div>
+
+      <div class="card">
+        <div class="sa-vis-topo">
+          <div><div class="sa-liga-titulo">Clientes</div>
+            <div class="sa-liga-texto">Quanto cada um paga hoje, quanto passa a pagar e o valor proporcional para ativar.</div></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <div class="sa-filtros" role="group" aria-label="Filtrar clientes">
+              ${[['todos', 'Todos'], ['pendentes', 'Sem upgrade'], ['feitos', 'Com upgrade']].map(([k, l]) => `<button class="${U.filtro === k ? 'on' : ''}" data-up-filtro="${k}">${l}</button>`).join('')}
+            </div>
+            <button class="btn bg" data-up="todos" title="Zera a contagem de quem ainda não fez o upgrade">Mostrar de novo para todos</button>
+          </div>
+        </div>
+        ${lista.length ? `<div style="overflow-x:auto;margin-top:14px"><table>
+          <thead><tr><th>Loja</th><th>Mensalidade</th><th>Vencimento</th><th>Para ativar hoje</th><th>Oferta</th><th></th></tr></thead>
+          <tbody>${lista.map(l => `<tr>
+            <td><div class="sa-loja">${esc(l.nome)}</div></td>
+            <td>${l.comprou_em ? `<b>${brl(l.nova)}</b><div class="sa-sub">com IA</div>` : `${brl(l.base)} <span style="color:var(--muted)">para</span> <b>${brl(l.nova)}</b>`}</td>
+            <td>${l.vencimento ? dataBR(l.vencimento) : '—'}</td>
+            <td>${l.comprou_em ? '—' : brl(l.valor_hoje)}</td>
+            <td>${situacaoUpgrade(l, c.vezes)}</td>
+            <td style="text-align:right">${!l.comprou_em && l.vistas ? `<button class="btn bg" style="font-size:12px;padding:6px 10px" data-up="de-novo" data-id="${esc(l.id)}">Mostrar de novo</button>` : ''}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : `<div class="sa-dica" style="margin-top:14px">${U.filtro === 'feitos' ? 'Nenhum upgrade ainda.' : 'Nenhum cliente nesta lista.'}</div>`}
+      </div>
+
+      ${d.pagos.length ? `<div class="card" style="margin-top:16px">
+        <div class="sa-liga-titulo" style="font-size:16px">Pagamentos de upgrade</div>
+        <div style="overflow-x:auto;margin-top:12px"><table>
+          <thead><tr><th>Loja</th><th>Pago na hora</th><th>Nova mensalidade</th><th>Situação</th><th>Data</th></tr></thead>
+          <tbody>${d.pagos.map(p => `<tr><td><div class="sa-loja">${esc(p.nome || p.tenant_id)}</div></td><td>${brl(p.valor)}<div class="sa-sub">Pix</div></td><td>${brl(p.nova_mensalidade)}</td>
+            <td>${p.status === 'aprovado' ? '<span class="badge bg-green">Ativado</span>' : '<span class="badge bg-red">Pago, não ativou</span>'}</td><td>${horaLocal(p.aprovado_em)}</td></tr>`).join('')}</tbody>
+        </table></div></div>` : ''}`;
+  }
+
+  async function salvarUpgrade(parcial, msg) {
+    try { U.dados = await api('POST', '/api/admin/upgrade-ia/config', parcial); toast('ok', msg); }
+    catch (e) { toast('err', e.message); }
+    renderUpgrade();
+  }
+
+  function ligarUpgrade() {
+    const sec = $('sec-upgrade');
+    if (!sec || sec.dataset.ligado) return;
+    sec.dataset.ligado = '1';
+    sec.addEventListener('change', ev => {
+      if (ev.target.id === 'up-ativo') {
+        const ligar = ev.target.checked;
+        salvarUpgrade({ ativo: ligar }, ligar ? 'Oferta ligada: os clientes vão ver ao abrir o painel' : 'Oferta desligada');
+      }
+    });
+    sec.addEventListener('click', async ev => {
+      const f = ev.target.closest('[data-up-filtro]');
+      if (f) { U.filtro = f.dataset.upFiltro; renderUpgrade(); return; }
+      const b = ev.target.closest('[data-up]');
+      if (!b) return;
+      if (b.dataset.up === 'salvar') {
+        salvarUpgrade({ preco: $('up-preco').value, vezes: parseInt($('up-vezes').value, 10) }, 'Configuração do upgrade salva');
+      }
+      if (b.dataset.up === 'todos') {
+        if (!confirm('Mostrar a oferta de novo para todos que ainda não fizeram o upgrade? A contagem de vezes volta a zero.')) return;
+        try { U.dados = await api('POST', '/api/admin/upgrade-ia/mostrar-de-novo', { todos: true }); toast('ok', 'A oferta volta a aparecer para todos'); } catch (e) { toast('err', e.message); }
+        renderUpgrade();
+      }
+      if (b.dataset.up === 'de-novo') {
+        try { U.dados = await api('POST', '/api/admin/upgrade-ia/mostrar-de-novo', { tenant_id: b.dataset.id }); toast('ok', 'A oferta volta a aparecer para este cliente'); } catch (e) { toast('err', e.message); }
+        renderUpgrade();
+      }
+    });
+  }
+
+  function initUpgrade() {
+    css(); ligarUpgrade();
+    if (!$('up-css')) {
+      const st = document.createElement('style');
+      st.id = 'up-css';
+      st.textContent = '.up-cfg{display:grid;grid-template-columns:220px 200px max-content;justify-content:start;gap:12px;align-items:end;margin-top:18px;padding-top:18px;border-top:1px solid var(--border)}@media(max-width:700px){.up-cfg{grid-template-columns:1fr 1fr}.up-cfg .sa-campo:last-child{grid-column:1/-1}}';
+      document.head.appendChild(st);
+    }
+    renderUpgrade();
+    carregarUpgrade();
+  }
+
+  window.SITEUI = { initTestes, initSite, initUpgrade, badge: () => carregarTestes(true), emTeste: EM_TESTE };
 
   // contagem de testes ativos no menu assim que o painel abre
   const esperar = setInterval(() => {

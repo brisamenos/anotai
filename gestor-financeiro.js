@@ -1890,9 +1890,15 @@ function initSidebarState() {
   carregarWaServerUrl();
   // Carrega instância salva e verifica conexão já no boot da página
   // (não espera o usuário clicar na aba Robô)
-  evoCarregarInstancia().then(() => {
-    if (typeof waStatusRefresh === 'function') waStatusRefresh();
-    else if (EVO.instance) evoCheckStatus();
+  evoCarregarInstancia().then(async () => {
+    try {
+      if (typeof waStatusRefresh === 'function') await waStatusRefresh();
+      else if (EVO.instance) await evoCheckStatus();
+    } catch (e) {}
+    // Aviso do robô para conectar o WhatsApp (o admin liga em Site > Testes)
+    // e a oferta de upgrade dos pedidos por IA (o admin liga em Upgrade IA)
+    if (typeof avisosDoPainel === 'function') setTimeout(avisosDoPainel, 1500);
+    else if (typeof avisoWhatsappVerificar === 'function') setTimeout(avisoWhatsappVerificar, 1500);
   });
 }
 

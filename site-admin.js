@@ -78,7 +78,8 @@ const META_PIXEL_PADRAO = '3403468509829400' // pixel "estima" (conta de anúnci
 const META_PIXEL_ANTIGO = '1075636798774814' // pixel usado antes; quem salvou com ele passa a usar o novo
 const META_GRAPH = process.env.META_GRAPH_VERSION || 'v23.0'
 const TESTE_PADRAO = { ativo: false, dias: 7, limite_dia: 30, download_url: '', gestor_url: '', msg_ativa: true, msg_minutos: 2, msg_texto: MSG_PADRAO,
-  seq_ativa: true, seq: SEQ_PADRAO, meta_pixel: META_PIXEL_PADRAO, meta_token: '', meta_teste: '', ia_teste: true, compra_ativa: true }
+  seq_ativa: true, seq: SEQ_PADRAO, meta_pixel: META_PIXEL_PADRAO, meta_token: '', meta_teste: '', ia_teste: true, compra_ativa: true,
+  aviso_wa_teste: true, aviso_wa_clientes: false }
 const MSG_TENTATIVAS = 5        // quantas vezes tenta enviar antes de marcar como falha
 const MSG_NOVA_TENTATIVA = 5    // minutos entre uma tentativa e outra
 const MAX_CONTEUDO_BYTES = 600 * 1024
@@ -165,6 +166,30 @@ function init(deps) {
       conferido_em TEXT, aprovado_em TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_site_compras_mp ON site_compras(mp_payment_id);
+    -- upgrade para pedidos por IA (oferta no painel do gestor)
+    CREATE TABLE IF NOT EXISTS upgrade_ia_ofertas (
+      tenant_id TEXT PRIMARY KEY,
+      vistas INTEGER DEFAULT 0,
+      ultima_vista TEXT,
+      cliques INTEGER DEFAULT 0,
+      clicou_em TEXT,
+      comprou_em TEXT
+    );
+    CREATE TABLE IF NOT EXISTS upgrade_ia_pagamentos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chave TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      valor REAL, preco_mensal REAL, base_mensal REAL, nova_mensalidade REAL,
+      dias INTEGER, vencimento TEXT, inclui_proximo INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'pendente',
+      erro TEXT,
+      mp_payment_id TEXT, mp_ref TEXT,
+      qr_code TEXT, qr_code_base64 TEXT, pix_expira TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      conferido_em TEXT, aprovado_em TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_upgrade_ia_mp ON upgrade_ia_pagamentos(mp_payment_id);
+    CREATE INDEX IF NOT EXISTS idx_upgrade_ia_tenant ON upgrade_ia_pagamentos(tenant_id);
   `)
   try { D.db.prepare("DELETE FROM site_visitas WHERE dia < ?").run(somaDias(hojeBR(), -400)) } catch {}
   // Confere a cada minuto se há mensagem de boas-vindas na hora de sair
@@ -343,8 +368,35 @@ function cfgTeste() {
     meta_token: typeof salvo.meta_token === 'string' ? salvo.meta_token : '',
     meta_teste: typeof salvo.meta_teste === 'string' ? salvo.meta_teste.slice(0, 40) : '',
     ia_teste: salvo.ia_teste !== false,
-    compra_ativa: salvo.compra_ativa !== false
+    compra_ativa: salvo.compra_ativa !== false,
+    aviso_wa_teste: salvo.aviso_wa_teste !== false,
+    aviso_wa_clientes: salvo.aviso_wa_clientes === true
   }
+}
+
+// Aviso com o robô no painel do gestor pedindo para conectar o WhatsApp.
+// Quem está em teste (teste grátis do site ou teste da IA liberado pelo admin)
+// segue a chave "aviso_wa_teste"; os demais clientes seguem "aviso_wa_clientes".
+// O painel só mostra se o WhatsApp da loja estiver desconectado.
+function avisoWhatsapp(tenantId) {
+  const cfg = cfgTeste()
+  const hoje = hojeBR()
+  const t = D.db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId)
+  if (!t) return { mostrar: false }
+  let teste = null
+  try {
+    teste = D.db.prepare("SELECT status, expira_em, ia_teste FROM testes_gratis WHERE tenant_id=? AND status IN ('ativo','convertido') AND expira_em >= ? ORDER BY id DESC LIMIT 1").get(tenantId, hoje)
+  } catch (e) {}
+  const iaAte = t.ia_teste_ate && String(t.ia_teste_ate).slice(0, 10) >= hoje ? String(t.ia_teste_ate).slice(0, 10) : null
+  const emTeste = (!!teste && teste.status === 'ativo') || !!iaAte
+  const iaDoTeste = !!teste && !!teste.ia_teste
+  const pedidoIa = !!t.voz_ativo || iaDoTeste || !!iaAte
+  let iaLiberadaAte = null
+  if (!t.voz_ativo) {
+    const datas = [iaAte, iaDoTeste ? String(teste.expira_em).slice(0, 10) : null].filter(Boolean).sort()
+    iaLiberadaAte = datas.length ? datas[datas.length - 1] : null
+  }
+  return { mostrar: emTeste ? cfg.aviso_wa_teste : cfg.aviso_wa_clientes, em_teste: emTeste, pedido_ia: pedidoIa, ia_ate: iaLiberadaAte }
 }
 function downloadUrl(cfg) { return cfg.download_url || `${BASE_URL}/download` }
 function gestorUrl(cfg) { return cfg.gestor_url || `${BASE_URL}/login.html` }
@@ -450,6 +502,7 @@ async function processarMensagens() {
     if (fila.length) D.marcarDirty()
     await processarAcompanhamento(cfg)
     await conferirComprasPendentes()
+    await conferirUpgradesPendentes()
   } finally { _enviando = false }
 }
 
@@ -1015,9 +1068,11 @@ async function statusCompra(id, chave) {
 async function pagamentoDoSite(mpId, pd) {
   if (!D) return false
   const c = D.db.prepare('SELECT id FROM site_compras WHERE mp_payment_id=?').get(String(mpId))
-  if (!c) return false
-  await aplicarStatusMp(c.id, pd)
-  return true
+  if (c) { await aplicarStatusMp(c.id, pd); return true }
+  // upgrade para pedidos por IA pago pelo painel do gestor
+  const u = D.db.prepare('SELECT id FROM upgrade_ia_pagamentos WHERE mp_payment_id=?').get(String(mpId))
+  if (u) { await aplicarStatusUpgrade(u.id, pd); return true }
+  return false
 }
 
 // A cada minuto: Pix ainda pendentes (até 2 horas) e cartões em análise (até 3 dias)
@@ -1045,6 +1100,264 @@ function listarCompras() {
       c.created_at, c.aprovado_em, c.expira_em, c.tenant_id, t.nome AS loja
     FROM site_compras c LEFT JOIN tenants t ON t.id = c.tenant_id
     ORDER BY c.id DESC LIMIT 40`).all()
+}
+
+// ==================== Upgrade: pedidos por IA ====================
+// Oferta no painel do gestor para quem já é cliente ligar o adicional de
+// pedidos por IA (tenants.voz_ativo). O cliente paga hoje só a diferença
+// proporcional aos dias até o vencimento; daí em diante a fatura já vem com o
+// adicional (a cobrança automática soma o preco_addon_voz quando voz_ativo=1).
+const UPGRADE_PADRAO = { ativo: false, vezes: 3 }
+const PRECO_ADDON_PADRAO = 89.90
+const SLUGS_SISTEMA = new Set(['_global', '_admin', 'admin', 'system'])
+
+function cfgUpgrade() {
+  const s = lerDado('upgrade_ia')?.valor || {}
+  const vezes = parseInt(s.vezes, 10)
+  return { ativo: s.ativo === true, vezes: vezes >= 1 && vezes <= 10 ? vezes : UPGRADE_PADRAO.vezes }
+}
+function _globalIa() {
+  try { const r = D.db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); return r?.ia_config ? JSON.parse(r.ia_config) : {} } catch { return {} }
+}
+function precoAddonIa() {
+  const v = parseFloat(_globalIa().preco_addon_voz)
+  return Number.isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : PRECO_ADDON_PADRAO
+}
+// Mesma regra da cobrança automática: preço do plano ou o valor personalizado do cliente
+function mensalidadeBase(t) {
+  const g = _globalIa()
+  const num = (v, p) => { const n = parseFloat(v); return Number.isFinite(n) ? n : p }
+  const plano = t.plano === 'premium' ? 'premium' : (t.plano === 'fiscal' ? 'fiscal' : 'essencial')
+  let valor = plano === 'premium' ? num(g.preco_premium, 99.90) : (plano === 'fiscal' ? 159.90 : num(g.preco_essencial, 79.99))
+  if (plano !== 'fiscal' && t.valor_mensalidade !== null && t.valor_mensalidade !== undefined && t.valor_mensalidade !== '') valor = num(t.valor_mensalidade, valor)
+  return Math.round(valor * 100) / 100
+}
+function diasEntre(de, ate) { return Math.round((Date.parse(ate + 'T12:00:00Z') - Date.parse(de + 'T12:00:00Z')) / 86400000) }
+
+// Loja pode receber a oferta? (cliente ativo, sem o adicional, fora do teste grátis, em dia)
+function upgradeElegivel(t, hoje) {
+  if (!t || SLUGS_SISTEMA.has(String(t.slug || '')) || SLUGS_SISTEMA.has(String(t.id))) return false
+  if (!t.ativo || t.voz_ativo) return false
+  const venc = t.expires_at ? String(t.expires_at).slice(0, 10) : null
+  if (venc && venc < hoje) return false
+  try {
+    if (D.db.prepare("SELECT 1 FROM testes_gratis WHERE tenant_id=? AND status='ativo' AND expira_em >= ? LIMIT 1").get(t.id, hoje)) return false
+  } catch {}
+  return true
+}
+
+// Quanto custa o upgrade hoje para esta loja
+function calculoUpgrade(t, hoje) {
+  const preco = precoAddonIa()
+  const base = mensalidadeBase(t)
+  const venc = t.expires_at ? String(t.expires_at).slice(0, 10) : null
+  const dias = venc ? Math.max(1, diasEntre(hoje, venc)) : 30
+  let proporcional = Math.round(preco * dias / 30 * 100) / 100
+  // Fatura do próximo mês já gerada sem o adicional: o adicional desse mês entra agora
+  let faturaVenc = null
+  try {
+    const f = D.db.prepare("SELECT vence_em, created_at FROM faturas WHERE tenant_id=? AND status='pendente' AND created_at > datetime('now','-10 days') ORDER BY id DESC LIMIT 1").get(t.id)
+    if (f) faturaVenc = String(f.vence_em || venc || '').slice(0, 10) || null
+  } catch {}
+  const proximo = faturaVenc ? preco : 0
+  const total = Math.max(1, Math.round((proporcional + proximo) * 100) / 100)
+  return { preco, base, nova: Math.round((base + preco) * 100) / 100, vencimento: venc, dias, proporcional, inclui_proximo: !!faturaVenc, fatura_venc: faturaVenc, valor_hoje: total }
+}
+
+function ofertaDe(tid) {
+  return D.db.prepare('SELECT * FROM upgrade_ia_ofertas WHERE tenant_id=?').get(tid) || null
+}
+
+// O que o painel do gestor precisa saber
+function infoUpgrade(tid) {
+  const cfg = cfgUpgrade()
+  const hoje = hojeBR()
+  const t = D.db.prepare('SELECT * FROM tenants WHERE id=?').get(tid)
+  if (!t) return { disponivel: false }
+  if (t.voz_ativo) return { disponivel: false, ja_tem: true }
+  const temMp = !!(D.mpToken && D.mpToken())
+  if (!cfg.ativo || !temMp || !upgradeElegivel(t, hoje)) return { disponivel: false }
+  const o = ofertaDe(tid)
+  const mostrar = !(o && o.comprou_em) && (o?.vistas || 0) < cfg.vezes && o?.ultima_vista !== hoje
+  const iaAte = t.ia_teste_ate && String(t.ia_teste_ate).slice(0, 10) >= hoje ? String(t.ia_teste_ate).slice(0, 10) : null
+  const pend = D.db.prepare("SELECT * FROM upgrade_ia_pagamentos WHERE tenant_id=? AND status='pendente' ORDER BY id DESC LIMIT 1").get(tid)
+  return { disponivel: true, mostrar, ...calculoUpgrade(t, hoje), ia_teste_ate: iaAte, pendente: pend ? { id: pend.id, chave: pend.chave } : null }
+}
+
+function marcarVistaUpgrade(tid, acao) {
+  const hoje = hojeBR()
+  D.db.prepare('INSERT OR IGNORE INTO upgrade_ia_ofertas (tenant_id, vistas) VALUES (?, 0)').run(tid)
+  if (acao === 'vista') D.db.prepare('UPDATE upgrade_ia_ofertas SET vistas=vistas+1, ultima_vista=? WHERE tenant_id=? AND COALESCE(ultima_vista,\'\')<>?').run(hoje, tid, hoje)
+  if (acao === 'clique') D.db.prepare("UPDATE upgrade_ia_ofertas SET cliques=COALESCE(cliques,0)+1, clicou_em=COALESCE(clicou_em, datetime('now')) WHERE tenant_id=?").run(tid)
+  D.marcarDirty()
+}
+
+function respostaUpgrade(p) {
+  const out = { ok: true, id: p.id, chave: p.chave, status: p.status, valor: p.valor, nova: p.nova_mensalidade, vencimento: p.vencimento }
+  if (p.status === 'pendente') Object.assign(out, { qr_code: p.qr_code, qr_code_base64: p.qr_code_base64, pix_expira: p.pix_expira })
+  if (p.status === 'expirado') out.mensagem = 'O Pix venceu sem pagamento. Gere um novo para ativar.'
+  if (p.status === 'erro') out.mensagem = 'Recebemos o pagamento, mas a ativação não terminou sozinha. A nossa equipe já foi avisada e ativa em instantes.'
+  return out
+}
+
+async function iniciarUpgrade(req, tid) {
+  const info = infoUpgrade(tid)
+  if (!info.disponivel) return { http: 403, json: { error: info.ja_tem ? 'Os pedidos por IA já estão ativos na sua loja.' : 'O upgrade não está disponível agora. Fale com o suporte.' } }
+  const db = D.db
+  // Pix ainda válido com o mesmo valor: reaproveita
+  const atual = db.prepare("SELECT * FROM upgrade_ia_pagamentos WHERE tenant_id=? AND status='pendente' ORDER BY id DESC LIMIT 1").get(tid)
+  if (atual && Math.abs(atual.valor - info.valor_hoje) < 0.01 && atual.pix_expira && Date.parse(atual.pix_expira) > Date.now() + 3 * 60000) {
+    return { http: 200, json: respostaUpgrade(atual) }
+  }
+  const doDia = db.prepare("SELECT COUNT(*) AS c FROM upgrade_ia_pagamentos WHERE tenant_id=? AND created_at >= datetime('now','-1 day')").get(tid).c
+  if (doDia >= 10) return { http: 429, json: { error: 'Muitas tentativas hoje. Fale com o suporte para ativar.' } }
+  const t = db.prepare('SELECT * FROM tenants WHERE id=?').get(tid)
+  const u = db.prepare("SELECT nome, email FROM sys_users WHERE tenant_id=? AND email IS NOT NULL ORDER BY CASE WHEN role='gestor' THEN 0 ELSE 1 END LIMIT 1").get(tid) || {}
+  const email = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(u.email || '')) ? String(u.email) : 'pagamentos@estimafood.com.br'
+  const chave = crypto.randomBytes(16).toString('hex')
+  const ins = db.prepare(`INSERT INTO upgrade_ia_pagamentos (chave, tenant_id, valor, preco_mensal, base_mensal, nova_mensalidade, dias, vencimento, inclui_proximo)
+    VALUES (?,?,?,?,?,?,?,?,?)`).run(chave, tid, info.valor_hoje, info.preco, info.base, info.nova, info.dias, info.vencimento, info.inclui_proximo ? 1 : 0)
+  const id = ins.lastInsertRowid
+  const ref = 'upgrade-ia-' + id
+  const pn = String(u.nome || t?.nome || 'Cliente').trim().split(/\s+/)
+  try {
+    const mp = await mpPagamento('POST', '', {
+      transaction_amount: info.valor_hoje,
+      description: 'EstimaFood - pedidos por IA',
+      external_reference: ref,
+      notification_url: `${D.urlBase ? D.urlBase(req) : BASE_URL}/webhook/mercadopago`,
+      statement_descriptor: 'ESTIMAFOOD',
+      payment_method_id: 'pix',
+      date_of_expiration: isoBrasilia(Date.now() + PIX_MINUTOS * 60000),
+      payer: { email, first_name: pn[0], last_name: pn.slice(1).join(' ') || pn[0] }
+    }, ref)
+    if (!mp.ok || !mp.data?.id) {
+      db.prepare("UPDATE upgrade_ia_pagamentos SET status='falhou', erro=? WHERE id=?").run(String(mp.data?.message || mp.status).slice(0, 300), id)
+      D.log('❌', 'Upgrade IA: Pix não gerado:', mp.data?.message || mp.status)
+      return { http: 400, json: { error: 'Não foi possível gerar o Pix agora. Tente de novo em instantes.' } }
+    }
+    const d = mp.data
+    db.prepare('UPDATE upgrade_ia_pagamentos SET mp_payment_id=?, mp_ref=?, qr_code=?, qr_code_base64=?, pix_expira=? WHERE id=?')
+      .run(String(d.id), ref, d.point_of_interaction?.transaction_data?.qr_code || null, d.point_of_interaction?.transaction_data?.qr_code_base64 || null,
+        new Date(Date.now() + PIX_MINUTOS * 60000).toISOString(), id)
+    D.marcarDirty()
+    D.log('🤖', `Upgrade IA: Pix gerado para ${t?.nome} R$ ${info.valor_hoje.toFixed(2)} mp=${d.id}`)
+    if (d.status === 'approved') await finalizarUpgrade(id)
+    return { http: 200, json: respostaUpgrade(db.prepare('SELECT * FROM upgrade_ia_pagamentos WHERE id=?').get(id)) }
+  } catch (e) {
+    db.prepare("UPDATE upgrade_ia_pagamentos SET status='falhou', erro=? WHERE id=?").run(String(e.message).slice(0, 300), id)
+    D.log('❌', 'Upgrade IA falhou:', e.message)
+    return { http: 500, json: { error: 'Não foi possível gerar o Pix agora. Tente de novo em instantes.' } }
+  }
+}
+
+async function aplicarStatusUpgrade(id, pd) {
+  const p = D.db.prepare('SELECT * FROM upgrade_ia_pagamentos WHERE id=?').get(id)
+  if (!p || !pd) return
+  D.db.prepare("UPDATE upgrade_ia_pagamentos SET conferido_em=datetime('now') WHERE id=?").run(id)
+  const st = String(pd.status || '')
+  if (st === 'approved') return finalizarUpgrade(id)
+  if (p.status === 'pendente' && (st === 'cancelled' || st === 'expired' || st === 'rejected')) D.db.prepare("UPDATE upgrade_ia_pagamentos SET status='expirado' WHERE id=?").run(id)
+}
+
+async function finalizarUpgrade(id) {
+  const db = D.db
+  if (!db.prepare("UPDATE upgrade_ia_pagamentos SET status='processando' WHERE id=? AND status IN ('pendente','expirado','falhou')").run(id).changes) return
+  const p = db.prepare('SELECT * FROM upgrade_ia_pagamentos WHERE id=?').get(id)
+  try {
+    db.transaction(() => {
+      db.prepare('UPDATE tenants SET voz_ativo=1, ia_teste_ate=NULL WHERE id=?').run(p.tenant_id)
+      // Agente IA ligado com todas as opções (vale assim que o WhatsApp estiver conectado)
+      const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(p.tenant_id)
+      let ia = {}
+      try { ia = row?.ia_config ? JSON.parse(row.ia_config) : {} } catch {}
+      Object.assign(ia, { ativo: true, resp_cardapio: true, resp_pedido: true, resp_horario: true, resp_entrega: true, resp_promo: true })
+      if (row) db.prepare('UPDATE store_config SET ia_config=? WHERE tenant_id=?').run(JSON.stringify(ia), p.tenant_id)
+      else db.prepare('INSERT INTO store_config (tenant_id, ia_config) VALUES (?,?)').run(p.tenant_id, JSON.stringify(ia))
+      db.prepare('INSERT OR IGNORE INTO upgrade_ia_ofertas (tenant_id, vistas) VALUES (?, 0)').run(p.tenant_id)
+      db.prepare("UPDATE upgrade_ia_ofertas SET comprou_em=datetime('now') WHERE tenant_id=?").run(p.tenant_id)
+      db.prepare("UPDATE upgrade_ia_pagamentos SET status='aprovado', aprovado_em=datetime('now') WHERE id=?").run(id)
+    })()
+    D.marcarDirty()
+    try { setTimeout(() => D.fazerBackup(true), 2000) } catch {}
+    const t = db.prepare('SELECT nome FROM tenants WHERE id=?').get(p.tenant_id) || {}
+    const brl = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',')
+    D.log('🤖', `UPGRADE IA: ${t.nome} pagou ${brl(p.valor)}, nova mensalidade ${brl(p.nova_mensalidade)}`)
+    avisarAdmin(['*🤖 NOVO UPGRADE: PEDIDOS POR IA*', '', `*Loja:* ${t.nome || p.tenant_id}`, `*Pago hoje:* ${brl(p.valor)} (Pix)`,
+      `*Nova mensalidade:* ${brl(p.nova_mensalidade)}`, p.vencimento ? `*Próximo vencimento:* ${String(p.vencimento).split('-').reverse().join('/')}` : '',
+      '', '_O adicional já foi ligado no cadastro do cliente e entra nas próximas faturas._'].filter(l => l !== null).join('\n'))
+  } catch (e) {
+    db.prepare("UPDATE upgrade_ia_pagamentos SET status='erro', erro=? WHERE id=?").run(String(e.message).slice(0, 300), id)
+    D.log('❌', `Upgrade IA pago mas não ativado (id ${id}):`, e.message)
+    avisarAdmin(`*⚠️ UPGRADE DE IA COM PROBLEMA*\n\nO Pix do upgrade (id ${id}, loja ${p.tenant_id}) foi pago, mas a ativação falhou: ${e.message}\n\nLigue "Pedido por voz" no cadastro do cliente.`)
+  }
+}
+
+async function statusUpgrade(tid, id, chave) {
+  const p = id ? D.db.prepare('SELECT * FROM upgrade_ia_pagamentos WHERE id=? AND tenant_id=?').get(id, tid) : null
+  if (!p || !chave || p.chave !== chave) return { http: 404, json: { error: 'Pagamento não encontrado' } }
+  if (p.status === 'pendente' && p.mp_payment_id) {
+    const ultimo = p.conferido_em ? new Date(p.conferido_em.replace(' ', 'T') + 'Z').getTime() : 0
+    if (Date.now() - ultimo > 4000) {
+      try { const mp = await mpPagamento('GET', '/' + p.mp_payment_id); if (mp.ok) await aplicarStatusUpgrade(p.id, mp.data) } catch {}
+    }
+    const a = D.db.prepare('SELECT * FROM upgrade_ia_pagamentos WHERE id=?').get(p.id)
+    if (a.status === 'pendente' && a.pix_expira && Date.parse(a.pix_expira) < Date.now() - 60000) D.db.prepare("UPDATE upgrade_ia_pagamentos SET status='expirado' WHERE id=? AND status='pendente'").run(p.id)
+  }
+  return { http: 200, json: respostaUpgrade(D.db.prepare('SELECT * FROM upgrade_ia_pagamentos WHERE id=?').get(p.id)) }
+}
+
+async function conferirUpgradesPendentes() {
+  let linhas = []
+  try {
+    linhas = D.db.prepare(`SELECT id, mp_payment_id FROM upgrade_ia_pagamentos
+      WHERE mp_payment_id IS NOT NULL AND status='pendente' AND created_at >= datetime('now','-2 hours')
+        AND (conferido_em IS NULL OR conferido_em <= datetime('now','-90 seconds'))
+      ORDER BY id LIMIT 20`).all()
+  } catch { return }
+  for (const l of linhas) {
+    try { const mp = await mpPagamento('GET', '/' + l.mp_payment_id); if (mp.ok) await aplicarStatusUpgrade(l.id, mp.data) } catch {}
+  }
+  try { D.db.prepare("UPDATE upgrade_ia_pagamentos SET status='expirado' WHERE status='pendente' AND created_at < datetime('now','-2 hours')").run() } catch {}
+}
+
+// Painel do admin: lojas que podem receber a oferta e quem já fez o upgrade
+function painelUpgrade() {
+  const cfg = cfgUpgrade()
+  const hoje = hojeBR()
+  const tenants = D.db.prepare("SELECT * FROM tenants WHERE COALESCE(slug,'') NOT IN ('_global','_admin','admin','system') AND id NOT IN ('_global','system') ORDER BY nome COLLATE NOCASE").all()
+  const ofertas = new Map(D.db.prepare('SELECT * FROM upgrade_ia_ofertas').all().map(o => [o.tenant_id, o]))
+  const ultimoPag = new Map(D.db.prepare(`SELECT p.* FROM upgrade_ia_pagamentos p
+    JOIN (SELECT tenant_id, MAX(id) AS id FROM upgrade_ia_pagamentos GROUP BY tenant_id) u ON u.id = p.id`).all().map(p => [p.tenant_id, p]))
+  const lista = []
+  for (const t of tenants) {
+    const o = ofertas.get(t.id) || {}
+    const pag = ultimoPag.get(t.id) || null
+    const fezUpgrade = !!o.comprou_em
+    if (!fezUpgrade && !upgradeElegivel(t, hoje)) continue
+    const c = calculoUpgrade(t, hoje)
+    lista.push({ id: t.id, nome: t.nome, base: c.base, nova: c.nova, vencimento: c.vencimento, valor_hoje: c.valor_hoje,
+      vistas: o.vistas || 0, ultima_vista: o.ultima_vista || null, clicou_em: o.clicou_em || null, comprou_em: o.comprou_em || null,
+      voz_ativo: !!t.voz_ativo, pagamento: pag ? { status: pag.status, valor: pag.valor, created_at: pag.created_at, aprovado_em: pag.aprovado_em } : null })
+  }
+  const pagos = D.db.prepare(`SELECT p.id, p.tenant_id, p.valor, p.nova_mensalidade, p.preco_mensal, p.aprovado_em, p.status, t.nome
+    FROM upgrade_ia_pagamentos p LEFT JOIN tenants t ON t.id = p.tenant_id WHERE p.status IN ('aprovado','erro') ORDER BY p.id DESC LIMIT 50`).all()
+  const comAdicional = D.db.prepare("SELECT COUNT(*) AS c FROM tenants WHERE voz_ativo=1").get().c
+  const preco = precoAddonIa()
+  const pend = lista.filter(l => !l.comprou_em)
+  return {
+    config: cfg, preco, mp_ok: !!(D.mpToken && D.mpToken()), hoje,
+    resumo: {
+      podem: pend.length,
+      viram: pend.filter(l => l.vistas > 0).length,
+      clicaram: lista.filter(l => l.clicou_em).length,
+      fizeram: lista.filter(l => l.comprou_em).length,
+      com_adicional: comAdicional,
+      receita_mes: Math.round(comAdicional * preco * 100) / 100,
+      recebido: Math.round(pagos.filter(p => p.status === 'aprovado').reduce((s, p) => s + (p.valor || 0), 0) * 100) / 100
+    },
+    lista, pagos
+  }
 }
 
 // ==================== Visitas do site ====================
@@ -1167,7 +1480,7 @@ async function avisarAdmin(texto) {
 
 // ==================== Rotas ====================
 
-async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
+async function api(req, res, { upath, send, readBody, validarSessaoAdmin, validarSessaoGestor }) {
   const metodo = req.method
 
   // ── Público: conteúdo do site ──────────────────────────
@@ -1200,6 +1513,18 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
     const r = await statusCompra(parseInt(q.get('id'), 10) || 0, String(q.get('chave') || ''))
     res.setHeader('Cache-Control', 'no-store')
     send(res, r.http || 200, r.json)
+    return true
+  }
+
+  // ── Painel do gestor: mostrar o aviso para conectar o WhatsApp? ──
+  if (metodo === 'GET' && upath === '/api/site/aviso-whatsapp') {
+    const tid = String(req.headers['x-tenant-id'] || '').trim()
+    res.setHeader('Cache-Control', 'no-store')
+    if (!tid || tid === '_global') { send(res, 200, { mostrar: false }); return true }
+    let r = { mostrar: false }
+    try { r = avisoWhatsapp(tid) } catch (e) { D.log('⚠️', 'Aviso do WhatsApp:', e.message) }
+    try { if (r.mostrar && !r.pedido_ia) r.upgrade = !!infoUpgrade(tid).disponivel } catch {}
+    send(res, 200, r)
     return true
   }
 
@@ -1294,9 +1619,84 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
     return true
   }
 
+  // ── Painel do gestor: upgrade para pedidos por IA (exige login do gestor) ──
+  if (upath === '/api/site/upgrade-ia' || upath.startsWith('/api/site/upgrade-ia/')) {
+    const tid = String(req.headers['x-tenant-id'] || '').trim()
+    res.setHeader('Cache-Control', 'no-store')
+    const sess = tid && validarSessaoGestor ? validarSessaoGestor(req, tid) : null
+    if (!tid || !sess) { send(res, 401, { error: 'Entre de novo no painel para continuar.' }); return true }
+    try {
+      if (metodo === 'GET' && upath === '/api/site/upgrade-ia') { send(res, 200, infoUpgrade(tid)); return true }
+      if (metodo === 'POST' && upath === '/api/site/upgrade-ia/vista') {
+        let body = {}
+        try { body = await readBody(req, 1024) } catch {}
+        if (infoUpgrade(tid).disponivel) marcarVistaUpgrade(tid, body.acao === 'clique' ? 'clique' : 'vista')
+        send(res, 200, { ok: true }); return true
+      }
+      if (metodo === 'POST' && upath === '/api/site/upgrade-ia/pagar') {
+        const r = await iniciarUpgrade(req, tid)
+        send(res, r.http || 200, r.json); return true
+      }
+      if (metodo === 'GET' && upath === '/api/site/upgrade-ia/pagamento') {
+        const q = new URL(req.url, 'http://x').searchParams
+        const r = await statusUpgrade(tid, parseInt(q.get('id'), 10) || 0, String(q.get('chave') || ''))
+        send(res, r.http || 200, r.json); return true
+      }
+    } catch (e) {
+      D.log('❌', 'Upgrade IA:', e.message)
+      send(res, 500, { error: 'Não foi possível concluir agora. Tente de novo em instantes.' }); return true
+    }
+    send(res, 404, { error: 'Não encontrado' }); return true
+  }
+
   // ── Daqui para baixo: só superadmin ────────────────────
-  if (!upath.startsWith('/api/admin/site') && !upath.startsWith('/api/admin/testes')) return false
+  if (!upath.startsWith('/api/admin/site') && !upath.startsWith('/api/admin/testes') && !upath.startsWith('/api/admin/upgrade-ia')) return false
   if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+
+  // ── Upgrade para pedidos por IA ────────────────────────
+  if (metodo === 'GET' && upath === '/api/admin/upgrade-ia') {
+    send(res, 200, painelUpgrade())
+    return true
+  }
+  if (metodo === 'POST' && upath === '/api/admin/upgrade-ia/config') {
+    const body = await readBody(req)
+    const atual = cfgUpgrade()
+    const novo = { ...atual }
+    if (body.ativo !== undefined) novo.ativo = body.ativo === true
+    if (body.vezes !== undefined) {
+      const v = parseInt(body.vezes, 10)
+      if (!(v >= 1 && v <= 10)) { send(res, 400, { error: 'Escolha de 1 a 10 vezes' }); return true }
+      novo.vezes = v
+    }
+    if (body.preco !== undefined) {
+      const p = parseFloat(String(body.preco).replace(',', '.'))
+      if (!(Number.isFinite(p) && p >= 1 && p <= 5000)) { send(res, 400, { error: 'Informe um preço válido para o adicional' }); return true }
+      const row = D.db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      let g = {}
+      try { g = row?.ia_config ? JSON.parse(row.ia_config) : {} } catch {}
+      g.preco_addon_voz = Math.round(p * 100) / 100
+      if (row) D.db.prepare("UPDATE store_config SET ia_config=? WHERE tenant_id='_global'").run(JSON.stringify(g))
+      else D.db.prepare("INSERT INTO store_config (tenant_id, ia_config) VALUES ('_global', ?)").run(JSON.stringify(g))
+      D.log('⚙️', `Preço do adicional de pedidos por IA: R$ ${g.preco_addon_voz}`)
+    }
+    gravarDado('upgrade_ia', novo)
+    D.log('🤖', `Oferta de upgrade IA: ${novo.ativo ? 'LIGADA' : 'desligada'} (até ${novo.vezes}x por cliente)`)
+    send(res, 200, painelUpgrade())
+    return true
+  }
+  if (metodo === 'POST' && upath === '/api/admin/upgrade-ia/mostrar-de-novo') {
+    const body = await readBody(req)
+    if (body.todos === true) {
+      D.db.prepare('UPDATE upgrade_ia_ofertas SET vistas=0, ultima_vista=NULL WHERE comprou_em IS NULL').run()
+    } else {
+      const tid = String(body.tenant_id || '')
+      if (!tid) { send(res, 400, { error: 'Loja não informada' }); return true }
+      D.db.prepare('UPDATE upgrade_ia_ofertas SET vistas=0, ultima_vista=NULL WHERE tenant_id=? AND comprou_em IS NULL').run(tid)
+    }
+    D.marcarDirty()
+    send(res, 200, painelUpgrade())
+    return true
+  }
 
   if (metodo === 'GET' && upath === '/api/admin/site') {
     const { conteudo, salvo, migrado } = conteudoAtual()
@@ -1430,6 +1830,8 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
     if (body.meta_teste !== undefined) novo.meta_teste = String(body.meta_teste || '').trim().slice(0, 40)
     if (body.ia_teste !== undefined) novo.ia_teste = body.ia_teste === true
     if (body.compra_ativa !== undefined) novo.compra_ativa = body.compra_ativa === true
+    if (body.aviso_wa_teste !== undefined) novo.aviso_wa_teste = body.aviso_wa_teste === true
+    if (body.aviso_wa_clientes !== undefined) novo.aviso_wa_clientes = body.aviso_wa_clientes === true
     gravarDado('teste', novo)
     D.log('🧪', `Teste grátis no site: ${novo.ativo ? 'LIGADO' : 'desligado'} (${novo.dias} dias, até ${novo.limite_dia}/dia)`)
     send(res, 200, { ok: true, config: cfgParaPainel(cfgTeste()) })

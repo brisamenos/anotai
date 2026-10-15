@@ -265,6 +265,7 @@ function _iniciarPollingWuz() {
       clearInterval(wuzQrInterval);
       wuzCheckStatus();
       sbToast('ok', 'WhatsApp conectado!');
+      iaAtivarTudoAoConectar();
       return;
     }
     const img = document.querySelector('#wuz-qr-area img');
@@ -442,7 +443,7 @@ function _iniciarPollingConexao() {
     tries++;
     const s = await EVO.req('GET', `/instance/connectionState/${EVO.instance}`);
     const state = s.data?.instance?.state||s.data?.state||'close';
-    if (state==='open') { clearInterval(evoQrInterval); evoConnected=true; _evoSetStatus('connected','Conectado'); _evoShowConnected(s.data?.instance?.profileName||'WhatsApp'); sbToast('ok',' WhatsApp conectado!'); iaRegistrarWebhook(); }
+    if (state==='open') { clearInterval(evoQrInterval); evoConnected=true; _evoSetStatus('connected','Conectado'); _evoShowConnected(s.data?.instance?.profileName||'WhatsApp'); sbToast('ok',' WhatsApp conectado!'); iaRegistrarWebhook(); iaAtivarTudoAoConectar(); }
     if (tries>30) clearInterval(evoQrInterval);
   }, 4000);
 }
@@ -731,6 +732,7 @@ async function iaCarregarConfig() {
     if (ia.horario_txt) { const el = document.getElementById('ia-horario-txt'); if(el) el.value = ia.horario_txt; }
     if (ia.entrega_txt) { const el = document.getElementById('ia-entrega-txt'); if(el) el.value = ia.entrega_txt; }
   } catch(e) { console.warn('iaCarregarConfig:', e); }
+  try { if (typeof upgradeIaCartao === 'function') upgradeIaCartao(); } catch (e) {}
 }
 
 function iaAtualizarStatus() {
@@ -775,6 +777,570 @@ async function iaSalvarConfig() {
   } catch(e) {
     sbToast('err', 'Erro ao salvar: ' + (e.message||JSON.stringify(e)));
   }
+}
+
+// Ao ler o QR Code e conectar o WhatsApp, o Agente IA liga sozinho com todas
+// as capacidades. Depois o gestor pode desligar o que quiser na aba Agente IA.
+async function iaAtivarTudoAoConectar() {
+  let iaAtual = {};
+  try {
+    const { data, error } = await sb.from('store_config').select('ia_config').single();
+    if (error || !data) throw new Error(error?.message || 'sem resposta');
+    iaAtual = data?.ia_config ? JSON.parse(data.ia_config) : {};
+  } catch(e) {
+    // Sem a configuração atual, gravar aqui apagaria o resto (PIX manual, chave etc.)
+    console.warn('iaAtivarTudoAoConectar: não leu a configuração atual', e);
+    return;
+  }
+  const ia = { ...iaAtual, ativo: true, resp_cardapio: true, resp_pedido: true, resp_horario: true, resp_entrega: true, resp_promo: true };
+  try {
+    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, ia_config: JSON.stringify(ia) });
+    if (error) throw error;
+  } catch(e) {
+    console.warn('iaAtivarTudoAoConectar: não salvou', e);
+    return;
+  }
+  ['ia-toggle-ativo','ia-resp-cardapio','ia-resp-pedido','ia-resp-horario','ia-resp-entrega','ia-resp-promo']
+    .forEach(id => document.getElementById(id)?.classList.add('on'));
+  iaAtualizarStatus();
+  sbToast('ok', 'Agente IA ativado com todas as opções');
+}
+
+// ═══════════════════════════════════════
+// AVISO DO ROBÔ: conectar o WhatsApp
+// O admin liga em Site > Testes (para quem está em teste e/ou para os clientes).
+// Aparece ao abrir o painel com o WhatsApp desconectado. "Agora não" esconde
+// até o dia seguinte.
+// ═══════════════════════════════════════
+function _avisoWaHoje() { return new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10); }
+function _avisoWaChave() { return 'estima_aviso_wa_' + (_sessao?.tenant_id || ''); }
+
+async function avisoWhatsappVerificar() {
+  try {
+    if (wuzConnected || evoConnected || document.getElementById('wa-aviso')) return;
+    const tid = _sessao?.tenant_id || '';
+    if (!tid) return;
+    try { if (localStorage.getItem(_avisoWaChave()) === _avisoWaHoje()) return; } catch (e) {}
+    const r = await fetch('/api/site/aviso-whatsapp', { headers: { 'x-tenant-id': tid } });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.mostrar) return;
+    if (wuzConnected || evoConnected) return;
+    avisoWhatsappMostrar(d);
+  } catch (e) { console.warn('avisoWhatsappVerificar:', e); }
+}
+
+function _avisoWaCss() {
+  if (document.getElementById('wa-aviso-css')) return;
+  const st = document.createElement('style');
+  st.id = 'wa-aviso-css';
+  st.textContent = `
+  #wa-aviso{position:fixed;inset:0;z-index:99990;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(8,15,12,.62);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+  #wa-aviso .wa-av-card{position:relative;width:100%;max-width:860px;max-height:calc(100vh - 32px);overflow:auto;display:grid;grid-template-columns:350px 1fr;background:var(--surface,#fff);color:var(--text,#101828);border-radius:26px;box-shadow:0 30px 80px rgba(0,0,0,.45);animation:waAvEntra .45s cubic-bezier(.2,.9,.3,1.15) both}
+  #wa-aviso .wa-av-vitrine{position:relative;overflow:hidden;background:radial-gradient(90% 70% at 30% 15%,#1c7a52 0%,#0f4a33 45%,#0a2e21 100%);padding:30px 24px;display:flex;align-items:center;justify-content:center;min-height:520px}
+  #wa-aviso .wa-av-vitrine::before{content:"";position:absolute;width:360px;height:360px;border-radius:50%;background:radial-gradient(circle,rgba(37,211,102,.35),transparent 65%);top:-120px;right:-140px}
+  #wa-aviso .wa-av-fone{position:relative;width:268px;height:470px;border-radius:38px;background:#0b141a;padding:9px;box-shadow:0 22px 50px rgba(0,0,0,.45),inset 0 0 0 1.5px rgba(255,255,255,.08)}
+  #wa-aviso .wa-av-tela{width:100%;height:100%;border-radius:30px;overflow:hidden;display:flex;flex-direction:column;background:#efeae2}
+  #wa-aviso .wa-av-topo-chat{display:flex;align-items:center;gap:9px;padding:12px 12px 10px;background:#0b5f4f;color:#fff}
+  #wa-aviso .wa-av-avatar{width:34px;height:34px;border-radius:50%;background:#e9fbe9;display:flex;align-items:center;justify-content:center;flex:0 0 34px}
+  #wa-aviso .wa-av-nome{font-size:13px;font-weight:700;line-height:1.2}
+  #wa-aviso .wa-av-status{font-size:11px;opacity:.82;line-height:1.3}
+  #wa-aviso .wa-av-chat{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:10px 9px 12px;overflow:hidden;background-color:#efeae2;background-image:radial-gradient(rgba(0,0,0,.035) 1px,transparent 1px);background-size:14px 14px}
+  #wa-aviso .wa-av-msg{max-width:84%;font-size:12px;line-height:1.38;padding:6px 8px 14px;border-radius:10px;position:relative;color:#111b21;box-shadow:0 1px .5px rgba(11,20,26,.13);animation:waAvMsg .32s ease-out both;word-wrap:break-word}
+  #wa-aviso .wa-av-msg.cli{align-self:flex-start;background:#fff;border-top-left-radius:3px}
+  #wa-aviso .wa-av-msg.ia{align-self:flex-end;background:#d9fdd3;border-top-right-radius:3px}
+  #wa-aviso .wa-av-hora{position:absolute;right:7px;bottom:3px;font-size:9.5px;color:#667781;display:flex;align-items:center;gap:2px}
+  #wa-aviso .wa-av-audio{display:flex;align-items:center;gap:7px;min-width:170px;padding-top:2px}
+  #wa-aviso .wa-av-play{width:26px;height:26px;border-radius:50%;background:#0b5f4f;display:flex;align-items:center;justify-content:center;flex:0 0 26px}
+  #wa-aviso .wa-av-onda{display:flex;align-items:center;gap:2px;height:22px;flex:1}
+  #wa-aviso .wa-av-onda i{display:block;width:2.5px;border-radius:2px;background:#8aa59c}
+  #wa-aviso .wa-av-dur{font-size:10px;color:#667781}
+  #wa-aviso .wa-av-digitando{align-self:flex-end;background:#d9fdd3;border-radius:10px;border-top-right-radius:3px;padding:9px 11px;display:flex;gap:4px;animation:waAvMsg .25s ease-out both}
+  #wa-aviso .wa-av-digitando i{width:6px;height:6px;border-radius:50%;background:#5c8f7e;animation:waAvDigita 1.1s ease-in-out infinite}
+  #wa-aviso .wa-av-digitando i:nth-child(2){animation-delay:.15s}#wa-aviso .wa-av-digitando i:nth-child(3){animation-delay:.3s}
+  #wa-aviso .wa-av-pedido{background:#fff;border-radius:8px;padding:8px 9px;margin:2px 0 4px;border:1px solid #c9ecd0}
+  #wa-aviso .wa-av-pedido b{display:flex;align-items:center;gap:5px;font-size:12px;color:#0b5f4f;margin-bottom:5px}
+  #wa-aviso .wa-av-pedido div{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#3b4a54;line-height:1.5}
+  #wa-aviso .wa-av-pedido .tot{border-top:1px dashed #c9d6cf;margin-top:4px;padding-top:4px;font-weight:700;color:#111b21}
+  #wa-aviso .wa-av-notif{position:absolute;left:16px;right:16px;bottom:22px;display:flex;align-items:center;gap:11px;background:rgba(255,255,255,.97);color:#101828;border-radius:16px;padding:11px 13px;box-shadow:0 14px 34px rgba(0,0,0,.35);opacity:0;transform:translateY(16px);transition:opacity .35s ease,transform .45s cubic-bezier(.2,.9,.3,1.2);pointer-events:none;z-index:2}
+  #wa-aviso .wa-av-notif.on{opacity:1;transform:none}
+  #wa-aviso .wa-av-notif-ic{width:36px;height:36px;border-radius:11px;background:#128C4A;display:flex;align-items:center;justify-content:center;flex:0 0 36px}
+  #wa-aviso .wa-av-notif strong{display:block;font-size:13px;line-height:1.25}
+  #wa-aviso .wa-av-notif div > span{display:block;font-size:11.5px;color:#667085;line-height:1.3}
+  #wa-aviso .wa-av-info{padding:40px 40px 30px;display:flex;flex-direction:column}
+  #wa-aviso .wa-av-selo{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:#0f7a3f;background:rgba(37,211,102,.13);border-radius:99px;padding:6px 12px 6px 9px;margin-bottom:16px}
+  #wa-aviso .wa-av-selo i{width:8px;height:8px;border-radius:50%;background:#25D366;box-shadow:0 0 0 0 rgba(37,211,102,.6);animation:waAvPulso 1.8s infinite}
+  #wa-aviso h2{font-size:28px;line-height:1.14;font-weight:800;letter-spacing:-.022em;margin:0 0 12px;text-wrap:balance}
+  #wa-aviso .wa-av-sub{font-size:14.5px;line-height:1.6;color:var(--muted,#667085);margin:0 0 22px;max-width:44ch}
+  #wa-aviso .wa-av-lista{list-style:none;margin:0 0 22px;padding:0;display:grid;gap:14px}
+  #wa-aviso .wa-av-lista li{display:flex;gap:12px;align-items:flex-start}
+  #wa-aviso .wa-av-ic{width:36px;height:36px;border-radius:11px;background:rgba(37,211,102,.12);color:#0f7a3f;display:flex;align-items:center;justify-content:center;flex:0 0 36px}
+  #wa-aviso .wa-av-lista strong{display:block;font-size:14px;line-height:1.3;margin-top:1px}
+  #wa-aviso .wa-av-lista li > div > span{display:block;font-size:12.5px;line-height:1.45;color:var(--muted,#667085)}
+  #wa-aviso .wa-av-prazo{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#0f7a3f;background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.28);border-radius:12px;padding:9px 12px;margin:0 0 18px}
+  #wa-aviso .wa-av-extra{font-size:12.5px;line-height:1.5;color:var(--muted,#667085);border-left:3px solid #25D366;padding:2px 0 2px 10px;margin:0 0 18px}
+  #wa-aviso .wa-av-acoes{margin-top:auto}
+  #wa-aviso .wa-av-btn{width:100%;border:0;border-radius:14px;padding:15px 18px;font-size:15.5px;font-weight:800;cursor:pointer;background:#128C4A;color:#fff;display:flex;align-items:center;justify-content:center;gap:10px;font-family:inherit;box-shadow:0 10px 24px rgba(18,140,74,.32);transition:transform .15s ease,background .15s ease}
+  #wa-aviso .wa-av-btn:hover{background:#0f7a3f;transform:translateY(-1px)}
+  #wa-aviso .wa-av-nota{text-align:center;font-size:12px;color:var(--muted,#667085);margin:9px 0 0}
+  #wa-aviso .wa-av-depois{display:block;margin:4px auto 0;border:0;background:none;color:var(--muted,#667085);font-size:13px;font-weight:600;padding:8px 14px;cursor:pointer;font-family:inherit;border-radius:8px}
+  #wa-aviso .wa-av-depois:hover{color:var(--text,#101828)}
+  #wa-aviso .wa-av-x{position:absolute;top:14px;right:14px;z-index:3;width:36px;height:36px;border-radius:50%;border:0;background:rgba(16,24,40,.06);color:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  #wa-aviso .wa-av-x:hover{background:rgba(16,24,40,.12)}
+  #wa-aviso button:focus-visible{outline:3px solid rgba(37,211,102,.6);outline-offset:2px}
+  @keyframes waAvEntra{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
+  @keyframes waAvMsg{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+  @keyframes waAvDigita{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-3px);opacity:1}}
+  @keyframes waAvPulso{0%{box-shadow:0 0 0 0 rgba(37,211,102,.55)}70%{box-shadow:0 0 0 8px rgba(37,211,102,0)}100%{box-shadow:0 0 0 0 rgba(37,211,102,0)}}
+  @media (prefers-reduced-motion:reduce){#wa-aviso *{animation:none!important;transition:none!important}}
+  @media (max-width:760px){
+    #wa-aviso{padding:10px;align-items:flex-end}
+    #wa-aviso .wa-av-card{grid-template-columns:1fr;max-height:calc(100vh - 20px);border-radius:24px}
+    #wa-aviso .wa-av-vitrine{min-height:0;padding:18px 16px 14px}
+    #wa-aviso .wa-av-fone{width:262px;height:250px;border-radius:30px;padding:7px}
+    #wa-aviso .wa-av-tela{border-radius:24px}
+    #wa-aviso .wa-av-topo-chat{padding:9px 11px 8px}
+    #wa-aviso .wa-av-notif{left:12px;right:12px;bottom:10px;padding:9px 11px}
+    #wa-aviso .wa-av-info{padding:20px 20px 0}
+    #wa-aviso .wa-av-selo{margin-bottom:12px}
+    #wa-aviso h2{font-size:22px;margin-bottom:8px}
+    #wa-aviso .wa-av-sub{font-size:13.5px;margin-bottom:14px}
+    #wa-aviso .wa-av-lista{gap:10px;margin-bottom:14px}
+    #wa-aviso .wa-av-lista li{align-items:center}
+    #wa-aviso .wa-av-lista li > div > span{display:none}
+    #wa-aviso .wa-av-ic{width:32px;height:32px;flex-basis:32px;border-radius:10px}
+    #wa-aviso .wa-av-prazo{font-size:12.5px;margin-bottom:12px}
+    #wa-aviso .wa-av-acoes{position:sticky;bottom:0;margin:0 -20px;padding:12px 20px 10px;background:var(--surface,#fff);box-shadow:0 -10px 18px -12px rgba(16,24,40,.25)}
+    #wa-aviso .wa-av-x{background:rgba(255,255,255,.16);color:#fff}
+  }`;
+  document.head.appendChild(st);
+}
+
+const _AVISO_WA_ROBO = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><line x1="12" y1="2.5" x2="12" y2="5" stroke="#0b5f4f" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="2.3" r="1.5" fill="#25D366"/><rect x="4" y="5.5" width="16" height="13" rx="4.5" fill="#fff" stroke="#0b5f4f" stroke-width="1.4"/><rect x="6.5" y="8.3" width="11" height="6.6" rx="2.6" fill="#0b5f4f"/><circle cx="9.6" cy="11.5" r="1.25" fill="#4ade80"/><circle cx="14.4" cy="11.5" r="1.25" fill="#4ade80"/></svg>';
+
+function _avisoWaRoteiro(pedidoIa) {
+  if (!pedidoIa) return [
+    { de: 'cli', t: 'Oi! Que horas vocês abrem hoje?' },
+    { de: 'ia', t: 'Oi! Hoje abrimos às 18h e vamos até 23h.' },
+    { de: 'cli', t: 'Tem alguma promoção?' },
+    { de: 'ia', t: 'Tem sim: pizza grande + refrigerante 2L por R$ 59,90. Te mando o link do cardápio?' },
+    { de: 'cli', t: 'Manda!' },
+    { de: 'ia', t: 'Aqui está. É só escolher e finalizar pelo link.' }
+  ];
+  return [
+    { de: 'cli', t: 'Boa noite! Vocês entregam no Centro?' },
+    { de: 'ia', t: 'Boa noite! Entregamos sim, a taxa é R$ 5,00. Pode mandar seu pedido por texto ou áudio.' },
+    { de: 'cli', audio: '0:07' },
+    { de: 'ia', t: 'Entendi seu áudio: 1 pizza grande de calabresa e 1 Coca-Cola 2L. Posso confirmar?' },
+    { de: 'cli', t: 'Pode sim, pago no Pix' },
+    { de: 'ia', pedido: true }
+  ];
+}
+
+function _avisoWaHora() { return new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
+
+function _avisoWaBolha(m) {
+  const b = document.createElement('div');
+  b.className = 'wa-av-msg ' + m.de;
+  const vistos = m.de === 'ia' ? '<svg width="14" height="9" viewBox="0 0 16 10" fill="none" aria-hidden="true"><path d="M1 5.5l2.6 2.6L9.5 2M6.5 7.6l.6.6L13 2" stroke="#53bdeb" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
+  let corpo;
+  if (m.audio) {
+    const alturas = [6, 10, 14, 9, 17, 12, 7, 15, 19, 11, 8, 13, 16, 9, 6, 11, 14, 8, 5, 9];
+    corpo = `<div class="wa-av-audio"><span class="wa-av-play"><svg width="10" height="11" viewBox="0 0 10 11" aria-hidden="true"><path d="M1.5 1v9l7.5-4.5z" fill="#fff"/></svg></span><span class="wa-av-onda">${alturas.map(h => `<i style="height:${h}px"></i>`).join('')}</span><span class="wa-av-dur">${m.audio}</span></div>`;
+  } else if (m.pedido) {
+    corpo = `<div class="wa-av-pedido"><b><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="#25D366"/><path d="M4.8 8.2l2.1 2.1 4.3-4.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Pedido nº 128 confirmado</b><div><span>1 Pizza G Calabresa</span><span>R$ 54,90</span></div><div><span>1 Coca-Cola 2L</span><span>R$ 13,00</span></div><div><span>Entrega</span><span>R$ 5,00</span></div><div class="tot"><span>Total no Pix</span><span>R$ 72,90</span></div></div>Seu pedido já está na cozinha. Chega em 40 a 50 min.`;
+  } else corpo = m.t;
+  b.innerHTML = `${corpo}<span class="wa-av-hora">${_avisoWaHora()}${vistos}</span>`;
+  return b;
+}
+
+// Conversa animada dentro do celular. Devolve uma função que para a animação.
+function _avisoWaAnimar(el, roteiro, comPedido) {
+  const chat = el.querySelector('.wa-av-chat');
+  const status = el.querySelector('.wa-av-status');
+  const notif = el.querySelector('.wa-av-notif');
+  const timers = [];
+  const espera = (fn, ms) => timers.push(setTimeout(fn, ms));
+  let reduz = false;
+  try { reduz = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  if (reduz) {
+    roteiro.forEach(m => chat.appendChild(_avisoWaBolha(m)));
+    if (comPedido && notif) notif.classList.add('on');
+    return () => {};
+  }
+  let i = 0;
+  function passo() {
+    if (!document.body.contains(el)) return;
+    if (i >= roteiro.length) {
+      if (comPedido && notif) notif.classList.add('on');
+      espera(() => { if (notif) notif.classList.remove('on'); chat.innerHTML = ''; i = 0; espera(passo, 500); }, 5200);
+      return;
+    }
+    const m = roteiro[i++];
+    if (m.de === 'ia') {
+      if (status) status.textContent = 'digitando...';
+      const dig = document.createElement('div');
+      dig.className = 'wa-av-digitando';
+      dig.innerHTML = '<i></i><i></i><i></i>';
+      chat.appendChild(dig);
+      espera(() => { dig.remove(); if (status) status.textContent = 'online'; chat.appendChild(_avisoWaBolha(m)); espera(passo, m.pedido ? 900 : 1300); }, m.pedido ? 1700 : 1300);
+    } else {
+      chat.appendChild(_avisoWaBolha(m));
+      espera(passo, 1100);
+    }
+  }
+  espera(passo, 600);
+  return () => timers.forEach(clearTimeout);
+}
+
+function avisoWhatsappMostrar(info) {
+  _avisoWaCss();
+  const pedidoIa = !!info.pedido_ia;
+  const dataBR = s => String(s || '').slice(0, 10).split('-').reverse().slice(0, 2).join('/');
+  const ic = {
+    audio: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    painel: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="4" width="17" height="13" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 21h8M12 17v4M8 9.5l2.5 2.5L16 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    relogio: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    chat: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>'
+  };
+  const itens = pedidoIa ? [
+    [ic.audio, 'Entende texto e áudio', 'O cliente fala o pedido do jeito dele e a IA monta tudo certinho.'],
+    [ic.painel, 'Pedido cai direto no painel', 'Confirmado com o cliente, o pedido entra na sua tela pronto para a cozinha.'],
+    [ic.relogio, 'Atende 24 horas', 'Responde cardápio, horário, taxa de entrega e promoções, sem você parar o que está fazendo.']
+  ] : [
+    [ic.chat, 'Responde na hora', 'Cardápio, preços, horário, taxa de entrega e promoções.'],
+    [ic.relogio, 'Atende 24 horas', 'Nenhum cliente fica esperando, nem no horário de pico.'],
+    [ic.painel, 'Leva o cliente ao cardápio', 'Envia o link para o cliente escolher e finalizar o pedido.']
+  ];
+  const titulo = pedidoIa ? 'Seus pedidos pelo WhatsApp, anotados pela IA' : 'Atendimento com IA no WhatsApp da sua loja';
+  const sub = pedidoIa
+    ? 'Conecte o WhatsApp da loja e a IA atende seus clientes, monta o pedido e manda direto para o seu painel.'
+    : 'Conecte o WhatsApp da loja e a atendente com IA responde seus clientes na hora, a qualquer momento.';
+  const prazo = pedidoIa && info.ia_ate
+    ? `<div class="wa-av-prazo"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Pedido por IA liberado ${info.em_teste ? 'no seu teste ' : ''}até ${dataBR(info.ia_ate)}, sem custo</div>`
+    : '';
+  const extra = pedidoIa ? '' : (info.upgrade
+    ? '<div class="wa-av-extra">Quer que a IA também anote os pedidos por texto e áudio? <button type="button" data-wa-av="upgrade" style="border:0;background:none;padding:0;color:#0f7a3f;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer">Conheça os pedidos por IA</button></div>'
+    : '<div class="wa-av-extra">Quer que a IA também anote os pedidos por texto e áudio? Fale com o nosso suporte para liberar.</div>');
+
+  const el = document.createElement('div');
+  el.id = 'wa-aviso';
+  el.innerHTML = `
+    <div class="wa-av-card" role="dialog" aria-modal="true" aria-labelledby="wa-av-titulo">
+      <button class="wa-av-x" type="button" aria-label="Fechar" data-wa-av="depois"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+      <div class="wa-av-vitrine" aria-hidden="true">
+        <div class="wa-av-fone"><div class="wa-av-tela">
+          <div class="wa-av-topo-chat">
+            <span class="wa-av-avatar">${_AVISO_WA_ROBO}</span>
+            <div><div class="wa-av-nome">Atendente IA da loja</div><div class="wa-av-status">online</div></div>
+          </div>
+          <div class="wa-av-chat"></div>
+        </div></div>
+        ${pedidoIa ? `<div class="wa-av-notif"><span class="wa-av-notif-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 3.5h12v17l-3-2-3 2-3-2-3 2z" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 8.5h6M9 12h6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg></span><div><strong>Novo pedido nº 128 no painel</strong><span>Feito pela IA no WhatsApp, R$ 72,90</span></div></div>` : ''}
+      </div>
+      <div class="wa-av-info">
+        <div class="wa-av-selo"><i></i>${pedidoIa ? 'Pedidos por IA' : 'Atendente com IA'}</div>
+        <h2 id="wa-av-titulo">${titulo}</h2>
+        <p class="wa-av-sub">${sub}</p>
+        <ul class="wa-av-lista">${itens.map(([i, t, d]) => `<li><span class="wa-av-ic">${i}</span><div><strong>${t}</strong><span>${d}</span></div></li>`).join('')}</ul>
+        ${prazo}${extra}
+        <div class="wa-av-acoes">
+          <button class="wa-av-btn" type="button" data-wa-av="conectar"><svg width="19" height="19" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M9.5 9.5h1.5v1.5M13.5 9.5v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Conectar meu WhatsApp</button>
+          <p class="wa-av-nota">Leva menos de 1 minuto: é só ler um QR Code com o celular da loja.</p>
+          <button class="wa-av-depois" type="button" data-wa-av="depois">Agora não</button>
+        </div>
+      </div>
+    </div>`;
+  el.addEventListener('click', ev => {
+    const acao = ev.target.closest('[data-wa-av]')?.dataset.waAv;
+    if (acao === 'conectar') avisoWaConectar();
+    else if (acao === 'upgrade') { avisoWaFechar(true); upgradeIaAbrir(); }
+    else if (acao === 'depois' || ev.target === el) avisoWaFechar(true);
+  });
+  el.addEventListener('keydown', ev => { if (ev.key === 'Escape') avisoWaFechar(true); });
+  document.body.appendChild(el);
+  el._parar = _avisoWaAnimar(el, _avisoWaRoteiro(pedidoIa), pedidoIa);
+  setTimeout(() => el.querySelector('.wa-av-btn')?.focus({ preventScroll: true }), 80);
+}
+
+function avisoWaFechar(adiar) {
+  const el = document.getElementById('wa-aviso');
+  if (el) { try { el._parar && el._parar(); } catch (e) {} el.remove(); }
+  if (adiar) { try { localStorage.setItem(_avisoWaChave(), _avisoWaHoje()); } catch (e) {} }
+}
+// Abre a aba Conexão do Robô e já gera o QR Code
+async function avisoWaConectar() {
+  avisoWaFechar(false);
+  try {
+    if (typeof nav === 'function') nav('robo');
+    ['wp','auto','msgs','ia'].forEach(t => {
+      document.getElementById('robo-tab-'+t)?.classList.toggle('on', t === 'wp');
+      const s = document.getElementById('robo-section-'+t);
+      if (s) s.style.display = t === 'wp' ? '' : 'none';
+    });
+    await waProviderInit();
+    if (wuzConnected || evoConnected) return;
+    if (document.getElementById('wuz-cards')?.style.display === 'block') await wuzConectar();
+    else if (EVO.instance) await evoConectar();
+  } catch (e) { console.warn('avisoWaConectar:', e); }
+}
+
+// ═══════════════════════════════════════
+// UPGRADE: PEDIDOS POR IA
+// O admin liga a oferta em Upgrade IA. Ela abre sozinha ao entrar no painel,
+// no máximo uma vez por dia e até o número de vezes que o admin escolheu.
+// O cliente paga por Pix só a diferença proporcional até o vencimento; com o
+// Pix aprovado, o adicional liga sozinho e entra nas próximas faturas.
+// ═══════════════════════════════════════
+function _upHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  if (_sessao?.tenant_id) h['x-tenant-id'] = _sessao.tenant_id;
+  if (_sessao?.token) h['Authorization'] = 'Bearer ' + _sessao.token;
+  return h;
+}
+async function _upApi(metodo, caminho, corpo) {
+  const r = await fetch('/api/site/upgrade-ia' + caminho, { method: metodo, headers: _upHeaders(), body: corpo ? JSON.stringify(corpo) : undefined });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || 'Não foi possível concluir agora.');
+  return d;
+}
+const _upBRL = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const _upData = s => String(s || '').slice(0, 10).split('-').reverse().slice(0, 2).join('/');
+let _upInfo = null;
+
+async function upgradeIaInfo() {
+  try { _upInfo = await _upApi('GET', ''); } catch (e) { _upInfo = null; }
+  return _upInfo;
+}
+
+// Ao abrir o painel: primeiro a oferta de upgrade; se não for a vez dela, o aviso do WhatsApp
+async function avisosDoPainel() {
+  try {
+    const up = await upgradeIaInfo();
+    if (up?.disponivel && up.mostrar && !document.getElementById('wa-aviso')) { upgradeIaMostrar(up, true); return; }
+  } catch (e) {}
+  if (typeof avisoWhatsappVerificar === 'function') avisoWhatsappVerificar();
+}
+
+function _upCss() {
+  _avisoWaCss();
+  if (document.getElementById('wa-up-css')) return;
+  const st = document.createElement('style');
+  st.id = 'wa-up-css';
+  st.textContent = `
+  #wa-aviso.wa-up .wa-av-info{padding:36px 38px 26px}
+  #wa-aviso.wa-up h2{font-size:26px}
+  #wa-aviso.wa-up .wa-av-sub{margin-bottom:18px}
+  #wa-aviso.wa-up .wa-av-lista{gap:11px;margin-bottom:18px}
+  #wa-aviso .wa-up-preco{border:1px solid var(--border,#e4e7ec);border-radius:16px;padding:14px 16px;margin:0 0 12px}
+  #wa-aviso .wa-up-linha{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:13.5px;color:var(--muted,#667085);padding:3px 0}
+  #wa-aviso .wa-up-linha b{font-weight:700;color:var(--text,#101828);font-variant-numeric:tabular-nums}
+  #wa-aviso .wa-up-linha.add b{color:#0f7a3f}
+  #wa-aviso .wa-up-linha.total{border-top:1px solid var(--border,#e4e7ec);margin-top:7px;padding-top:10px;color:var(--text,#101828);font-weight:700;font-size:14.5px}
+  #wa-aviso .wa-up-linha.total b{font-size:20px;font-weight:800;letter-spacing:-.01em}
+  #wa-aviso .wa-up-linha.total small{font-size:12px;font-weight:600;color:var(--muted,#667085);margin-left:2px}
+  #wa-aviso .wa-up-hoje{display:flex;gap:12px;align-items:flex-start;background:rgba(37,211,102,.09);border:1px solid rgba(37,211,102,.3);border-radius:14px;padding:12px 14px;margin:0 0 18px}
+  #wa-aviso .wa-up-hoje-ic{width:34px;height:34px;border-radius:10px;background:#128C4A;color:#fff;display:flex;align-items:center;justify-content:center;flex:0 0 34px}
+  #wa-aviso .wa-up-hoje strong{display:block;font-size:14px;color:#0f5f33;line-height:1.3}
+  #wa-aviso .wa-up-hoje strong em{font-style:normal;font-size:17px}
+  #wa-aviso .wa-up-hoje p{margin:2px 0 0;font-size:12.5px;line-height:1.45;color:var(--muted,#667085)}
+  #wa-aviso .wa-up-voltar{align-self:flex-start;border:0;background:none;color:var(--muted,#667085);font:inherit;font-size:13px;font-weight:600;padding:4px 0;margin:-6px 0 12px;cursor:pointer;display:flex;align-items:center;gap:6px}
+  #wa-aviso .wa-up-valor{font-size:34px;font-weight:800;letter-spacing:-.02em;margin:0 0 4px;font-variant-numeric:tabular-nums}
+  #wa-aviso .wa-up-qr{display:flex;justify-content:center;margin:14px 0}
+  #wa-aviso .wa-up-qr img{width:196px;height:196px;border-radius:14px;border:1px solid var(--border,#e4e7ec);padding:8px;background:#fff}
+  #wa-aviso .wa-up-copiar{width:100%;border:1.5px solid #128C4A;background:transparent;color:#0f7a3f;border-radius:14px;padding:13px 16px;font:inherit;font-size:14.5px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px}
+  #wa-aviso .wa-up-copiar:hover{background:rgba(37,211,102,.08)}
+  #wa-aviso .wa-up-espera{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:600;margin:16px 0 6px}
+  #wa-aviso .wa-up-gira{width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(18,140,74,.25);border-top-color:#128C4A;animation:waUpGira .8s linear infinite;flex:0 0 18px}
+  #wa-aviso .wa-up-ok{width:64px;height:64px;border-radius:50%;background:#128C4A;color:#fff;display:flex;align-items:center;justify-content:center;margin:6px 0 18px;animation:waUpOk .5s cubic-bezier(.2,.9,.3,1.4) both;box-shadow:0 0 0 10px rgba(37,211,102,.14)}
+  #wa-aviso .wa-up-erro{font-size:13px;color:#b42318;background:rgba(240,68,56,.08);border-radius:10px;padding:9px 12px;margin:0 0 12px}
+  @keyframes waUpGira{to{transform:rotate(360deg)}}
+  @keyframes waUpOk{from{transform:scale(.4);opacity:0}to{transform:none;opacity:1}}
+  @media (max-width:760px){
+    #wa-aviso.wa-up .wa-av-info{padding:20px 20px 0}
+    #wa-aviso.wa-up h2{font-size:21px}
+    #wa-aviso .wa-up-preco{padding:11px 13px}
+    #wa-aviso .wa-up-linha.total b{font-size:18px}
+    #wa-aviso .wa-up-hoje{margin-bottom:12px}
+    #wa-aviso .wa-up-qr img{width:170px;height:170px}
+  }`;
+  document.head.appendChild(st);
+}
+
+const _UP_IC = {
+  audio: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  painel: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="4" width="17" height="13" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 21h8M12 17v4M8 9.5l2.5 2.5L16 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  relogio: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  raio: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13 2.5L4.5 13.5h6.5l-1 8 8.5-11h-6.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+  pix: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2.8l3.6 3.6-3.6 3.6-3.6-3.6zM12 14l3.6 3.6-3.6 3.6-3.6-3.6zM2.8 12l3.6-3.6L10 12l-3.6 3.6zM14 12l3.6-3.6 3.6 3.6-3.6 3.6z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+  copiar: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8" stroke="currentColor" stroke-width="1.8"/></svg>',
+  voltar: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  check: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+};
+
+function upgradeIaMostrar(info, automatico) {
+  if (!info?.disponivel) return;
+  avisoWaFechar(false);
+  _upCss();
+  const el = document.createElement('div');
+  el.id = 'wa-aviso';
+  el.className = 'wa-up';
+  el.innerHTML = `
+    <div class="wa-av-card" role="dialog" aria-modal="true" aria-labelledby="wa-av-titulo">
+      <button class="wa-av-x" type="button" aria-label="Fechar" data-up="fechar"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+      <div class="wa-av-vitrine" aria-hidden="true">
+        <div class="wa-av-fone"><div class="wa-av-tela">
+          <div class="wa-av-topo-chat">
+            <span class="wa-av-avatar">${_AVISO_WA_ROBO}</span>
+            <div><div class="wa-av-nome">Atendente IA da loja</div><div class="wa-av-status">online</div></div>
+          </div>
+          <div class="wa-av-chat"></div>
+        </div></div>
+        <div class="wa-av-notif"><span class="wa-av-notif-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 3.5h12v17l-3-2-3 2-3-2-3 2z" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 8.5h6M9 12h6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg></span><div><strong>Novo pedido nº 128 no painel</strong><span>Feito pela IA no WhatsApp, R$ 72,90</span></div></div>
+      </div>
+      <div class="wa-av-info"></div>
+    </div>`;
+  const pararChat = _avisoWaAnimar(el, _avisoWaRoteiro(true), true);
+  let pararPix = () => {};
+  el._parar = () => { pararChat(); pararPix(); };
+  const info$ = el.querySelector('.wa-av-info');
+  const focar = () => setTimeout(() => el.querySelector('.wa-av-btn, .wa-up-copiar')?.focus({ preventScroll: true }), 60);
+
+  function telaOferta(erro) {
+    const selo = info.ia_teste_ate ? `Seu teste da IA vai até ${_upData(info.ia_teste_ate)}` : 'Novo para a sua loja';
+    const hoje = `Proporcional ${info.vencimento ? `aos ${info.dias} dias até o seu vencimento em ${_upData(info.vencimento)}` : 'ao primeiro mês'}. Depois, a fatura já vem com o novo valor.${info.inclui_proximo ? ` Inclui o adicional da fatura de ${_upData(info.fatura_venc)}, que já foi gerada.` : ''}`;
+    info$.innerHTML = `
+      <div class="wa-av-selo"><i></i>${selo}</div>
+      <h2 id="wa-av-titulo">Ative os pedidos por IA no seu WhatsApp</h2>
+      <p class="wa-av-sub">A IA atende seus clientes, entende texto e áudio, monta o pedido e manda direto para o seu painel. Nenhum pedido fica sem resposta, nem no horário de pico.</p>
+      <ul class="wa-av-lista">
+        <li><span class="wa-av-ic">${_UP_IC.audio}</span><div><strong>Entende texto e áudio</strong><span>O cliente fala do jeito dele e a IA monta o pedido certinho.</span></div></li>
+        <li><span class="wa-av-ic">${_UP_IC.painel}</span><div><strong>Pedido cai direto no painel</strong><span>Confirmado com o cliente, entra na sua tela pronto para a cozinha.</span></div></li>
+        <li><span class="wa-av-ic">${_UP_IC.relogio}</span><div><strong>Atende 24 horas</strong><span>Cardápio, horário, taxa de entrega e promoções, sem você parar.</span></div></li>
+      </ul>
+      <div class="wa-up-preco">
+        <div class="wa-up-linha"><span>Sua mensalidade hoje</span><b>${_upBRL(info.base)}</b></div>
+        <div class="wa-up-linha add"><span>Pedidos por IA</span><b>+ ${_upBRL(info.preco)}</b></div>
+        <div class="wa-up-linha total"><span>Nova mensalidade</span><span><b>${_upBRL(info.nova)}</b><small>/mês</small></span></div>
+      </div>
+      <div class="wa-up-hoje"><span class="wa-up-hoje-ic">${_UP_IC.raio}</span><div><strong>Para ativar hoje: <em>${_upBRL(info.valor_hoje)}</em></strong><p>${hoje}</p></div></div>
+      ${erro ? `<div class="wa-up-erro" role="alert">${erro}</div>` : ''}
+      <div class="wa-av-acoes">
+        <button class="wa-av-btn" type="button" data-up="pagar">${_UP_IC.raio}Ativar pedidos por IA</button>
+        <p class="wa-av-nota">Pagamento por Pix. A IA liga assim que o Pix for aprovado.</p>
+        <button class="wa-av-depois" type="button" data-up="fechar">Agora não</button>
+      </div>`;
+  }
+
+  function telaPix(p) {
+    const temImg = !!p.qr_code_base64;
+    info$.innerHTML = `
+      <button class="wa-up-voltar" type="button" data-up="voltar">${_UP_IC.voltar}Voltar</button>
+      <div class="wa-av-selo"><i></i>Pix gerado</div>
+      <h2 id="wa-av-titulo">Pague com Pix para ativar</h2>
+      <div class="wa-up-valor">${_upBRL(p.valor)}</div>
+      <p class="wa-av-sub" style="margin-bottom:6px">Abra o app do seu banco, escolha Pix e ${temImg ? 'leia o QR Code ou ' : ''}use o código copia e cola.</p>
+      ${temImg ? `<div class="wa-up-qr"><img alt="QR Code do Pix" src="data:image/png;base64,${p.qr_code_base64}"></div>` : ''}
+      <div class="wa-up-espera" role="status"><span class="wa-up-gira"></span><span>Aguardando o pagamento<span data-up-tempo></span></span></div>
+      <p class="wa-av-sub" style="font-size:12.5px;margin-bottom:16px">Assim que o banco confirmar, os pedidos por IA ligam sozinhos. Pode deixar esta tela aberta.</p>
+      <div class="wa-av-acoes">
+        <button class="wa-up-copiar" type="button" data-up="copiar">${_UP_IC.copiar}<span>Copiar código Pix</span></button>
+        <button class="wa-av-depois" type="button" data-up="fechar">Pagar depois</button>
+      </div>`;
+    el._pix = p;
+    pararPix();
+    const fim = p.pix_expira ? Date.parse(p.pix_expira) : 0;
+    const relogio = setInterval(() => {
+      const t = info$.querySelector('[data-up-tempo]');
+      if (!t || !fim) return;
+      const s = Math.max(0, Math.round((fim - Date.now()) / 1000));
+      t.textContent = s > 0 ? ` (vence em ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')})` : '';
+    }, 1000);
+    const consulta = setInterval(async () => {
+      if (!document.body.contains(el)) { pararPix(); return; }
+      try {
+        const r = await _upApi('GET', `/pagamento?id=${p.id}&chave=${p.chave}`);
+        if (r.status === 'aprovado') { pararPix(); telaSucesso(r); }
+        else if (r.status === 'expirado' || r.status === 'erro') { pararPix(); telaOferta(r.mensagem); focar(); }
+      } catch (e) {}
+    }, 4000);
+    pararPix = () => { clearInterval(relogio); clearInterval(consulta); };
+  }
+
+  function telaSucesso(r) {
+    const conectado = (typeof wuzConnected !== 'undefined' && wuzConnected) || (typeof evoConnected !== 'undefined' && evoConnected);
+    _upInfo = { disponivel: false, ja_tem: true };
+    document.getElementById('ia-upgrade-card')?.remove();
+    info$.innerHTML = `
+      <div class="wa-up-ok">${_UP_IC.check}</div>
+      <h2 id="wa-av-titulo">Pedidos por IA ativados</h2>
+      <p class="wa-av-sub">A partir de agora a IA atende e anota os pedidos que chegam no WhatsApp da sua loja.${r.nova ? ` Sua mensalidade passa a ser ${_upBRL(r.nova)}${r.vencimento ? `, a partir do vencimento em ${_upData(r.vencimento)}` : ''}.` : ''}</p>
+      ${conectado ? '' : '<p class="wa-av-sub" style="margin-top:-8px">Falta só um passo: conectar o WhatsApp da loja lendo o QR Code.</p>'}
+      <div class="wa-av-acoes">
+        <button class="wa-av-btn" type="button" data-up="${conectado ? 'ver-ia' : 'conectar'}">${conectado ? 'Ver o Agente IA' : 'Conectar meu WhatsApp'}</button>
+        <button class="wa-av-depois" type="button" data-up="fechar">Fechar</button>
+      </div>`;
+    try { sbToast('ok', 'Pedidos por IA ativados!'); } catch (e) {}
+    focar();
+  }
+
+  async function pagar(btn) {
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="wa-up-gira" style="border-color:rgba(255,255,255,.35);border-top-color:#fff"></span>Gerando o Pix...'; }
+    _upApi('POST', '/vista', { acao: 'clique' }).catch(() => {});
+    try {
+      const p = await _upApi('POST', '/pagar', {});
+      if (p.status === 'aprovado') telaSucesso(p); else telaPix(p);
+      focar();
+    } catch (e) { telaOferta(e.message); focar(); }
+  }
+
+  async function copiar(btn) {
+    const cod = el._pix?.qr_code || '';
+    let ok = false;
+    try { await navigator.clipboard.writeText(cod); ok = true; } catch (e) {
+      try { const ta = document.createElement('textarea'); ta.value = cod; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); ta.remove(); } catch (e2) {}
+    }
+    const span = btn.querySelector('span');
+    if (span) { span.textContent = ok ? 'Código copiado' : 'Não foi possível copiar'; setTimeout(() => { if (span.isConnected) span.textContent = 'Copiar código Pix'; }, 2500); }
+  }
+
+  el.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-up]');
+    const acao = b?.dataset.up;
+    if (acao === 'pagar') pagar(b);
+    else if (acao === 'copiar') copiar(b);
+    else if (acao === 'voltar') { pararPix(); telaOferta(); focar(); }
+    else if (acao === 'conectar') avisoWaConectar();
+    else if (acao === 'ver-ia') { avisoWaFechar(false); try { nav('robo'); roboTab('ia'); } catch (e) {} }
+    else if (acao === 'fechar' || ev.target === el) avisoWaFechar(false);
+  });
+  el.addEventListener('keydown', ev => { if (ev.key === 'Escape') avisoWaFechar(false); });
+  telaOferta();
+  document.body.appendChild(el);
+  focar();
+  if (automatico) _upApi('POST', '/vista', { acao: 'vista' }).catch(() => {});
+}
+
+async function upgradeIaAbrir() {
+  const info = (_upInfo && _upInfo.disponivel) ? _upInfo : await upgradeIaInfo();
+  if (info?.disponivel) upgradeIaMostrar(info, false);
+  else sbToast('err', 'O upgrade não está disponível agora. Fale com o suporte.');
+}
+
+// Cartão fixo na aba Agente IA para quem ainda não tem os pedidos por IA
+async function upgradeIaCartao() {
+  const sec = document.getElementById('robo-section-ia');
+  if (!sec) return;
+  const info = await upgradeIaInfo();
+  document.getElementById('ia-upgrade-card')?.remove();
+  if (!info?.disponivel) return;
+  const c = document.createElement('div');
+  c.id = 'ia-upgrade-card';
+  c.style.cssText = 'display:flex;align-items:center;gap:14px;flex-wrap:wrap;max-width:700px;margin:0 0 16px;padding:16px 18px;border-radius:16px;background:linear-gradient(120deg,#0f4a33,#1c7a52);color:#fff;box-shadow:0 10px 26px rgba(15,74,51,.25)';
+  c.innerHTML = `<span style="width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;flex:0 0 42px">${_UP_IC.audio.replace('width="18" height="18"', 'width="20" height="20"')}</span>
+    <div style="flex:1;min-width:200px"><div style="font-size:15px;font-weight:800;margin-bottom:2px">Pedidos por IA no WhatsApp</div>
+    <div style="font-size:12.5px;opacity:.85;line-height:1.45">A IA entende texto e áudio e manda o pedido pronto para o seu painel. Por ${_upBRL(info.preco)} a mais na mensalidade.</div></div>
+    <button class="btn" type="button" onclick="upgradeIaAbrir()" style="background:#fff;color:#0f5f33;font-weight:800;border:0;padding:10px 16px;border-radius:11px">Conhecer e ativar</button>`;
+  sec.insertBefore(c, sec.firstChild);
 }
 
 // ── Busca cliente para retorno manual ──

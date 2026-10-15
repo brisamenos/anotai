@@ -9659,8 +9659,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ── Marketing: fluxos de mensagens e disparos (painel admin) ──
   // Site institucional (conteúdo editável) e contas de teste grátis — site-admin.js
   if (upath.startsWith('/api/site/') || upath === '/api/admin/site' || upath.startsWith('/api/admin/site/') ||
-      upath === '/api/admin/testes' || upath.startsWith('/api/admin/testes/')) {
-    return _site.api(req, res, { upath, send, readBody, validarSessaoAdmin })
+      upath === '/api/admin/testes' || upath.startsWith('/api/admin/testes/') ||
+      upath === '/api/admin/upgrade-ia' || upath.startsWith('/api/admin/upgrade-ia/')) {
+    return _site.api(req, res, { upath, send, readBody, validarSessaoAdmin, validarSessaoGestor })
   }
 
   if (upath === '/api/admin/marketing' || upath.startsWith('/api/admin/marketing/')) {

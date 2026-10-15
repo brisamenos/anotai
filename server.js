@@ -1283,6 +1283,8 @@ const MIGRATIONS = [
   ] },
   { version:91, description:'agendamento com horário escolhido pelo cliente (liga/desliga, dias à frente, antecedência e intervalo)', up:
     `ALTER TABLE store_config ADD COLUMN agendamento_config TEXT` },
+  { version:92, description:'teste do pedido por IA para clientes que já existem (admin libera até uma data, sem cobrança)', up:
+    `ALTER TABLE tenants ADD COLUMN ia_teste_ate TEXT` },
 ]
 
 function runMigrations() {
@@ -2512,7 +2514,7 @@ try {
 agendarResetDiarioPedidos()
 
 const TABLE_COLS = {
-  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca','voz_ativo'],
+  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca','voz_ativo','ia_teste_ate'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','pedido_minimo_retirada','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento','tablet_splash_bg_url','promo_automatica','agendamento_config'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','image_url','sort_order','ativo'],
@@ -6693,14 +6695,16 @@ function _resolverOpenAIKey(tenantId) {
 // Pedido por IA (voz e texto no WhatsApp) liberado para a loja: add-on ligado
 // pelo admin (tenants.voz_ativo, entra na cobrança) OU teste grátis criado com a
 // atendente com IA, só até o último dia do teste (não entra em cobrança nenhuma).
-// Depois do teste, só o admin liga de novo.
+// Depois do teste, só o admin liga de novo. O admin também pode liberar um
+// teste para um cliente que já existe (tenants.ia_teste_ate), sem cobrança.
 function _vozLiberadaRow(tenantId) {
   try {
-    const t = db.prepare('SELECT voz_ativo FROM tenants WHERE id=?').get(tenantId)
+    const t = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId)
     if (!t) return null
     if (t.voz_ativo) return { voz_ativo: 1 }
+    const hojeBR = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10)
+    if (t.ia_teste_ate && String(t.ia_teste_ate).slice(0, 10) >= hojeBR) return { voz_ativo: 1, teste: true }
     try {
-      const hojeBR = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10)
       const g = db.prepare("SELECT 1 AS ok FROM testes_gratis WHERE tenant_id=? AND ia_teste=1 AND status IN ('ativo','convertido') AND expira_em >= ? LIMIT 1").get(tenantId, hojeBR)
       if (g) return { voz_ativo: 1, teste: true }
     } catch (e) { /* tabela de testes ainda não existe */ }
