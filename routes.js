@@ -1173,6 +1173,21 @@ async function _enviarLembreteFatura(db, t, fatura) {
   if (!telefone) return { ok: false, erro: 'Cliente sem telefone de cobrança nem WhatsApp da loja cadastrado' }
   const valorTxt = parseFloat(fatura.valor).toFixed(2).replace('.', ',')
   const venceEmTxt = fatura.vence_em ? new Date(fatura.vence_em + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
+  // Loja no teste grátis: mensagem própria, para convencer a ativar (o texto é
+  // editado no admin em Testes grátis). Quem já é cliente segue no lembrete abaixo.
+  let msgTeste = null
+  try { msgTeste = _site.mensagemCobrancaTeste ? _site.mensagemCobrancaTeste(t, fatura) : null } catch (_) {}
+  if (msgTeste) {
+    const r = await _svBot.sendText(telefone, msgTeste)
+    if (!r?.ok) return { ok: false, erro: r?.error || r?.data?.message || 'O WhatsApp recusou o envio' }
+    if (fatura.qr_code) {
+      await new Promise(res => setTimeout(res, 1000))
+      await _svBot.sendText(telefone, 'Pix copia e cola para ativar:')
+      await _svBot.sendText(telefone, fatura.qr_code)
+    }
+    if (fatura.qr_code_base64) await _svBot.sendImage(telefone, fatura.qr_code_base64, `QR Code Pix para ativar: R$ ${valorTxt}`)
+    return { ok: true, teste: true }
+  }
   const msg = [
     `🧾 *Lembrete: sua mensalidade vence em breve*`,
     ``,
@@ -9368,7 +9383,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
         `_Após o pagamento, seu acesso é renovado automaticamente._ ✅`,
         `_Dúvidas? É só responder esta mensagem._`
       ]
-      const msg = linhas.join('\n')
+      let msg = linhas.join('\n')
+      // Loja ainda no teste grátis: a mensagem de ativação (texto editado no admin)
+      let msgTeste = null
+      try { msgTeste = _site.mensagemCobrancaTeste ? _site.mensagemCobrancaTeste(tenant, fatura) : null } catch (_) {}
+      if (msgTeste) msg = msgTeste + '\n\n' + (fatura.metodo === 'pix' ? '*Ative pelo Pix:* ' : '*Ative pelo cartão:* ') + (fatura.link_pagamento || '(link indisponível)')
 
       const instCob = _getInstanciaCobranca(db, EVO_INST)
       const r = await _svBot.sendText(telefone, msg)

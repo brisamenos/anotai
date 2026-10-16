@@ -274,6 +274,12 @@ body.theme-light .sa-chave span{background:#cbd5e1}
     const feitas = String(x.seq_enviados || '').split(',').filter(Boolean);
     let h = feitas.length ? `<div class="sa-sub">Acompanhamento: ${feitas.map(k => NOME_ETAPA[k] || k).join(', ')}</div>` : '';
     if (x.seq_erro) h += `<div class="sa-sub" title="${esc(x.seq_erro)}" style="color:var(--danger)">Acompanhamento não enviou</div>`;
+    const p = x.proxima_msg;
+    if (p) {
+      const hoje = T.dados?.hoje;
+      const quando = p.ja ? 'em instantes' : `${p.dia === hoje ? 'hoje' : dataBR(p.dia).slice(0, 5)} às ${p.hora}h`;
+      h += `<div class="sa-sub">Próxima: ${NOME_ETAPA[p.etapa] || p.etapa}, ${quando}</div>`;
+    }
     if (x.meta_compra_em) h += '<div class="sa-sub" style="color:var(--success);font-weight:600">Venda enviada à Meta</div>';
     else if (x.meta_compra_erro && !/não configurado/.test(x.meta_compra_erro)) h += `<div class="sa-sub" title="${esc(x.meta_compra_erro)}" style="color:var(--danger)">Venda não chegou à Meta</div>`;
     return h;
@@ -435,9 +441,11 @@ body.theme-light .sa-chave span{background:#cbd5e1}
         <div class="sa-msg ${seqAtiva ? '' : 'desligada'}">
           <div class="sa-msg-topo">
             <div><b>Acompanhamento do teste no WhatsApp</b>
-              <div class="sa-dica" style="margin-top:3px">Mensagens automáticas ao longo do teste, entre 9h e 20h, com pelo menos 12 horas entre uma e outra. Quem vira cliente para de receber.</div></div>
+              <div class="sa-dica" style="margin-top:3px">Uma mensagem por dia, sempre no horário escolhido abaixo (horário de Brasília). Quem se cadastra hoje recebe a do 1º dia amanhã nesse horário, a do 2º dia depois de amanhã e assim por diante. Quem vira cliente para de receber.</div></div>
             <label class="toggle" title="${seqAtiva ? 'Desligar o acompanhamento' : 'Ligar o acompanhamento'}"><input type="checkbox" id="sa-teste-seq-ativa" ${seqAtiva ? 'checked' : ''} aria-label="Acompanhamento do teste"><span class="toggle-slider"></span></label>
           </div>
+          <div class="sa-campo" style="max-width:260px;margin-top:12px"><label for="sa-teste-seq-hora">Horário de envio todos os dias</label>
+            <select class="minput" id="sa-teste-seq-hora">${Array.from({ length: 14 }, (_, i) => i + 6).map(h => `<option value="${h}" ${String(v('sa-teste-seq-hora', c.seq_hora ?? 9)) === String(h) ? 'selected' : ''}>${h}h</option>`).join('')}</select></div>
           ${avisoFluxos()}
           ${ETAPAS_UI.map(([k, rot]) => `
           <div class="sa-msg-corpo">
@@ -445,6 +453,15 @@ body.theme-light .sa-chave span{background:#cbd5e1}
             <div class="sa-campo"><textarea class="minput" id="sa-seq-${k}" maxlength="1500" style="min-height:130px" aria-label="${rot}">${esc(v('sa-seq-' + k, c.seq?.[k]))}</textarea></div>
           </div>`).join('')}
           <div class="sa-dica" style="margin-top:8px">Além dos códigos da mensagem de boas-vindas, aqui também vale {preco}: o preço do 1º mês mostrado no site.</div>
+        </div>
+
+        <div class="sa-msg">
+          <div class="sa-msg-topo">
+            <div><b>Cobrança no fim do teste</b>
+              <div class="sa-dica" style="margin-top:3px">Dois dias antes do fim do teste o sistema gera o Pix da mensalidade e manda no WhatsApp. Para quem está no teste vai esta mensagem, feita para convencer a ativar. Logo depois seguem o código Pix copia e cola e o QR Code. Quem já é cliente continua recebendo o lembrete normal de mensalidade.</div></div>
+          </div>
+          <div class="sa-campo" style="margin-top:12px"><label for="sa-teste-cobranca">Texto da mensagem</label><textarea class="minput" id="sa-teste-cobranca" maxlength="1500" style="min-height:220px">${esc(v('sa-teste-cobranca', c.cobranca_texto))}</textarea>
+            <div class="sa-dica">Use {nome}, {loja}, {valor}, {validade}, {produtos}, {pedidos} e {link_gestor}. O {resumo} vira uma frase pronta: quantos produtos e pedidos a loja já tem, ou um convite para montar o cardápio se ainda não tiver nenhum. <button class="sa-link" data-acao="cobranca-padrao">Voltar ao texto padrão</button></div></div>
         </div>
 
         <div class="sa-msg ${c.ia_teste ? '' : 'desligada'}">
@@ -644,7 +661,8 @@ body.theme-light .sa-chave span{background:#cbd5e1}
         dias: $('sa-teste-dias').value, limite_dia: $('sa-teste-limite').value,
         gestor_url: $('sa-teste-gestor').value.trim(), download_url: $('sa-teste-download').value.trim(),
         msg_ativa: $('sa-teste-msg-ativa').checked, msg_minutos: $('sa-teste-msg-min').value, msg_texto: $('sa-teste-msg-texto').value,
-        seq_ativa: $('sa-teste-seq-ativa').checked,
+        seq_ativa: $('sa-teste-seq-ativa').checked, seq_hora: $('sa-teste-seq-hora').value,
+        cobranca_texto: $('sa-teste-cobranca').value,
         seq: Object.fromEntries(ETAPAS_UI.map(([k]) => [k, $('sa-seq-' + k).value])),
         fluxos: Object.fromEntries(['boasvindas', ...ETAPAS_UI.map(([k]) => k)].map(k => [k, $('sa-fluxo-' + k) ? ($('sa-fluxo-' + k).value || null) : undefined]).filter(([, x]) => x !== undefined)),
         meta_pixel: $('sa-meta-pixel').value.trim(), meta_teste: $('sa-meta-teste').value.trim(),
@@ -656,6 +674,7 @@ body.theme-light .sa-chave span{background:#cbd5e1}
         api('POST', '/api/admin/testes/fluxos-prontos', {}).then(() => { toast('ok', 'Fluxos prontos criados e ligados às etapas'); ['boasvindas', ...ETAPAS_UI.map(([k]) => k)].forEach(k => delete T.rascunho['sa-fluxo-' + k]); carregarTestes(); }).catch(e => toast('err', e.message));
         return;
       }
+      if (a.dataset.acao === 'cobranca-padrao') { T.rascunho['sa-teste-cobranca'] = T.dados.config.cobranca_padrao || ''; renderTestes(); }
       if (a.dataset.acao === 'msg-padrao') { T.rascunho['sa-teste-msg-texto'] = T.dados.config.msg_padrao; renderTestes(); }
       if (a.dataset.acao === 'seq-padrao') { T.rascunho['sa-seq-' + a.dataset.etapa] = T.dados.config.seq_padrao?.[a.dataset.etapa] || ''; renderTestes(); }
       if (a.dataset.acao === 'senha') verSenha(id);
@@ -690,9 +709,10 @@ body.theme-light .sa-chave span{background:#cbd5e1}
       if (/^sa-fluxo-/.test(ev.target.id)) { T.rascunho[ev.target.id] = ev.target.value; renderTestes(); return; }
       if (ev.target.id === 'sa-teste-msg-ativa') { T.rascunho['sa-teste-msg-ativa'] = ev.target.checked; renderTestes(); }
       if (ev.target.id === 'sa-teste-seq-ativa') { T.rascunho['sa-teste-seq-ativa'] = ev.target.checked; renderTestes(); }
+      if (ev.target.id === 'sa-teste-seq-hora') { T.rascunho['sa-teste-seq-hora'] = ev.target.value; }
     });
     sec.addEventListener('input', ev => {
-      if (/^sa-teste-(dias|limite|gestor|download|msg-min|msg-texto)$/.test(ev.target.id) || /^sa-(seq-(dia1|dia2|dia3|dia5|vespera|expirou)|meta-(pixel|token|teste))$/.test(ev.target.id)) { T.rascunho[ev.target.id] = ev.target.value; return; }
+      if (/^sa-teste-(dias|limite|gestor|download|msg-min|msg-texto|cobranca)$/.test(ev.target.id) || /^sa-(seq-(dia1|dia2|dia3|dia5|vespera|expirou)|meta-(pixel|token|teste))$/.test(ev.target.id)) { T.rascunho[ev.target.id] = ev.target.value; return; }
       if (ev.target.id !== 'sa-teste-busca') return;
       T.busca = ev.target.value;
       const pos = ev.target.selectionStart;

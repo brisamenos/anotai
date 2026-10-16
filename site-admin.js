@@ -41,6 +41,23 @@ const MSG_PADRAO = [
   'Quer ajuda para montar o cardápio? É só responder esta mensagem.'
 ].join('\n')
 // Acompanhamento do teste: mensagens ao longo dos dias, pelo mesmo WhatsApp de Suporte e Vendas
+// Mensagem da cobrança para quem está no teste grátis (a fatura automática sai 2
+// dias antes do fim do teste). Cliente que já paga recebe o lembrete normal de
+// mensalidade; aqui o foco é convencer a ativar.
+const COBRANCA_TESTE_PADRAO = [
+  '*{nome}, a {loja} está pronta para continuar vendendo!*',
+  '',
+  'Seu teste grátis termina em *{validade}*. {resumo}',
+  '',
+  'Ative agora e continue com tudo o que você já montou: cardápio, pedidos, impressão automática e atendimento no WhatsApp.',
+  '',
+  '*Valor: R$ {valor} por mês.*',
+  '',
+  'É só pagar o Pix que vem logo abaixo. A ativação é na hora, sem precisar falar com ninguém.',
+  '',
+  'Ficou com alguma dúvida? Responda esta mensagem que a gente te ajuda.'
+].join('\n')
+
 const SEQ_PADRAO = {
   dia1: [
     'Oi, {nome}! Já montou o cardápio da *{loja}*?',
@@ -94,7 +111,7 @@ const META_PIXEL_PADRAO = '3403468509829400' // pixel "estima" (conta de anúnci
 const META_PIXEL_ANTIGO = '1075636798774814' // pixel usado antes; quem salvou com ele passa a usar o novo
 const META_GRAPH = process.env.META_GRAPH_VERSION || 'v23.0'
 const TESTE_PADRAO = { ativo: false, dias: 7, limite_dia: 30, download_url: '', gestor_url: '', msg_ativa: true, msg_minutos: 2, msg_texto: MSG_PADRAO,
-  seq_ativa: true, seq: SEQ_PADRAO, meta_pixel: META_PIXEL_PADRAO, meta_token: '', meta_teste: '', ia_teste: true, compra_ativa: true,
+  seq_ativa: true, seq_hora: 9, seq: SEQ_PADRAO, meta_pixel: META_PIXEL_PADRAO, meta_token: '', meta_teste: '', ia_teste: true, compra_ativa: true,
   aviso_wa_teste: true, aviso_wa_clientes: false }
 const MSG_TENTATIVAS = 5        // quantas vezes tenta enviar antes de marcar como falha
 const MSG_NOVA_TENTATIVA = 5    // minutos entre uma tentativa e outra
@@ -149,7 +166,15 @@ function init(deps) {
     fbp: 'TEXT', fbc: 'TEXT', ua: 'TEXT', origem_url: 'TEXT', ev_id: 'TEXT',
     meta_compra_em: 'TEXT', meta_compra_erro: 'TEXT',
     // atendente com IA (pedido por voz/texto no WhatsApp) liberada só durante o teste
-    ia_teste: 'INTEGER DEFAULT 0'
+    ia_teste: 'INTEGER DEFAULT 0',
+    // auditoria do teste: quando cada etapa foi vista pela primeira vez (UTC) e contagens
+    // atuais. Fica guardado aqui para o funil continuar certo mesmo depois que a loja de
+    // teste for apagada.
+    aud_painel_em: 'TEXT', aud_produtos_em: 'TEXT', aud_loja_em: 'TEXT', aud_whats_em: 'TEXT',
+    aud_pedido_em: 'TEXT', aud_pedido_real_em: 'TEXT', aud_ia_em: 'TEXT', aud_pagou_em: 'TEXT',
+    aud_ultimo_uso: 'TEXT', aud_em: 'TEXT',
+    aud_produtos: 'INTEGER DEFAULT 0', aud_fotos: 'INTEGER DEFAULT 0', aud_pedidos: 'INTEGER DEFAULT 0',
+    aud_pedidos_reais: 'INTEGER DEFAULT 0', aud_pedidos_ia: 'INTEGER DEFAULT 0', aud_conversas: 'INTEGER DEFAULT 0'
   }
   for (const [col, tipo] of Object.entries(novas)) {
     if (!existentes.has(col)) D.db.exec(`ALTER TABLE testes_gratis ADD COLUMN ${col} ${tipo}`)
@@ -214,43 +239,70 @@ function init(deps) {
   setTimeout(() => { processarMensagens().catch(() => {}) }, 20 * 1000)
   // fluxos prontos (vídeo, imagem e botões) do acompanhamento do teste, criados uma vez no Marketing
   setTimeout(() => { instalarFluxosTeste().catch(() => {}) }, 8 * 1000)
+  // auditoria do teste: anota as etapas de cada loja a cada 15 minutos
+  const relogioAud = setInterval(() => { try { atualizarAuditoria() } catch (e) { D.log('⚠️', 'Auditoria do teste falhou:', e.message) } }, 15 * 60 * 1000)
+  if (relogioAud.unref) relogioAud.unref()
+  setTimeout(() => { try { atualizarAuditoria() } catch {} }, 30 * 1000)
 }
 
 // ==================== Acompanhamento do teste ====================
-// Uma mensagem por vez, só entre 9h e 20h de Brasília, com pelo menos 12 horas
-// desde a última mensagem para a mesma pessoa. Quem já virou cliente ou teve o
+// Uma mensagem por dia para cada pessoa, a partir do horário escolhido no admin
+// (9h de Brasília por padrão) e até as 20h. A etapa é contada em dias do
+// calendário: quem se cadastrou hoje recebe a do 1º dia amanhã no horário, a do
+// 2º dia depois de amanhã e assim por diante. Quem já virou cliente ou teve o
 // teste apagado não recebe mais nada.
 function precoSite() {
   try { return String(conteudoAtual().conteudo?.precos?.atual || PADRAO.precos?.atual || '') } catch { return '' }
 }
+// dia (Brasília) de uma data gravada em UTC pelo SQLite ("AAAA-MM-DD HH:MM:SS")
+function diaBR(utc) {
+  const t = new Date(String(utc || '').replace(' ', 'T') + 'Z').getTime()
+  return isNaN(t) ? '' : new Date(t - 3 * 3600 * 1000).toISOString().slice(0, 10)
+}
+function horaAgoraBR() { return new Date(Date.now() - 3 * 3600 * 1000).getUTCHours() }
 function etapaDevida(l, hoje) {
   const feitas = new Set(String(l.seq_enviados || '').split(',').filter(Boolean))
-  const horas = (Date.now() - new Date(String(l.created_at).replace(' ', 'T') + 'Z').getTime()) / 3600000
+  const d = diasEntre(diaBR(l.created_at) || hoje, hoje)
   const vespera = somaDias(l.expira_em, -1)
   if (l.expira_em < hoje) {
     // terminou: só o recado de fim, e só nos 2 primeiros dias depois do prazo
     return !feitas.has('expirou') && diasEntre(l.expira_em, hoje) <= 2 ? 'expirou' : null
   }
   if (hoje >= vespera && !feitas.has('vespera')) return 'vespera'
-  if (horas >= 120 && !feitas.has('dia5') && hoje < vespera) return 'dia5'
-  if (horas >= 72 && !feitas.has('dia3') && hoje < vespera) return 'dia3'
-  if (horas >= 48 && !feitas.has('dia2') && hoje < vespera) return 'dia2'
-  if (horas >= 24 && !feitas.has('dia1') && hoje < vespera) return 'dia1'
+  if (d >= 5 && !feitas.has('dia5') && hoje < vespera) return 'dia5'
+  if (d >= 3 && !feitas.has('dia3') && hoje < vespera) return 'dia3'
+  if (d >= 2 && !feitas.has('dia2') && hoje < vespera) return 'dia2'
+  if (d >= 1 && !feitas.has('dia1') && hoje < vespera) return 'dia1'
+  return null
+}
+// Próxima mensagem do acompanhamento de um teste (para mostrar no admin)
+function proximaMensagem(l, cfg) {
+  if (!cfg.seq_ativa || l.status !== 'ativo') return null
+  const hoje = hojeBR(), hora = horaAgoraBR()
+  const enviouHoje = l.seq_ultimo_em && diaBR(l.seq_ultimo_em) === hoje
+  const inicio = (hora >= 20 || enviouHoje || l.msg_status === 'pendente') ? 1 : 0
+  for (let i = inicio; i <= 14; i++) {
+    const dia = somaDias(hoje, i)
+    const etapa = etapaDevida(l, dia)
+    if (etapa) return { etapa, dia, hora: cfg.seq_hora, ja: i === 0 && hora >= cfg.seq_hora }
+  }
   return null
 }
 async function processarAcompanhamento(cfg) {
   if (!cfg.seq_ativa || !D.bot?.sendText) return
-  const horaBR = new Date(Date.now() - 3 * 3600 * 1000).getUTCHours()
-  if (horaBR < 9 || horaBR >= 20) return
+  const horaBR = horaAgoraBR()
+  if (horaBR < cfg.seq_hora || horaBR >= 20) return
   sincronizarTestes()
   const hoje = hojeBR()
+  // no máximo uma mensagem por dia (de Brasília) para cada pessoa; se der erro,
+  // tenta de novo depois de 30 minutos
   const linhas = D.db.prepare(`
     SELECT * FROM testes_gratis
     WHERE status = 'ativo' AND COALESCE(msg_status,'') <> 'pendente'
-      AND (seq_ultimo_em IS NULL OR seq_ultimo_em <= datetime('now','-12 hours'))
-      AND (seq_tentativa_em IS NULL OR seq_tentativa_em <= datetime('now','-60 minutes'))
-    ORDER BY id LIMIT 200
-  `).all()
+      AND (seq_ultimo_em IS NULL OR date(seq_ultimo_em, '-3 hours') < ?)
+      AND (seq_tentativa_em IS NULL OR seq_tentativa_em <= datetime('now','-30 minutes'))
+    ORDER BY id LIMIT 300
+  `).all(hoje)
   let enviadas = 0
   for (const l of linhas) {
     if (enviadas >= 5) break // poucas por minuto, para o WhatsApp não estranhar
@@ -383,6 +435,7 @@ function cfgTeste() {
     msg_minutos: minutos >= 1 && minutos <= 1440 ? minutos : TESTE_PADRAO.msg_minutos,
     msg_texto: typeof salvo.msg_texto === 'string' && salvo.msg_texto.trim() ? salvo.msg_texto.slice(0, 1500) : MSG_PADRAO,
     seq_ativa: salvo.seq_ativa !== false,
+    seq_hora: (() => { const h = parseInt(salvo.seq_hora, 10); return h >= 6 && h <= 19 ? h : TESTE_PADRAO.seq_hora })(),
     seq: Object.fromEntries(SEQ_ETAPAS.map(k => [k, typeof salvo.seq?.[k] === 'string' && salvo.seq[k].trim() ? salvo.seq[k].slice(0, 1500) : SEQ_PADRAO[k]])),
     meta_pixel: /^\d{6,20}$/.test(String(salvo.meta_pixel || '')) && String(salvo.meta_pixel) !== META_PIXEL_ANTIGO ? String(salvo.meta_pixel) : META_PIXEL_PADRAO,
     meta_token: typeof salvo.meta_token === 'string' ? salvo.meta_token : '',
@@ -391,7 +444,8 @@ function cfgTeste() {
     compra_ativa: salvo.compra_ativa !== false,
     fluxos: Object.fromEntries(ETAPAS_FLUXO.map(k => { const n = parseInt(salvo.fluxos?.[k], 10); return [k, n > 0 ? n : null] })),
     aviso_wa_teste: salvo.aviso_wa_teste !== false,
-    aviso_wa_clientes: salvo.aviso_wa_clientes === true
+    aviso_wa_clientes: salvo.aviso_wa_clientes === true,
+    cobranca_texto: typeof salvo.cobranca_texto === 'string' && salvo.cobranca_texto.trim() ? salvo.cobranca_texto.slice(0, 1500) : COBRANCA_TESTE_PADRAO
   }
 }
 
@@ -425,7 +479,7 @@ function cfgParaPainel(cfg) {
   // o token da Meta nunca volta inteiro para a tela
   const { meta_token, ...resto } = cfg
   return { ...resto, meta_token_salvo: meta_token ? '••••' + meta_token.slice(-4) : '', download_padrao: `${BASE_URL}/download`, gestor_padrao: `${BASE_URL}/login.html`,
-    msg_padrao: MSG_PADRAO, seq_padrao: SEQ_PADRAO }
+    msg_padrao: MSG_PADRAO, seq_padrao: SEQ_PADRAO, cobranca_padrao: COBRANCA_TESTE_PADRAO }
 }
 
 // ── Senha do cadastro ───────────────────────────────────
@@ -505,6 +559,12 @@ async function enviarEtapa(l, cfg, etapa, texto) {
       await D.marketing.executarFluxoId(fid, l.telefone, { origem: 'teste_' + etapa, vars: varsTeste(l, cfg) })
       return { ok: true, fluxo: true }
     } catch (e) {
+      // se o fluxo já mandou parte das mensagens, não manda o texto por cima (a
+      // pessoa receberia duas vezes); o erro fica no log para corrigir o fluxo
+      if (e.parcial) {
+        D.log('⚠️', `Teste grátis: fluxo da etapa ${etapa} parou no meio (${e.message}); confira o fluxo no Marketing`)
+        return { ok: true, fluxo: true, parcial: true }
+      }
       D.log('⚠️', `Teste grátis: fluxo da etapa ${etapa} falhou (${e.message}); enviando o texto`)
     }
   }
@@ -1580,7 +1640,7 @@ function listarTestes() {
     SELECT g.id, g.tenant_id, g.nome, g.restaurante, g.telefone, g.email, g.dias, g.expira_em, g.status,
            g.convertido_em, g.created_at,
            g.msg_status, g.msg_em, g.msg_enviada_em, g.msg_erro,
-           g.seq_enviados, g.seq_erro, g.meta_compra_em, g.meta_compra_erro, g.ia_teste,
+           g.seq_enviados, g.seq_erro, g.seq_ultimo_em, g.meta_compra_em, g.meta_compra_erro, g.ia_teste,
            (g.senha_cifrada IS NOT NULL) AS tem_senha, t.voz_ativo,
            t.nome AS loja, t.slug, t.ativo AS loja_ativa, t.expires_at AS loja_expira,
            (SELECT COUNT(*) FROM orders o WHERE o.tenant_id = g.tenant_id) AS pedidos,
@@ -1590,9 +1650,12 @@ function listarTestes() {
     WHERE g.status IN ('ativo','convertido')
     ORDER BY g.id DESC LIMIT 500
   `).all()
+  const cfg = cfgTeste()
   const testes = linhas.map(l => {
     const situacao = l.status === 'convertido' ? 'cliente' : (l.expira_em >= hoje ? 'ativo' : 'expirado')
-    return { ...l, situacao, dias_restantes: l.status === 'ativo' ? diasEntre(hoje, l.expira_em) : null }
+    let proxima_msg = null
+    try { proxima_msg = proximaMensagem(l, cfg) } catch {}
+    return { ...l, situacao, dias_restantes: l.status === 'ativo' ? diasEntre(hoje, l.expira_em) : null, proxima_msg }
   })
   const ativos = testes.filter(t => t.situacao === 'ativo')
   const totalCriados = D.db.prepare('SELECT COUNT(*) AS c FROM testes_gratis').get().c
@@ -1606,6 +1669,255 @@ function listarTestes() {
       convertidos,
       total: totalCriados
     }
+  }
+}
+
+// ==================== Cobrança de quem está no teste ====================
+// Chamada pelo envio do lembrete de fatura (routes.js). Devolve o texto próprio do
+// teste grátis, ou null quando a loja não está em teste (aí vale o lembrete normal).
+function mensagemCobrancaTeste(t, fatura) {
+  if (!D || !t?.id) return null
+  const l = D.db.prepare("SELECT * FROM testes_gratis WHERE tenant_id=? AND status='ativo' ORDER BY id DESC LIMIT 1").get(t.id)
+  if (!l) return null
+  const cfg = cfgTeste()
+  const conta = (sql) => { try { return D.db.prepare(sql).get(t.id)?.n || 0 } catch { return 0 } }
+  const produtos = conta('SELECT COUNT(*) AS n FROM menu_items WHERE tenant_id=?')
+  const pedidos = conta('SELECT COUNT(*) AS n FROM orders WHERE tenant_id=?')
+  const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`
+  const resumo = produtos
+    ? `Você já cadastrou *${plural(produtos, 'produto', 'produtos')}*${pedidos ? ` e recebeu *${plural(pedidos, 'pedido', 'pedidos')}*` : ''}. Não deixe isso parar.`
+    : 'Ainda dá tempo de deixar o cardápio pronto: mande a foto do seu cardápio que a gente monta junto com você.'
+  const venc = String(fatura?.vence_em || l.expira_em || '').slice(0, 10)
+  const valores = {
+    nome: String(l.nome || '').split(' ')[0],
+    loja: l.restaurante || t.nome || '',
+    valor: Number(fatura?.valor || 0).toFixed(2).replace('.', ','),
+    validade: venc.split('-').reverse().join('/'),
+    resumo,
+    produtos: String(produtos),
+    pedidos: String(pedidos),
+    link_gestor: gestorUrl(cfg)
+  }
+  return String(cfg.cobranca_texto || COBRANCA_TESTE_PADRAO).replace(/\{(\w+)\}/g, (m, k) => (k in valores ? valores[k] : m))
+}
+
+// ==================== Auditoria do teste (funil) ====================
+// Para cada teste: até onde a pessoa chegou (entrou no painel, cadastrou produtos,
+// personalizou a loja, conectou o WhatsApp, recebeu pedidos, pagou) e quando.
+// Cada etapa guarda a primeira vez em que foi vista, então o histórico continua
+// valendo mesmo se a loja de teste for apagada depois.
+const ETAPAS_AUD = [
+  { k: 'painel', col: 'aud_painel_em', nome: 'Entrou no painel' },
+  { k: 'produtos', col: 'aud_produtos_em', nome: 'Cadastrou produtos' },
+  { k: 'loja', col: 'aud_loja_em', nome: 'Personalizou a loja' },
+  { k: 'whats', col: 'aud_whats_em', nome: 'Conectou o WhatsApp' },
+  { k: 'pedido', col: 'aud_pedido_em', nome: 'Recebeu um pedido' },
+  { k: 'pedido_real', col: 'aud_pedido_real_em', nome: 'Pedido de outro telefone' },
+  { k: 'ia', col: 'aud_ia_em', nome: 'Pedido feito pela IA' },
+  { k: 'pagou', col: 'aud_pagou_em', nome: 'Pagou' }
+]
+const sqlData = v => {
+  if (v == null || v === '') return null
+  const d = typeof v === 'number' ? new Date(v) : new Date(String(v).includes('T') ? String(v) : String(v).replace(' ', 'T') + 'Z')
+  return isNaN(d) ? null : d.toISOString().slice(0, 19).replace('T', ' ')
+}
+const fim8 = f => String(f || '').replace(/\D/g, '').slice(-8)
+
+function atualizarAuditoria() {
+  if (!D) return
+  const db = D.db
+  sincronizarTestes()
+  const linhas = db.prepare(`
+    SELECT g.id, g.tenant_id, g.telefone, g.status, g.convertido_em
+    FROM testes_gratis g JOIN tenants t ON t.id = g.tenant_id
+    WHERE g.status = 'ativo' OR (g.status = 'convertido' AND g.aud_pagou_em IS NULL)
+  `).all()
+  // quem já pagou fica com a foto do fim do teste (não precisa reler os pedidos de cliente)
+  if (!linhas.length) return
+  const q = {
+    prod: db.prepare("SELECT COUNT(*) AS n, SUM(CASE WHEN COALESCE(image_url,'') <> '' THEN 1 ELSE 0 END) AS fotos, MIN(created_at) AS primeiro FROM menu_items WHERE tenant_id=?"),
+    ped: db.prepare('SELECT phone, canal, created_at FROM orders WHERE tenant_id=? ORDER BY id'),
+    loja: db.prepare('SELECT store_logo_url, store_banner_url, store_banners, ia_config FROM store_config WHERE tenant_id=?'),
+    acesso: db.prepare('SELECT MAX(ultimo_acesso) AS u FROM sys_users WHERE tenant_id=?'),
+    sess: (() => { try { return db.prepare('SELECT MIN(ts) AS pri, MAX(ts) AS ult FROM gestor_sessions WHERE tenant_id=?') } catch { return null } })(),
+    wa: (() => { try { return db.prepare('SELECT COUNT(DISTINCT remote_jid) AS n, MIN(created_at) AS primeiro FROM wa_messages WHERE tenant_id=?') } catch { return null } })(),
+    fat: (() => { try { return db.prepare("SELECT MIN(COALESCE(pago_em, created_at)) AS p FROM faturas WHERE tenant_id=? AND status='pago'") } catch { return null } })()
+  }
+  const agora = sqlData(Date.now())
+  const grava = db.prepare(`UPDATE testes_gratis SET
+    aud_painel_em = COALESCE(aud_painel_em, ?), aud_produtos_em = COALESCE(aud_produtos_em, ?),
+    aud_loja_em = COALESCE(aud_loja_em, ?), aud_whats_em = COALESCE(aud_whats_em, ?),
+    aud_pedido_em = COALESCE(aud_pedido_em, ?), aud_pedido_real_em = COALESCE(aud_pedido_real_em, ?),
+    aud_ia_em = COALESCE(aud_ia_em, ?), aud_pagou_em = COALESCE(aud_pagou_em, ?),
+    aud_ultimo_uso = COALESCE(?, aud_ultimo_uso),
+    aud_produtos = ?, aud_fotos = ?, aud_pedidos = ?, aud_pedidos_reais = ?, aud_pedidos_ia = ?,
+    aud_conversas = MAX(COALESCE(aud_conversas,0), ?), aud_em = ?
+    WHERE id = ?`)
+  db.transaction(() => {
+    for (const l of linhas) {
+      const tid = l.tenant_id
+      const p = q.prod.get(tid) || {}
+      const pedidos = q.ped.all(tid)
+      const dono = fim8(l.telefone)
+      const reais = pedidos.filter(o => { const f = fim8(o.phone); return f.length === 8 && f !== dono })
+      const ia = pedidos.filter(o => o.canal === 'voz_whatsapp')
+      const sc = q.loja.get(tid) || {}
+      let iaCfg = {}
+      try { iaCfg = sc.ia_config ? JSON.parse(sc.ia_config) : {} } catch {}
+      const temBanner = !!(sc.store_banner_url || (sc.store_banners && sc.store_banners !== '[]'))
+      const wa = q.wa ? (q.wa.get(tid) || {}) : {}
+      // conectou: chegou mensagem no WhatsApp da loja, ou o painel ligou as respostas
+      // da IA sozinho na hora da leitura do QR Code
+      const conectou = (wa.n || 0) > 0 || iaCfg.resp_cardapio !== undefined
+      const ac = q.acesso.get(tid) || {}
+      const ss = q.sess ? (q.sess.get(tid) || {}) : {}
+      // entrou no painel: primeiro acesso visto (ou o primeiro produto, que só se cadastra lá dentro)
+      const entrou = [ac.u, ss.pri, p.n ? p.primeiro : null].map(sqlData).filter(Boolean).sort()[0] || null
+      const ultimo = [ac.u, ss.ult].map(sqlData).filter(Boolean).sort().pop() || null
+      const fat = q.fat ? (q.fat.get(tid) || {}) : {}
+      const pagou = l.status === 'convertido' ? (sqlData(l.convertido_em) || agora) : (fat.p ? sqlData(fat.p) : null)
+      grava.run(
+        entrou,
+        p.n ? (sqlData(p.primeiro) || agora) : null,
+        (sc.store_logo_url || temBanner) ? agora : null,
+        conectou ? (sqlData(wa.primeiro) || agora) : null,
+        pedidos.length ? sqlData(pedidos[0].created_at) : null,
+        reais.length ? sqlData(reais[0].created_at) : null,
+        ia.length ? sqlData(ia[0].created_at) : null,
+        pagou,
+        ultimo,
+        p.n || 0, p.fotos || 0, pedidos.length, reais.length, ia.length, wa.n || 0,
+        agora, l.id
+      )
+    }
+  })()
+}
+
+function origemTeste(l) {
+  const u = String(l.origem_url || '').toLowerCase()
+  const src = (u.match(/[?&]utm_source=([^&#]+)/) || [])[1] || ''
+  if (l.fbc || /fbclid=/.test(u) || /^(fb|facebook|ig|instagram|meta)/.test(src)) return 'Facebook e Instagram'
+  if (/gclid=/.test(u) || /^google/.test(src)) return 'Google'
+  if (src) return decodeURIComponent(src).slice(0, 30)
+  return 'Direto'
+}
+
+function proximoPasso(t) {
+  const e = t.etapas
+  if (t.situacao === 'cliente') return { nivel: 'ok', texto: 'Virou cliente' }
+  if (t.situacao === 'excluido') return { nivel: 'off', texto: 'Teste apagado' }
+  if (t.situacao === 'expirado') {
+    if (e.pedido_real) return { nivel: 'quente', texto: 'Teste acabou com pedidos reais. Ligue e ofereça o plano hoje.' }
+    if (e.produtos) return { nivel: 'morno', texto: 'Teste acabou com o cardápio montado. Ofereça mais alguns dias.' }
+    return { nivel: 'frio', texto: 'Teste acabou sem uso.' }
+  }
+  if (!e.painel) return { nivel: 'frio', texto: 'Não entrou no painel. Mande o link de acesso e a senha.' }
+  if (!e.produtos) return { nivel: 'frio', texto: 'Não cadastrou produtos. Ofereça montar o cardápio pela foto.' }
+  if (!e.whats) return { nivel: 'morno', texto: 'Não conectou o WhatsApp. Mostre o pedido pela IA.' }
+  if (!e.pedido) return { nivel: 'morno', texto: 'Ainda sem pedido. Peça um pedido de teste.' }
+  if (!e.pedido_real) return { nivel: 'morno', texto: 'Só pedidos de teste. Ajude a divulgar o link do cardápio.' }
+  return { nivel: 'quente', texto: 'Já recebe pedidos reais. Ofereça o plano.' }
+}
+
+function auditoriaTestes(dias) {
+  try { atualizarAuditoria() } catch (e) { D.log('⚠️', 'Auditoria do teste falhou:', e.message) }
+  const db = D.db
+  const hoje = hojeBR()
+  const n = Math.max(0, parseInt(dias, 10) || 0)
+  const desde = n ? somaDias(hoje, -(n - 1)) : null
+  // created_at é UTC; o corte usa o dia de Brasília (3h a mais)
+  const filtro = desde ? "AND datetime(g.created_at,'-3 hours') >= ?" : ''
+  const linhas = db.prepare(`
+    SELECT g.*, t.id AS t_id, t.slug
+    FROM testes_gratis g LEFT JOIN tenants t ON t.id = g.tenant_id
+    WHERE 1=1 ${filtro}
+    ORDER BY g.id DESC LIMIT 2000
+  `).all(...(desde ? [desde] : []))
+  const horasDesde = (a, b) => (new Date(b.replace(' ', 'T') + 'Z') - new Date(String(a).replace(' ', 'T') + 'Z')) / 3600000
+  const testes = linhas.map(l => {
+    const situacao = l.status === 'convertido' ? 'cliente' : l.status === 'excluido' ? 'excluido' : (l.expira_em >= hoje ? 'ativo' : 'expirado')
+    const etapas = {}
+    for (const e of ETAPAS_AUD) etapas[e.k] = l[e.col] || null
+    if (situacao === 'cliente' && !etapas.pagou) etapas.pagou = sqlData(l.convertido_em) || null
+    const t = {
+      id: l.id, tenant_id: l.t_id || null, slug: l.slug || null,
+      nome: l.nome, restaurante: l.restaurante, telefone: l.telefone, email: l.email,
+      created_at: l.created_at, expira_em: l.expira_em, situacao,
+      dias_restantes: situacao === 'ativo' ? diasEntre(hoje, l.expira_em) : null,
+      origem: origemTeste(l), etapas,
+      produtos: l.aud_produtos || 0, fotos: l.aud_fotos || 0, pedidos: l.aud_pedidos || 0,
+      pedidos_reais: l.aud_pedidos_reais || 0, pedidos_ia: l.aud_pedidos_ia || 0, conversas: l.aud_conversas || 0,
+      ultimo_uso: l.aud_ultimo_uso || null,
+      boas_vindas: l.msg_status || null,
+      mensagens: String(l.seq_enviados || '').split(',').filter(Boolean)
+    }
+    t.proximo = proximoPasso(t)
+    return t
+  })
+
+  const total = testes.length
+  const pct = (a, b) => b ? Math.round(a * 1000 / b) / 10 : 0
+  const mediana = arr => {
+    if (!arr.length) return null
+    const s = arr.slice().sort((a, b) => a - b), m = Math.floor(s.length / 2)
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
+  }
+  const funil = [{ k: 'cadastro', nome: 'Fez o cadastro', n: total, pct: total ? 100 : 0, horas: null }]
+    .concat(ETAPAS_AUD.map(e => {
+      const com = testes.filter(t => t.etapas[e.k])
+      const horas = com.map(t => horasDesde(t.created_at, t.etapas[e.k])).filter(h => h >= 0)
+      // "Personalizou a loja" só é notado na conferência, então o tempo dela não é exato
+      return { k: e.k, nome: e.nome, n: com.length, pct: pct(com.length, total), horas: e.k === 'loja' ? null : mediana(horas) }
+    }))
+
+  // Conversão em pagamento só conta testes que já terminaram (pagaram, acabaram ou foram
+  // apagados): quem ainda está no prazo pode pagar até o último dia.
+  const terminados = testes.filter(t => t.situacao !== 'ativo')
+  const pagaram = arr => arr.filter(t => t.etapas.pagou).length
+  const conversao = [{ k: 'todos', nome: 'Todos os testes', terminaram: terminados.length, pagaram: pagaram(terminados) }]
+    .concat(ETAPAS_AUD.filter(e => e.k !== 'pagou').map(e => {
+      const sim = terminados.filter(t => t.etapas[e.k])
+      return { k: e.k, nome: e.nome, terminaram: sim.length, pagaram: pagaram(sim) }
+    }))
+  const semProdutos = terminados.filter(t => !t.etapas.produtos)
+  conversao.push({ k: 'sem_produtos', nome: 'Não cadastrou produtos', terminaram: semProdutos.length, pagaram: pagaram(semProdutos) })
+  for (const c of conversao) c.taxa = pct(c.pagaram, c.terminaram)
+
+  const origens = {}
+  for (const t of testes) {
+    const o = origens[t.origem] || (origens[t.origem] = { origem: t.origem, cadastros: 0, produtos: 0, pedido_real: 0, pagaram: 0 })
+    o.cadastros++
+    if (t.etapas.produtos) o.produtos++
+    if (t.etapas.pedido_real) o.pedido_real++
+    if (t.etapas.pagou) o.pagaram++
+  }
+
+  const msgs = {}
+  for (const t of testes) {
+    if (t.boas_vindas === 'enviada') msgs.boasvindas = (msgs.boasvindas || 0) + 1
+    for (const m of t.mensagens) msgs[m] = (msgs[m] || 0) + 1
+  }
+
+  let compras = 0
+  try {
+    compras = db.prepare(`SELECT COUNT(*) AS c FROM site_compras WHERE status='aprovado' ${desde ? "AND datetime(created_at,'-3 hours') >= ?" : ''}`).get(...(desde ? [desde] : [])).c
+  } catch {}
+
+  const ativos = testes.filter(t => t.situacao === 'ativo')
+  return {
+    dias: n, desde, gerado_em: sqlData(Date.now()),
+    resumo: {
+      cadastros: total, ativos: ativos.length, terminados: terminados.length,
+      pagaram: testes.filter(t => t.etapas.pagou).length,
+      taxa_final: pct(pagaram(terminados), terminados.length),
+      quentes: ativos.filter(t => t.proximo.nivel === 'quente').length,
+      parados: ativos.filter(t => !t.etapas.produtos).length,
+      compras_diretas: compras
+    },
+    funil, conversao,
+    origens: Object.values(origens).sort((a, b) => b.cadastros - a.cadastros),
+    mensagens: msgs,
+    testes
   }
 }
 
@@ -1925,6 +2237,13 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin, valida
     return true
   }
 
+  if (metodo === 'GET' && upath === '/api/admin/testes/auditoria') {
+    let dias = 30
+    try { dias = parseInt(new URL(req.url, 'http://x').searchParams.get('dias') ?? '30', 10) } catch {}
+    send(res, 200, { ok: true, ...auditoriaTestes(dias) })
+    return true
+  }
+
   if (metodo === 'POST' && upath === '/api/admin/testes/config') {
     const body = await readBody(req)
     const atual = cfgTeste()
@@ -1962,6 +2281,16 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin, valida
       novo.msg_texto = txt || MSG_PADRAO
     }
     if (body.seq_ativa !== undefined) novo.seq_ativa = body.seq_ativa === true
+    if (body.cobranca_texto !== undefined) {
+      const txt = String(body.cobranca_texto || '').replace(/\r/g, '').trim()
+      if (txt.length > 1500) { send(res, 400, { error: 'A mensagem de cobrança pode ter até 1500 caracteres' }); return true }
+      novo.cobranca_texto = txt || COBRANCA_TESTE_PADRAO
+    }
+    if (body.seq_hora !== undefined) {
+      const h = parseInt(body.seq_hora, 10)
+      if (!(h >= 6 && h <= 19)) { send(res, 400, { error: 'O horário do acompanhamento deve ficar entre 6h e 19h' }); return true }
+      novo.seq_hora = h
+    }
     if (body.seq && typeof body.seq === 'object') {
       novo.seq = { ...atual.seq }
       for (const k of SEQ_ETAPAS) {
@@ -2076,6 +2405,8 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin, valida
       if (!linha || linha.status !== 'ativo') { send(res, 404, { error: 'Teste não encontrado' }); return true }
       alvos = [linha]
     }
+    // guarda as etapas de cada loja antes de apagar, para o funil continuar certo
+    try { atualizarAuditoria() } catch (e) { D.log('⚠️', 'Auditoria do teste falhou:', e.message) }
     for (const linha of alvos) apagarContaTeste(linha)
     if (alvos.length) {
       D.marcarDirty()
@@ -2089,4 +2420,4 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin, valida
   return true
 }
 
-module.exports = { init, api, processarMensagens, registrarCompra, pagamentoDoSite, _internals: { chaveEmail, conferirProvedorEmail, dominioRecebeEmail, etapaDevida, enviarEventoMeta } }
+module.exports = { init, api, processarMensagens, registrarCompra, pagamentoDoSite, mensagemCobrancaTeste, _internals: { chaveEmail, conferirProvedorEmail, dominioRecebeEmail, etapaDevida, enviarEventoMeta } }

@@ -758,10 +758,13 @@ function textoAlternativoBotoes(texto, botoes) {
 }
 
 const carrosselOff = new Set()
+// quantas mensagens cada número já recebeu dos fluxos (para saber se um fluxo
+// que falhou no meio chegou a mandar alguma coisa)
+const enviosPorTel = new Map()
 
 async function executarPasso(p, tel, vars, opts) {
   const T = s => aplicarVars(s, vars)
-  const run = fn => D.bot.wuzRun(tel, fn)
+  const run = async fn => { const r = await D.bot.wuzRun(tel, fn); enviosPorTel.set(tel, (enviosPorTel.get(tel) || 0) + 1); return r }
 
   switch (p.tipo) {
     case 'espera':
@@ -1648,7 +1651,14 @@ async function executarFluxoId(id, tel, { origem = 'sistema', vars = {} } = {}) 
   const f = obterFluxo(parseInt(id, 10))
   if (!f) throw new Error('Fluxo não encontrado')
   const fone = n55(tel)
-  return enfileirar(fone, () => executarFluxo(f, fone, { origem, vars }))
+  return enfileirar(fone, async () => {
+    const antes = enviosPorTel.get(fone) || 0
+    try { return await executarFluxo(f, fone, { origem, vars }) } catch (e) {
+      // parcial: o fluxo já tinha mandado alguma mensagem antes de falhar
+      e.parcial = (enviosPorTel.get(fone) || 0) > antes
+      throw e
+    }
+  })
 }
 const canalFluxosAtivo = () => { try { return D.bot.provider() === 'wuzapi' } catch { return false } }
 

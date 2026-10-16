@@ -763,6 +763,7 @@ td{padding:12px 16px;color:#dce6f7}
 <script src="/admin-marketing.js"></script>
 <script src="/admin-marketing-editor.js"></script>
 <script src="/admin-site.js?v=1"></script>
+<script src="/admin-funil.js?v=1"></script>
 </head>
 <body>
 <div id="toast"></div>
@@ -821,6 +822,9 @@ td{padding:12px 16px;color:#dce6f7}
       <button class="sb-item" id="nav-testes" onclick="navTo('testes')">
         <span class="sb-icon"><svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="9" r="5"/><path d="M8 6.4V9l1.8 1.1M6.3 1.8h3.4M8 1.8V4"/></svg></span> Testes grátis
         <span id="nav-testes-badge" style="display:none;margin-left:auto;background:var(--success);color:#fff;font-size:10.5px;font-weight:800;border-radius:99px;min-width:19px;padding:1px 6px;text-align:center"></span>
+      </button>
+      <button class="sb-item" id="nav-funil" onclick="navTo('funil')">
+        <span class="sb-icon"><svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12l-4.5 5.2V13l-3 1.2V8.2z"/></svg></span> Funil do teste
       </button>
       <button class="sb-item" id="nav-upgrade" onclick="navTo('upgrade')">
         <span class="sb-icon"><svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8.6 1.5L3 9h4.4l-.9 5.5L13 7H8.6z"/></svg></span> Upgrade IA
@@ -1280,6 +1284,8 @@ td{padding:12px 16px;color:#dce6f7}
       <div id="sec-testes" style="display:none" class="sec-page"></div>
       <div id="sec-site" style="display:none" class="sec-page"></div>
       <div id="sec-upgrade" style="display:none" class="sec-page"></div>
+      <!-- Funil do teste (auditoria do teste grátis): montado por admin-funil.js -->
+      <div id="sec-funil" style="display:none" class="sec-page"></div>
 
       <!-- COMUNICADOS -->
       <div id="sec-comunicados" style="display:none" class="sec-page">
@@ -3340,7 +3346,7 @@ function polishAdminUI(root = document) {
 window.addEventListener('DOMContentLoaded', () => polishAdminUI());
 
 function navTo(id) {
-  ['dash','clientes','ia','backup','saques','pix-geral','planos','comunicados','marketing','testes','site','upgrade','faturamento','fiscal-uso','indicacoes','auditoria','icones','operacao'].forEach(s => {
+  ['dash','clientes','ia','backup','saques','pix-geral','planos','comunicados','marketing','testes','site','upgrade','funil','faturamento','fiscal-uso','indicacoes','auditoria','icones','operacao'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
     if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
@@ -3351,6 +3357,7 @@ function navTo(id) {
   titles.testes = 'Testes grátis';
   titles.site = 'Site';
   titles.upgrade = 'Upgrade IA';
+  titles.funil = 'Funil do teste';
   titles['pix-geral'] = 'Pix online geral';
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
@@ -3362,6 +3369,7 @@ function navTo(id) {
   if (id==='testes')      { window.SITEUI && SITEUI.initTestes(); }
   if (id==='site')        { window.SITEUI && SITEUI.initSite(); }
   if (id==='upgrade')     { window.SITEUI && SITEUI.initUpgrade && SITEUI.initUpgrade(); }
+  if (id==='funil')       { window.FUNILUI && FUNILUI.init(); }
   if (id==='comunicados') { renderComunicadoTargetsAdmin(); carregarComunicadosAdmin(); }
   if (id==='faturamento') { carregarFaturamento(); }
   if (id==='fiscal-uso')  { carregarFiscalUso(); }
