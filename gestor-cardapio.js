@@ -950,10 +950,10 @@ function renderGestor(){
           <span class="cat-drag" onmousedown="event.stopPropagation()" title="Arrastar para reordenar">⠿</span>
           <div>
             <div class="cat-name">${cat.label}</div>
-            <span class="cat-badge">${catItems.length} ite${catItems.length===1?'m':'ns'}</span>
+            <span class="cat-badge">${catItems.length} ite${catItems.length===1?'m':'ns'}</span>${_visTags(cat.garcomOculto, cat.cardapioOculto, 'Esta categoria')}
           </div>
           <div class="cat-actions">
-            <div class="sw"><select onclick="event.stopPropagation()" style="font-size:11.5px;padding:4px 22px 4px 9px" onchange="handleCatAction(${cat.id},this.value,this)"><option value="">Ações</option><option value="edit">Editar</option><option value="duplicate">Duplicar</option><option value="pause">Pausar todos os itens</option><option value="unpause">Despausar todos os itens</option><option value="delete">Excluir</option></select></div>
+            <div class="sw"><select onclick="event.stopPropagation()" style="font-size:11.5px;padding:4px 22px 4px 9px" onchange="handleCatAction(${cat.id},this.value,this)"><option value="">Ações</option><option value="edit">Editar</option><option value="duplicate">Duplicar</option><option value="pause">Pausar todos os itens</option><option value="unpause">Despausar todos os itens</option><option value="garcom">Onde aparece</option><option value="delete">Excluir</option></select></div>
             <div class="cat-toggle${aberta?' open':''}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           </div>
         </div>
@@ -965,14 +965,14 @@ function renderGestor(){
                 ? `<img src="${item.imageUrl}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;display:block">`
                 : `<svg viewBox="0 0 24 24" fill="none" width="18" height="18" style="opacity:.35"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" stroke="currentColor" stroke-width="1.5"/><path d="M3 16l5-5 3 3 3-4 4 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" opacity=".5"/></svg>`
               }</div>
-              <div style="flex:1;min-width:0">
+              <div class="cat-item-info" style="flex:1;min-width:0">
                 <div class="cat-item-name">${item.name}${item.promo?' <span class="ptag">promo</span>':''}${item.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">🍕</span>':''}${item.itemType==='kg'?' <span style="font-size:9px;background:rgba(34,197,94,.15);color:#16a34a;border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">KG</span>':''}</div>
-                <div class="cat-item-price">R$ ${item.price.toFixed(2).replace('.',',')}${item.itemType==='kg'?'<span style="font-size:10px;color:var(--muted)">/kg</span>':''} · ${item.status==='active'?'<span style="color:var(--success)">Disponível</span>':item.status==='esgotado'?'<span style="color:var(--danger)">Esgotado</span>':'<span style="color:var(--accent3)">Pausado</span>'}</div>
+                <div class="cat-item-price">R$ ${item.price.toFixed(2).replace('.',',')}${item.itemType==='kg'?'<span style="font-size:10px;color:var(--muted)">/kg</span>':''}<span class="cip-st"> · ${item.status==='active'?'<span style="color:var(--success)">Disponível</span>':item.status==='esgotado'?'<span style="color:var(--danger)">Esgotado</span>':'<span style="color:var(--accent3)">Pausado</span>'}</span>${_visTags(item.garcomOculto && !cat.garcomOculto, item.cardapioOculto && !cat.cardapioOculto, 'Este produto')}</div>
               </div>
-              <div style="display:flex;gap:4px;flex-shrink:0;align-items:center">
-                <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();duplicateItem(+this.dataset.id)" title="Duplicar item" aria-label="Duplicar item"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 3.5v-.5a1 1 0 0 0-1-1H3.5a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1H4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
-                <button class="stbadge-mini ${scClass(item.status)}" data-id="${item.id}" onclick="event.stopPropagation();quickToggleStatus(+this.dataset.id,this)" title="Alterar disponibilidade">${_statusIcon(item.status)}</button>
-                <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();openEditItem(+this.dataset.id)">Editar</button>
+              <div class="cat-item-acts" style="display:flex;gap:4px;flex-shrink:0;align-items:center">
+                <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();duplicateItem(+this.dataset.id)" title="Duplicar item" aria-label="Duplicar item"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 3.5v-.5a1 1 0 0 0-1-1H3.5a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1H4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span class="cia-lbl">Duplicar</span></button>
+                <button class="stbadge-mini ${scClass(item.status)}" data-id="${item.id}" onclick="event.stopPropagation();quickToggleStatus(+this.dataset.id,this)" title="Alterar disponibilidade">${_statusBtnHtml(item.status)}</button>
+                <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();openEditItem(+this.dataset.id)"><svg class="cia-ico" width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>Editar</button>
               </div>
             </div>
           `).join('')}
@@ -1241,10 +1241,12 @@ function handleCatAction(id, action, selectEl) {
     duplicateCategory(id);
   } else if (action === 'delete') {
     deleteCatById(id);
-  } else if (action === 'pause') {
-    _pausarTodosItensCategoria(cat, true);
-  } else if (action === 'unpause') {
-    _pausarTodosItensCategoria(cat, false);
+  } else if (action === 'pause' || action === 'unpause') {
+    // (antes "cat" não existia aqui e o botão dava erro sem fazer nada)
+    const cat = categories.find(c => c.id === id);
+    if (cat) _pausarTodosItensCategoria(cat, action === 'pause');
+  } else if (action === 'garcom') {
+    abrirVisibilidadeGarcom(id);
   }
 }
 
@@ -1639,6 +1641,19 @@ const _SC = [
   { key:'esgotado', cls:'ste', label:'Esgotado'   },
   { key:'pausado',  cls:'stp', label:'Pausado'    },
 ];
+// Botão de disponibilidade na lista do gestor: no computador só o ícone; no
+// celular o texto aparece junto (a classe cia-lbl é escondida no computador).
+function _statusBtnHtml(status) {
+  const lbl = status === 'active' ? 'Disponível' : status === 'esgotado' ? 'Esgotado' : 'Pausado';
+  return _statusIcon(status) + '<span class="cia-lbl">' + lbl + '</span>';
+}
+// Selos "fora do garçom" / "fora do cardápio" na lista do gestor.
+function _visTags(semGarcom, semCardapio, quem) {
+  let h = '';
+  if (semGarcom) h += ' <span class="vis-tag" title="' + quem + ' não aparece no app do garçom">fora do garçom</span>';
+  if (semCardapio) h += ' <span class="vis-tag" title="' + quem + ' não aparece no cardápio do cliente">fora do cardápio</span>';
+  return h;
+}
 function _statusIcon(status) {
   if (status === 'active')   return '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M6 5.5l5 2.5-5 2.5V5.5z" fill="currentColor"/></svg>';
   if (status === 'esgotado') return '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
@@ -1668,7 +1683,7 @@ async function quickToggleStatus(id, el) {
   it.status  = next.key;
   _SC.forEach(s => el.classList.remove(s.cls));
   el.classList.add(next.cls);
-  el.innerHTML = _statusIcon(next.key);
+  el.innerHTML = el.closest('.cat-item-acts') ? _statusBtnHtml(next.key) : _statusIcon(next.key);
   el.title = next.label;
   const row = el.closest('.cat-item-row');
   if (row) {
@@ -3201,3 +3216,239 @@ async function replicarVideoEmLote() {
   else if (sucesso && falhas) sbToast('ok', `Replicado em ${sucesso}. ${falhas} ${falhas===1?'falhou':'falharam'}.`);
   else sbToast('err', 'Nenhum produto foi atualizado. Tente novamente.');
 }
+
+
+// ─────────────────────────────────────────
+// ONDE APARECE (garçom e cardápio do cliente)
+// Por padrão tudo aparece nos dois lugares. Aqui o gestor desliga, por
+// categoria inteira ou produto solto, o que não deve aparecer:
+//   garcom_oculto   = 1 → some do app do garçom
+//   cardapio_oculto = 1 → some do cardápio do cliente (link, totem e robô)
+// ─────────────────────────────────────────
+const _GV_COLS = [
+  { k: 'g', campo: 'garcom_oculto',   nome: 'Garçom',   dica: 'App do garçom' },
+  { k: 'c', campo: 'cardapio_oculto', nome: 'Cardápio', dica: 'Cardápio do cliente' }
+];
+const _gv = { cats: [], itens: [], orig: null, abertas: new Set(), busca: '' };
+const _gvEsc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function _gvGarantirModal() {
+  if (document.getElementById('modal-garcom-vis')) return;
+  const st = document.createElement('style');
+  st.textContent = `
+#modal-garcom-vis .modal{width:600px;max-width:calc(100vw - 24px);max-height:calc(100vh - 40px);display:flex;flex-direction:column}
+.gv-topo{font-size:13px;color:var(--muted);line-height:1.5;margin:-4px 0 12px}
+.gv-ferr{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.gv-ferr .form-input{flex:1;min-width:0;height:38px}
+.gv-ferr .btn{white-space:nowrap}
+.gv-resumo{font-size:12.5px;font-weight:600;margin-bottom:8px;color:var(--muted)}
+.gv-resumo b{color:var(--text)}
+.gv-lista{overflow-y:auto;flex:1;min-height:120px;border:1px solid var(--border);border-radius:12px}
+.gv-cab{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:11.5px;font-weight:700;color:var(--muted)}
+.gv-cab .gv-nome{flex:1}
+.gv-col{width:68px;flex-shrink:0;display:flex;justify-content:center;text-align:center}
+.gv-cat{border-bottom:1px solid var(--border)}
+.gv-cat:last-child{border-bottom:0}
+.gv-linha{display:flex;align-items:center;gap:8px;padding:10px 12px}
+.gv-cat > .gv-linha{background:var(--surface2)}
+.gv-nome{flex:1;min-width:0}
+.gv-cat-t{display:flex;align-items:center;gap:6px;background:none;border:0;padding:0;font:inherit;color:var(--text);cursor:pointer;text-align:left;max-width:100%}
+.gv-cat-t strong{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gv-cat-t svg{flex-shrink:0;color:var(--muted);transition:transform .15s}
+.gv-cat-t.on svg{transform:rotate(180deg)}
+.gv-sub{font-size:11.5px;color:var(--muted);margin-top:2px}
+.gv-sub .gv-alerta{color:#dc2626!important;font-weight:650}
+.gv-item{padding:8px 12px 8px 26px;border-top:1px solid var(--border)}
+.gv-item .gv-nome{font-size:13.5px;line-height:1.35}
+.gv-item small{display:block;font-size:11px;color:var(--muted)}
+.gv-sw{position:relative;display:inline-flex;width:40px;height:24px;cursor:pointer;flex-shrink:0}
+.gv-sw input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer;z-index:1}
+.gv-sw span{position:absolute;inset:0;border-radius:24px;background:var(--border);transition:background .15s}
+.gv-sw span::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+.gv-sw input:checked + span{background:var(--success,#16a34a)}
+.gv-sw input:checked + span::after{transform:translateX(16px)}
+.gv-sw input:focus-visible + span{outline:2px solid var(--accent,#3b82f6);outline-offset:2px}
+.gv-sw input:disabled{cursor:not-allowed}
+.gv-sw input:disabled + span{opacity:.4}
+.gv-rodape{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+@media(max-width:480px){
+  .gv-col{width:56px}
+  .gv-ferr .btn{padding:0 10px}
+  .gv-item{padding-left:18px}
+  .gv-rodape .btn{flex:1}
+}
+@media(prefers-reduced-motion:reduce){.gv-sw span,.gv-sw span::after,.gv-cat-t svg{transition:none}}`;
+  document.head.appendChild(st);
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.id = 'modal-garcom-vis';
+  bg.innerHTML = `
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-garcom-vis')" aria-label="Fechar"></button>
+    <h2>Onde aparece</h2>
+    <div class="gv-topo">Ligado aparece, desligado some. Garçom é o app do garçom; Cardápio é o que o cliente vê no link, no totem e no robô do WhatsApp. Desligar a categoria esconde todos os produtos dela.</div>
+    <div class="gv-ferr">
+      <input class="form-input" type="search" id="gv-busca" placeholder="Buscar produto ou categoria" aria-label="Buscar produto ou categoria">
+      <button class="btn bg" type="button" data-gv="tudo">Ligar tudo</button>
+    </div>
+    <div class="gv-resumo" id="gv-resumo"></div>
+    <div class="gv-lista" id="gv-lista"></div>
+    <div class="gv-rodape">
+      <button class="btn bg" type="button" onclick="closeModal('modal-garcom-vis')">Cancelar</button>
+      <button class="btn bp" type="button" data-gv="salvar">Salvar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bg);
+  bg.addEventListener('input', ev => {
+    if (ev.target.id !== 'gv-busca') return;
+    _gv.busca = ev.target.value;
+    _gvRender();
+  });
+  bg.addEventListener('change', ev => {
+    const t = ev.target;
+    const k = t.dataset.gvK;
+    if (!k) return;
+    if (t.dataset.gvCat) {
+      const c = _gv.cats.find(x => String(x.id) === t.dataset.gvCat);
+      if (!c) return;
+      c[k] = !t.checked;
+      // ligar a categoria inteira mostra todos os produtos dela nesse lugar
+      if (t.checked) _gvItensDaCat(c).forEach(i => { i[k] = false; });
+    } else if (t.dataset.gvItem) {
+      const i = _gv.itens.find(x => String(x.id) === t.dataset.gvItem);
+      if (!i) return;
+      i[k] = !t.checked;
+    }
+    _gvRender();
+  });
+  bg.addEventListener('click', ev => {
+    const ab = ev.target.closest('[data-gv-abrir]');
+    if (ab) {
+      const id = ab.dataset.gvAbrir;
+      if (_gv.abertas.has(id)) _gv.abertas.delete(id); else _gv.abertas.add(id);
+      _gvRender();
+      return;
+    }
+    const b = ev.target.closest('[data-gv]');
+    if (!b) return;
+    if (b.dataset.gv === 'tudo') {
+      [..._gv.cats, ..._gv.itens].forEach(x => { x.g = false; x.c = false; });
+      _gvRender();
+    }
+    if (b.dataset.gv === 'salvar') _gvSalvar();
+  });
+}
+
+function _gvItensDaCat(c) {
+  return _gv.itens.filter(i => (i.category_id != null && i.category_id !== '' && Number(i.category_id) === Number(c.id)) || i.cat_key === c.name || (!i.cat_key && i.cat === c.name));
+}
+
+async function abrirVisibilidadeGarcom(catId) {
+  _gvGarantirModal();
+  _gv.busca = '';
+  const busca = document.getElementById('gv-busca');
+  if (busca) busca.value = '';
+  document.getElementById('gv-lista').innerHTML = '<div style="padding:18px;font-size:13px;color:var(--muted)">Carregando...</div>';
+  document.getElementById('gv-resumo').textContent = '';
+  openModal('modal-garcom-vis');
+  try {
+    const [cr, ir] = await Promise.all([
+      sb.from('categories').select('*').order('sort_order'),
+      sb.from('menu_items').select('*').order('sort_order').order('id')
+    ]);
+    if (cr.error || ir.error) throw (cr.error || ir.error);
+    _gv.cats = (cr.data || []).map(c => ({ id: c.id, name: c.name, label: c.label || c.name, g: Number(c.garcom_oculto) === 1, c: Number(c.cardapio_oculto) === 1 }));
+    _gv.itens = (ir.data || []).map(i => ({ id: i.id, name: i.name, cat: i.cat, cat_key: i.cat_key, category_id: i.category_id, status: i.status, g: Number(i.garcom_oculto) === 1, c: Number(i.cardapio_oculto) === 1 }));
+    _gv.orig = {
+      cats: Object.fromEntries(_gv.cats.map(c => [c.id, { g: c.g, c: c.c }])),
+      itens: Object.fromEntries(_gv.itens.map(i => [i.id, { g: i.g, c: i.c }]))
+    };
+    _gv.abertas = new Set(catId != null ? [String(catId)] : []);
+    _gvRender();
+  } catch (e) {
+    document.getElementById('gv-lista').innerHTML = '<div style="padding:18px;font-size:13px;color:var(--danger)">Não foi possível carregar o cardápio. Feche e tente de novo.</div>';
+  }
+}
+
+function _gvSw(attrs, ligado, desligado, rotulo) {
+  return `<label class="gv-sw" title="${_gvEsc(rotulo)}"><input type="checkbox" ${attrs} ${ligado ? 'checked' : ''} ${desligado ? 'disabled' : ''} aria-label="${_gvEsc(rotulo)}"><span></span></label>`;
+}
+
+function _gvRender() {
+  const lista = document.getElementById('gv-lista');
+  if (!lista) return;
+  const nb = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const q = nb(_gv.busca).trim();
+  const tot = { g: 0, c: 0, n: 0 };
+  const corpo = _gv.cats.map(c => {
+    const itens = _gvItensDaCat(c);
+    const vis = {};
+    _GV_COLS.forEach(({ k }) => { vis[k] = c[k] ? 0 : itens.filter(i => !i[k]).length; tot[k] += vis[k]; });
+    tot.n += itens.length;
+    let mostrar = itens;
+    let aberta = _gv.abertas.has(String(c.id));
+    if (q) {
+      const catBate = nb(c.label).includes(q);
+      const filtrados = itens.filter(i => nb(i.name).includes(q));
+      if (!catBate && !filtrados.length) return '';
+      if (!catBate) mostrar = filtrados;
+      aberta = true;
+    }
+    // resumo da categoria: só fala do que está diferente do normal
+    const partes = _GV_COLS.map(({ k, nome }) => {
+      if (c[k]) return `<span class="gv-alerta">fora do ${nome.toLowerCase()}</span>`;
+      if (vis[k] < itens.length) return `${nome.toLowerCase()}: ${vis[k]} de ${itens.length}`;
+      return '';
+    }).filter(Boolean);
+    const sub = `${itens.length} produto${itens.length === 1 ? '' : 's'}${partes.length ? ' · ' + partes.join(' · ') : ''}`;
+    return `<div class="gv-cat">
+      <div class="gv-linha">
+        <div class="gv-nome">
+          <button type="button" class="gv-cat-t${aberta ? ' on' : ''}" data-gv-abrir="${c.id}" aria-expanded="${aberta}"><strong>${_gvEsc(c.label)}</strong><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <div class="gv-sub">${sub}</div>
+        </div>
+        ${_GV_COLS.map(({ k, nome }) => `<div class="gv-col">${_gvSw(`data-gv-cat="${c.id}" data-gv-k="${k}"`, !c[k], false, `${c.label} no ${nome.toLowerCase()}`)}</div>`).join('')}
+      </div>
+      ${aberta ? (mostrar.length ? mostrar.map(i => `
+      <div class="gv-linha gv-item">
+        <div class="gv-nome">${_gvEsc(i.name)}${i.status === 'pausado' ? '<small>pausado</small>' : i.status === 'esgotado' ? '<small>esgotado</small>' : ''}</div>
+        ${_GV_COLS.map(({ k, nome }) => `<div class="gv-col">${_gvSw(`data-gv-item="${i.id}" data-gv-k="${k}"`, !c[k] && !i[k], c[k], `${i.name} no ${nome.toLowerCase()}`)}</div>`).join('')}
+      </div>`).join('') : '<div class="gv-linha gv-item"><div class="gv-nome" style="color:var(--muted);font-size:12.5px">Nenhum produto nesta categoria.</div></div>') : ''}
+    </div>`;
+  }).join('');
+  const cab = `<div class="gv-cab"><span class="gv-nome">Categoria e produtos</span>${_GV_COLS.map(({ nome, dica }) => `<span class="gv-col" title="${dica}">${nome}</span>`).join('')}</div>`;
+  lista.innerHTML = cab + (corpo || '<div style="padding:18px;font-size:13px;color:var(--muted)">Nada encontrado.</div>');
+  document.getElementById('gv-resumo').innerHTML = `Garçom vê <b>${tot.g} de ${tot.n}</b> · Cardápio mostra <b>${tot.c} de ${tot.n}</b>`;
+}
+
+async function _gvSalvar() {
+  const o = _gv.orig;
+  if (!o) return;
+  const mud = (atual, antes) => {
+    const p = {};
+    _GV_COLS.forEach(({ k, campo }) => { if (antes[k] !== atual[k]) p[campo] = atual[k] ? 1 : 0; });
+    return Object.keys(p).length ? p : null;
+  };
+  const cats = _gv.cats.map(c => ({ c, p: mud(c, o.cats[c.id]) })).filter(x => x.p);
+  const itens = _gv.itens.map(i => ({ i, p: mud(i, o.itens[i.id]) })).filter(x => x.p);
+  if (!cats.length && !itens.length) { closeModal('modal-garcom-vis'); sbToast('ok', 'Nada foi alterado'); return; }
+  sbLoading(true);
+  const results = await Promise.all([
+    ...cats.map(({ c, p }) => sb.from('categories').update(p).eq('id', c.id)),
+    ...itens.map(({ i, p }) => sb.from('menu_items').update(p).eq('id', i.id))
+  ]);
+  sbLoading(false);
+  const falhou = results.find(r => r?.error);
+  if (falhou) {
+    if (_isSessaoExpiradaError(falhou.error)) _avisarSessaoExpirada();
+    else sbToast('err', 'Não foi possível salvar tudo. Abra de novo e confira.');
+    return;
+  }
+  // atualiza a lista do gestor na hora (o tempo real também atualiza)
+  cats.forEach(({ c }) => { const g = categories.find(x => x.id === c.id); if (g) { g.garcomOculto = c.g; g.cardapioOculto = c.c; } });
+  itens.forEach(({ i }) => { const g = items.find(x => x.id === i.id); if (g) { g.garcomOculto = i.g; g.cardapioOculto = i.c; } });
+  renderGestor();
+  closeModal('modal-garcom-vis');
+  sbToast('ok', 'Salvo. O garçom e o cardápio já mostram só o que está ligado.');
+}
+window.abrirVisibilidadeGarcom = abrirVisibilidadeGarcom;

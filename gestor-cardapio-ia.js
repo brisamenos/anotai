@@ -304,7 +304,7 @@
     try {
       const [ir, cr] = await Promise.all([sb.from('menu_items').select('*'), sb.from('categories').select('*').order('sort_order')])
       if (ir?.data) items = ir.data.map(mapItem)
-      if (cr?.data) categories = cr.data.map(c => ({ id: c.id, name: c.name, label: c.label || c.name, type: c.type || 'Itens principais', promo: !!c.promo, imageUrl: c.image_url || null, open: false }))
+      if (cr?.data) categories = cr.data.map(c => ({ id: c.id, name: c.name, label: c.label || c.name, type: c.type || 'Itens principais', promo: !!c.promo, imageUrl: c.image_url || null, open: false, garcomOculto: Number(c.garcom_oculto) === 1, cardapioOculto: Number(c.cardapio_oculto) === 1 }))
       ;['renderGestor', 'renderTable', 'populateCatSelects', 'atualizarQualidadeCardapio', 'renderPDV'].forEach(f => { try { if (typeof window[f] === 'function') window[f]() } catch {} })
     } catch (e) { console.warn('[cardapio-ia] recarregar', e) }
   }

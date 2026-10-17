@@ -733,7 +733,9 @@ function mapItem(i) {
     maxFlavors: i.max_flavors || 1,
     customGroups: _safeParseArray(i.custom_groups),
     destaque: !!i.destaque,
-    hidePrice: !!i.hide_price
+    hidePrice: !!i.hide_price,
+    garcomOculto: Number(i.garcom_oculto) === 1,
+    cardapioOculto: Number(i.cardapio_oculto) === 1
   };
 }
 
@@ -844,7 +846,7 @@ async function loadAllData(silent = false) {
     if (typeof atualizarQualidadeCardapio === 'function') { try { atualizarQualidadeCardapio(); } catch(e) { console.warn('[qualidade]', e); } }
     if (catsRes.data?.length)     categories    = catsRes.data.map(c => ({
       id: c.id, name: c.name, label: c.label || c.name,
-      type: c.type||'Itens principais', promo:!!c.promo, imageUrl: c.image_url || null, open:false
+      type: c.type||'Itens principais', promo:!!c.promo, imageUrl: c.image_url || null, open:false, garcomOculto: Number(c.garcom_oculto) === 1, cardapioOculto: Number(c.cardapio_oculto) === 1
     }));
     // Merge pedidos ativos + pedidos entregue recentes
     const _ordersAtivosRaw = ordersRes?.data || [];
@@ -1662,7 +1664,7 @@ function subscribeOrders() {
         if (typeof atualizarQualidadeCardapio === 'function') { try { atualizarQualidadeCardapio(); } catch(e) { console.warn('[qualidade]', e); } }
         if (catsRes.data) categories = catsRes.data.map(c => ({
           id: c.id, name: c.name, label: c.label || c.name,
-          type: c.type || 'Itens principais', promo: !!c.promo, imageUrl: c.image_url || null, open: false
+          type: c.type || 'Itens principais', promo: !!c.promo, imageUrl: c.image_url || null, open: false, garcomOculto: Number(c.garcom_oculto) === 1, cardapioOculto: Number(c.cardapio_oculto) === 1
         }));
         if (typeof renderTable === 'function') renderTable();
         if (typeof renderGestor === 'function') renderGestor();

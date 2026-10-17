@@ -2683,6 +2683,7 @@ async function loadData() {
   tables   = (mesasRes.data || []);
   allItems = (itemsRes.data || []);
   allCats  = (catsRes.data  || []);
+  _garcomMontarOcultos();
   try { _garcomPrintCfg = cfgRes.data?.print_config ? JSON.parse(cfgRes.data.print_config) : {}; } catch { _garcomPrintCfg = {}; }
   _garcomOrderNumOffset = parseInt(cfgRes.data?.order_num_offset) || 0;
   _garcomTaxaServicoPct = parseFloat(cfgRes.data?.taxa_servico_pct) || 0;
@@ -3596,10 +3597,55 @@ function clearCardapioSearch() {
   renderItemGrid();
 }
 
+// ── O que o garçom vê ─────────────────────
+// No gestor de cardápio dá para tirar categorias inteiras ou produtos soltos do
+// app do garçom (garcom_oculto = 1). Eles continuam na lista completa (allItems),
+// para os pedidos que já estão nas mesas abrirem normalmente; só não aparecem
+// para escolher.
+let _garcomCatsOcultas = new Set();
+function _garcomMontarOcultos() {
+  _garcomCatsOcultas = new Set();
+  (allCats || []).forEach(c => {
+    if (Number(c.garcom_oculto) === 1) {
+      _garcomCatsOcultas.add('id:' + c.id);
+      if (c.name) _garcomCatsOcultas.add('n:' + c.name);
+    }
+  });
+}
+function _garcomCatVisivel(c) { return Number(c && c.garcom_oculto) !== 1; }
+// Ao voltar para o app, busca o cardápio de novo: o que o gestor mudou
+// (inclusive o que o garçom pode ver) já aparece sem precisar sair e entrar.
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden || typeof currentGarcom === 'undefined' || !currentGarcom) return;
+  try {
+    const [itemsRes, catsRes] = await Promise.all([
+      sb.from('menu_items').select('*').neq('status','pausado').order('id'),
+      sb.from('categories').select('*').order('sort_order')
+    ]);
+    if (!itemsRes.data || !catsRes.data) return;
+    allItems = itemsRes.data;
+    allCats = catsRes.data;
+    _garcomMontarOcultos();
+    const ativo = activeCatFilter;
+    buildCatPills();
+    if (ativo && allCats.some(c => c.name === ativo && _garcomCatVisivel(c))) {
+      const b = document.querySelector(`.cat-pill[data-cat="${CSS.escape(ativo)}"]`);
+      if (b) { document.querySelectorAll('.cat-pill').forEach(x => x.classList.remove('on')); b.classList.add('on'); }
+    } else activeCatFilter = '';
+    renderItemGrid();
+  } catch (e) {}
+});
+function _garcomItemVisivel(i) {
+  if (!i || Number(i.garcom_oculto) === 1) return false;
+  if (i.category_id != null && _garcomCatsOcultas.has('id:' + i.category_id)) return false;
+  const k = i.cat_key || i.cat;
+  return !(k && _garcomCatsOcultas.has('n:' + k));
+}
+
 function buildCatPills() {
   const el = document.getElementById('cat-pills');
   el.innerHTML = `<button class="cat-pill on" data-cat="" onclick="filterItems(this,'')">Todos</button>`;
-  allCats.forEach(c => {
+  allCats.filter(_garcomCatVisivel).forEach(c => {
     const btn = document.createElement('button');
     btn.className = 'cat-pill';
     btn.dataset.cat = c.name;
@@ -3620,6 +3666,7 @@ function renderItemGrid() {
   const q = (activeSearchFilter || '').toLowerCase().trim();
   const filtered = allItems.filter(i => {
     if (i.status === 'esgotado') return false;
+    if (!_garcomItemVisivel(i)) return false;
     if (q) {
       // quando há texto, ignora filtro de categoria e busca por nome
       return (i.name || '').toLowerCase().includes(q) ||
@@ -3904,7 +3951,7 @@ function renderImXsell(item) {
   if (!wrap) return;
   const itemCat = item.cat_key || item.cat || '';
   const others = allItems.filter(x =>
-    x.id !== item.id && x.status !== 'pausado' && x.status !== 'esgotado' &&
+    x.id !== item.id && x.status !== 'pausado' && x.status !== 'esgotado' && _garcomItemVisivel(x) &&
     (x.cat_key || x.cat) !== itemCat
   ).slice(0, 8);
   if (!others.length) { wrap.innerHTML = ''; return; }
@@ -3936,7 +3983,7 @@ function _isPizzaItem(i) {
 
 function _renderHalfPicker(baseItem) {
   const catKey = baseItem.cat_key || baseItem.cat;
-  const siblings = allItems.filter(x => x.id !== baseItem.id && (x.cat_key===catKey||x.cat===catKey) && x.status !== 'esgotado');
+  const siblings = allItems.filter(x => x.id !== baseItem.id && (x.cat_key===catKey||x.cat===catKey) && x.status !== 'esgotado' && _garcomItemVisivel(x));
   const list = document.getElementById('half-picker-list');
   if (!siblings.length) { list.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--muted);text-align:center">Nenhuma opção disponível</div>'; return; }
   list.innerHTML = siblings.map(s => {
@@ -6328,7 +6375,7 @@ function pzRenderSlots() {
 function pzOpenSlot(idx) {
   pz.activeSlot = idx;
   pzRenderSlots();
-  const flavors = allItems.filter(i=>i.item_type==='pizza' && i.status!=='esgotado');
+  const flavors = allItems.filter(i=>i.item_type==='pizza' && i.status!=='esgotado' && _garcomItemVisivel(i));
   const names   = ['1º sabor','2º sabor','3º sabor','4º sabor'];
   document.getElementById('pz-picker-title').textContent = 'ESCOLHA O '+(names[idx]||'SABOR').toUpperCase();
   document.getElementById('pz-picker').style.display = '';

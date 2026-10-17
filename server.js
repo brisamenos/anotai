@@ -1285,6 +1285,14 @@ const MIGRATIONS = [
     `ALTER TABLE store_config ADD COLUMN agendamento_config TEXT` },
   { version:92, description:'teste do pedido por IA para clientes que já existem (admin libera até uma data, sem cobrança)', up:
     `ALTER TABLE tenants ADD COLUMN ia_teste_ate TEXT` },
+  { version:93, description:'escolher no gestor de cardápio quais categorias e produtos aparecem no app do garçom (0 = aparece, padrão)', up:[
+    `ALTER TABLE categories ADD COLUMN garcom_oculto INTEGER DEFAULT 0`,
+    `ALTER TABLE menu_items ADD COLUMN garcom_oculto INTEGER DEFAULT 0`
+  ]},
+  { version:94, description:'escolher no gestor de cardápio quais categorias e produtos aparecem no cardápio do cliente (0 = aparece, padrão)', up:[
+    `ALTER TABLE categories ADD COLUMN cardapio_oculto INTEGER DEFAULT 0`,
+    `ALTER TABLE menu_items ADD COLUMN cardapio_oculto INTEGER DEFAULT 0`
+  ]},
 ]
 
 function runMigrations() {
@@ -2517,8 +2525,8 @@ const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca','voz_ativo','ia_teste_ate'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','pedido_minimo_retirada','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento','tablet_splash_bg_url','promo_automatica','agendamento_config'],
-  categories:   ['id','tenant_id','name','label','type','promo','emoji','image_url','sort_order','ativo'],
-  menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','video_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','hide_price','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at'],
+  categories:   ['id','tenant_id','name','label','type','promo','emoji','image_url','sort_order','ativo','garcom_oculto','cardapio_oculto'],
+  menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','video_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','hide_price','garcom_oculto','cardapio_oculto','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','taxa_servico','clientes_json','pagamentos_json','nome','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
@@ -5424,6 +5432,20 @@ function _vozEhPizza(item) {
 // (mantemos 'inativo' também na lista só por segurança, caso apareça em
 // dado antigo).
 const _VOZ_STATUS_INDISPONIVEL = ['esgotado', 'pausado', 'inativo']
+// Produto ou categoria que o gestor escondeu do cardápio do cliente
+// ("Onde aparece" → cardapio_oculto = 1) também fica de fora do robô do
+// WhatsApp. "t" é o nome/apelido da tabela menu_items na consulta.
+function _vozSqlVisivelCliente(t = 'menu_items') {
+  return ` AND COALESCE(${t}.cardapio_oculto,0)=0 AND NOT EXISTS (SELECT 1 FROM categories hc WHERE hc.tenant_id=${t}.tenant_id AND COALESCE(hc.cardapio_oculto,0)=1 AND (hc.id=${t}.category_id OR hc.name=${t}.cat_key OR (COALESCE(${t}.cat_key,'')='' AND hc.name=${t}.cat)))`
+}
+function _vozItemOcultoCliente(tenantId, item) {
+  if (!item) return true
+  if (Number(item.cardapio_oculto) === 1) return true
+  try {
+    return !!db.prepare(`SELECT 1 FROM categories WHERE tenant_id=? AND COALESCE(cardapio_oculto,0)=1 AND (id=? OR name=? OR (?='' AND name=?)) LIMIT 1`)
+      .get(tenantId, item.category_id ?? -1, item.cat_key || '', item.cat_key || '', item.cat || '')
+  } catch { return false }
+}
 
 // Pizza fica de fora da extração por IA (_vozItemEhComplexo exclui — preço
 // varia demais com tamanho/meio-a-meio pra confiar só no áudio), então
@@ -5438,7 +5460,7 @@ function _vozCasarPizzaPorNome(tenantId, texto) {
   if (!norm) return null
   const pizzas = db.prepare(`
     SELECT * FROM menu_items
-    WHERE tenant_id=? AND (status IS NULL OR status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))
+    WHERE tenant_id=? AND (status IS NULL OR status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))${_vozSqlVisivelCliente()}
   `).all(tenantId, ..._VOZ_STATUS_INDISPONIVEL).filter(_vozEhPizza)
   let melhor = null, melhorScore = 0
   for (const p of pizzas) {
@@ -5510,11 +5532,11 @@ function _vozCategoriasAtivas(tenantId) {
   return db.prepare(`
     SELECT c.id, c.name, c.label
     FROM categories c
-    WHERE c.tenant_id=? AND (c.ativo IS NULL OR c.ativo=1)
+    WHERE c.tenant_id=? AND (c.ativo IS NULL OR c.ativo=1) AND COALESCE(c.cardapio_oculto,0)=0
       AND EXISTS (
         SELECT 1 FROM menu_items m
         WHERE m.tenant_id=c.tenant_id AND (m.category_id=c.id OR m.cat_key=c.name OR m.cat=c.name)
-          AND (m.status IS NULL OR m.status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))
+          AND (m.status IS NULL OR m.status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))${_vozSqlVisivelCliente('m')}
       )
     ORDER BY c.sort_order, c.id
   `).all(tenantId, ..._VOZ_STATUS_INDISPONIVEL)
@@ -5556,7 +5578,8 @@ function _vozDetectarPerguntaDisponibilidade(texto) {
 // prioridade; senão aceita nome contido/contendo (ex: "coca" bate com
 // "Coca-Cola 1L").
 function _vozBuscarDisponibilidade(tenantId, nomePerguntado) {
-  const todos = db.prepare('SELECT id, name, price, status FROM menu_items WHERE tenant_id=?').all(tenantId)
+  const todos = db.prepare('SELECT id, name, price, status, cardapio_oculto, category_id, cat, cat_key FROM menu_items WHERE tenant_id=?').all(tenantId)
+    .map(it => _vozItemOcultoCliente(tenantId, it) ? { ...it, status: 'pausado' } : it)
   const norm = _normBairro(nomePerguntado)
   if (!norm) return null
   let parcial = null
@@ -5619,7 +5642,7 @@ function _vozItensDaCategoria(tenantId, catId) {
   return db.prepare(`
     SELECT * FROM menu_items
     WHERE tenant_id=? AND (category_id=? OR cat_key=? OR cat=?)
-      AND (status IS NULL OR status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))
+      AND (status IS NULL OR status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))${_vozSqlVisivelCliente()}
     ORDER BY name
   `).all(tenantId, catId, catName, catName, ..._VOZ_STATUS_INDISPONIVEL)
 }
@@ -5629,7 +5652,7 @@ function _vozPizzaSiblings(tenantId, item) {
   return db.prepare(`
     SELECT * FROM menu_items
     WHERE tenant_id=? AND id<>? AND (cat_key=? OR cat=?)
-      AND (status IS NULL OR status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))
+      AND (status IS NULL OR status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))${_vozSqlVisivelCliente()}
     ORDER BY name
   `).all(tenantId, item.id, catKey, catLabel, ..._VOZ_STATUS_INDISPONIVEL)
 }
@@ -6139,7 +6162,7 @@ async function _vozOferecerRepetirPedido(tenantId, phone, inst, draft) {
   for (const it of (itensAntigos || [])) {
     if (!it?.id) continue
     const atual = _vozItemPorId(tenantId, it.id)
-    if (!atual || _VOZ_STATUS_INDISPONIVEL.includes(atual.status)) continue
+    if (!atual || _VOZ_STATUS_INDISPONIVEL.includes(atual.status) || _vozItemOcultoCliente(tenantId, atual)) continue
     itensValidos.push({ id: atual.id, name: atual.name, qty: it.qty || 1, price: atual.price, obs: it.obs || '' })
   }
   if (!itensValidos.length) { await _vozOferecerMaisItens(tenantId, phone, inst, draft); return }
@@ -6779,7 +6802,7 @@ async function extrairPedidoDeTexto(tenantId, texto) {
     // Grupos obrigatórios genéricos (ex: Borda) NÃO excluem mais o item —
     // eles entram no contexto da IA pra ela tentar capturar a escolha, ou o
     // sistema pergunta depois se não veio no áudio.
-    const itensRaw = db.prepare(`SELECT id,name,price,item_type,custom_groups,hide_price,cat,cat_key FROM menu_items WHERE tenant_id=? AND (status IS NULL OR status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))`).all(tenantId, ..._VOZ_STATUS_INDISPONIVEL)
+    const itensRaw = db.prepare(`SELECT id,name,price,item_type,custom_groups,hide_price,cat,cat_key FROM menu_items WHERE tenant_id=? AND (status IS NULL OR status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))${_vozSqlVisivelCliente()}`).all(tenantId, ..._VOZ_STATUS_INDISPONIVEL)
     const itensAtivos = itensRaw.filter(i => {
       if (i.hide_price) return false
       if (_vozItemEhComplexo(i)) return false

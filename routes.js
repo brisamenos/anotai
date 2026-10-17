@@ -2148,6 +2148,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
   }
   const _chatMenuRows = (tid) => db.prepare(`SELECT id,name,description,price,item_type,custom_groups,status
     FROM menu_items WHERE tenant_id=? AND COALESCE(status,'ativo')!='pausado'
+      AND COALESCE(menu_items.cardapio_oculto,0)=0
+      AND NOT EXISTS (SELECT 1 FROM categories hc WHERE hc.tenant_id=menu_items.tenant_id AND COALESCE(hc.cardapio_oculto,0)=1
+        AND (hc.id=menu_items.category_id OR hc.name=menu_items.cat_key OR (COALESCE(menu_items.cat_key,'')='' AND hc.name=menu_items.cat)))
     ORDER BY sort_order IS NULL, sort_order, id LIMIT 300`).all(tid)
   const _chatPizzaSizes = (item) => {
     const groups = _chatJson(item?.custom_groups, [])
