@@ -1147,6 +1147,7 @@ async function init() {
       destaque: !!x.destaque
     }));
     allCats   = (catsR.data   || []);
+    _cardapioTirarOcultos();
     // Cupom: filtra os expirados e sem usos disponíveis no client
     // (server-side há também rechecagem no /api/cupom/validar antes de fechar pedido)
     const _agoraISO = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -1573,6 +1574,26 @@ function applyBrandingLive(cfg) {
     .catch(()=>{});
 }
 
+// O gestor pode esconder do cardápio do cliente uma categoria inteira ou um
+// produto solto ("Onde aparece" no gestor de cardápio → cardapio_oculto = 1).
+// Categoria escondida leva junto todos os produtos dela. Item e categoria
+// se ligam pelo id ou pelo NOME (cat_key/cat), igual ao resto do cardápio.
+function _cardapioTirarOcultos() {
+  const oc = new Set();
+  (allCats || []).forEach(c => {
+    if (Number(c.cardapio_oculto) === 1) { oc.add('id:' + c.id); if (c.name) oc.add('n:' + c.name); }
+  });
+  if (oc.size) allCats = allCats.filter(c => Number(c.cardapio_oculto) !== 1);
+  allItems = (allItems || []).filter(i => {
+    if (Number(i.cardapio_oculto) === 1) return false;
+    if (!oc.size) return true;
+    if (i.category_id != null && i.category_id !== '' && oc.has('id:' + i.category_id)) return false;
+    if (i.cat_key && oc.has('n:' + i.cat_key)) return false;
+    if (!i.cat_key && i.cat && oc.has('n:' + i.cat)) return false;
+    return true;
+  });
+}
+
 async function reloadMenu() {
   const [itemsR, catsR] = await Promise.all([
     sb.from('menu_items').select('*').not('status','eq','pausado').order('sort_order', { nullsFirst: false }).order('id'),
@@ -1586,6 +1607,7 @@ async function reloadMenu() {
     destaque: !!x.destaque
   }));
   allCats  = (catsR.data  || []);
+  _cardapioTirarOcultos();
   try {
     window._cardapioItems = allItems;
     window._cardapioCats = allCats;
