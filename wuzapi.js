@@ -79,6 +79,11 @@ async function createUser(name) {
   return { id, token };
 }
 
+// Erro de "token não existe/não autorizado": a instância foi apagada na WuzAPI
+function tokenInvalido(err) {
+  return !!err && (err.status === 401 || /unauthori[sz]ed|invalid token|user not found|no user/i.test(String(err.message || '')));
+}
+
 async function deleteUser(id) {
   if (id === null || id === undefined || id === '') return null;
   return wzFetch(`/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE', admin: true });
@@ -284,6 +289,7 @@ module.exports = {
   isConfigured,
   createUser,
   deleteUser,
+  tokenInvalido,
   checkUsers,
   connect,
   setWebhook,

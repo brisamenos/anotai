@@ -60,17 +60,28 @@ async function status(tenantId) {
 async function connect(tenantId, baseUrl) {
   if (!wuzapi.isConfigured()) throw new Error('WuzAPI não configurada no servidor (WUZAPI_URL / WUZAPI_ADMIN_TOKEN)');
   let cfg = getConfig(tenantId);
-  if (!cfg.wuzapi_token) {
-    const tenantRow = D.db.prepare('SELECT slug, nome FROM tenants WHERE id=?').get(tenantId);
-    const userName = `estimafood-${tenantRow?.slug || tenantId}`;
+  const tenantRow = D.db.prepare('SELECT slug, nome FROM tenants WHERE id=?').get(tenantId);
+  const userName = `estimafood-${tenantRow?.slug || tenantId}`;
+  const criarInstancia = async () => {
     const created = await wuzapi.createUser(userName);
     D.db.prepare('UPDATE store_config SET wuzapi_token=?, wuzapi_user_id=? WHERE tenant_id=?')
       .run(created.token, created.id === null ? null : String(created.id), tenantId);
     cfg = getConfig(tenantId);
-  }
+  };
+  if (!cfg.wuzapi_token) await criarInstancia();
   const secret = webhookSecretFor(tenantId);
   const webhook = `${String(baseUrl).replace(/\/$/, '')}/webhook/wuz/${tenantId}/${secret}`;
-  await wuzapi.connect(cfg.wuzapi_token, webhook);
+  try {
+    await wuzapi.connect(cfg.wuzapi_token, webhook);
+  } catch (e) {
+    // A instância desta loja sumiu da WuzAPI (ex.: a WuzAPI reiniciou sem
+    // guardar os dados). O token salvo não vale mais: cria de novo e segue,
+    // em vez de ficar dando erro para sempre ao tentar conectar.
+    if (!wuzapi.tokenInvalido(e)) throw e;
+    D.log?.('⚠️', `WuzAPI: instância de ${userName} não existe mais, criando de novo`);
+    await criarInstancia();
+    await wuzapi.connect(cfg.wuzapi_token, webhook);
+  }
 
   const started = Date.now();
   while (Date.now() - started < 20000) {

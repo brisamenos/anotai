@@ -233,6 +233,14 @@ async function wuzCheckStatus(respostaPronta) {
   }
 }
 
+// Motivo técnico da falha, em letra pequena, pra facilitar o suporte
+function _wuzDetalheErro(r) {
+  const msg = String((r && r.data && r.data.error) || (r && r.status ? 'erro ' + r.status : '')).slice(0, 200);
+  if (!msg) return '';
+  const safe = msg.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return `<div style="font-size:11.5px;color:var(--muted);margin-top:12px">Motivo: ${safe}</div>`;
+}
+
 async function wuzConectar() {
   const area = document.getElementById('wuz-qr-area');
   if (area) area.innerHTML = '<div style="font-size:13.5px;color:var(--muted)">Gerando o QR Code... pode levar até 20 segundos</div>';
@@ -245,7 +253,7 @@ async function wuzConectar() {
   const r = await WUZ.req('POST', '/connect', {});
   if (!r.ok) {
     console.warn('[WhatsApp] falha ao conectar:', r.data?.error || r.status);
-    if (area) area.innerHTML = `<div style="font-size:14px;font-weight:700;margin-bottom:6px">Não foi possível gerar o QR Code agora</div><div style="font-size:13px;color:var(--muted);margin-bottom:14px">Tente de novo em instantes. Se continuar, fale com o suporte.</div><button class="btn bp" onclick="wuzConectar()">Tentar de novo</button>`;
+    if (area) area.innerHTML = `<div style="font-size:14px;font-weight:700;margin-bottom:6px">Não foi possível gerar o QR Code agora</div><div style="font-size:13px;color:var(--muted);margin-bottom:14px">Tente de novo em instantes. Se continuar, fale com o suporte.</div><button class="btn bp" onclick="wuzConectar()">Tentar de novo</button>${_wuzDetalheErro(r)}`;
     return;
   }
   if (r.data?.status === 'connected') { wuzCheckStatus(); sbToast('ok', 'WhatsApp já estava conectado!'); return; }

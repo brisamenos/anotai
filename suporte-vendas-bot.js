@@ -225,7 +225,16 @@ async function connect(baseUrl) {
     g = saveCfg({ wuzapi_user_token: created.token, wuzapi_user_id: created.id })
   }
   const webhook = `${String(baseUrl).replace(/\/$/, '')}/webhook/cobranca-wuz/${webhookSecret()}`
-  await wuzapi.connect(g.wuzapi_user_token, webhook)
+  try {
+    await wuzapi.connect(g.wuzapi_user_token, webhook)
+  } catch (e) {
+    // Instância sumiu da WuzAPI (reinício sem guardar dados): cria de novo
+    if (!wuzapi.tokenInvalido(e)) throw e
+    D.log?.('⚠️', 'WuzAPI: instância do suporte não existe mais, criando de novo')
+    const created = await wuzapi.createUser(USER_NAME)
+    g = saveCfg({ wuzapi_user_token: created.token, wuzapi_user_id: created.id })
+    await wuzapi.connect(g.wuzapi_user_token, webhook)
+  }
 
   // Espera o QR (ou perceber que ja esta pareado)
   const started = Date.now()
