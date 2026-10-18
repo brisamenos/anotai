@@ -1293,6 +1293,9 @@ const MIGRATIONS = [
     `ALTER TABLE categories ADD COLUMN cardapio_oculto INTEGER DEFAULT 0`,
     `ALTER TABLE menu_items ADD COLUMN cardapio_oculto INTEGER DEFAULT 0`
   ]},
+  { version:95, description:'aviso pelo WhatsApp de suporte quando o WhatsApp da loja desconecta', up:[
+    `CREATE TABLE IF NOT EXISTS wa_desconexao (tenant_id TEXT PRIMARY KEY, desde TEXT, avisos INTEGER DEFAULT 0, ultimo_aviso TEXT)`
+  ]},
 ]
 
 function runMigrations() {

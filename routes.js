@@ -1421,6 +1421,85 @@ function _iniciarAutoCobrancaJob(ctx) {
   setInterval(tick, 30 * 60_000)
 }
 
+// ── Aviso de WhatsApp desconectado (pelo número de suporte) ─────────────
+// A cada 30 min confere as lojas que usam a conexão nova (WuzAPI). Se o
+// WhatsApp da loja estiver desconectado há mais de 20 min, manda uma
+// mensagem pelo WhatsApp de suporte para o dono reconectar. Repete no
+// máximo a cada 24h, até 3 vezes por queda, e só entre 9h e 20h. Quando a
+// loja reconecta, zera tudo. Se a própria WuzAPI estiver fora do ar, não
+// avisa ninguém (não é culpa da loja). Para desligar: WA_AVISO_DESCONECTADO=0
+let _avisoWaJobIniciado = false
+const _AVISO_WA_MAX = 3
+function _iniciarAvisoWaDesconectadoJob(ctx) {
+  if (_avisoWaJobIniciado) return
+  _avisoWaJobIniciado = true
+  if (String(process.env.WA_AVISO_DESCONECTADO || '') === '0') return
+  const { db, log } = ctx
+  const wuzapi = require('./wuzapi')
+  const agoraSql = () => new Date().toISOString().slice(0, 19).replace('T', ' ')
+  const minDesde = (txt) => txt ? (Date.now() - new Date(String(txt).replace(' ', 'T') + 'Z').getTime()) / 60000 : 0
+  const baseGestor = (process.env.PUBLIC_BASE_URL || process.env.APP_URL || 'https://estimafood.evocrm.sbs').replace(/\/+$/, '') + '/gestor.html'
+
+  async function tick() {
+    try {
+      if (!wuzapi.isConfigured()) return
+      const lojas = db.prepare(`
+        SELECT t.id, t.nome, t.segmento, t.telefone_cobranca, sc.store_name, sc.store_whatsapp, sc.wuzapi_token
+        FROM tenants t JOIN store_config sc ON sc.tenant_id = t.id
+        WHERE t.ativo = 1 AND sc.whatsapp_provider = 'wuzapi' AND COALESCE(sc.wuzapi_token,'') <> ''
+          AND t.id NOT IN ('_admin','_global','admin','system')
+      `).all()
+      const hora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getHours()
+      const horarioOk = hora >= 9 && hora < 20
+      let enviados = 0
+      for (const l of lojas) {
+        let st = 'erro'
+        try { st = await wuzapi.getStatus(l.wuzapi_token) }
+        catch (e) { st = wuzapi.tokenInvalido(e) ? 'disconnected' : 'erro' } // instância apagada conta como desconectada
+        if (st === 'erro') continue // WuzAPI fora do ar ou lenta: não acusa a loja
+        if (st === 'connected') { db.prepare('DELETE FROM wa_desconexao WHERE tenant_id=?').run(l.id); continue }
+        let reg = db.prepare('SELECT * FROM wa_desconexao WHERE tenant_id=?').get(l.id)
+        if (!reg) { db.prepare('INSERT INTO wa_desconexao (tenant_id, desde, avisos) VALUES (?,?,0)').run(l.id, agoraSql()); continue }
+        if (!horarioOk || minDesde(reg.desde) < 20) continue
+        if ((reg.avisos || 0) >= _AVISO_WA_MAX) continue
+        if (reg.ultimo_aviso && minDesde(reg.ultimo_aviso) < 24 * 60) continue
+        if (enviados >= 30) break // no máximo 30 por rodada; o resto vai na próxima
+        let tel = String(l.telefone_cobranca || l.store_whatsapp || '').replace(/\D/g, '')
+        if (!tel) continue
+        if (tel.length === 10 || tel.length === 11) tel = '55' + tel
+        const gestor = db.prepare("SELECT nome FROM sys_users WHERE tenant_id=? AND role='gestor' AND ativo=1 ORDER BY created_at ASC LIMIT 1").get(l.id)
+        const nome = String(gestor?.nome || '').trim().split(' ')[0]
+        const loja = l.store_name || l.nome || 'sua loja'
+        const msg = [
+          `Olá${nome ? ', ' + nome : ''}! O WhatsApp da *${loja}* está desconectado do ${_brandNome(l.segmento)}.`,
+          '',
+          'Enquanto isso, as mensagens automáticas e o atendimento do robô não chegam aos seus clientes.',
+          '',
+          '*Para reconectar (leva menos de 1 minuto):*',
+          `1. Abra o painel: ${baseGestor}`,
+          '2. Toque no aviso *Conectar agora* (ou vá em *Robô > Conexão*)',
+          '3. No celular da loja, abra o WhatsApp > *Aparelhos conectados* > *Conectar um aparelho* e leia o QR Code',
+          '',
+          'Precisa de ajuda? É só responder esta mensagem.'
+        ].join('\n')
+        try {
+          const r = await _svBot.sendText(tel, msg)
+          if (r && r.ok) {
+            db.prepare('UPDATE wa_desconexao SET avisos = COALESCE(avisos,0) + 1, ultimo_aviso = ? WHERE tenant_id=?').run(agoraSql(), l.id)
+            enviados++
+            log('📨', `Aviso de WhatsApp desconectado enviado: ${loja} (${tel})`)
+            await new Promise(r2 => setTimeout(r2, 4000)) // espaçado, para o número de suporte não parecer spam
+          } else {
+            log('⚠️', `Aviso de WhatsApp desconectado NÃO enviado: ${loja} — ${r?.error || r?.data?.error || 'falha no envio'}`)
+          }
+        } catch (e) { log('⚠️', `Aviso de WhatsApp desconectado erro (${loja}):`, e.message) }
+      }
+    } catch (e) { log('⚠️', 'Aviso WhatsApp desconectado: erro geral:', e.message) }
+  }
+  setTimeout(tick, 3 * 60_000)
+  setInterval(tick, 30 * 60_000)
+}
+
 module.exports = async function handleRoutes(req, res, ctx) {
   const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
           validarSessaoAdmin, criarSessaoAdmin, validarSessaoGestor, criarSessaoGestor, criarSessaoGarcom,
@@ -3493,6 +3572,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
   // ── Inicia job de auto-cobrança SaaS (uma vez) ────────────────────────────
   _iniciarAutoCobrancaJob(ctx)
+  _iniciarAvisoWaDesconectadoJob(ctx)
 
   if (req.method === 'POST' && upath === '/api/entregador-login') {
     const body = await readBody(req)
@@ -7101,7 +7181,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (req.method === 'GET' && (action === '' || action === '/status')) {
         const cfg = _tenantWa.getConfig(tid)
         const st = await _tenantWa.status(tid)
-        send(res, 200, { ...st, provider: cfg.whatsapp_provider || 'evolution' })
+        // ja_conectou: a loja já tinha montado a conexão (mostra o aviso de
+        // "WhatsApp desconectado" no gestor em vez do convite para conectar)
+        send(res, 200, { ...st, provider: cfg.whatsapp_provider || 'evolution', ja_conectou: !!cfg.wuzapi_token })
         return true
       }
       if (req.method === 'POST' && action === '/provider') {

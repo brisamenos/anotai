@@ -44,7 +44,9 @@ async function wzFetch(path, { method = 'GET', body, token, admin = false } = {}
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
 
   if (!response.ok || (data && data.success === false)) {
-    const message = (data && (data.error || data.message)) || `WuzAPI retornou ${response.status}`;
+    let message = (data && (data.error || data.message)) || `WuzAPI retornou ${response.status}`;
+    // Rota de admin recusada = a senha de admin do EstimaFood não é a mesma da WuzAPI
+    if (admin && response.status === 401) message = 'senha de admin da WuzAPI não confere (WUZAPI_ADMIN_TOKEN diferente nos dois serviços)';
     const err = new Error(String(message));
     err.status = response.status;
     throw err;

@@ -143,6 +143,52 @@ let wuzQrInterval = null;
 //  · servidor sem a conexão nova       → mostra a antiga, com o nome da conexão
 let _waProvider = null;          // 'wuzapi' | 'evolution' (o que está gravado no servidor)
 let _waTrocarAoConectar = false; // true = gravar a conexão nova no primeiro "Conectar"
+let _waJaConectou = false;       // a loja já tinha montado a conexão (caiu depois)
+
+// ── Faixa "WhatsApp desconectado" ───────────────────────
+// Aparece no topo do gestor, em qualquer tela, quando o WhatsApp da loja
+// caiu. "Conectar agora" leva direto ao QR Code; "Depois" esconde por 1h.
+// Some sozinha quando reconecta (o status é conferido a cada 30s).
+function _waBarraChave() { return 'estima_wa_barra_' + (_sessao?.tenant_id || ''); }
+function _waBarraDesconectado(mostrar) {
+  let el = document.getElementById('wa-barra-off');
+  if (!mostrar) { if (el) el.remove(); return; }
+  try { const ate = Number(localStorage.getItem(_waBarraChave()) || 0); if (ate > Date.now()) { if (el) el.remove(); return; } } catch (e) {}
+  if (el) return;
+  if (!document.getElementById('wa-barra-off-css')) {
+    const st = document.createElement('style');
+    st.id = 'wa-barra-off-css';
+    st.textContent = `
+#wa-barra-off{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:9000;width:min(720px,calc(100vw - 24px));display:flex;align-items:center;gap:14px;padding:12px 14px 12px 16px;border-radius:14px;background:#fff7ed;border:1px solid #fdba74;color:#7c2d12;box-shadow:0 10px 30px rgba(0,0,0,.14)}
+#wa-barra-off .wbo-ic{width:36px;height:36px;border-radius:10px;background:#ffedd5;color:#c2410c;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+#wa-barra-off .wbo-tx{flex:1;min-width:0;font-size:13px;line-height:1.4}
+#wa-barra-off .wbo-tx strong{display:block;font-size:14px;color:#7c2d12}
+#wa-barra-off .wbo-bt{display:flex;gap:8px;flex-shrink:0}
+#wa-barra-off button{border:0;border-radius:10px;font:inherit;font-size:13px;font-weight:700;padding:9px 14px;cursor:pointer;white-space:nowrap}
+#wa-barra-off .wbo-ok{background:#16a34a;color:#fff}
+#wa-barra-off .wbo-depois{background:transparent;color:#9a3412}
+#wa-barra-off button:focus-visible{outline:2px solid #c2410c;outline-offset:2px}
+@media(max-width:600px){#wa-barra-off{top:58px;flex-wrap:wrap;gap:10px}#wa-barra-off .wbo-bt{width:100%}#wa-barra-off .wbo-ok{flex:1}}`;
+    document.head.appendChild(st);
+  }
+  el = document.createElement('div');
+  el.id = 'wa-barra-off';
+  el.setAttribute('role', 'alert');
+  el.innerHTML = `<div class="wbo-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div>
+    <div class="wbo-tx"><strong>Seu WhatsApp está desconectado</strong>As mensagens automáticas e o robô não estão chegando aos clientes.</div>
+    <div class="wbo-bt"><button type="button" class="wbo-depois">Depois</button><button type="button" class="wbo-ok">Conectar agora</button></div>`;
+  el.querySelector('.wbo-depois').onclick = () => {
+    try { localStorage.setItem(_waBarraChave(), String(Date.now() + 60 * 60 * 1000)); } catch (e) {}
+    el.remove();
+  };
+  el.querySelector('.wbo-ok').onclick = () => {
+    el.remove();
+    try { if (typeof nav === 'function') nav('robo'); } catch (e) {}
+    try { if (typeof roboTab === 'function') roboTab('wp'); } catch (e) {}
+    setTimeout(() => { if (typeof wuzConectar === 'function') wuzConectar(); }, 300);
+  };
+  document.body.appendChild(el);
+}
 
 async function waProviderInit() {
   const r = await WUZ.req('GET', '/status');
@@ -221,13 +267,21 @@ async function wuzCheckStatus(respostaPronta) {
   if (naAbaRobo) _wuzSetStatus('loading', 'Verificando...');
   const r = (respostaPronta && respostaPronta.data) ? respostaPronta : await WUZ.req('GET', '/status');
   const area = document.getElementById('wuz-qr-area');
+  if (r.ok && r.data && 'ja_conectou' in r.data) _waJaConectou = !!r.data.ja_conectou;
   if (r.ok && r.data?.status === 'connected') {
     wuzConnected = true;
+    _waBarraDesconectado(false);
     _wuzSetStatus('connected', 'Conectado');
     if (area) area.innerHTML = `<div style="width:52px;height:52px;border-radius:50%;background:rgba(31,157,87,.12);color:var(--pf-ok);display:flex;align-items:center;justify-content:center;margin:0 auto 14px"><svg width="26" height="26" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div style="font-size:15px;font-weight:750;margin-bottom:4px">WhatsApp conectado</div><div style="font-size:13px;color:var(--muted);margin-bottom:16px">As mensagens automáticas saem por este número</div><button class="btn bd" onclick="wuzDesconectar()">Desconectar</button>`;
   } else {
     wuzConnected = false;
     _wuzSetStatus('disconnected', 'Desconectado');
+    // Faixa "WhatsApp desconectado": só para loja que já usava a conexão e
+    // quando a resposta é confiável (desconectado de fato ou instância
+    // apagada) — se a WuzAPI estiver fora do ar, não assusta o gestor.
+    const st = String(r.data?.status || '');
+    const desconectadoDeFato = r.ok && (st === 'disconnected' || st === 'connecting' || /unauthori|invalid|not found/i.test(st));
+    _waBarraDesconectado(_waProvider === 'wuzapi' && _waJaConectou && desconectadoDeFato);
     // só repõe o botão se não houver um QR Code na tela esperando leitura
     if (area && !area.querySelector('img')) area.innerHTML = _WUZ_DESCONECTADO_HTML;
   }
@@ -826,6 +880,7 @@ function _avisoWaChave() { return 'estima_aviso_wa_' + (_sessao?.tenant_id || ''
 async function avisoWhatsappVerificar() {
   try {
     if (wuzConnected || evoConnected || document.getElementById('wa-aviso')) return;
+    if (_waJaConectou) return; // loja que só caiu: a faixa "WhatsApp desconectado" já avisa
     const tid = _sessao?.tenant_id || '';
     if (!tid) return;
     try { if (localStorage.getItem(_avisoWaChave()) === _avisoWaHoje()) return; } catch (e) {}
