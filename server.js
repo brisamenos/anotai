@@ -6135,6 +6135,23 @@ function _vozTiposEntregaDisponiveis(tenantId) {
   return tipos
 }
 
+// Acha a unidade de retirada pelo que o cliente disse: número da opção,
+// nome ("principal", "no varejo") ou parte do endereço ("rua A").
+function _vozCasarPontoRetirada(pontos, txt) {
+  const bruto = String(txt || '').trim()
+  if (!bruto || !pontos?.length) return null
+  if (/^\d+$/.test(bruto)) { const i = parseInt(bruto, 10); return (i >= 1 && i <= pontos.length) ? pontos[i - 1] : null }
+  const t = _normBairro(bruto)
+  if (!t) return null
+  const exato = pontos.find(p => _normBairro(p.nome) === t || _normBairro((p.nome || '') + ' — ' + (p.endereco || '')) === t)
+  if (exato) return exato
+  const porNome = pontos.filter(p => { const n = _normBairro(p.nome); return n && (t.includes(n) || (t.length >= 3 && n.includes(t))) })
+  if (porNome.length === 1) return porNome[0]
+  const porEnd = pontos.filter(p => { const e = _normBairro(p.endereco || ''); return e && t.length >= 4 && (e.includes(t) || t.includes(e)) })
+  if (porEnd.length === 1) return porEnd[0]
+  return null
+}
+
 function _vozPontosRetirada(tenantId) {
   const sc = db.prepare('SELECT store_address, pickup_addresses FROM store_config WHERE tenant_id=?').get(tenantId)
   let pontos = []
@@ -6201,13 +6218,23 @@ async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido, textoOrig
     taxa: draftExistente.taxa,
     bairro_nome: draftExistente.bairro_nome,
     forma_pagamento: draftExistente.forma_pagamento ?? extraido.forma_pagamento,
-    troco: draftExistente.troco,
-    observacao_geral: draftExistente.observacao_geral ?? extraido.observacao_geral
+    troco: draftExistente.troco !== undefined ? draftExistente.troco : extraido.troco,
+    observacao_geral: draftExistente.observacao_geral ?? extraido.observacao_geral,
+    rua_numero: draftExistente.rua_numero ?? extraido.rua_numero,
+    ponto_retirada: draftExistente.ponto_retirada ?? extraido.ponto_retirada,
+    nome_cliente: draftExistente.nome_cliente ?? extraido.nome_cliente,
+    finalizar: !!extraido.finalizar
   } : {
     tipo_pedido: extraido.tipo_pedido,
     forma_pagamento: extraido.forma_pagamento,
-    observacao_geral: extraido.observacao_geral
+    observacao_geral: extraido.observacao_geral,
+    troco: extraido.troco,
+    rua_numero: extraido.rua_numero,
+    ponto_retirada: extraido.ponto_retirada,
+    nome_cliente: extraido.nome_cliente,
+    finalizar: !!extraido.finalizar
   }
+  if (base.troco === undefined) delete base.troco // sem valor = ainda vai perguntar
   // Loja no WuzAPI: tenta casar o texto com o SABOR de uma pizza (pizza
   // fica de fora da extração por IA — ver _vozCasarPizzaPorNome) — SEMPRE,
   // mesmo quando o áudio já reconheceu outros itens junto (ex: "quero uma
@@ -6234,6 +6261,15 @@ async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido, textoOrig
     return
   }
   if (!extraido.itens.length) {
+    // "Pode finalizar" / "é só isso" sem item novo, com itens já no carrinho:
+    // vai direto pro fechamento (entrega/retirada, pagamento...).
+    if (emAndamento && base.finalizar && itensBase.length) {
+      const draftFim = { ...draftExistente, ...base, itens: itensBase, bairro: draftExistente.bairro ?? extraido.bairro }
+      delete draftFim.estado; delete draftFim.meta; delete draftFim.finalizar
+      if (draftFim.addr) await _vozMontarConfirmacaoFinal(tenantId, phone, inst, draftFim)
+      else await _vozResolverTipoEEndereco(tenantId, phone, inst, draftFim)
+      return
+    }
     if (_vozEhWuzapi(tenantId)) {
       if (emAndamento) {
         // Pedido já em andamento — não faz sentido oferecer repetir o
@@ -6281,8 +6317,11 @@ async function _vozProcessarGruposPendentes(tenantId, phone, inst, draft) {
   const draftCompleto = {
     itens: itensFinal, bairro: draft.bairro, tipo_pedido: draft.tipo_pedido,
     forma_pagamento: draft.forma_pagamento, observacao_geral: draft.observacao_geral,
-    addr: draft.addr, taxa: draft.taxa, troco: draft.troco, bairro_nome: draft.bairro_nome
+    addr: draft.addr, taxa: draft.taxa, troco: draft.troco, bairro_nome: draft.bairro_nome,
+    rua_numero: draft.rua_numero, ponto_retirada: draft.ponto_retirada, nome_cliente: draft.nome_cliente,
+    finalizar: draft.finalizar
   }
+  for (const k of Object.keys(draftCompleto)) if (draftCompleto[k] === undefined) delete draftCompleto[k]
   // Se o cliente já disse EXPLICITAMENTE o tipo de entrega nesse mesmo
   // áudio/texto (ex: pedido "completo" numa mensagem só: itens + "pra
   // entrega"/"pra retirar") E o endereço ainda não tinha sido resolvido
@@ -6293,8 +6332,13 @@ async function _vozProcessarGruposPendentes(tenantId, phone, inst, draft) {
   // faz sentido oferecer o catálogo de novo, pra poder acrescentar mais de
   // um item antes de finalizar). Se ele não disse nada sobre entrega/
   // retirada, também continua oferecendo o catálogo, como sempre foi.
-  if (!draft.addr && (draft.tipo_pedido === 'delivery' || draft.tipo_pedido === 'retirada' || draft.tipo_pedido === 'mesa')) {
+  if (!draft.addr && (draft.tipo_pedido === 'delivery' || draft.tipo_pedido === 'retirada' || draft.tipo_pedido === 'mesa' || draft.finalizar)) {
     await _vozResolverTipoEEndereco(tenantId, phone, inst, draftCompleto)
+    return
+  }
+  if (draft.addr && draft.finalizar) {
+    const { finalizar: _f, ...semFim } = draftCompleto
+    await _vozMontarConfirmacaoFinal(tenantId, phone, inst, semFim)
     return
   }
   // IMPORTANTE: preserva addr/taxa/troco/bairro_nome quando já existirem —
@@ -6311,7 +6355,7 @@ async function _vozResolverTipoEEndereco(tenantId, phone, inst, draftIn) {
   // Descarta qualquer "estado"/"meta" residual que tenha vindo grudado no
   // draft (mesma proteção já aplicada em _vozContinuarPagamento/_vozPedirRuaNumero)
   // — sem isso, um _vozSalvarDraft mais abaixo pode gravar o estado errado.
-  const { estado: _e, meta: _m, ...draft } = draftIn
+  const { estado: _e, meta: _m, finalizar: _fim, ...draft } = draftIn
   const tiposDisp = _vozTiposEntregaDisponiveis(tenantId)
   if (!tiposDisp.length) {
     await sendWA(phone, 'No momento o pedido por voz não está disponível pra essa loja. Fale com o atendente ou use o cardápio.', inst)
@@ -6344,9 +6388,21 @@ async function _vozResolverTipoEEndereco(tenantId, phone, inst, draftIn) {
   if (tipo === 'retirada') {
     const pontos = _vozPontosRetirada(tenantId)
     if (pontos.length > 1) {
-      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_ponto_retirada', ...draft, tipo_pedido: tipo })
-      const opcoesTxt = pontos.map((p, i) => `${i + 1}. ${p.nome}${p.endereco ? ' — ' + p.endereco : ''}`).join('\n')
-      await sendWA(phone, `De qual unidade vai ser a retirada?\n${opcoesTxt}`, inst)
+      // O cliente já disse a unidade (no áudio/texto do pedido)? Usa direto.
+      const jaDita = draft.ponto_retirada ? _vozCasarPontoRetirada(pontos, draft.ponto_retirada) : null
+      if (jaDita) {
+        const addrRet = ['Retirada', jaDita.endereco || jaDita.nome].filter(Boolean).join(' — ')
+        await _vozContinuarPagamento(tenantId, phone, inst, { ...draft, tipo_pedido: 'retirada', addr: addrRet, taxa: 0 })
+        return
+      }
+      const opcoesPr = pontos.map((p, i) => ({ id: `pr:${i}`, label: p.nome + (p.endereco ? ' — ' + p.endereco : '') }))
+      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_ponto_retirada', ...draft, tipo_pedido: tipo, meta: { opcoes: opcoesPr } })
+      await _vozEnviarOpcoes(phone, inst, {
+        titulo: 'Retirada',
+        texto: 'De qual unidade vai ser a retirada?',
+        buttonText: 'Ver unidades',
+        rows: pontos.map((p, i) => ({ id: `pr:${i}`, title: p.nome.slice(0, 24), description: (p.endereco || '').slice(0, 72) }))
+      })
       return
     }
     const addr = pontos.length === 1 ? ['Retirada', pontos[0].endereco].filter(Boolean).join(' — ') : 'Retirada no balcão'
@@ -6502,6 +6558,7 @@ async function _vozMontarConfirmacaoFinal(tenantId, phone, inst, draft) {
   const listaItens = draft.itens.map(i => `${i.qty}x ${i.name}${i.obs ? ` (${i.obs})` : ''}`).join('\n')
   const pagLabelMap = { pix: 'PIX', credito: 'Cartão de Crédito (na entrega)', debito: 'Cartão de Débito (na entrega)', dinheiro: 'Dinheiro na entrega' }
   let pagLabel = pagLabelMap[draft.forma_pagamento] || 'Dinheiro na entrega'
+  if (draft.tipo_pedido === 'retirada') pagLabel = pagLabel.replace('na entrega', 'na retirada')
   if (draft.forma_pagamento === 'dinheiro' && draft.troco) {
     pagLabel += draft.troco === -1 ? ' (precisa de troco, valor a combinar)' : ` (troco para R$${fmt(draft.troco)})`
   }
@@ -6836,7 +6893,7 @@ async function extrairPedidoDeTexto(tenantId, texto) {
     const sysPrompt = [
       'Você extrai pedidos de restaurante a partir de um texto transcrito de áudio de WhatsApp.',
       'Responda APENAS com um JSON válido, sem nenhum texto fora do JSON, no formato:',
-      '{"itens":[{"item_id":123,"qty":1,"obs":"","escolhas":[{"grupo":"Borda","opcao":"Catupiry"}]}],"bairro":"nome do bairro ou null","tipo_pedido":"delivery|retirada|mesa|null","forma_pagamento":"dinheiro|pix|cartao|credito|debito|null","observacao_geral":"texto ou null","nao_entendido":"texto ou null"}',
+      '{"itens":[{"item_id":123,"qty":1,"obs":"","escolhas":[{"grupo":"Borda","opcao":"Catupiry"}]}],"rua_numero":null,"unidade_retirada":null,"troco_para":null,"sem_troco":false,"nome_cliente":null,"finalizar":false,"bairro":"nome do bairro ou null","tipo_pedido":"delivery|retirada|mesa|null","forma_pagamento":"dinheiro|pix|cartao|credito|debito|null","observacao_geral":"texto ou null","nao_entendido":"texto ou null"}',
       'Regras: use SOMENTE item_id que existam na lista de cardápio fornecida — nunca invente um id.',
       'Cada item pode ter "grupos" no cardápio fornecido. Grupo com "obrigatorio":true PRECISA de 1 opção escolhida — se o cliente já disse no áudio (ex: "borda catupiry"), preencha em "escolhas" usando o nome EXATO da opção fornecida; se não disse, deixe sem nenhuma entrada pra esse grupo (o sistema pergunta depois). Grupo com "obrigatorio":false é um ADICIONAL opcional — só preencha "escolhas" pra ele se o cliente pediu explicitamente (ex: "com bacon extra"); NUNCA invente uma escolha pra um adicional que ele não mencionou.',
       'Grupo com "tipo":"checkbox" aceita MAIS DE UMA opção — se o cliente pediu duas coisas desse grupo, repita uma entrada em "escolhas" pra cada uma, todas com o mesmo "grupo". Grupo "tipo":"radio" aceita só 1 opção.',
@@ -6844,10 +6901,15 @@ async function extrairPedidoDeTexto(tenantId, texto) {
       'Se o cliente não falar bairro/endereço, deixe "bairro" como null.',
       'Se o cliente disser que vai buscar/retirar, "tipo_pedido"="retirada". Se disser que é pra entregar/mandar em casa, "tipo_pedido"="delivery". Se disser que está numa mesa do restaurante, "tipo_pedido"="mesa". Se não falar nada sobre isso, deixe null.',
       'Se o cliente não falar forma de pagamento, deixe "forma_pagamento" como null — não assuma dinheiro por padrão. Se ele disser "cartão" de forma genérica sem dizer crédito ou débito, use "cartao" (o sistema pergunta depois qual dos dois); se ele já disser explicitamente "crédito" ou "débito", use "credito" ou "debito".',
-      'O bairro/endereço dito no áudio só serve pra calcular a taxa de entrega — a rua e o número da casa são sempre perguntados depois separadamente, então não precisa tentar extrair rua/número aqui.',
+      'Se o cliente disser o bairro, coloque em "bairro". Se disser a rua e o número da casa (ex: "rua das flores 123"), coloque em "rua_numero" (sem o bairro); se não disser, null.',
+      'Se for retirada e o cliente disser em qual unidade vai buscar, coloque em "unidade_retirada" o texto EXATO de uma das "unidades_retirada" fornecidas; se não disser, null.',
+      'Se o cliente disser que precisa de troco pra um valor (ex: "troco pra 50"), coloque o número em "troco_para". Se disser que não precisa de troco, "sem_troco":true.',
+      'Se o cliente disser o próprio nome (ex: "meu nome é Ana"), coloque em "nome_cliente"; senão null.',
+      '"finalizar":true quando o cliente deixa claro que é só isso e quer fechar o pedido (ex: "só isso", "pode fechar", "quero finalizar", "pode mandar") ou quando, junto com os itens, já informa entrega/retirada ou forma de pagamento. Se só pediu itens, false.',
       '"obs" é só pra observação daquele item específico (ex: "sem cebola"), não pro pedido inteiro.'
     ].join(' ')
-    const userPrompt = JSON.stringify({ texto_transcrito: texto, cardapio: cardapioCtx })
+    const _pontosRet = _vozPontosRetirada(tenantId).map(p => p.nome + (p.endereco ? ' — ' + p.endereco : ''))
+    const userPrompt = JSON.stringify({ texto_transcrito: texto, cardapio: cardapioCtx, unidades_retirada: _pontosRet })
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -6917,7 +6979,12 @@ async function extrairPedidoDeTexto(tenantId, texto) {
       tipo_pedido: tipoPedidoValido,
       forma_pagamento: formaPagValida,
       observacao_geral: parsed.observacao_geral ? String(parsed.observacao_geral).slice(0, 300) : null,
-      nao_entendido: parsed.nao_entendido ? String(parsed.nao_entendido).slice(0, 300) : null
+      nao_entendido: parsed.nao_entendido ? String(parsed.nao_entendido).slice(0, 300) : null,
+      rua_numero: parsed.rua_numero ? String(parsed.rua_numero).slice(0, 140) : null,
+      ponto_retirada: parsed.unidade_retirada ? String(parsed.unidade_retirada).slice(0, 140) : null,
+      troco: parsed.sem_troco === true ? null : (parseFloat(parsed.troco_para) > 0 ? parseFloat(parsed.troco_para) : undefined),
+      nome_cliente: parsed.nome_cliente ? String(parsed.nome_cliente).slice(0, 60) : null,
+      finalizar: parsed.finalizar === true
     }
   } catch (e) { log('❌', '[VOZ] Falha na extração do pedido:', e.message); return null }
 }
@@ -6930,7 +6997,259 @@ async function extrairPedidoDeTexto(tenantId, texto) {
 // estado inteiro e reiniciava o pedido do zero. Retorna true se algum
 // estado bateu e a resposta já foi enviada; false se não achou estado
 // correspondente (o chamador decide o que fazer nesse caso).
-async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, msgChoiceId, cfg) {
+// ═══════════════════════════════════════════════════════════════════════
+// RESPOSTA LIVRE NO MEIO DO PEDIDO (texto ou áudio)
+// O cliente não precisa tocar no botão nem digitar o número da opção: pode
+// responder do jeito dele ("vou buscar na principal", "pode ser no pix",
+// "é só isso, pode fechar", "põe mais uma coca"). Quando a resposta não é um
+// toque/número/palavra simples, a IA interpreta a mensagem olhando a
+// pergunta atual e as opções, e o fluxo segue normalmente a partir daí.
+// Também aproveita qualquer informação que o cliente já adiantar (forma de
+// pagamento, endereço, unidade, troco, nome) pra não perguntar de novo.
+// ═══════════════════════════════════════════════════════════════════════
+const _VOZ_PERGUNTA_ESTADO = {
+  aguardando_tipo_entrega: 'Vai ser entrega ou retirada?',
+  aguardando_ponto_retirada: 'De qual unidade vai ser a retirada?',
+  aguardando_bairro: 'Qual o bairro da entrega?',
+  aguardando_rua_numero: 'Qual a rua e o número da entrega?',
+  aguardando_pagamento: 'Como prefere pagar?',
+  aguardando_tipo_cartao: 'O cartão é de crédito ou débito?',
+  aguardando_troco: 'Precisa de troco?',
+  aguardando_troco_valor: 'Troco pra quanto?',
+  aguardando_nome: 'Qual o seu nome?',
+  aguardando_confirmacao: 'Confirma o pedido?',
+  aguardando_editar_pedido: 'O que quer fazer com o pedido: adicionar item, remover item ou cancelar?',
+  aguardando_remover_item: 'Qual item quer remover?',
+  aguardando_repetir_pedido: 'Quer repetir o último pedido?',
+  aguardando_confirma_endereco: 'A entrega ainda é no endereço salvo?',
+  aguardando_decisao_itens: 'Quer adicionar mais alguma coisa, remover item ou finalizar o pedido?',
+  aguardando_mais_itens: 'Escolha uma categoria do cardápio.',
+  aguardando_categoria_item: 'Escolha um item desta categoria.',
+  aguardando_grupo: 'Escolha uma opção/adicional para o item.',
+  aguardando_pizza_tamanho: 'Qual o tamanho da pizza?',
+  aguardando_pizza_meio: 'Pizza inteira ou meio a meio?',
+  aguardando_pizza_sabor2: 'Qual o segundo sabor da pizza?'
+}
+
+function _vozOpcoesDoEstado(tenantId, d) {
+  if (d.estado === 'aguardando_ponto_retirada') {
+    return _vozPontosRetirada(tenantId).map((p, i) => ({ id: `pr:${i}`, label: p.nome + (p.endereco ? ' — ' + p.endereco : '') }))
+  }
+  if (d.estado === 'aguardando_grupo') {
+    const pend = _vozProximaPendenciaGrupo(d.itens || [])
+    if (!pend) return []
+    const g = pend.grupo
+    const ops = (g.opcoes || []).map(o => ({ id: `op:${o.nome}`, label: o.nome }))
+    if (g.tipo === 'checkbox') ops.push({ id: '__concluir', label: 'Concluir / sem adicional' })
+    else if (!g.required) ops.push({ id: '__nenhum', label: 'Não quero' })
+    return ops
+  }
+  if (d.estado === 'aguardando_confirmacao') return d.meta?.opcoes || [{ id: 'sim', label: 'Sim' }, { id: 'nao', label: 'Não' }]
+  return Array.isArray(d.meta?.opcoes) ? d.meta.opcoes : []
+}
+
+// Respostas curtas e diretas o próprio fluxo já entende sem IA (rápido e sem custo)
+function _vozRespostaDireta(tenantId, d, msg, opcoes, cfg, audio) {
+  const t = String(msg || '').trim()
+  if (!t) return true
+  if (/^\d{1,2}$/.test(t)) return true
+  const curta = t.length <= 30
+  switch (d.estado) {
+    case 'aguardando_pedido_minimo': return true // já usa a extração de itens
+    case 'aguardando_bairro': {
+      if (audio) return false
+      const fee = cfg?.delivery_fee_config ? jsonParse(cfg.delivery_fee_config) : {}
+      try { return !!_vozResolverTaxa(fee, t).resolvido } catch { return false }
+    }
+    case 'aguardando_rua_numero': return !audio && t.length <= 80 && !/\b(bairro|pix|cart[aã]o|dinheiro|retir|troco|finaliz)/i.test(t)
+    case 'aguardando_nome': return !audio && t.split(/\s+/).length <= 4 && !/\b(nome|sou|chamo|pedido)\b/i.test(t)
+    case 'aguardando_troco_valor': return /^\D{0,12}\d+([.,]\d+)?\D{0,12}$/.test(t)
+    case 'aguardando_tipo_entrega': if (curta && /\b(entrega|delivery|retirada|retirar|buscar)\b/i.test(t)) return true; break
+    case 'aguardando_pagamento': if (curta && /\b(pix|d[eé]bito|cr[eé]dito|cart[aã]o|dinheiro)\b/i.test(t)) return true; break
+    case 'aguardando_tipo_cartao': if (curta && /\b(d[eé]bito|cr[eé]dito)\b/i.test(t)) return true; break
+    case 'aguardando_troco': case 'aguardando_confirmacao': case 'aguardando_repetir_pedido': case 'aguardando_confirma_endereco':
+      if (t.length <= 15 && /^(sim|s|n[aã]o|n|ok|isso|pode|confirmo|confirma|certo|correto)\b/i.test(t)) return true
+      break
+  }
+  return t.length <= 40 && !!_vozResolverEscolha(t, null, opcoes)
+}
+
+async function _vozInterpretarRespostaIA(tenantId, d, msg, opcoes) {
+  try {
+    const apiKey = _resolverOpenAIKey(tenantId)
+    if (!apiKey) return null
+    const pontos = _vozPontosRetirada(tenantId)
+    const sys = [
+      'Você interpreta a resposta de um cliente no meio de um pedido de delivery pelo WhatsApp (texto digitado ou áudio transcrito).',
+      'Responda APENAS com JSON válido no formato:',
+      '{"opcao_id":null,"acao":"responder","tipo_pedido":null,"unidade_retirada":null,"bairro":null,"rua_numero":null,"forma_pagamento":null,"troco_para":null,"sem_troco":false,"nome":null,"confirma":null}',
+      'opcao_id: se a mensagem escolhe uma das "opcoes" da pergunta atual (pelo nome, número, posição como "a primeira", sinônimo ou descrição), devolva o "id" EXATO dela; senão null. Nunca invente id.',
+      'acao: "responder" quando responde a pergunta; "adicionar_itens" quando pede produto(s) novo(s) pro pedido; "finalizar" quando diz que é só isso / quer fechar o pedido; "remover_item" quando quer tirar um item; "cancelar" quando quer cancelar o pedido inteiro; "nao_entendi" quando não dá pra saber.',
+      'Se a mensagem pede itens E diz pra finalizar, use "adicionar_itens".',
+      'Se a pergunta é se quer adicionar mais alguma coisa e o cliente diz que não / é só isso, use "finalizar".',
+      'Extraia também qualquer informação que o cliente der, mesmo que não tenha sido perguntada: tipo_pedido ("delivery" ou "retirada"), unidade_retirada (texto EXATO de uma das unidades_retirada), bairro, rua_numero (rua e número, sem o bairro), forma_pagamento ("dinheiro","pix","credito","debito" ou "cartao" quando não disse qual), troco_para (número) ou sem_troco (true), nome (o nome da pessoa, só se ela disser), confirma (true para sim/confirmo, false para não).',
+      'Campos não mencionados ficam null (sem_troco fica false).'
+    ].join(' ')
+    const user = JSON.stringify({
+      pergunta_atual: _VOZ_PERGUNTA_ESTADO[d.estado] || d.estado,
+      opcoes: (opcoes || []).slice(0, 40).map(o => ({ id: o.id, texto: o.label })),
+      itens_no_pedido: (d.itens || []).map(i => `${i.qty}x ${i.name}`),
+      unidades_retirada: pontos.map(p => p.nome + (p.endereco ? ' — ' + p.endereco : '')),
+      mensagem_do_cliente: String(msg || '').slice(0, 800)
+    })
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-4o-mini', temperature: 0, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] }),
+      signal: AbortSignal.timeout(20000)
+    })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok) { log('❌', '[VOZ] Interpretação erro:', data?.error?.message || r.status); return null }
+    return JSON.parse(data?.choices?.[0]?.message?.content || '{}')
+  } catch (e) { log('❌', '[VOZ] Falha na interpretação:', e.message); return null }
+}
+
+// Devolve { tratado:true } quando já resolveu tudo, ou { msg, msgChoiceId }
+// (a resposta "traduzida") pra seguir no fluxo normal da etapa.
+async function _vozPreInterpretar(tenantId, phone, inst, d, msg, msgChoiceId, cfg, opts = {}) {
+  if (msgChoiceId || !String(msg || '').trim()) return { msg, msgChoiceId }
+  if (!d?.estado || !_VOZ_PERGUNTA_ESTADO[d.estado]) return { msg, msgChoiceId }
+  const opcoes = _vozOpcoesDoEstado(tenantId, d)
+  // Troco dito junto ("dinheiro, troco pra 50" / "não preciso de troco"): guarda já
+  if (d.troco === undefined && d.estado !== 'aguardando_troco' && d.estado !== 'aguardando_troco_valor') {
+    const mTroco = String(msg).match(/troco\s*(?:pra|para|de)?\s*(?:r\$)?\s*(\d+(?:[.,]\d+)?)/i)
+    if (mTroco) d.troco = parseFloat(mTroco[1].replace(',', '.'))
+    else if (/\b(sem troco|n[aã]o (?:preciso|precisa) de troco|n[aã]o precisa troco)\b/i.test(String(msg))) d.troco = null
+  }
+  // "Quer adicionar mais alguma coisa?" → "não" / "só isso" = finalizar
+  if (d.estado === 'aguardando_decisao_itens' && opcoes.some(o => o.id === '__finalizar') &&
+      /^\s*(n[aã]o|nao|n|s[oó] isso|[eé] s[oó] isso|pode fechar|fecha|finaliza|t[aá] bom assim|s[oó])\b/i.test(String(msg)) &&
+      !/\b(mais|tamb[eé]m|adiciona|p[oõ]e|quero)\b/i.test(String(msg))) {
+    return { msg, msgChoiceId: '__finalizar' }
+  }
+  if (_vozRespostaDireta(tenantId, d, msg, opcoes, cfg, opts.audio)) return { msg, msgChoiceId }
+  const ia = await _vozInterpretarRespostaIA(tenantId, d, msg, opcoes)
+  if (!ia) return { msg, msgChoiceId }
+  log('🧠', `[VOZ] Interpretado [${tenantId}] ${phone} (${d.estado}): "${String(msg).slice(0, 60)}" → ${JSON.stringify(ia).slice(0, 220)}`)
+  const acao = String(ia.acao || 'responder')
+
+  // Guarda o que o cliente adiantou (sem sobrescrever o que já tinha)
+  const forma = ['dinheiro', 'pix', 'credito', 'debito', 'cartao'].includes(ia.forma_pagamento) ? ia.forma_pagamento : null
+  if (forma && !d.forma_pagamento && d.estado !== 'aguardando_pagamento' && d.estado !== 'aguardando_tipo_cartao') d.forma_pagamento = forma
+  if (['delivery', 'retirada'].includes(ia.tipo_pedido) && !d.tipo_pedido && d.estado !== 'aguardando_tipo_entrega') d.tipo_pedido = ia.tipo_pedido
+  if (ia.unidade_retirada && !d.ponto_retirada) d.ponto_retirada = String(ia.unidade_retirada).slice(0, 140)
+  if (ia.rua_numero && !d.rua_numero && d.estado !== 'aguardando_rua_numero') d.rua_numero = String(ia.rua_numero).slice(0, 140)
+  if (ia.bairro && !d.bairro && d.estado !== 'aguardando_bairro') d.bairro = String(ia.bairro).slice(0, 80)
+  if (ia.nome && !d.nome_cliente) d.nome_cliente = String(ia.nome).slice(0, 60)
+  if (d.troco === undefined && d.estado !== 'aguardando_troco' && d.estado !== 'aguardando_troco_valor') {
+    if (ia.sem_troco === true) d.troco = null
+    else if (parseFloat(ia.troco_para) > 0) d.troco = parseFloat(ia.troco_para)
+  }
+
+  const temOp = id => opcoes.some(o => o.id === id)
+  const ESTADOS_PROPRIO_CANCELAR = ['aguardando_confirmacao', 'aguardando_editar_pedido']
+
+  if (acao === 'cancelar') {
+    if (d.estado === 'aguardando_confirmacao') return { msg, msgChoiceId: 'nao' }
+    if (d.estado === 'aguardando_editar_pedido' && temOp('cancelar')) return { msg, msgChoiceId: 'cancelar' }
+    if (!ESTADOS_PROPRIO_CANCELAR.includes(d.estado)) return { msg: 'cancelar', msgChoiceId: null }
+  }
+
+  if (acao === 'adicionar_itens') {
+    let extraido = null
+    try { extraido = await extrairPedidoDeTexto(tenantId, msg) } catch (e) {}
+    if (extraido?.itens?.length) {
+      await _vozIniciarConfirmacao(tenantId, phone, inst, extraido, msg, d)
+      return { tratado: true }
+    }
+  }
+
+  if (acao === 'remover_item') {
+    if (temOp('__remover')) return { msg, msgChoiceId: '__remover' }
+    if (temOp('remover')) return { msg, msgChoiceId: 'remover' }
+    if (d.itens?.length) {
+      const { meta, estado, ...semMeta } = d
+      await _vozIniciarRemoverItem(tenantId, phone, inst, semMeta)
+      return { tratado: true }
+    }
+  }
+
+  if (acao === 'finalizar') {
+    if (temOp('__finalizar')) return { msg, msgChoiceId: '__finalizar' }
+    if (d.estado === 'aguardando_confirmacao') return { msg, msgChoiceId: 'sim' }
+    const estadosItem = ['aguardando_mais_itens', 'aguardando_categoria_item', 'aguardando_decisao_itens', 'aguardando_editar_pedido', 'aguardando_remover_item']
+    if (estadosItem.includes(d.estado) && d.itens?.length) {
+      const { meta, estado, ...semMeta } = d
+      if (semMeta.addr) await _vozMontarConfirmacaoFinal(tenantId, phone, inst, semMeta)
+      else await _vozResolverTipoEEndereco(tenantId, phone, inst, semMeta)
+      return { tratado: true }
+    }
+  }
+
+  // Resposta direta da pergunta atual
+  if (ia.opcao_id && temOp(ia.opcao_id)) {
+    // Adicional (checkbox) ainda na tela de "Adicionar / Sem adicional": abre a lista
+    if (d.estado === 'aguardando_grupo' && String(ia.opcao_id).startsWith('op:')) {
+      const pend = _vozProximaPendenciaGrupo(d.itens || [])
+      if (pend?.grupo?.tipo === 'checkbox') pend.grupo._listaAberta = true
+    }
+    return { msg, msgChoiceId: ia.opcao_id }
+  }
+  switch (d.estado) {
+    case 'aguardando_tipo_entrega':
+      if (['delivery', 'retirada'].includes(ia.tipo_pedido)) return { msg, msgChoiceId: ia.tipo_pedido }
+      break
+    case 'aguardando_ponto_retirada': {
+      const pontos = _vozPontosRetirada(tenantId)
+      const p = ia.unidade_retirada ? _vozCasarPontoRetirada(pontos, ia.unidade_retirada) : null
+      if (p) return { msg, msgChoiceId: `pr:${pontos.indexOf(p)}` }
+      break
+    }
+    case 'aguardando_bairro':
+      if (ia.rua_numero && !d.rua_numero) d.rua_numero = String(ia.rua_numero).slice(0, 140)
+      if (ia.bairro) return { msg: String(ia.bairro), msgChoiceId: null }
+      break
+    case 'aguardando_rua_numero':
+      if (ia.rua_numero) return { msg: String(ia.rua_numero), msgChoiceId: null }
+      break
+    case 'aguardando_pagamento':
+      if (forma === 'cartao') {
+        const { meta, estado, ...semMeta } = d
+        await _vozContinuarPagamento(tenantId, phone, inst, { ...semMeta, forma_pagamento: 'cartao' })
+        return { tratado: true }
+      }
+      if (forma) return { msg: forma === 'credito' ? 'crédito' : forma === 'debito' ? 'débito' : forma, msgChoiceId: temOp(forma) ? forma : null }
+      break
+    case 'aguardando_tipo_cartao':
+      if (forma === 'credito' || forma === 'debito') return { msg, msgChoiceId: forma }
+      break
+    case 'aguardando_troco':
+      if (ia.sem_troco === true || ia.confirma === false) return { msg, msgChoiceId: 'nao' }
+      if (parseFloat(ia.troco_para) > 0) return { msg: String(parseFloat(ia.troco_para)), msgChoiceId: null }
+      if (ia.confirma === true) return { msg, msgChoiceId: 'sim' }
+      break
+    case 'aguardando_troco_valor':
+      if (parseFloat(ia.troco_para) > 0) return { msg: String(parseFloat(ia.troco_para)), msgChoiceId: null }
+      if (ia.sem_troco === true) return { msg: '0', msgChoiceId: null }
+      break
+    case 'aguardando_nome':
+      if (ia.nome) return { msg: String(ia.nome), msgChoiceId: null }
+      break
+    case 'aguardando_confirmacao': case 'aguardando_repetir_pedido': case 'aguardando_confirma_endereco':
+      if (ia.confirma === true) return { msg, msgChoiceId: 'sim' }
+      if (ia.confirma === false) return { msg, msgChoiceId: 'nao' }
+      break
+  }
+  return { msg, msgChoiceId }
+}
+
+async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, msgChoiceId, cfg, opts = {}) {
+  // Resposta livre (texto/áudio): interpreta antes de seguir na etapa
+  try {
+    const pre = await _vozPreInterpretar(tenantId, phone, inst, vozDraft, msg, msgChoiceId, cfg, opts)
+    if (pre?.tratado) return true
+    if (pre) { msg = pre.msg; msgChoiceId = pre.msgChoiceId }
+  } catch (e) { log('⚠️', '[VOZ] pré-interpretação falhou:', e.message) }
   const msgNorm = msg.trim().toLowerCase()
   // Comando global de cancelamento — funciona em QUALQUER etapa do pedido já
   // em andamento (escolhendo item, adicional, endereço, pagamento etc.),
@@ -7143,11 +7462,12 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
   }
   if (vozDraft.estado === 'aguardando_ponto_retirada') {
     const pontos = _vozPontosRetirada(tenantId)
-    const idxDigitado = parseInt(msg.trim())
-    let ponto = (idxDigitado >= 1 && idxDigitado <= pontos.length) ? pontos[idxDigitado - 1] : null
-    if (!ponto) ponto = pontos.find(p => _normBairro(p.nome).includes(_normBairro(msg.trim())))
+    let ponto = null
+    if (msgChoiceId && /^pr:\d+$/.test(msgChoiceId)) ponto = pontos[parseInt(msgChoiceId.slice(3), 10)] || null
+    if (!ponto) ponto = _vozCasarPontoRetirada(pontos, msg)
     if (!ponto) {
-      await sendWA(phone, 'Não entendi — responda com o número da unidade.', inst)
+      const nomes = pontos.map((p, i) => `${i + 1}. ${p.nome}`).join('\n')
+      await sendWA(phone, `Não entendi em qual unidade — pode tocar numa opção ou dizer o nome dela?\n${nomes}`, inst)
       return true
     }
     const addr = ['Retirada', ponto.endereco || ponto.nome].filter(Boolean).join(' — ')
@@ -7331,7 +7651,7 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
       // na primeira vez ele é sempre perguntado, e nas próximas nunca
       // mais, porque já tem o nome real salvo.
       const _custNomeRow = db.prepare(`SELECT name FROM customers WHERE tenant_id=? AND ${phoneLookupSql('phone')} ORDER BY id DESC LIMIT 1`).get(tenantId, ...phoneLookupArgs(phone))
-      const nomeCli = (_custNomeRow?.name && _custNomeRow.name !== 'Cliente') ? _custNomeRow.name : null
+      const nomeCli = (_custNomeRow?.name && _custNomeRow.name !== 'Cliente') ? _custNomeRow.name : (draftSemMeta.nome_cliente || null)
       if (!nomeCli) {
         // Primeira vez desse telefone (ou só tem o placeholder genérico
         // "Cliente") — pergunta o nome, em vez de criar o pedido com
@@ -7540,7 +7860,7 @@ async function handleIAWebhook(req, res) {
             // respondendo "entrega" enquanto o bot esperava exatamente essa
             // resposta era ignorado e o pedido inteiro recomeçava.
             if (draftExistente?.estado && !_VOZ_ESTADOS_ITEM.includes(draftExistente.estado)) {
-              const tratado = await _vozTratarEstadoPendente(tenantId, phoneVoz, inst, draftExistente, texto, null, cfgV)
+              const tratado = await _vozTratarEstadoPendente(tenantId, phoneVoz, inst, draftExistente, texto, null, cfgV, { audio: true })
               if (tratado) return
             }
             // Checa loja aberta ANTES de gastar a chamada de extração — evita o
