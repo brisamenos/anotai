@@ -2903,3 +2903,75 @@ async function iaRegistrarWebhook(webhookUrl) {
     return false;
   }
 }
+
+// ═══════════════════════════════════════
+// CLIENTE PEDIU ATENDENTE (WhatsApp)
+// Quando o cliente pede para falar com alguém (ou o robô percebe uma
+// reclamação), o robô para de responder esse cliente e o painel mostra um
+// aviso com o botão para abrir a conversa.
+// ═══════════════════════════════════════
+let _waAlertasES = null;
+function waAlertasIniciar(tid) {
+  if (_waAlertasES || !tid || typeof EventSource === 'undefined') return;
+  try {
+    _waAlertasES = new EventSource('/sse/' + encodeURIComponent('wa-alerta:' + tid));
+    const tratar = ev => { try { _waAlertaMostrar(JSON.parse(ev.data || '{}'), ev.type); } catch (e) {} };
+    _waAlertasES.addEventListener('wa:atendimento', tratar);
+    _waAlertasES.addEventListener('wa:atendimento_urgente', tratar);
+    _waAlertasES.onerror = () => {
+      try { _waAlertasES.close(); } catch (e) {}
+      _waAlertasES = null;
+      setTimeout(() => waAlertasIniciar(tid), 5000);
+    };
+  } catch (e) { _waAlertasES = null; }
+}
+function _waAlertaFone(p) {
+  const d = String(p || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return d || p;
+}
+function _waAlertaMostrar(d, tipo) {
+  if (!d || !d.phone) return;
+  if (!document.getElementById('wa-alertas-css')) {
+    const st = document.createElement('style');
+    st.id = 'wa-alertas-css';
+    st.textContent = `
+#wa-alertas{position:fixed;left:16px;bottom:16px;z-index:9500;display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 32px))}
+.wa-alerta{background:var(--surface,#fff);color:var(--text,#101828);border:1px solid var(--border,#e4e7ec);border-left:4px solid #16a34a;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:14px 14px 12px}
+.wa-alerta.urg{border-left-color:#dc2626}
+.wa-alerta strong{display:block;font-size:14px;margin-bottom:2px}
+.wa-alerta .wal-sub{font-size:12.5px;color:var(--muted,#667085);line-height:1.45}
+.wa-alerta .wal-bt{display:flex;gap:8px;margin-top:10px}
+.wa-alerta button{border:0;border-radius:10px;font:inherit;font-size:13px;font-weight:700;padding:8px 12px;cursor:pointer}
+.wa-alerta .wal-ok{background:#16a34a;color:#fff;flex:1}
+.wa-alerta .wal-x{background:transparent;color:var(--muted,#667085)}`;
+    document.head.appendChild(st);
+  }
+  let box = document.getElementById('wa-alertas');
+  if (!box) { box = document.createElement('div'); box.id = 'wa-alertas'; box.setAttribute('aria-live', 'assertive'); document.body.appendChild(box); }
+  const urg = tipo === 'wa:atendimento_urgente';
+  const el = document.createElement('div');
+  el.className = 'wa-alerta' + (urg ? ' urg' : '');
+  el.setAttribute('role', 'alert');
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const titulo = urg ? 'Cliente precisa de atenção' : 'Cliente pediu atendente';
+  const detalhe = urg ? (d.mensagem ? `"${esc(String(d.mensagem).slice(0, 120))}"` : 'Reclamação ou urgência no WhatsApp.')
+    : (d.resumo ? `Estava pedindo: ${esc(d.resumo)}` : 'O robô parou de responder esse cliente para você atender.');
+  el.innerHTML = `<strong>${titulo}</strong><div class="wal-sub">${esc(_waAlertaFone(d.phone))}<br>${detalhe}</div>
+    <div class="wal-bt"><button type="button" class="wal-x">Fechar</button><button type="button" class="wal-ok">Abrir conversa</button></div>`;
+  el.querySelector('.wal-x').onclick = () => el.remove();
+  el.querySelector('.wal-ok').onclick = () => {
+    el.remove();
+    const jid = String(d.phone).replace(/\D/g, '') + '@s.whatsapp.net';
+    try { if (typeof waOpenPanel === 'function') waOpenPanel(); } catch (e) {}
+    setTimeout(() => { try { if (typeof waOpenConv === 'function') waOpenConv(jid, _waAlertaFone(d.phone)); } catch (e) {} }, 400);
+  };
+  box.appendChild(el);
+  try { if (typeof sbToast === 'function') sbToast('ok', titulo); } catch (e) {}
+}
+(function _waAlertasBoot() {
+  const tid = (typeof _sessao !== 'undefined' && _sessao) ? _sessao.tenant_id : null;
+  if (!tid) { setTimeout(_waAlertasBoot, 2000); return; }
+  waAlertasIniciar(tid);
+})();
