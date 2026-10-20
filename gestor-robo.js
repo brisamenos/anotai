@@ -791,10 +791,52 @@ async function iaCarregarConfig() {
       const el = document.getElementById(`ia-resp-${c}`);
       if (el) { ia[`resp_${c}`] ? el.classList.add('on') : el.classList.remove('on'); }
     });
+    const pw = document.getElementById('ia-pedido-whatsapp');
+    if (pw) { ia.pedido_whatsapp !== false ? pw.classList.add('on') : pw.classList.remove('on'); }
+    iaPedidoWhatsappLiberado();
     if (ia.horario_txt) { const el = document.getElementById('ia-horario-txt'); if(el) el.value = ia.horario_txt; }
     if (ia.entrega_txt) { const el = document.getElementById('ia-entrega-txt'); if(el) el.value = ia.entrega_txt; }
   } catch(e) { console.warn('iaCarregarConfig:', e); }
   try { if (typeof upgradeIaCartao === 'function') upgradeIaCartao(); } catch (e) {}
+}
+
+// ── Pedidos pelo WhatsApp (texto e áudio) ───────────────
+// Liga/desliga na hora (sem precisar do botão Salvar). Só funciona se o
+// recurso estiver no plano da loja; senão a chave fica bloqueada com aviso.
+let _iaPedidoSalvando = false;
+async function iaPedidoWhatsappAlternar(el) {
+  if (!el || _iaPedidoSalvando || el.dataset.bloqueado === '1') return;
+  const ligar = !el.classList.contains('on');
+  _iaPedidoSalvando = true;
+  el.classList.toggle('on', ligar);
+  try {
+    const { data, error } = await sb.from('store_config').select('ia_config').single();
+    if (error || !data) throw new Error(error?.message || 'sem resposta');
+    const ia = data.ia_config ? JSON.parse(data.ia_config) : {};
+    ia.pedido_whatsapp = ligar;
+    const r = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, ia_config: JSON.stringify(ia) });
+    if (r.error) throw r.error;
+    sbToast('ok', ligar ? 'Pedidos pelo WhatsApp ligados' : 'Pedidos pelo WhatsApp desligados. O robô vai mandar o link do cardápio.');
+  } catch (e) {
+    el.classList.toggle('on', !ligar);
+    sbToast('err', 'Não foi possível salvar agora. Tente de novo.');
+  } finally { _iaPedidoSalvando = false; }
+}
+// A chave só aparece para quem tem o pedido pelo WhatsApp: no plano (liberado
+// pelo admin), comprado pelo upgrade ou no período de teste. Para os demais
+// fica escondida (o cartão de upgrade da própria aba já oferece o recurso).
+async function iaPedidoWhatsappLiberado() {
+  const card = document.getElementById('ia-pedido-whatsapp-card');
+  const el = document.getElementById('ia-pedido-whatsapp');
+  if (!card || !el) return;
+  let liberado = false;
+  try {
+    const r = await fetch('/api/site/aviso-whatsapp', { headers: { 'x-tenant-id': _sessao?.tenant_id || '' } });
+    const d = await r.json().catch(() => ({}));
+    liberado = r.ok && !!d.pedido_ia;
+  } catch (e) {}
+  el.dataset.bloqueado = liberado ? '' : '1';
+  card.style.display = liberado ? '' : 'none';
 }
 
 function iaAtualizarStatus() {
@@ -827,6 +869,7 @@ async function iaSalvarConfig() {
     resp_horario: document.getElementById('ia-resp-horario')?.classList.contains('on'),
     resp_entrega: document.getElementById('ia-resp-entrega')?.classList.contains('on'),
     resp_promo:   document.getElementById('ia-resp-promo')?.classList.contains('on'),
+    pedido_whatsapp: document.getElementById('ia-pedido-whatsapp') ? document.getElementById('ia-pedido-whatsapp').classList.contains('on') : iaAtual.pedido_whatsapp,
     horario_txt:  document.getElementById('ia-horario-txt')?.value || '',
     entrega_txt:  document.getElementById('ia-entrega-txt')?.value || '',
   };
@@ -1333,6 +1376,8 @@ function upgradeIaMostrar(info, automatico) {
     const conectado = (typeof wuzConnected !== 'undefined' && wuzConnected) || (typeof evoConnected !== 'undefined' && evoConnected);
     _upInfo = { disponivel: false, ja_tem: true };
     document.getElementById('ia-upgrade-card')?.remove();
+    // Upgrade feito: a chave "Receber pedidos pelo WhatsApp" aparece na hora
+    try { iaPedidoWhatsappLiberado(); } catch (e) {}
     info$.innerHTML = `
       <div class="wa-up-ok">${_UP_IC.check}</div>
       <h2 id="wa-av-titulo">Pedidos por IA ativados</h2>

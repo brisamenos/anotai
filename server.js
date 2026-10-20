@@ -6723,7 +6723,22 @@ function _resolverOpenAIKey(tenantId) {
 // atendente com IA, só até o último dia do teste (não entra em cobrança nenhuma).
 // Depois do teste, só o admin liga de novo. O admin também pode liberar um
 // teste para um cliente que já existe (tenants.ia_teste_ate), sem cobrança.
+// A própria loja pode desligar os pedidos pelo WhatsApp (texto e áudio) na aba
+// Robô > Agente IA (ia_config.pedido_whatsapp = false). Desligado, o robô volta
+// a mandar o link do cardápio, como numa loja sem esse recurso.
+function _vozPedidoDesligadoPelaLoja(tenantId) {
+  try {
+    const c = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tenantId)
+    const ia = c?.ia_config ? JSON.parse(c.ia_config) : {}
+    return ia.pedido_whatsapp === false
+  } catch (e) { return false }
+}
 function _vozLiberadaRow(tenantId) {
+  const r = _vozLiberadaPeloAdmin(tenantId)
+  if (r?.voz_ativo && _vozPedidoDesligadoPelaLoja(tenantId)) return { voz_ativo: 0, desligado_pela_loja: true }
+  return r
+}
+function _vozLiberadaPeloAdmin(tenantId) {
   try {
     const t = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId)
     if (!t) return null
@@ -7406,6 +7421,28 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
 // um item novo aqui.
 const _VOZ_ESTADOS_ITEM = ['aguardando_mais_itens', 'aguardando_categoria_item', 'aguardando_pizza_tamanho', 'aguardando_pizza_meio', 'aguardando_pizza_sabor2']
 
+// ── Mensagem repetida do cliente ─────────────────────────────────────
+// A mesma mensagem do WhatsApp às vezes chega DUAS vezes (a WuzAPI reenviando,
+// ou o número ligado na conexão antiga e na nova ao mesmo tempo). O robô de
+// pedidos é uma conversa em etapas: a cópia era tratada já na etapa seguinte
+// e respondia "Não entendi", bagunçando o pedido. Cada mensagem tem um código
+// único do WhatsApp — o mesmo código só é atendido uma vez (guardado 30 min).
+const _iaMsgVistas = new Map()
+function _iaMsgJaVista(tenantId, msgId, origem) {
+  const k = tenantId + ':' + msgId
+  const agora = Date.now()
+  const antes = _iaMsgVistas.get(k)
+  if (antes && agora - antes.t < 30 * 60 * 1000) {
+    log('🔁', `[IA] Mensagem repetida ignorada ${msgId} [${tenantId}] — chegou por ${origem}, a primeira veio por ${antes.origem}`)
+    return true
+  }
+  _iaMsgVistas.set(k, { t: agora, origem })
+  if (_iaMsgVistas.size > 5000) {
+    for (const [kk, v] of _iaMsgVistas) if (agora - v.t > 30 * 60 * 1000) _iaMsgVistas.delete(kk)
+  }
+  return false
+}
+
 async function handleIAWebhook(req, res) {
   const body = req._parsedBody !== undefined ? req._parsedBody : await readBody(req)
   const upath = new URL(req.url,`http://x`).pathname
@@ -7424,6 +7461,9 @@ async function handleIAWebhook(req, res) {
     const from   = [data?.key?.remoteJid, data?.key?.remoteJidAlt, data?.key?.participant, data?.key?.participantAlt, data?.participant, data?.sender].find(j => phoneUtils.cleanWhatsappJid(j)) || data?.key?.remoteJid || ''
     const fromMe = body?.data?.key?.fromMe||false
     const msgId  = body?.data?.key?.id || null  // usado pra marcar como lida (visto azul)
+    if (!fromMe && msgId && tenantId && _iaMsgJaVista(tenantId, msgId, req._origemWebhook || 'evolution')) {
+      send(res, 200, { ok: true, repetida: true }); return
+    }
     // Se mensagem foi enviada pelo próprio gestor via WhatsApp, registra pausa da IA
     if (fromMe && from && tenantId) {
       const phone = phoneUtils.cleanWhatsappJid(from)
@@ -7556,7 +7596,10 @@ async function handleIAWebhook(req, res) {
     // Tem prioridade sobre tudo (acompanhamento, robô determinístico) porque
     // é uma mini-conversa curta e já em andamento — uma resposta tipo "sim"
     // aqui não deve cair no roteador normal por engano.
-    const vozDraft = _vozLerDraft(tenantId, phone)
+    let vozDraft = _vozLerDraft(tenantId, phone)
+    // Loja desligou os pedidos pelo WhatsApp com um pedido em andamento:
+    // descarta o rascunho e segue como conversa normal.
+    if (vozDraft && _vozLiberadaRow(tenantId)?.desligado_pela_loja) { _vozApagarDraft(tenantId, phone); vozDraft = null }
     if (vozDraft) {
       const inst = _waInstanceFor(tenantId, cfg)
       // Pergunta de disponibilidade ("tem pratinho?") no meio de um pedido

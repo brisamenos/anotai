@@ -1500,6 +1500,67 @@ function _iniciarAvisoWaDesconectadoJob(ctx) {
   setInterval(tick, 30 * 60_000)
 }
 
+// ── Loja na WuzAPI: desliga a conexão antiga (Evolution) ─────────────────
+// A Evolution vai ser removida. Toda loja que já está conectada pela WuzAPI
+// tem a instância antiga desconectada (logout) — assim o número não fica
+// ligado nas duas ao mesmo tempo (era o que fazia cada mensagem do cliente
+// chegar duas vezes). Só faz logout: não apaga nada. Nunca mexe na instância
+// do WhatsApp de suporte/cobrança nem em instância usada por outra loja que
+// ainda está na Evolution.
+const _evoOffFeito = new Map() // tenant -> quando conferiu por último
+async function _desligarEvolutionDaLoja(ctx, tid, opts = {}) {
+  const { db, log, EVO_URL, EVO_KEY, EVO_INST } = ctx
+  try {
+    if (!EVO_URL || !EVO_KEY || !tid) return false
+    const ult = _evoOffFeito.get(tid) || 0
+    if (!opts.forcar && Date.now() - ult < 10 * 60 * 1000) return false
+    _evoOffFeito.set(tid, Date.now())
+    const cfg = db.prepare('SELECT evo_instance, whatsapp_provider FROM store_config WHERE tenant_id=?').get(tid)
+    const inst = String(cfg?.evo_instance || '').trim()
+    if (cfg?.whatsapp_provider !== 'wuzapi' || !inst) return false
+    const protegidas = new Set([String(EVO_INST || ''), String(_getInstanciaCobranca(db, EVO_INST) || '')])
+    if (protegidas.has(inst)) return false
+    const outra = db.prepare("SELECT tenant_id FROM store_config WHERE evo_instance=? AND tenant_id<>? AND COALESCE(whatsapp_provider,'evolution')<>'wuzapi' LIMIT 1").get(inst, tid)
+    if (outra) return false
+    const h = { 'Content-Type': 'application/json', apikey: EVO_KEY }
+    const r = await fetch(`${EVO_URL}/instance/connectionState/${encodeURIComponent(inst)}`, { headers: h, signal: AbortSignal.timeout(10000) })
+    if (!r.ok) return false // instância não existe mais na Evolution (ou Evolution fora do ar)
+    const d = await r.json().catch(() => ({}))
+    const estado = d?.instance?.state || d?.state || ''
+    if (estado !== 'open' && estado !== 'connecting') return false
+    const r2 = await fetch(`${EVO_URL}/instance/logout/${encodeURIComponent(inst)}`, { method: 'DELETE', headers: h, signal: AbortSignal.timeout(15000) })
+    log(r2.ok ? '🔌' : '⚠️', `Evolution: ${r2.ok ? 'desconectada' : 'não consegui desconectar'} a instância antiga "${inst}" da loja ${tid} (ela já usa a WuzAPI)`)
+    return r2.ok
+  } catch (e) { return false }
+}
+
+let _evoOffJobIniciado = false
+function _iniciarEvolutionOffJob(ctx) {
+  if (_evoOffJobIniciado) return
+  _evoOffJobIniciado = true
+  const { db, log } = ctx
+  const wuzapi = require('./wuzapi')
+  async function tick() {
+    try {
+      if (!wuzapi.isConfigured()) return
+      const lojas = db.prepare(`
+        SELECT tenant_id, wuzapi_token FROM store_config
+        WHERE whatsapp_provider='wuzapi' AND COALESCE(wuzapi_token,'')<>'' AND COALESCE(evo_instance,'')<>''
+      `).all()
+      let n = 0
+      for (const l of lojas) {
+        let st = ''
+        try { st = await wuzapi.getStatus(l.wuzapi_token) } catch (_) {}
+        if (st !== 'connected') continue // só desliga a antiga se a nova estiver funcionando
+        if (await _desligarEvolutionDaLoja(ctx, l.tenant_id, { forcar: true })) n++
+      }
+      if (n) log('🔌', `Evolution: ${n} loja(s) que já usam a WuzAPI tiveram a conexão antiga desligada`)
+    } catch (e) { log('⚠️', 'Desligar Evolution: erro geral:', e.message) }
+  }
+  setTimeout(tick, 2 * 60_000)
+  setInterval(tick, 60 * 60_000)
+}
+
 module.exports = async function handleRoutes(req, res, ctx) {
   const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
           validarSessaoAdmin, criarSessaoAdmin, validarSessaoGestor, criarSessaoGestor, criarSessaoGarcom,
@@ -3573,6 +3634,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ── Inicia job de auto-cobrança SaaS (uma vez) ────────────────────────────
   _iniciarAutoCobrancaJob(ctx)
   _iniciarAvisoWaDesconectadoJob(ctx)
+  _iniciarEvolutionOffJob(ctx)
 
   if (req.method === 'POST' && upath === '/api/entregador-login') {
     const body = await readBody(req)
@@ -7184,6 +7246,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         // ja_conectou: a loja já tinha montado a conexão (mostra o aviso de
         // "WhatsApp desconectado" no gestor em vez do convite para conectar)
         send(res, 200, { ...st, provider: cfg.whatsapp_provider || 'evolution', ja_conectou: !!cfg.wuzapi_token })
+        if (st.status === 'connected' && cfg.whatsapp_provider === 'wuzapi') _desligarEvolutionDaLoja(ctx, tid).catch(() => {})
         return true
       }
       if (req.method === 'POST' && action === '/provider') {
@@ -7370,6 +7433,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           const fakeBody = { data: m }
           const fakeReqWuz = Object.assign(Object.create(req), {
             _parsedBody: fakeBody,
+            _origemWebhook: 'wuzapi',
             url: `/webhook/whatsapp/${tidWuz}`,
             headers: Object.assign({}, req.headers, { 'x-tenant-id': tidWuz })
           })
@@ -7400,6 +7464,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
         ? body.data.messages
         : (body?.data ? [body.data] : [])
       _ingestWaMessages(ctx, tid_wh, msgs)
+    }
+
+    // Loja que já usa a WuzAPI: o robô responde só pelo que chega da WuzAPI.
+    // Se o número ainda estiver ligado na Evolution, o que vem de lá é ignorado
+    // (e a instância antiga é desligada).
+    if (tid_wh) {
+      const provWh = db.prepare('SELECT whatsapp_provider FROM store_config WHERE tenant_id=?').get(tid_wh)
+      if (provWh?.whatsapp_provider === 'wuzapi') {
+        send(res, 200, { ok: true, ignorado: 'loja usa WuzAPI' })
+        _desligarEvolutionDaLoja(ctx, tid_wh).catch(() => {})
+        return true
+      }
     }
 
     // Processa IA (re-usa body já lido)

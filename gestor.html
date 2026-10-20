@@ -1551,7 +1551,18 @@ Aguardamos o pagamento. Obrigado pela visita!</textarea>
 
       <div style="display:grid;grid-template-columns:1fr;gap:16px;max-width:700px">
 
-        <!-- O que a IA responde -->
+        <!-- Pedidos pelo WhatsApp (texto e áudio) -->
+<div class="card" id="ia-pedido-whatsapp-card" style="padding:18px;display:none">
+  <label style="display:flex;align-items:center;gap:12px;cursor:pointer">
+    <div class="toggle" id="ia-pedido-whatsapp" role="switch" aria-label="Receber pedidos pelo WhatsApp" onclick="iaPedidoWhatsappAlternar(this)"></div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:14px;font-weight:700">Receber pedidos pelo WhatsApp</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.45">O cliente pede por texto ou áudio e o pedido chega pronto no painel. Desligado, o robô só manda o link do cardápio.</div>
+    </div>
+  </label>
+</div>
+
+<!-- O que a IA responde -->
         <div class="card" style="padding:18px">
           <div class="card-title" style="margin-bottom:14px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="3" y="2" width="10" height="13" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M6 6h4M6 9h3M6 12h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg> Capacidades do Agente</div>
 
