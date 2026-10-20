@@ -3379,7 +3379,11 @@ async function handleREST(req, res, table, params, body) {
               // Só atualiza nome/endereço se o pedido trouxe algo real e diferente do que já tinha —
               // não sobrescreve um nome já cadastrado com "Cliente" (placeholder genérico).
               const _novoNome = (_nomeCust && _nomeCust !== 'Cliente' && _nomeCust !== _existingCust.name) ? _nomeCust : null
-              const _novoAddr = (rawForEmit.addr && rawForEmit.addr !== _existingCust.addr) ? rawForEmit.addr : null
+              // Pedido de retirada/mesa traz o endereço da LOJA (ou nada) — não pode
+              // virar o endereço salvo do cliente (era oferecido depois como "a
+              // entrega ainda é em Retirada — ...?").
+              const _addrEhDoCliente = !!rawForEmit.addr && !/^\s*retirada\b/i.test(String(rawForEmit.addr)) && !rawForEmit.mesa_num
+              const _novoAddr = (_addrEhDoCliente && rawForEmit.addr !== _existingCust.addr) ? rawForEmit.addr : null
               if (_novoNome || _novoAddr) {
                 db.prepare('UPDATE customers SET name=COALESCE(?,name), addr=COALESCE(?,addr) WHERE id=?')
                   .run(_novoNome, _novoAddr, _existingCust.id)
@@ -3393,7 +3397,7 @@ async function handleREST(req, res, table, params, body) {
                 ON CONFLICT(tenant_id,phone) DO UPDATE SET
                   name = CASE WHEN excluded.name <> 'Cliente' THEN excluded.name ELSE customers.name END,
                   addr = COALESCE(excluded.addr, customers.addr)
-              `).run(_tidCust, _nomeCust || 'Cliente', _phoneDigits, rawForEmit.addr || null)
+              `).run(_tidCust, _nomeCust || 'Cliente', _phoneDigits, (rawForEmit.addr && !/^\s*retirada\b/i.test(String(rawForEmit.addr)) && !rawForEmit.mesa_num) ? rawForEmit.addr : null)
             }
           }
         } catch(e) { log('⚠️', 'Upsert customers no pedido falhou:', e.message) }
@@ -6223,6 +6227,7 @@ async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido, textoOrig
     rua_numero: draftExistente.rua_numero ?? extraido.rua_numero,
     ponto_retirada: draftExistente.ponto_retirada ?? extraido.ponto_retirada,
     nome_cliente: draftExistente.nome_cliente ?? extraido.nome_cliente,
+    referencia: draftExistente.referencia !== undefined ? draftExistente.referencia : extraido.referencia,
     finalizar: !!extraido.finalizar
   } : {
     tipo_pedido: extraido.tipo_pedido,
@@ -6232,9 +6237,11 @@ async function _vozIniciarConfirmacao(tenantId, phone, inst, extraido, textoOrig
     rua_numero: extraido.rua_numero,
     ponto_retirada: extraido.ponto_retirada,
     nome_cliente: extraido.nome_cliente,
+    referencia: extraido.referencia,
     finalizar: !!extraido.finalizar
   }
   if (base.troco === undefined) delete base.troco // sem valor = ainda vai perguntar
+  if (base.referencia === undefined) delete base.referencia
   // Loja no WuzAPI: tenta casar o texto com o SABOR de uma pizza (pizza
   // fica de fora da extração por IA — ver _vozCasarPizzaPorNome) — SEMPRE,
   // mesmo quando o áudio já reconheceu outros itens junto (ex: "quero uma
@@ -6319,7 +6326,7 @@ async function _vozProcessarGruposPendentes(tenantId, phone, inst, draft) {
     forma_pagamento: draft.forma_pagamento, observacao_geral: draft.observacao_geral,
     addr: draft.addr, taxa: draft.taxa, troco: draft.troco, bairro_nome: draft.bairro_nome,
     rua_numero: draft.rua_numero, ponto_retirada: draft.ponto_retirada, nome_cliente: draft.nome_cliente,
-    finalizar: draft.finalizar
+    referencia: draft.referencia, finalizar: draft.finalizar
   }
   for (const k of Object.keys(draftCompleto)) if (draftCompleto[k] === undefined) delete draftCompleto[k]
   // Se o cliente já disse EXPLICITAMENTE o tipo de entrega nesse mesmo
@@ -6453,7 +6460,7 @@ async function _vozResolverTipoEEndereco(tenantId, phone, inst, draftIn) {
   // depois de um "não", sem voltar a perguntar reaproveitamento).
   if (!draft.bairro) {
     const _custEndRow = db.prepare(`SELECT addr, last_bairro FROM customers WHERE tenant_id=? AND ${phoneLookupSql('phone')} ORDER BY id DESC LIMIT 1`).get(tenantId, ...phoneLookupArgs(phone))
-    if (_custEndRow?.addr && _custEndRow?.last_bairro) {
+    if (_custEndRow?.addr && _custEndRow?.last_bairro && !/^\s*retirada\b/i.test(String(_custEndRow.addr))) {
       const opcoes = [{ id: 'sim', label: 'Sim, esse mesmo' }, { id: 'nao', label: 'Não, outro endereço' }]
       _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_confirma_endereco', ...draft, tipo_pedido: 'delivery', meta: { opcoes, addrSalvo: _custEndRow.addr, bairroSalvo: _custEndRow.last_bairro } })
       await _vozEnviarOpcoes(phone, inst, {
@@ -6484,11 +6491,35 @@ async function _vozResolverTipoEEndereco(tenantId, phone, inst, draftIn) {
 // número pra fechar o endereço completo — sem isso o entregador só saberia
 // o bairro, que não é suficiente pra achar a casa. Segue o mesmo padrão de
 // pergunta livre (texto) já usado pro bairro, já que é campo aberto.
+// Endereço de entrega completo: rua + NÚMERO + ponto de referência. Se o
+// cliente já disse tudo (no áudio/texto), não pergunta de novo; se faltou o
+// número ou a referência, pergunta só o que falta.
+function _vozTemNumeroCasa(txt) {
+  return /\d/.test(String(txt || '')) || /\b(s\/?n|sem n[uú]mero|sem numero)\b/i.test(String(txt || ''))
+}
+function _vozTemReferencia(txt) {
+  return /\b(perto|pr[oó]xim[oa]|em frente|ao lado|refer[eê]ncia|esquina|vizinho|atr[aá]s|depois d|antes d|casa (azul|verde|amarela|branca|rosa|vermelha))\b/i.test(String(txt || ''))
+}
 async function _vozPedirRuaNumero(tenantId, phone, inst, draftIn) {
   const { estado: _e, meta: _m, ...draft } = draftIn
+  if (draft.rua_numero && !_vozTemNumeroCasa(draft.rua_numero)) {
+    _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_numero_casa', ...draft })
+    await sendWA(phone, `Qual o *número* da casa na ${draft.rua_numero}? (se não tiver, responda "sem número")`, inst)
+    return
+  }
+  if (draft.rua_numero && draft.referencia === undefined) {
+    if (_vozTemReferencia(draft.rua_numero)) {
+      draft.referencia = ''
+    } else {
+      _vozSalvarDraft(tenantId, phone, { estado: 'aguardando_referencia', ...draft })
+      await sendWA(phone, 'Tem algum *ponto de referência*? (ex: "perto da praça", "casa azul de portão branco") — se não tiver, responda "não".', inst)
+      return
+    }
+  }
   if (draft.rua_numero) {
-    const addr = [draft.rua_numero, draft.bairroLabel].filter(Boolean).join(' - ')
-    const { bairroLabel, rua_numero, ...draftLimpo } = draft
+    const refTxt = String(draft.referencia || '').trim()
+    const addr = [draft.rua_numero, draft.bairroLabel].filter(Boolean).join(' - ') + (refTxt ? ` (Ref.: ${refTxt})` : '')
+    const { bairroLabel, rua_numero, referencia, ...draftLimpo } = draft
     // Guarda o nome do bairro (sem número/rua) separado do endereço completo
     // — é isso que fica salvo em customers.last_bairro pra poder reaproveitar
     // o endereço num pedido futuro (ver _vozResolverTipoEEndereco).
@@ -6893,7 +6924,7 @@ async function extrairPedidoDeTexto(tenantId, texto) {
     const sysPrompt = [
       'Você extrai pedidos de restaurante a partir de um texto transcrito de áudio de WhatsApp.',
       'Responda APENAS com um JSON válido, sem nenhum texto fora do JSON, no formato:',
-      '{"itens":[{"item_id":123,"qty":1,"obs":"","escolhas":[{"grupo":"Borda","opcao":"Catupiry"}]}],"rua_numero":null,"unidade_retirada":null,"troco_para":null,"sem_troco":false,"nome_cliente":null,"finalizar":false,"bairro":"nome do bairro ou null","tipo_pedido":"delivery|retirada|mesa|null","forma_pagamento":"dinheiro|pix|cartao|credito|debito|null","observacao_geral":"texto ou null","nao_entendido":"texto ou null"}',
+      '{"itens":[{"item_id":123,"qty":1,"obs":"","escolhas":[{"grupo":"Borda","opcao":"Catupiry"}]}],"rua_numero":null,"referencia":null,"unidade_retirada":null,"troco_para":null,"sem_troco":false,"nome_cliente":null,"finalizar":false,"bairro":"nome do bairro ou null","tipo_pedido":"delivery|retirada|mesa|null","forma_pagamento":"dinheiro|pix|cartao|credito|debito|null","observacao_geral":"texto ou null","nao_entendido":"texto ou null"}',
       'Regras: use SOMENTE item_id que existam na lista de cardápio fornecida — nunca invente um id.',
       'Cada item pode ter "grupos" no cardápio fornecido. Grupo com "obrigatorio":true PRECISA de 1 opção escolhida — se o cliente já disse no áudio (ex: "borda catupiry"), preencha em "escolhas" usando o nome EXATO da opção fornecida; se não disse, deixe sem nenhuma entrada pra esse grupo (o sistema pergunta depois). Grupo com "obrigatorio":false é um ADICIONAL opcional — só preencha "escolhas" pra ele se o cliente pediu explicitamente (ex: "com bacon extra"); NUNCA invente uma escolha pra um adicional que ele não mencionou.',
       'Grupo com "tipo":"checkbox" aceita MAIS DE UMA opção — se o cliente pediu duas coisas desse grupo, repita uma entrada em "escolhas" pra cada uma, todas com o mesmo "grupo". Grupo "tipo":"radio" aceita só 1 opção.',
@@ -6905,6 +6936,7 @@ async function extrairPedidoDeTexto(tenantId, texto) {
       'Se for retirada e o cliente disser em qual unidade vai buscar, coloque em "unidade_retirada" o texto EXATO de uma das "unidades_retirada" fornecidas; se não disser, null.',
       'Se o cliente disser que precisa de troco pra um valor (ex: "troco pra 50"), coloque o número em "troco_para". Se disser que não precisa de troco, "sem_troco":true.',
       'Se o cliente disser o próprio nome (ex: "meu nome é Ana"), coloque em "nome_cliente"; senão null.',
+      'Se o cliente disser um ponto de referência do endereço (ex: "perto da praça"), coloque em "referencia"; senão null.',
       '"finalizar":true quando o cliente deixa claro que é só isso e quer fechar o pedido (ex: "só isso", "pode fechar", "quero finalizar", "pode mandar") ou quando, junto com os itens, já informa entrega/retirada ou forma de pagamento. Se só pediu itens, false.',
       '"obs" é só pra observação daquele item específico (ex: "sem cebola"), não pro pedido inteiro.'
     ].join(' ')
@@ -6984,6 +7016,7 @@ async function extrairPedidoDeTexto(tenantId, texto) {
       ponto_retirada: parsed.unidade_retirada ? String(parsed.unidade_retirada).slice(0, 140) : null,
       troco: parsed.sem_troco === true ? null : (parseFloat(parsed.troco_para) > 0 ? parseFloat(parsed.troco_para) : undefined),
       nome_cliente: parsed.nome_cliente ? String(parsed.nome_cliente).slice(0, 60) : null,
+      referencia: parsed.referencia ? String(parsed.referencia).slice(0, 140) : undefined,
       finalizar: parsed.finalizar === true
     }
   } catch (e) { log('❌', '[VOZ] Falha na extração do pedido:', e.message); return null }
@@ -7012,6 +7045,8 @@ const _VOZ_PERGUNTA_ESTADO = {
   aguardando_ponto_retirada: 'De qual unidade vai ser a retirada?',
   aguardando_bairro: 'Qual o bairro da entrega?',
   aguardando_rua_numero: 'Qual a rua e o número da entrega?',
+  aguardando_numero_casa: 'Qual o número da casa?',
+  aguardando_referencia: 'Tem algum ponto de referência do endereço?',
   aguardando_pagamento: 'Como prefere pagar?',
   aguardando_tipo_cartao: 'O cartão é de crédito ou débito?',
   aguardando_troco: 'Precisa de troco?',
@@ -7063,6 +7098,8 @@ function _vozRespostaDireta(tenantId, d, msg, opcoes, cfg, audio) {
     }
     case 'aguardando_rua_numero': return !audio && t.length <= 80 && !/\b(bairro|pix|cart[aã]o|dinheiro|retir|troco|finaliz)/i.test(t)
     case 'aguardando_nome': return !audio && t.split(/\s+/).length <= 4 && !/\b(nome|sou|chamo|pedido)\b/i.test(t)
+    case 'aguardando_numero_casa': return t.length <= 40 && _vozTemNumeroCasa(t)
+    case 'aguardando_referencia': return !audio
     case 'aguardando_troco_valor': return /^\D{0,12}\d+([.,]\d+)?\D{0,12}$/.test(t)
     case 'aguardando_tipo_entrega': if (curta && /\b(entrega|delivery|retirada|retirar|buscar)\b/i.test(t)) return true; break
     case 'aguardando_pagamento': if (curta && /\b(pix|d[eé]bito|cr[eé]dito|cart[aã]o|dinheiro)\b/i.test(t)) return true; break
@@ -7082,12 +7119,12 @@ async function _vozInterpretarRespostaIA(tenantId, d, msg, opcoes) {
     const sys = [
       'Você interpreta a resposta de um cliente no meio de um pedido de delivery pelo WhatsApp (texto digitado ou áudio transcrito).',
       'Responda APENAS com JSON válido no formato:',
-      '{"opcao_id":null,"acao":"responder","tipo_pedido":null,"unidade_retirada":null,"bairro":null,"rua_numero":null,"forma_pagamento":null,"troco_para":null,"sem_troco":false,"nome":null,"confirma":null}',
+      '{"opcao_id":null,"acao":"responder","tipo_pedido":null,"unidade_retirada":null,"bairro":null,"rua_numero":null,"numero_casa":null,"referencia":null,"forma_pagamento":null,"troco_para":null,"sem_troco":false,"nome":null,"confirma":null}',
       'opcao_id: se a mensagem escolhe uma das "opcoes" da pergunta atual (pelo nome, número, posição como "a primeira", sinônimo ou descrição), devolva o "id" EXATO dela; senão null. Nunca invente id.',
       'acao: "responder" quando responde a pergunta; "adicionar_itens" quando pede produto(s) novo(s) pro pedido; "finalizar" quando diz que é só isso / quer fechar o pedido; "remover_item" quando quer tirar um item; "cancelar" quando quer cancelar o pedido inteiro; "nao_entendi" quando não dá pra saber.',
       'Se a mensagem pede itens E diz pra finalizar, use "adicionar_itens".',
       'Se a pergunta é se quer adicionar mais alguma coisa e o cliente diz que não / é só isso, use "finalizar".',
-      'Extraia também qualquer informação que o cliente der, mesmo que não tenha sido perguntada: tipo_pedido ("delivery" ou "retirada"), unidade_retirada (texto EXATO de uma das unidades_retirada), bairro, rua_numero (rua e número, sem o bairro), forma_pagamento ("dinheiro","pix","credito","debito" ou "cartao" quando não disse qual), troco_para (número) ou sem_troco (true), nome (o nome da pessoa, só se ela disser), confirma (true para sim/confirmo, false para não).',
+      'Extraia também qualquer informação que o cliente der, mesmo que não tenha sido perguntada: tipo_pedido ("delivery" ou "retirada"), unidade_retirada (texto EXATO de uma das unidades_retirada), bairro, rua_numero (rua e número, sem o bairro), numero_casa (só o número, ou "s/n"), referencia (ponto de referência do endereço; "" se o cliente disse que não tem), forma_pagamento ("dinheiro","pix","credito","debito" ou "cartao" quando não disse qual), troco_para (número) ou sem_troco (true), nome (o nome da pessoa, só se ela disser), confirma (true para sim/confirmo, false para não).',
       'Campos não mencionados ficam null (sem_troco fica false).'
     ].join(' ')
     const user = JSON.stringify({
@@ -7141,6 +7178,7 @@ async function _vozPreInterpretar(tenantId, phone, inst, d, msg, msgChoiceId, cf
   if (ia.rua_numero && !d.rua_numero && d.estado !== 'aguardando_rua_numero') d.rua_numero = String(ia.rua_numero).slice(0, 140)
   if (ia.bairro && !d.bairro && d.estado !== 'aguardando_bairro') d.bairro = String(ia.bairro).slice(0, 80)
   if (ia.nome && !d.nome_cliente) d.nome_cliente = String(ia.nome).slice(0, 60)
+  if (typeof ia.referencia === 'string' && d.referencia === undefined && d.estado !== 'aguardando_referencia') d.referencia = ia.referencia.slice(0, 140)
   if (d.troco === undefined && d.estado !== 'aguardando_troco' && d.estado !== 'aguardando_troco_valor') {
     if (ia.sem_troco === true) d.troco = null
     else if (parseFloat(ia.troco_para) > 0) d.troco = parseFloat(ia.troco_para)
@@ -7211,6 +7249,15 @@ async function _vozPreInterpretar(tenantId, phone, inst, d, msg, msgChoiceId, cf
       break
     case 'aguardando_rua_numero':
       if (ia.rua_numero) return { msg: String(ia.rua_numero), msgChoiceId: null }
+      break
+    case 'aguardando_numero_casa': {
+      const n = ia.numero_casa || (String(ia.rua_numero || '').match(/\d+[a-zA-Z]?/) || [])[0]
+      if (n) return { msg: String(n), msgChoiceId: null }
+      break
+    }
+    case 'aguardando_referencia':
+      if (typeof ia.referencia === 'string') return { msg: ia.referencia || 'não', msgChoiceId: null }
+      if (ia.confirma === false) return { msg: 'não', msgChoiceId: null }
       break
     case 'aguardando_pagamento':
       if (forma === 'cartao') {
@@ -7539,6 +7586,29 @@ async function _vozTratarEstadoPendente(tenantId, phone, inst, vozDraft, msg, ms
     }
     const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
     await _vozPedirRuaNumero(tenantId, phone, inst, { ...draftSemMeta, rua_numero: ruaNumero })
+    return true
+  }
+  // Faltou o número da casa
+  if (vozDraft.estado === 'aguardando_numero_casa') {
+    const t = msg.trim()
+    if (!t || !_vozTemNumeroCasa(t)) {
+      await sendWA(phone, 'Não peguei o número — pode mandar só o número da casa? (ou "sem número")', inst)
+      return true
+    }
+    const numero = /\b(s\/?n|sem n[uú]mero|sem numero)\b/i.test(t) ? 's/n' : (t.match(/\d+[a-zA-Z]?/) || [t])[0]
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    const resto = t.replace(/^\D*\d+[a-zA-Z]?\s*[,.-]?\s*/, '').trim() // "123, perto do mercado" → referência junto
+    const novo = { ...draftSemMeta, rua_numero: `${draftSemMeta.rua_numero}, ${numero}` }
+    if (resto && _vozTemReferencia(resto) && novo.referencia === undefined) novo.referencia = resto.slice(0, 140)
+    await _vozPedirRuaNumero(tenantId, phone, inst, novo)
+    return true
+  }
+  // Ponto de referência (opcional — "não" segue sem)
+  if (vozDraft.estado === 'aguardando_referencia') {
+    const t = msg.trim()
+    const semRef = !t || /^(n[aã]o|nao|n|sem|nenhum|nada|n[aã]o tem)\b/i.test(t)
+    const { meta, estado: _estadoAntigo, ...draftSemMeta } = vozDraft
+    await _vozPedirRuaNumero(tenantId, phone, inst, { ...draftSemMeta, referencia: semRef ? '' : t.slice(0, 140) })
     return true
   }
   // Pedido abaixo do mínimo pra entrega — o cliente disse o que mais
