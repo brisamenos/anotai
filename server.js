@@ -3936,6 +3936,55 @@ async function sendWAButtons(phone, inst, opts) {
   } catch (e) { log('⚠️', '[VOZ] sendButtons falhou:', e.message); return false }
 }
 
+// Mensagem com o link do cardápio (loja na WuzAPI): sai como card com a
+// imagem da loja no topo, o texto e o botão "Abrir cardápio" embaixo.
+// Se a WuzAPI recusar o botão, manda o texto normal com o link (que ainda
+// chega com a prévia do site). Desliga com WA_BOTAO_CARDAPIO=0.
+async function sendWALinkCardapio(phone, inst, tenantId, texto, link, delayMs) {
+  const usaBotao = process.env.WA_BOTAO_CARDAPIO !== '0' && link && String(texto || '').includes(link) &&
+    typeof inst === 'string' && inst.startsWith(WUZAPI_SENTINEL)
+  if (usaBotao) {
+    const esc = link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    // "Cardápio: <link>" numa linha só some inteira (o botão já diz isso);
+    // nas frases, sai só o link e os dois-pontos antes dele.
+    const corpo = String(texto)
+      .replace(new RegExp(`(^|\\n)[ \\t]*[^\\n:]{0,20}:[ \\t]*${esc}[ \\t]*(?=\\n|$)`, 'g'), '$1')
+      .replace(new RegExp(`[ \\t]*:?[ \\t]*(?:\\n[ \\t]*)?${esc}[ \\t]*`, 'g'), ' ')
+      .replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
+    let imagem
+    try {
+      const arq = await Promise.race([_ogGerar(tenantId), new Promise(r => setTimeout(() => r(null), 8000))])
+      if (arq && fs.existsSync(arq)) imagem = ogImagemUrl(tenantId)
+    } catch (e) {}
+    await _wuzDigitando(tenantId, phone, delayMs)
+    try {
+      const r = await _tenantWa.sendButtons(tenantId, phone, {
+        text: corpo || 'Confira nosso cardápio',
+        image: imagem,
+        buttons: [{ type: 'url', id: 'abrir_cardapio', text: 'Abrir cardápio', url: link }]
+      })
+      const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
+      if (id) _tenantWa.markBotSent(id)
+      try {
+        const num = phone.replace(/\D/g, '')
+        const number = num.startsWith('55') ? num : `55${num}`
+        const jid = `${number}@s.whatsapp.net`
+        const msgId = id || `wz-${Date.now()}`
+        const payload = JSON.stringify({ key: { remoteJid: jid, id: msgId, fromMe: true }, messageTimestamp: Math.floor(Date.now() / 1000), message: { conversation: texto } })
+        db.prepare('INSERT OR IGNORE INTO wa_messages (tenant_id, remote_jid, msg_id, payload, from_me, ts) VALUES (?,?,?,?,1,?)')
+          .run(tenantId, jid, msgId, payload, Math.floor(Date.now() / 1000))
+        marcarDirty()
+      } catch (e) {}
+      log('📤', `Cardápio com botão (WuzAPI) para ${phone}`)
+      return { ok: true }
+    } catch (e) {
+      log('⚠️', 'Botão do cardápio falhou, mandando link em texto:', e.message)
+      return sendWA(phone, texto, inst, 0)
+    }
+  }
+  return sendWA(phone, texto, inst, delayMs)
+}
+
 // Marca mensagem do cliente como "lida" (✓✓ azul) na Evolution API.
 // Faz parte do fluxo humanizado: leitura → pausa → digitando → resposta.
 // Falha silenciosamente se o endpoint não estiver disponível ou o ID
@@ -8876,7 +8925,7 @@ async function handleIAWebhook(req, res) {
         const _porChar     = 35 + Math.floor(Math.random() * 15)      // 35-50ms
         const _humanDelay  = Math.min(6000, _baseLeitura + resposta.length * _porChar)
 
-        await sendWA(phone, resposta, inst, _humanDelay)
+        await sendWALinkCardapio(phone, inst, tenantId, resposta, linkCardapio, _humanDelay)
         log('🤖', `IA → ${phone} (delay ${_humanDelay}ms): ${resposta.slice(0, 60).replace(/\n/g,' ')}`)
         convHist.push({ role: 'user', content: msgFull }, { role: 'assistant', content: resposta })
         if (convHist.length > 20) convHist.splice(0, convHist.length - 20)
@@ -8960,6 +9009,133 @@ function _handleStoreLogo(req, res, upath) {
     res.writeHead(200)
     res.end(buf)
   } catch (e) { res.writeHead(500); res.end('Erro') }
+  return true
+}
+
+// ── Imagem do card do link do cardápio (1200x630) ─────────────────────
+// Quando o link do cardápio é enviado no WhatsApp, o card mostra esta
+// imagem: foto de capa da loja, logo, nome e descrição. É gerada uma vez
+// (Chromium do Puppeteer) e guardada em arquivo; só é gerada de novo quando
+// nome, descrição, logo, capa ou cor da loja mudam (o "hash" muda junto).
+const _OG_VERSAO = '2'
+const _ogGerando = new Map()
+function _ogDadosLoja(tid) {
+  const t = db.prepare('SELECT id,nome FROM tenants WHERE id=?').get(tid)
+  if (!t) return null
+  const cfg = db.prepare('SELECT store_name,store_descricao,store_logo_url,store_banner_url,store_cor FROM store_config WHERE tenant_id=?').get(tid) || {}
+  const d = {
+    nome: cfg.store_name || t.nome || 'Cardápio',
+    descricao: cfg.store_descricao || 'Confira o cardápio digital e faça seu pedido online.',
+    logo: cfg.store_logo_url || '',
+    capa: cfg.store_banner_url || '',
+    cor: /^#[0-9a-f]{3,8}$/i.test(cfg.store_cor || '') ? cfg.store_cor : '#f97316'
+  }
+  d.hash = crypto.createHash('sha1').update([_OG_VERSAO, d.nome, d.descricao, d.logo, d.capa, d.cor].join('|')).digest('hex').slice(0, 12)
+  return d
+}
+function ogImagemUrl(tid, base) {
+  const d = _ogDadosLoja(tid)
+  return d ? `${base || PUBLIC_BASE_URL}/api/og-image/${encodeURIComponent(tid)}-${d.hash}.jpg` : ''
+}
+function _ogArquivo(tid, hash) {
+  return path.join(UPLOADS_DIR, `og_${String(tid).replace(/[^\w-]/g, '')}_${hash}.jpg`)
+}
+// Converte o endereço da imagem da loja em algo que o Chromium abre sem
+// depender da internet: arquivo da pasta de uploads vira data URL.
+function _ogImgSrc(u) {
+  u = String(u || '')
+  if (!u) return ''
+  if (u.startsWith('data:') || /^https?:\/\//i.test(u)) return u
+  const m = u.match(/^\/(?:uploads|storage\/v1\/object\/public)\/.*?([^/]+)$/)
+  if (m) {
+    const f = path.join(UPLOADS_DIR, path.basename(m[1]))
+    if (fs.existsSync(f)) {
+      const ext = path.extname(f).toLowerCase()
+      const tipo = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.svg' ? 'image/svg+xml' : 'image/jpeg'
+      return `data:${tipo};base64,${fs.readFileSync(f).toString('base64')}`
+    }
+  }
+  return u.startsWith('/') ? PUBLIC_BASE_URL + u : u
+}
+function _ogFonte(peso) {
+  try { return `data:font/woff2;base64,${fs.readFileSync(path.join(__dirname, 'fonts', `outfit-${peso}.woff2`)).toString('base64')}` } catch (e) { return '' }
+}
+function _ogHtml(d) {
+  const esc = _escHtmlAttr
+  const logo = _ogImgSrc(d.logo), capa = _ogImgSrc(d.capa)
+  const f800 = _ogFonte(800), f500 = _ogFonte(500)
+  const inicial = esc((d.nome || '?').trim().charAt(0).toUpperCase())
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+${f800 ? `@font-face{font-family:OgF;font-weight:800;src:url(${f800})}` : ''}
+${f500 ? `@font-face{font-family:OgF;font-weight:500;src:url(${f500})}` : ''}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1200px;height:630px;overflow:hidden}
+body{font-family:OgF,'Liberation Sans',Arial,sans-serif;color:#fff;position:relative;background:${d.cor}}
+.capa{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.fundo{position:absolute;inset:0;background:${capa
+    ? 'linear-gradient(90deg,rgba(8,10,20,.88) 0%,rgba(8,10,20,.72) 48%,rgba(8,10,20,.25) 100%)'
+    : `radial-gradient(900px 700px at 85% 20%,rgba(255,255,255,.22),transparent 60%),linear-gradient(135deg,${d.cor},#111827)`}}
+.box{position:absolute;left:72px;top:0;bottom:0;right:72px;display:flex;align-items:center;gap:48px}
+.logo{width:230px;height:230px;border-radius:50%;background:#fff;border:8px solid #fff;box-shadow:0 20px 50px rgba(0,0,0,.45);overflow:hidden;flex-shrink:0;display:grid;place-items:center;font-weight:800;font-size:110px;color:${d.cor}}
+.logo img{width:100%;height:100%;object-fit:cover}
+.txt{min-width:0}
+.n{font-weight:800;font-size:72px;line-height:1.05;letter-spacing:-1px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 4px 20px rgba(0,0,0,.35)}
+.d{font-weight:500;font-size:34px;line-height:1.3;margin-top:18px;color:rgba(255,255,255,.88);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+</style></head><body>
+${capa ? `<img class="capa" src="${esc(capa)}">` : ''}<div class="fundo"></div>
+<div class="box"><div class="logo">${logo ? `<img src="${esc(logo)}">` : inicial}</div>
+<div class="txt"><div class="n">${esc(d.nome)}</div><div class="d">${esc(d.descricao)}</div></div></div>
+</body></html>`
+}
+async function _ogGerar(tid) {
+  const d = _ogDadosLoja(tid)
+  if (!d) return null
+  const arq = _ogArquivo(tid, d.hash)
+  if (fs.existsSync(arq)) return arq
+  if (_ogGerando.has(arq)) return _ogGerando.get(arq)
+  const p = (async () => {
+    let puppeteer
+    try { puppeteer = require('puppeteer') } catch (e) { return null }
+    const browser = await puppeteer.launch({
+      headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+    })
+    try {
+      const page = await browser.newPage()
+      await page.setViewport({ width: 1200, height: 630, deviceScaleFactor: 1 })
+      await page.setContent(_ogHtml(d), { waitUntil: 'load', timeout: 15000 })
+      await page.evaluate(() => document.fonts.ready)
+      const buf = await page.screenshot({ type: 'jpeg', quality: 86 })
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true })
+      fs.writeFileSync(arq + '.tmp', buf); fs.renameSync(arq + '.tmp', arq)
+      // apaga as versões antigas desta loja
+      try {
+        const pre = path.basename(_ogArquivo(tid, 'x')).replace(/x\.jpg$/, '')
+        for (const f of fs.readdirSync(UPLOADS_DIR)) if (f.startsWith(pre) && f !== path.basename(arq)) fs.unlinkSync(path.join(UPLOADS_DIR, f))
+      } catch (e) {}
+      return arq
+    } finally { await browser.close().catch(() => {}) }
+  })().catch(e => { log('⚠️', 'Imagem do card do cardápio falhou:', e.message); return null })
+    .finally(() => _ogGerando.delete(arq))
+  _ogGerando.set(arq, p)
+  return p
+}
+async function _handleOgImage(req, res, upath) {
+  const m = upath.match(/^\/api\/og-image\/(.+)-([0-9a-f]{12})\.jpg$/)
+  if (!m) return false
+  const tid = decodeURIComponent(m[1])
+  const arq = await _ogGerar(tid)
+  if (arq && fs.existsSync(arq)) {
+    res.setHeader('Content-Type', 'image/jpeg')
+    res.setHeader('Cache-Control', 'public, max-age=604800')
+    res.writeHead(200); fs.createReadStream(arq).pipe(res); return true
+  }
+  // Sem Chromium disponível: usa a logo da loja (ou o ícone padrão)
+  const d = _ogDadosLoja(tid)
+  const logo = d?.logo || ''
+  const destino = logo.startsWith('data:') ? logoUrlServer(tid) : (logo ? (logo.startsWith('/') ? PUBLIC_BASE_URL + logo : logo) : `${PUBLIC_BASE_URL}/favicon-cardapio.png`)
+  res.writeHead(302, { Location: destino }); res.end()
   return true
 }
 
@@ -9601,7 +9777,7 @@ const server = http.createServer(async (req,res) => {
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
   const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/manifest-cardapio','/api/pwa-install','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/estoque/movimentar','/api/estoque/movimentos','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/fidelidade/saldo','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao','/api/favoritos','/api/favoritos/toggle'])
-  if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/')&&!upath.startsWith('/api/store-logo/'))||upath.startsWith('/rest/v1/')){
+  if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/')&&!upath.startsWith('/api/store-logo/')&&!upath.startsWith('/api/og-image/'))||upath.startsWith('/rest/v1/')){
     try {
       const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
       await handleREST(req,res,table,params,body)
@@ -9767,6 +9943,9 @@ const server = http.createServer(async (req,res) => {
   if (req.method === 'GET' && upath.startsWith('/api/store-logo/')) {
     if (_handleStoreLogo(req, res, upath)) return
   }
+  if (req.method === 'GET' && upath.startsWith('/api/og-image/')) {
+    if (await _handleOgImage(req, res, upath)) return
+  }
 
   const _lPathMatch = upath.match(/^\/l\/([^/]+)\/?$/)
   if (req.method === 'GET' && (upath === '/' || upath === '/index.html' || _lPathMatch)) {
@@ -9787,8 +9966,12 @@ const server = http.createServer(async (req,res) => {
         const logoRaw = cfg?.store_logo_url || ''
         const logo = logoRaw.startsWith('data:')
           ? _escHtmlAttr(logoUrlServer(t.id))
-          : (logoRaw ? _escHtmlAttr(logoRaw) : `${baseAtual}/favicon-cardapio.png`)
+          : (logoRaw ? _escHtmlAttr(logoRaw.startsWith('/') ? baseAtual + logoRaw : logoRaw) : `${baseAtual}/favicon-cardapio.png`)
         const pageUrl = _escHtmlAttr(linkCardapioTenant(t.id))
+        // Card do link (WhatsApp etc.): imagem larga com capa, logo e nome.
+        // Já começa a gerar agora, pra ficar pronta quando pedirem a imagem.
+        const ogImg = _escHtmlAttr(ogImagemUrl(t.id, baseAtual) || logo)
+        _ogGerar(t.id).catch(() => {})
         let html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf-8')
         html = html.replace(/<!--OG_FAVICON-->[\s\S]*?<!--\/OG_FAVICON-->/, `<link rel="icon" type="image/png" href="${logo}">`)
         html = html.replace(/<!--OG_MANIFEST-->[\s\S]*?<!--\/OG_MANIFEST-->/, `<link rel="manifest" href="/api/manifest-cardapio?slug=${encodeURIComponent(t.slug || t.id)}"><link rel="apple-touch-icon" href="${logo}">`)
@@ -9797,12 +9980,16 @@ const server = http.createServer(async (req,res) => {
           `<meta property="og:type" content="website">`,
           `<meta property="og:title" content="${nome}">`,
           `<meta property="og:description" content="${descricao}">`,
-          `<meta property="og:image" content="${logo}">`,
+          `<meta property="og:site_name" content="${nome}">`,
+          `<meta property="og:image" content="${ogImg}">`,
+          `<meta property="og:image:type" content="image/jpeg">`,
+          `<meta property="og:image:width" content="1200">`,
+          `<meta property="og:image:height" content="630">`,
           `<meta property="og:url" content="${pageUrl}">`,
-          `<meta name="twitter:card" content="summary">`,
+          `<meta name="twitter:card" content="summary_large_image">`,
           `<meta name="twitter:title" content="${nome}">`,
           `<meta name="twitter:description" content="${descricao}">`,
-          `<meta name="twitter:image" content="${logo}">`
+          `<meta name="twitter:image" content="${ogImg}">`
         ].join('\n'))
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-cache')

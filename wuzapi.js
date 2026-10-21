@@ -131,8 +131,14 @@ async function logout(token) {
 
 // ==================== Envio ====================
 
+// Mensagem com link vai com "card" (imagem, título e descrição do site),
+// igual quando a pessoa cola um link no WhatsApp. Desliga com WUZAPI_LINK_PREVIEW=0.
+const LINK_PREVIEW = process.env.WUZAPI_LINK_PREVIEW !== '0';
+
 async function sendText(token, phone, text) {
-  const data = await wzFetch('/chat/send/text', { method: 'POST', token, body: { Phone: phone, Body: text } });
+  const body = { Phone: phone, Body: text };
+  if (LINK_PREVIEW && /https?:\/\/\S+/i.test(String(text || ''))) body.LinkPreview = true;
+  const data = await wzFetch('/chat/send/text', { method: 'POST', token, body });
   return data?.Id || null;
 }
 
