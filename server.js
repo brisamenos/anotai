@@ -3940,7 +3940,7 @@ async function sendWAButtons(phone, inst, opts) {
 // imagem da loja no topo, o texto e o botão "Abrir cardápio" embaixo.
 // Se a WuzAPI recusar o botão, manda o texto normal com o link (que ainda
 // chega com a prévia do site). Desliga com WA_BOTAO_CARDAPIO=0.
-async function sendWALinkCardapio(phone, inst, tenantId, texto, link, delayMs) {
+async function sendWALinkCardapio(phone, inst, tenantId, texto, link, delayMs, extras = []) {
   const usaBotao = process.env.WA_BOTAO_CARDAPIO !== '0' && link && String(texto || '').includes(link) &&
     typeof inst === 'string' && inst.startsWith(WUZAPI_SENTINEL)
   if (usaBotao) {
@@ -3953,15 +3953,16 @@ async function sendWALinkCardapio(phone, inst, tenantId, texto, link, delayMs) {
       .replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
     let imagem
     try {
-      const arq = await Promise.race([_ogGerar(tenantId), new Promise(r => setTimeout(() => r(null), 8000))])
+      const arq = await Promise.race([_ogGerar(tenantId), new Promise(r => setTimeout(() => r(null), 25000))])
       if (arq && fs.existsSync(arq)) imagem = ogImagemUrl(tenantId)
+      else log('⚠️', `Card do cardápio sem imagem (ainda não ficou pronta) [${tenantId}]`)
     } catch (e) {}
     await _wuzDigitando(tenantId, phone, delayMs)
     try {
       const r = await _tenantWa.sendButtons(tenantId, phone, {
         text: corpo || 'Confira nosso cardápio',
         image: imagem,
-        buttons: [{ type: 'url', id: 'abrir_cardapio', text: 'Abrir cardápio', url: link }]
+        buttons: [{ type: 'url', id: 'abrir_cardapio', text: 'Abrir cardápio', url: link }, ...extras]
       })
       const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
       if (id) _tenantWa.markBotSent(id)
@@ -8593,6 +8594,7 @@ async function handleIAWebhook(req, res) {
       }
       // ════════════════════════════════════════════════════════════════
       const linkCardapio=linkCardapioTenant(tenantId)
+      let _botaoPedirAqui = false
       const agora=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'})), diasSemana=['dom','seg','ter','qua','qui','sex','sab'], diaHoje=diasSemana[agora.getDay()], horaMin=agora.getHours()*60+agora.getMinutes()
       // ── Helpers para pedido ──
       const _offsetCfg = db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
@@ -8867,8 +8869,11 @@ async function handleIAWebhook(req, res) {
         // nunca deve ver essa opção, senão manda áudio e o sistema ignora
         // (comportamento de sempre quando voz_ativo=0/null).
         const _vozHint = _tRowTxt?.voz_ativo
-          ? '\n\n🎙️ Ou, se preferir, manda um *áudio* contando o que você quer que eu já monto seu pedido aqui mesmo!'
+          ? '\n\n🎙️ Ou, se preferir, me manda um *áudio* ou escreve aqui o que você quer, que eu já monto seu pedido por aqui mesmo!'
           : ''
+        // Com o pedido pelo WhatsApp ligado, as boas-vindas ganham também o
+        // botão "Pedir por aqui" (abre as categorias na própria conversa).
+        _botaoPedirAqui = !!_vozHint && (_isPrimeiraMsgDia || _isSoSaudacao) && _vozEhWuzapi(tenantId)
         if (_isPrimeiraMsgDia || _isSoSaudacao) {
           resposta = _pickOne([
             `${_saudacaoHora}! 😊 Seja muito bem-vindo(a) ao ${nomeLojaFmt}!${aviso}\nDá uma olhadinha no nosso cardápio, tem coisa boa esperando por você: ${linkCardapio}`,
@@ -8925,7 +8930,8 @@ async function handleIAWebhook(req, res) {
         const _porChar     = 35 + Math.floor(Math.random() * 15)      // 35-50ms
         const _humanDelay  = Math.min(6000, _baseLeitura + resposta.length * _porChar)
 
-        await sendWALinkCardapio(phone, inst, tenantId, resposta, linkCardapio, _humanDelay)
+        await sendWALinkCardapio(phone, inst, tenantId, resposta, linkCardapio, _humanDelay,
+          _botaoPedirAqui ? [{ id: '__novo', text: 'Pedir por aqui' }] : [])
         log('🤖', `IA → ${phone} (delay ${_humanDelay}ms): ${resposta.slice(0, 60).replace(/\n/g,' ')}`)
         convHist.push({ role: 'user', content: msgFull }, { role: 'assistant', content: resposta })
         if (convHist.length > 20) convHist.splice(0, convHist.length - 20)
@@ -9017,7 +9023,7 @@ function _handleStoreLogo(req, res, upath) {
 // imagem: foto de capa da loja, logo, nome e descrição. É gerada uma vez
 // (Chromium do Puppeteer) e guardada em arquivo; só é gerada de novo quando
 // nome, descrição, logo, capa ou cor da loja mudam (o "hash" muda junto).
-const _OG_VERSAO = '2'
+const _OG_VERSAO = '3'
 const _ogGerando = new Map()
 function _ogDadosLoja(tid) {
   const t = db.prepare('SELECT id,nome FROM tenants WHERE id=?').get(tid)
@@ -9040,31 +9046,44 @@ function ogImagemUrl(tid, base) {
 function _ogArquivo(tid, hash) {
   return path.join(UPLOADS_DIR, `og_${String(tid).replace(/[^\w-]/g, '')}_${hash}.jpg`)
 }
-// Converte o endereço da imagem da loja em algo que o Chromium abre sem
-// depender da internet: arquivo da pasta de uploads vira data URL.
-function _ogImgSrc(u) {
+// Converte a imagem da loja em data URL antes de abrir no Chromium (assim
+// ele não depende de internet nem fica esperando um site lento):
+// arquivo da pasta de uploads é lido do disco; endereço http é baixado.
+async function _ogImgSrc(u) {
   u = String(u || '')
   if (!u) return ''
-  if (u.startsWith('data:') || /^https?:\/\//i.test(u)) return u
-  const m = u.match(/^\/(?:uploads|storage\/v1\/object\/public)\/.*?([^/]+)$/)
+  if (u.startsWith('data:')) return u
+  const m = u.match(/^(?:https?:\/\/[^/]+)?\/(?:uploads|storage\/v1\/object\/public)\/.*?([^/?#]+)(?:[?#].*)?$/)
   if (m) {
     const f = path.join(UPLOADS_DIR, path.basename(m[1]))
     if (fs.existsSync(f)) {
       const ext = path.extname(f).toLowerCase()
-      const tipo = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.svg' ? 'image/svg+xml' : 'image/jpeg'
+      const tipo = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.svg' ? 'image/svg+xml' : ext === '.gif' ? 'image/gif' : 'image/jpeg'
       return `data:${tipo};base64,${fs.readFileSync(f).toString('base64')}`
     }
   }
-  return u.startsWith('/') ? PUBLIC_BASE_URL + u : u
+  const url = u.startsWith('/') ? PUBLIC_BASE_URL + u : u
+  if (!/^https?:\/\//i.test(url)) return ''
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(6000) })
+    if (!r.ok) return ''
+    const tipo = (r.headers.get('content-type') || 'image/jpeg').split(';')[0]
+    if (!/^image\//.test(tipo)) return ''
+    const buf = Buffer.from(await r.arrayBuffer())
+    return buf.length ? `data:${tipo};base64,${buf.toString('base64')}` : ''
+  } catch (e) { return '' }
 }
 function _ogFonte(peso) {
   try { return `data:font/woff2;base64,${fs.readFileSync(path.join(__dirname, 'fonts', `outfit-${peso}.woff2`)).toString('base64')}` } catch (e) { return '' }
 }
-function _ogHtml(d) {
+// Fundo: a foto de capa; sem capa, a própria logo ampliada e desfocada;
+// sem logo também, um degradê na cor da loja.
+function _ogHtml(d, logo, capa) {
   const esc = _escHtmlAttr
-  const logo = _ogImgSrc(d.logo), capa = _ogImgSrc(d.capa)
   const f800 = _ogFonte(800), f500 = _ogFonte(500)
   const inicial = esc((d.nome || '?').trim().charAt(0).toUpperCase())
+  const fundoImg = capa || logo
+  const desfoca = !capa && !!logo
   return `<!doctype html><html><head><meta charset="utf-8"><style>
 ${f800 ? `@font-face{font-family:OgF;font-weight:800;src:url(${f800})}` : ''}
 ${f500 ? `@font-face{font-family:OgF;font-weight:500;src:url(${f500})}` : ''}
@@ -9072,30 +9091,38 @@ ${f500 ? `@font-face{font-family:OgF;font-weight:500;src:url(${f500})}` : ''}
 html,body{width:1200px;height:630px;overflow:hidden}
 body{font-family:OgF,'Liberation Sans',Arial,sans-serif;color:#fff;position:relative;background:${d.cor}}
 .capa{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.fundo{position:absolute;inset:0;background:${capa
-    ? 'linear-gradient(90deg,rgba(8,10,20,.88) 0%,rgba(8,10,20,.72) 48%,rgba(8,10,20,.25) 100%)'
+.capa.blur{inset:-90px;width:1380px;height:810px;filter:blur(44px) saturate(1.35) brightness(.9)}
+.fundo{position:absolute;inset:0;background:${fundoImg
+    ? (desfoca
+      ? 'linear-gradient(90deg,rgba(8,10,20,.8) 0%,rgba(8,10,20,.55) 50%,rgba(8,10,20,.2) 100%)'
+      : 'linear-gradient(90deg,rgba(8,10,20,.88) 0%,rgba(8,10,20,.72) 48%,rgba(8,10,20,.25) 100%)')
     : `radial-gradient(900px 700px at 85% 20%,rgba(255,255,255,.22),transparent 60%),linear-gradient(135deg,${d.cor},#111827)`}}
 .box{position:absolute;left:72px;top:0;bottom:0;right:72px;display:flex;align-items:center;gap:48px}
-.logo{width:230px;height:230px;border-radius:50%;background:#fff;border:8px solid #fff;box-shadow:0 20px 50px rgba(0,0,0,.45);overflow:hidden;flex-shrink:0;display:grid;place-items:center;font-weight:800;font-size:110px;color:${d.cor}}
+.logo{width:250px;height:250px;border-radius:50%;background:#fff;border:8px solid #fff;box-shadow:0 24px 60px rgba(0,0,0,.5);overflow:hidden;flex-shrink:0;display:grid;place-items:center;font-weight:800;font-size:120px;color:${d.cor}}
 .logo img{width:100%;height:100%;object-fit:cover}
 .txt{min-width:0}
-.n{font-weight:800;font-size:72px;line-height:1.05;letter-spacing:-1px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 4px 20px rgba(0,0,0,.35)}
-.d{font-weight:500;font-size:34px;line-height:1.3;margin-top:18px;color:rgba(255,255,255,.88);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.n{font-weight:800;font-size:72px;line-height:1.05;letter-spacing:-1px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 4px 24px rgba(0,0,0,.5)}
+.d{font-weight:500;font-size:34px;line-height:1.3;margin-top:18px;color:rgba(255,255,255,.9);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 2px 12px rgba(0,0,0,.45)}
 </style></head><body>
-${capa ? `<img class="capa" src="${esc(capa)}">` : ''}<div class="fundo"></div>
+${fundoImg ? `<img class="capa${desfoca ? ' blur' : ''}" src="${esc(fundoImg)}">` : ''}<div class="fundo"></div>
 <div class="box"><div class="logo">${logo ? `<img src="${esc(logo)}">` : inicial}</div>
 <div class="txt"><div class="n">${esc(d.nome)}</div><div class="d">${esc(d.descricao)}</div></div></div>
 </body></html>`
 }
+// Uma imagem por vez: abrir vários Chromium juntos num servidor pequeno
+// deixava a geração lenta (e a mensagem saía sem a imagem).
+let _ogFila = Promise.resolve()
 async function _ogGerar(tid) {
   const d = _ogDadosLoja(tid)
   if (!d) return null
   const arq = _ogArquivo(tid, d.hash)
   if (fs.existsSync(arq)) return arq
   if (_ogGerando.has(arq)) return _ogGerando.get(arq)
-  const p = (async () => {
+  const p = _ogFila.then(async () => {
+    if (fs.existsSync(arq)) return arq
     let puppeteer
     try { puppeteer = require('puppeteer') } catch (e) { return null }
+    const [logo, capa] = await Promise.all([_ogImgSrc(d.logo), _ogImgSrc(d.capa)])
     const browser = await puppeteer.launch({
       headless: true,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
@@ -9104,8 +9131,8 @@ async function _ogGerar(tid) {
     try {
       const page = await browser.newPage()
       await page.setViewport({ width: 1200, height: 630, deviceScaleFactor: 1 })
-      await page.setContent(_ogHtml(d), { waitUntil: 'load', timeout: 15000 })
-      await page.evaluate(() => document.fonts.ready)
+      await page.setContent(_ogHtml(d, logo, capa), { waitUntil: 'load', timeout: 12000 }).catch(() => {})
+      await page.evaluate(() => document.fonts.ready).catch(() => {})
       const buf = await page.screenshot({ type: 'jpeg', quality: 86 })
       fs.mkdirSync(UPLOADS_DIR, { recursive: true })
       fs.writeFileSync(arq + '.tmp', buf); fs.renameSync(arq + '.tmp', arq)
@@ -9116,11 +9143,21 @@ async function _ogGerar(tid) {
       } catch (e) {}
       return arq
     } finally { await browser.close().catch(() => {}) }
-  })().catch(e => { log('⚠️', 'Imagem do card do cardápio falhou:', e.message); return null })
+  }).catch(e => { log('⚠️', 'Imagem do card do cardápio falhou:', e.message); return null })
     .finally(() => _ogGerando.delete(arq))
+  _ogFila = p.catch(() => {})
   _ogGerando.set(arq, p)
   return p
 }
+// Deixa a imagem pronta das lojas que usam WuzAPI logo depois que o
+// servidor sobe — assim a primeira mensagem do dia já sai com ela.
+setTimeout(async () => {
+  try {
+    const lojas = db.prepare(`SELECT t.id FROM tenants t JOIN store_config s ON s.tenant_id=t.id WHERE t.ativo=1 AND s.whatsapp_provider='wuzapi'`).all()
+    for (const l of lojas) await _ogGerar(l.id).catch(() => {})
+    if (lojas.length) log('🖼️', `Imagens do card do cardápio prontas (${lojas.length} lojas)`)
+  } catch (e) { log('⚠️', 'Preparar imagens do card falhou:', e.message) }
+}, 45000)
 async function _handleOgImage(req, res, upath) {
   const m = upath.match(/^\/api\/og-image\/(.+)-([0-9a-f]{12})\.jpg$/)
   if (!m) return false
