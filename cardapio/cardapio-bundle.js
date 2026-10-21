@@ -888,6 +888,7 @@ function openOrderTracker(orderId, orderNum) {
   document.getElementById('track-order-num').textContent = orderNum ? 'Pedido ' + initialNum : 'Pedido aguardando pagamento';
   sb.from('orders').select('id,order_num,status,items,client,addr,total,taxa,pag,troco').eq('id', orderId).single().then(({data})=>{
     if (data) {
+      if (typeof _trackDefinirPag === 'function') _trackDefinirPag(data.pag, data.status);
       updateTracker(data.status, data.addr);
       renderTrackItems(Array.isArray(data.items)?data.items:[], data.client, {
         addr: data.addr,
@@ -5948,6 +5949,17 @@ const STEPS = [
 ];
 const STATUS_ORDER = ['aguardando_pix','aguardando_cartao','analise','producao','pronto','saiu','entregue','finalizado'];
 
+// Mostra so a etapa de pagamento que vale para este pedido (Pix ou cartao online).
+// Pedido pago na entrega nao mostra nenhuma das duas.
+let _trackPagTipo = '';
+function _trackDefinirPag(pag, status) {
+  const p = String(pag || '').toLowerCase();
+  const s = String(status || '');
+  if (s === 'aguardando_pix' || p === 'pix' || p === 'pix_manual') _trackPagTipo = 'pix';
+  else if (s === 'aguardando_cartao' || p === 'cartao_mp') _trackPagTipo = 'cartao';
+  else _trackPagTipo = '';
+}
+
 function stepIndexFor(status) {
   return STEPS.findIndex(s => s.key.includes(status));
 }
@@ -5964,6 +5976,7 @@ function startTracking(orderId, items, client, addr, initialStatus, orderNum, de
   _trackOrderId = orderId;
   _initialOrderStatus = initialStatus || 'analise';
   _trackCurrentStatus = _initialOrderStatus;
+  _trackDefinirPag(details && details.pag, _initialOrderStatus);
   const fab = document.getElementById('track-fab');
   fab.classList.add('show');
   const numLabel = orderNum ? '#' + String(orderNum).padStart(3,'0') : 'Pagamento pendente';
@@ -5993,13 +6006,16 @@ function startTracking(orderId, items, client, addr, initialStatus, orderNum, de
 }
 
 function updateTracker(status, addr) {
-  const curIdx = stepIndexFor(status);
+  if (status === 'aguardando_pix') _trackPagTipo = 'pix';
+  else if (status === 'aguardando_cartao') _trackPagTipo = 'cartao';
+  const baseSteps = STEPS.filter((s, i) => i > 1 || (i === 0 && _trackPagTipo === 'pix') || (i === 1 && _trackPagTipo === 'cartao'));
+  const curIdx = baseSteps.findIndex(s => s.key.includes(status));
   const tl     = document.getElementById('track-timeline');
   if (!tl) return;
   const _addr = (addr || '').toLowerCase();
   const isRetirada = _addr.startsWith('retirada') || _addr.startsWith('mesa');
-  const steps = STEPS.map((s, i) => {
-    if (i === STEPS.length - 1 && isRetirada) return { ...s, title: 'Seu pedido está pronto!', desc: 'Pode vir buscar — seu pedido está pronto para retirada!' };
+  const steps = baseSteps.map((s, i) => {
+    if (i === baseSteps.length - 1 && isRetirada) return { ...s, title: 'Seu pedido está pronto!', desc: 'Pode vir buscar — seu pedido está pronto para retirada!' };
     return s;
   });
   if (status === 'cancelado') {

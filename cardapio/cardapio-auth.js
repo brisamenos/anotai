@@ -463,6 +463,7 @@ function openOrderTracker(orderId, orderNum) {
   document.getElementById('track-order-num').textContent = orderNum ? 'Pedido ' + initialNum : 'Pedido aguardando pagamento';
   sb.from('orders').select('id,order_num,status,items,client,addr,total,taxa,pag,troco').eq('id', orderId).single().then(({data})=>{
     if (data) {
+      if (typeof _trackDefinirPag === 'function') _trackDefinirPag(data.pag, data.status);
       updateTracker(data.status, data.addr);
       renderTrackItems(Array.isArray(data.items)?data.items:[], data.client, {
         addr: data.addr,
