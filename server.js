@@ -1588,6 +1588,31 @@ function garantirSchemaChatPedido() {
 }
 garantirSchemaChatPedido()
 
+// ── Numeração dos pedidos: contador por loja ─────────────────────────────
+// Antes o próximo número era "maior número entre os pedidos com id acima do
+// ponto de corte (offset)". Isso repetia número quando um pedido feito ANTES
+// do zerar recebia o número DEPOIS (ex.: Pix online pago depois da meia-noite):
+// ele pegava o #1 do dia novo, mas o próximo pedido não o enxergava (id abaixo
+// do corte) e também virava #1. Agora cada loja tem um contador próprio: cada
+// número é dado uma vez só e zerar coloca o contador em 0.
+db.exec(`CREATE TABLE IF NOT EXISTS order_num_contador (
+  tenant_id TEXT PRIMARY KEY,
+  ultimo INTEGER NOT NULL DEFAULT 0
+)`)
+// Chamar sempre dentro de uma transação (db.transaction).
+function proximoOrderNum(tenantId) {
+  const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tenantId)
+  const offset = parseInt(cfg?.order_num_offset) || 0
+  const mxCiclo = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=? AND id>? AND order_num IS NOT NULL').get(tenantId, offset)?.mx || 0
+  const row = db.prepare('SELECT ultimo FROM order_num_contador WHERE tenant_id=?').get(tenantId)
+  const next = Math.max(Number(row?.ultimo) || 0, Number(mxCiclo) || 0) + 1
+  db.prepare('INSERT INTO order_num_contador (tenant_id, ultimo) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ultimo=excluded.ultimo').run(tenantId, next)
+  return next
+}
+function zerarOrderNumContador(tenantId) {
+  db.prepare('INSERT INTO order_num_contador (tenant_id, ultimo) VALUES (?,0) ON CONFLICT(tenant_id) DO UPDATE SET ultimo=0').run(tenantId)
+}
+
 // ── Backfill order_num para pedidos existentes ────────────────────────────
 try {
   const _backfillWhere = "order_num IS NULL AND NOT (status='aguardando_cartao' OR (status='aguardando_pix' AND COALESCE(pag,'')!='pix_manual'))"
@@ -1600,10 +1625,9 @@ try {
       const _offset = parseInt(_cfg?.order_num_offset) || 0
       const _nullOrders = db.prepare(`SELECT id FROM orders WHERE tenant_id=? AND id>? AND ${_backfillWhere} ORDER BY id ASC`).all(tenant_id, _offset)
       if (!_nullOrders.length) continue
-      const _existingMax = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=? AND id>? AND order_num IS NOT NULL').get(tenant_id, _offset)
-      let _seq = _existingMax?.mx || 0
+      let _seq = 0
       const _upd = db.prepare('UPDATE orders SET order_num=? WHERE id=?')
-      db.transaction(() => { for (const r of _nullOrders) _upd.run(++_seq, r.id) })()
+      db.transaction(() => { for (const r of _nullOrders) { _seq = proximoOrderNum(tenant_id); _upd.run(_seq, r.id) } })()
       log('✅', `  Tenant ${tenant_id}: ${_nullOrders.length} pedidos numerados (1..${_seq})`)
     }
   }
@@ -2048,6 +2072,24 @@ setInterval(() => {
   } catch(e) { log('⚠️','[CLEANUP] erro:', e.message) }
 }, 5 * 60 * 1000)
 
+// Pedido antigo não gera aviso de status no WhatsApp. Sem isso, quando a loja
+// finaliza no dia seguinte os pedidos que ficaram no quadro, o cliente recebia
+// "Pedido entregue/finalizado" de um pedido velho (às vezes logo depois de
+// fazer um pedido novo, achando que era sobre o novo). Conta a partir da hora
+// do pedido ou da hora agendada, o que for mais tarde. Ajuste: WA_STATUS_MAX_HORAS.
+function _dataPedidoMs(v) {
+  if (!v) return 0
+  const s = String(v)
+  const t = new Date(/[TZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s.replace(' ', 'T') + 'Z').getTime()
+  return isNaN(t) ? 0 : t
+}
+function pedidoRecenteParaAviso(order) {
+  const horas = Math.max(1, parseInt(process.env.WA_STATUS_MAX_HORAS || '6', 10) || 6)
+  const ref = Math.max(_dataPedidoMs(order?.created_at), _dataPedidoMs(order?.scheduled_for))
+  if (!ref) return true
+  return Date.now() - ref <= horas * 3600 * 1000
+}
+
 function pedidoOnlineAguardandoPagamento(order) {
   const status = String(order?.status || '').toLowerCase()
   const pag = String(order?.pag || '').toLowerCase()
@@ -2065,14 +2107,7 @@ function atribuirOrderNumSeNecessario(tid, orderId) {
         .run(atual.order_num, id, tenantId)
       return Number(atual.order_num)
     }
-    const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tenantId)
-    const offset = parseInt(cfg?.order_num_offset) || 0
-    const row = db.prepare(`
-      SELECT COALESCE(MAX(order_num),0) as mx
-      FROM orders
-      WHERE tenant_id=? AND id>? AND order_num IS NOT NULL
-    `).get(tenantId, offset)
-    const next = (row?.mx || 0) + 1
+    const next = proximoOrderNum(tenantId)
     db.prepare('UPDATE orders SET order_num=? WHERE id=? AND tenant_id=? AND order_num IS NULL').run(next, id, tenantId)
     db.prepare('UPDATE order_chat_threads SET order_num=?, updated_at=datetime(\'now\') WHERE order_id=? AND tenant_id=?')
       .run(next, id, tenantId)
@@ -2468,15 +2503,29 @@ function msUntilNextBrasiliaMidnight(now = new Date()) {
   return Math.max(1000, targetUtc - now.getTime())
 }
 
-function executarResetDiarioPedidos() {
+function executarResetDiarioPedidos(opts = {}) {
   const hoje = brasiliaDateString()
-  const tenants = db.prepare(`
+  let tenants = db.prepare(`
     SELECT tenant_id
       FROM store_config
      WHERE COALESCE(order_auto_reset_daily,0)=1
        AND COALESCE(order_auto_reset_last_date,'')<>?
   `).all(hoje)
   if (!tenants.length) return 0
+  // Servidor reiniciado no meio do dia sem o reset de hoje registrado: se a
+  // loja já teve pedido hoje, NÃO zera agora (os próximos pedidos repetiriam
+  // os números de hoje). Só marca o dia como feito; zera na próxima meia-noite.
+  if (opts.inicializacao) {
+    const p = brasiliaParts()
+    const meiaNoiteUtc = new Date(Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), 3, 0, 0)).toISOString().slice(0, 19).replace('T', ' ')
+    const marcar = db.prepare('UPDATE store_config SET order_auto_reset_last_date=? WHERE tenant_id=?')
+    tenants = tenants.filter(r => {
+      const teve = db.prepare('SELECT 1 FROM orders WHERE tenant_id=? AND created_at>=? AND order_num IS NOT NULL LIMIT 1').get(r.tenant_id, meiaNoiteUtc)
+      if (teve) { marcar.run(hoje, r.tenant_id); log('INFO', `Reset diario adiado para a proxima meia-noite (loja ja teve pedido hoje): ${r.tenant_id}`) }
+      return !teve
+    })
+    if (!tenants.length) { marcarDirty(); return 0 }
+  }
 
   const offset = db.prepare('SELECT COALESCE(MAX(id),0) as max_id FROM orders').get()?.max_id || 0
   const updateCfg = db.prepare(`
@@ -2487,7 +2536,7 @@ function executarResetDiarioPedidos() {
   `)
 
   db.transaction(() => {
-    for (const row of tenants) updateCfg.run(offset, hoje, row.tenant_id)
+    for (const row of tenants) { updateCfg.run(offset, hoje, row.tenant_id); zerarOrderNumContador(row.tenant_id) }
   })()
 
   marcarDirty()
@@ -2520,7 +2569,7 @@ function agendarResetDiarioPedidos() {
 }
 
 try {
-  const n = executarResetDiarioPedidos()
+  const n = executarResetDiarioPedidos({ inicializacao: true })
   if (n > 0) log('INFO', `Reset diario pendente aplicado na inicializacao: ${n} tenant(s)`)
 } catch (e) {
   log('WARN', 'Reset diario na inicializacao falhou:', e.message)
@@ -2702,7 +2751,12 @@ async function responderAcompanhamentoWhatsapp({ tenantId, phone, text, msgIds =
       ORDER BY id DESC
       LIMIT 100
     `).all(tenantId, ...phoneArgs)
-    pedido = candidatos.find(c => numeroPedidoComOffset(c, offset) === info.number) || null
+    // Com a numeração zerando todo dia, o mesmo número existe em vários dias.
+    // Procura primeiro nos pedidos das últimas 36h; só olha os mais antigos
+    // se não achar nada recente com esse número.
+    const recente = c => Date.now() - _dataPedidoMs(c.created_at) <= 36 * 3600 * 1000
+    pedido = candidatos.find(c => recente(c) && numeroPedidoComOffset(c, offset) === info.number)
+      || candidatos.find(c => numeroPedidoComOffset(c, offset) === info.number) || null
   } else {
     pedido = db.prepare(`
       SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at
@@ -3338,10 +3392,7 @@ async function handleREST(req, res, table, params, body) {
         if (_tid && !pedidoOnlineAguardandoPagamento(payload)) {
           try {
             const txFn = db.transaction((tenantId, rowid) => {
-              const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tenantId)
-              const offset = parseInt(cfg?.order_num_offset) || 0
-              const row = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=? AND id>?').get(tenantId, offset)
-              const next = (row?.mx || 0) + 1
+              const next = proximoOrderNum(tenantId)
               db.prepare('UPDATE orders SET order_num=? WHERE rowid=?').run(next, rowid)
               return next
             })
@@ -3537,7 +3588,7 @@ async function handleREST(req, res, table, params, body) {
         }
         const pTid = tenantId || payload.tenant_id || vals[0] || null
         if (!pTid) return send(res, 400, { error: 'tenant_id obrigatório' })
-        const upsertKeys = [...new Set([...keys,'tenant_id'])].filter(k=>cols.includes(k))
+        const upsertKeys = [...new Set([...Object.keys(payload).filter(k=>cols.includes(k)),'tenant_id'])].filter(k=>cols.includes(k))
         if (!payload.tenant_id) payload.tenant_id = pTid
         const setClause = upsertKeys.filter(k=>k!=='tenant_id').map(k=>`"${k}"=excluded."${k}"`).join(', ')
         db.prepare(`INSERT INTO store_config (${upsertKeys.map(k=>`"${k}"`).join(',')}) VALUES (${upsertKeys.map(()=>'?').join(',')}) ON CONFLICT(tenant_id) DO UPDATE SET ${setClause}`).run(...upsertKeys.map(k=>sanitize(payload[k]??(k==='tenant_id'?pTid:null))))
@@ -4987,6 +5038,10 @@ async function handleOrderStatus(req, res) {
             log('🔕', `[anti-ban] Pulando recompensas do pedido #${order_id} — cliente não ativou tracking via WhatsApp`)
             return
           }
+          if (!pedidoRecenteParaAviso(order)) {
+            log('🔕', `[wa] Pulando mensagem de recompensas do pedido #${order_id} — pedido antigo (a recompensa foi creditada normalmente)`)
+            return
+          }
           const lojaNome  = cfg?.store_name || 'Restaurante'
           const linhasRec = _recompensas.map(r => r.linha).join('\n')
           const msgFinal  = _recompensas.length === 1
@@ -5107,6 +5162,9 @@ async function handleOrderStatus(req, res) {
           if (ct.on===false) { log('⏭️',`Automação "${tipoAuto}" desligada`) }
           else if (!_trackingAtivo) {
             log('🔕', `[anti-ban] Pulando "${new_status}" do pedido #${idStr} — cliente não ativou tracking via WhatsApp`)
+          }
+          else if (!pedidoRecenteParaAviso(order)) {
+            log('🔕', `[wa] Pulando "${new_status}" do pedido #${idStr} — pedido antigo (feito há mais de ${process.env.WA_STATUS_MAX_HORAS || 6}h)`)
           }
           else if (ct.on&&ct.msg) { msgFinal=fillVars(ct.msg,vars) }
           else { msgFinal=msgPadraoOrganizado[new_status]||msgPadrao[new_status]||null }
@@ -8759,7 +8817,10 @@ async function handleIAWebhook(req, res) {
         if (_numMatch) {
           const n = parseInt(_numMatch[1])
           const realId = n + _iaOffset
-          ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND order_num=? ORDER BY id DESC LIMIT 1`).get(tenantId, ..._phoneArgs, n)
+          // Pedido recente (36h) com esse número primeiro — a numeração zera todo
+          // dia em muitas lojas, então o mesmo número existe em dias diferentes.
+          ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND order_num=? AND created_at >= datetime('now','-36 hours') ORDER BY id DESC LIMIT 1`).get(tenantId, ..._phoneArgs, n)
+          if (!ped) ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND order_num=? ORDER BY id DESC LIMIT 1`).get(tenantId, ..._phoneArgs, n)
           if (!ped) ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND id=? AND (order_num IS NULL OR order_num=0) LIMIT 1`).get(tenantId, ..._phoneArgs, realId)
         } else {
           // Sem número citado — pega o pedido mais recente do cliente
@@ -9653,7 +9714,7 @@ const server = http.createServer(async (req,res) => {
 
   if (req.method === 'GET' && upath === '/api/stamp/check') {
     const tid   = req.headers['x-tenant-id'] || ''
-    const phone = (params.phone || '').replace(/\D/g,'')
+    const phone = (params.get('phone') || '').replace(/\D/g,'')
     if (!tid || !phone) { send(res, 400, { error: 'tenant_id e phone obrigatórios' }); return }
     const row = db.prepare('SELECT stamp_config FROM store_config WHERE tenant_id=?').get(tid)
     const cfg = (() => { try { return JSON.parse(row?.stamp_config||'{}') } catch { return {} } })()
@@ -9694,7 +9755,7 @@ const server = http.createServer(async (req,res) => {
   // do pedido. Essa rota espelha exatamente o /api/stamp/check.
   if (req.method === 'GET' && upath === '/api/fidelidade/saldo') {
     const tid   = req.headers['x-tenant-id'] || ''
-    const phone = (params.phone || '').replace(/\D/g,'')
+    const phone = (params.get('phone') || '').replace(/\D/g,'')
     if (!tid || !phone) { send(res, 400, { error: 'tenant_id e phone obrigatórios' }); return }
     const row = db.prepare('SELECT fid_config FROM store_config WHERE tenant_id=?').get(tid)
     const cfg = (() => { try { return JSON.parse(row?.fid_config||'{}') } catch { return {} } })()

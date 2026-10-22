@@ -137,6 +137,19 @@ function _emitOrderUpdate(db, sseBroadcast, tenantId, order, extra = {}) {
   sseBroadcast(`orders-rt:${tenantId}`, 'orders:UPDATE', { ...order, items, ...extra })
 }
 
+// Mesmo contador por loja do server.js (tabela order_num_contador).
+// Chamar sempre dentro de uma transação.
+function _proximoOrderNum(db, tid) {
+  db.exec('CREATE TABLE IF NOT EXISTS order_num_contador (tenant_id TEXT PRIMARY KEY, ultimo INTEGER NOT NULL DEFAULT 0)')
+  const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
+  const offset = parseInt(cfg?.order_num_offset) || 0
+  const mxCiclo = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=? AND id>? AND order_num IS NOT NULL').get(tid, offset)?.mx || 0
+  const row = db.prepare('SELECT ultimo FROM order_num_contador WHERE tenant_id=?').get(tid)
+  const next = Math.max(Number(row?.ultimo) || 0, Number(mxCiclo) || 0) + 1
+  db.prepare('INSERT INTO order_num_contador (tenant_id, ultimo) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ultimo=excluded.ultimo').run(tid, next)
+  return next
+}
+
 function _atribuirOrderNumSeNecessario(db, tenantId, orderId) {
   if (!tenantId || !orderId) return null
   const txFn = db.transaction((tid, id) => {
@@ -147,14 +160,7 @@ function _atribuirOrderNumSeNecessario(db, tenantId, orderId) {
         .run(atual.order_num, id, tid)
       return Number(atual.order_num)
     }
-    const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
-    const offset = parseInt(cfg?.order_num_offset) || 0
-    const row = db.prepare(`
-      SELECT COALESCE(MAX(order_num),0) as mx
-      FROM orders
-      WHERE tenant_id=? AND id>? AND order_num IS NOT NULL
-    `).get(tid, offset)
-    const next = (row?.mx || 0) + 1
+    const next = _proximoOrderNum(db, tid)
     db.prepare('UPDATE orders SET order_num=? WHERE id=? AND tenant_id=? AND order_num IS NULL').run(next, id, tid)
     db.prepare('UPDATE order_chat_threads SET order_num=?, updated_at=datetime(\'now\') WHERE order_id=? AND tenant_id=?')
       .run(next, id, tid)
@@ -2712,10 +2718,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const orderId = info.lastInsertRowid
     try {
       const txFn = db.transaction((tenantId, rowid) => {
-        const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tenantId)
-        const offset = parseInt(cfg?.order_num_offset) || 0
-        const row = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=? AND id>?').get(tenantId, offset)
-        const next = (row?.mx || 0) + 1
+        const next = _proximoOrderNum(db, tenantId)
         db.prepare('UPDATE orders SET order_num=? WHERE rowid=?').run(next, rowid)
       })
       txFn(tid, orderId)
@@ -8910,6 +8913,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
       db.transaction(() => {
         db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(tid)
         db.prepare('UPDATE store_config SET order_num_offset=?, order_auto_reset_last_date=? WHERE tenant_id=?').run(offset, hoje, tid)
+        db.exec('CREATE TABLE IF NOT EXISTS order_num_contador (tenant_id TEXT PRIMARY KEY, ultimo INTEGER NOT NULL DEFAULT 0)')
+        db.prepare('INSERT INTO order_num_contador (tenant_id, ultimo) VALUES (?,0) ON CONFLICT(tenant_id) DO UPDATE SET ultimo=0').run(tid)
       })()
       marcarDirty()
       const payload = { tenant_id: tid, order_num_offset: offset, order_auto_reset_last_date: hoje }
