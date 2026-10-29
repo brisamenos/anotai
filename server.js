@@ -2090,6 +2090,71 @@ function pedidoRecenteParaAviso(order) {
   return Date.now() - ref <= horas * 3600 * 1000
 }
 
+// ── Controle dos avisos de pedido no WhatsApp ────────────────────────────
+// Cada aviso (pedido recebido, pagamento confirmado, em preparo, pronto...)
+// sai no máximo UMA vez por pedido — registrado no banco, vale mesmo depois
+// de reiniciar o servidor. Antes o mesmo pedido podia receber "Pagamento
+// confirmado" duas vezes (webhook + consulta do Mercado Pago, por exemplo) e,
+// logo em seguida, "Pedido recebido" e "Pedido confirmado", que só repetiam
+// o que o cliente já sabia.
+db.exec(`CREATE TABLE IF NOT EXISTS wa_avisos_pedido (
+  tenant_id TEXT NOT NULL,
+  order_id INTEGER NOT NULL,
+  tipo TEXT NOT NULL,
+  enviado_em INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, order_id, tipo)
+)`)
+function avisoPedidoReservar(tid, orderId, tipo) {
+  try { return db.prepare('INSERT OR IGNORE INTO wa_avisos_pedido (tenant_id, order_id, tipo, enviado_em) VALUES (?,?,?,?)').run(tid, Number(orderId), tipo, Date.now()).changes === 1 }
+  catch (e) { return true }
+}
+function avisoPedidoLiberar(tid, orderId, tipo) {
+  try { db.prepare('DELETE FROM wa_avisos_pedido WHERE tenant_id=? AND order_id=? AND tipo=?').run(tid, Number(orderId), tipo) } catch (e) {}
+}
+function avisoPedidoJa(tid, orderId, tipos) {
+  try {
+    return !!db.prepare(`SELECT 1 FROM wa_avisos_pedido WHERE tenant_id=? AND order_id=? AND tipo IN (${tipos.map(() => '?').join(',')}) LIMIT 1`).get(tid, Number(orderId), ...tipos)
+  } catch (e) { return false }
+}
+const _AVISO_ORDEM = { analise: 1, producao: 2, pronto: 3, saiu: 4, entregue: 5, finalizado: 6 }
+// Devolve o motivo para NÃO mandar o aviso desse status (ou '' se pode mandar).
+function avisoStatusRedundante(tid, orderId, status) {
+  if (avisoPedidoJa(tid, orderId, ['st_' + status])) return 'já enviado'
+  if (status === 'analise' && avisoPedidoJa(tid, orderId, ['recebido', 'pix_cobranca', 'pagamento_confirmado']))
+    return 'o cliente já recebeu a confirmação do pedido'
+  if (status === 'producao' && avisoPedidoJa(tid, orderId, ['pagamento_confirmado']))
+    return 'o aviso de pagamento já disse que o pedido entrou em preparo'
+  const r = _AVISO_ORDEM[status]
+  if (r) {
+    const maiores = Object.keys(_AVISO_ORDEM).filter(k => _AVISO_ORDEM[k] > r).map(k => 'st_' + k)
+    if (maiores.length && avisoPedidoJa(tid, orderId, maiores)) return 'um status mais adiantado já foi avisado'
+  }
+  return ''
+}
+// Mudanças de status em sequência rápida (ex.: aceitar e já marcar "pronto")
+// viram UMA mensagem só: espera alguns segundos e manda só o status em que o
+// pedido parou. Ajuste: WA_STATUS_JANELA_SEG (padrão 20).
+const _avisoStatusTimers = new Map()
+function agendarAvisoStatus(tid, orderId, status, enviar) {
+  const k = `${tid}:${orderId}`
+  const ant = _avisoStatusTimers.get(k)
+  if (ant) { clearTimeout(ant.timer); log('🔕', `[wa] aviso "${ant.status}" do pedido ${orderId} trocado por "${status}" (mudou rápido)`) }
+  const seg = Math.max(0, parseInt(process.env.WA_STATUS_JANELA_SEG || '20', 10) || 0)
+  const timer = setTimeout(async () => {
+    _avisoStatusTimers.delete(k)
+    try {
+      const atual = db.prepare('SELECT status FROM orders WHERE id=? AND tenant_id=?').get(orderId, tid)
+      if (!atual || atual.status !== status) return
+      const motivo = avisoStatusRedundante(tid, orderId, status)
+      if (motivo) { log('🔕', `[wa] aviso "${status}" do pedido ${orderId} não enviado: ${motivo}`); return }
+      if (!avisoPedidoReservar(tid, orderId, 'st_' + status)) return
+      const ok = await enviar()
+      if (!ok) avisoPedidoLiberar(tid, orderId, 'st_' + status)
+    } catch (e) { avisoPedidoLiberar(tid, orderId, 'st_' + status); log('❌', `[wa] aviso de status falhou #${orderId}:`, e.message) }
+  }, seg * 1000)
+  _avisoStatusTimers.set(k, { timer, status })
+}
+
 function pedidoOnlineAguardandoPagamento(order) {
   const status = String(order?.status || '').toLowerCase()
   const pag = String(order?.pag || '').toLowerCase()
@@ -3470,6 +3535,8 @@ async function handleREST(req, res, table, params, body) {
             const auto  = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
             const recAuto = auto['recebido'] || {}
             if (recAuto.on === false) { log('⏭️','Automacao recebido desligada'); return }
+            // Pedido feito pelo robô do WhatsApp: o próprio robô já confirmou na conversa.
+            if (_ord.canal === 'voz_whatsapp') { avisoPedidoReservar(_tid, _ord.id, 'recebido'); return }
             const trackingAtivo = parseInt(_ord.wa_track || 0) === 1
             if (!trackingAtivo) {
               log('🔕', `[anti-ban] Pulando comanda do pedido #${_ord.id} — cliente não ativou tracking via WhatsApp`)
@@ -3495,9 +3562,10 @@ async function handleREST(req, res, table, params, body) {
             const loja  = cfg?.store_name || 'Restaurante'
             const msgPadrao = `🏪 *${loja}*\n${'-'.repeat(20)}\n\n📥 *Pedido recebido - #${idStr}*\n\nOlá, *${nome.split(' ')[0]}*! Recebemos seu pedido.\n\n*Itens*\n${items || 'Itens do pedido'}\n\n*Total:* R$ ${total}\n\nEm breve confirmaremos por aqui.`
             const msgFinal = recAuto.msg ? fillVars(recAuto.msg, { nome, id: idStr, itens: items, total, loja, endereco: _ord.addr || '', mesa: String(_ord.mesa_num || '') }) : msgPadrao
+            if (!avisoPedidoReservar(_tid, _ord.id, 'recebido')) return
             const r = await sendWA(_ord.phone, msgFinal, inst, _autoDelayMs())
             if (r.ok) log('📤', `Comanda recebido enviada → ${_ord.phone} pedido #${idStr}`)
-            else      log('⚠️', `Comanda recebido falhou WA → ${_ord.phone}`)
+            else      { avisoPedidoLiberar(_tid, _ord.id, 'recebido'); log('⚠️', `Comanda recebido falhou WA → ${_ord.phone}`) }
           } catch(e) { log('❌','Erro notif recebido:', e.message) }
         })
       }
@@ -3519,6 +3587,8 @@ async function handleREST(req, res, table, params, body) {
             }
             const pixAuto = auto['pix_cobranca'] || {}
             if (pixAuto.on === false) { log('⏭️','Automação pix_cobranca desligada'); return }
+            // Pedido feito pelo robô do WhatsApp: o robô já mandou a chave Pix na conversa.
+            if (_ord.canal === 'voz_whatsapp') { avisoPedidoReservar(_tid, _ord.id, 'pix_cobranca'); return }
             const numeroRealP = atribuirOrderNumSeNecessario(_tid, _ord.id) || numeroPedidoPad(_ord, parseInt(cfg?.order_num_offset) || 0)
             const idStr   = String(numeroRealP).padStart(3, '0')
             const nome    = _ord.client || 'Cliente'
@@ -3535,7 +3605,9 @@ async function handleREST(req, res, table, params, body) {
             const _emP     = detectarCategoriaPedido(items, _segP).lojaEmoji
             const msgPadrao = `${_emP} *${lojaP}*\n${'-'.repeat(20)}\n\n💠 *PIX manual - Pedido #${idStr}*\n\nOlá, *${_nomeP}*! Recebemos seu pedido.\n\n*Itens*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n*Total:* R$ ${total}\n\nPara confirmar, faça o PIX:\n*Tipo:* ${tipoChave}\n*Chave:* ${chavePix}\n\nAssim que o pagamento for confirmado, seguimos com o preparo.`
             const msgFinal  = pixAuto.msg ? fillVars(pixAuto.msg, { nome, id: idStr, itens: items, total, chave_pix: chavePix, tipo_chave: tipoChave }) : msgPadrao
+            if (!avisoPedidoReservar(_tid, _ord.id, 'pix_cobranca')) return
             const r = await sendWA(_ord.phone, msgFinal, inst, _autoDelayMs())
+            if (!r.ok) avisoPedidoLiberar(_tid, _ord.id, 'pix_cobranca')
             if (r.ok) log('📤', `PIX manual notificado → ${_ord.phone} pedido #${idStr}`)
             else       log('⚠️', `PIX manual falhou envio WA → ${_ord.phone}`)
           } catch(e) { log('❌','Erro notif PIX manual:', e.message) }
@@ -4888,7 +4960,9 @@ async function handleOrderStatus(req, res) {
           const _emHeader    = _categPix.lojaEmoji
               const msgPad = `${_emHeader} *${lojaC}*\n${'-'.repeat(20)}\n\n✅ *Pagamento confirmado*\n\nOlá, *${_nomePOk}*! Recebemos o PIX do pedido *#${idStr}*.\n\n*Itens*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n*Total:* R$ ${total}\n\nSeu pedido já entrou em preparo.`
           const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total }) : msgPad
+          if (!avisoPedidoReservar(tid, order.id, 'pagamento_confirmado')) { log('🔕', `[wa] pagamento confirmado do pedido #${idStr} já tinha sido avisado`); return }
           const r = await sendWA(order.phone, msgFin, inst, _autoDelayMs())
+          if (!r.ok) avisoPedidoLiberar(tid, order.id, 'pagamento_confirmado')
           if (r.ok) log('📤', `PIX manual confirmado notificado → ${order.phone} #${idStr}`)
         } catch(e) { log('❌','Erro notif pix_confirmado manual:', e.message) }
       })
@@ -5052,7 +5126,9 @@ async function handleOrderStatus(req, res) {
               // Delay humanizado pra evitar padrão de bot (rajada de 1s fixo).
               // Notificações de fidelidade: 1.5s a 4s, com variação aleatória.
               const _delay = 1500 + Math.floor(Math.random() * 2500)
+              if (!avisoPedidoReservar(tid, order.id, 'recompensas')) return
               const r = await sendWA(order.phone, msgFinal, inst, _delay)
+              if (!r?.ok) avisoPedidoLiberar(tid, order.id, 'recompensas')
               if (r?.ok) log('📤', `WA recompensas (${_recompensas.map(r=>r.tipo).join('+')}) → ${order.phone}`)
               else       log('⚠️', `WA recompensas FALHOU → ${order.phone}:`, r?.error || 'sem detalhe')
             } catch(e) { log('⚠️', `WA recompensas ERROR → ${order.phone}:`, e.message) }
@@ -5169,6 +5245,10 @@ async function handleOrderStatus(req, res) {
           else if (ct.on&&ct.msg) { msgFinal=fillVars(ct.msg,vars) }
           else { msgFinal=msgPadraoOrganizado[new_status]||msgPadrao[new_status]||null }
           if (msgFinal) {
+            const _motivo = avisoStatusRedundante(tid, order.id, new_status)
+            if (_motivo) { log('🔕', `[wa] aviso "${new_status}" do pedido #${idStr} não enviado: ${_motivo}`); msgFinal = null }
+          }
+          if (msgFinal) {
             const _pkey = `${order.id}_${new_status}`
             if (new_status==='finalizado') {
               const min=Math.max(1,parseInt(auto._aval_minutos||1,10)||1)
@@ -5176,17 +5256,17 @@ async function handleOrderStatus(req, res) {
               if (processed.has(_pkey)) return
               processed.add(_pkey)
               log('⏳',`Avaliação agendada em ${min}min para #${idStr}`)
-              setTimeout(async()=>{ const cfgNow=db.prepare("SELECT evo_automacoes FROM store_config WHERE tenant_id=?").get(tid); if((jsonParse(cfgNow?.evo_automacoes)||{})['avaliacao']?.on===false) { processed.delete(_pkey); return } await sendWA(order.phone,msgFinal,inst,_autoDelayMs()) },min*60*1000)
+              setTimeout(async()=>{ const cfgNow=db.prepare("SELECT evo_automacoes FROM store_config WHERE tenant_id=?").get(tid); if((jsonParse(cfgNow?.evo_automacoes)||{})['avaliacao']?.on===false) { processed.delete(_pkey); return }
+                if (!avisoPedidoReservar(tid, order.id, 'st_finalizado')) return
+                const r = await sendWA(order.phone,msgFinal,inst,_autoDelayMs()); if (!r?.ok) avisoPedidoLiberar(tid, order.id, 'st_finalizado') },min*60*1000)
             } else {
-              // Marca ANTES do await para evitar race condition entre cliques duplos no gestor:
-              // se 2 POSTs /api/order-status chegam em paralelo, ambos leem oldStatus='pronto',
-              // passariam pelo check antigo simultaneamente e enviariam o WA duas vezes.
-              if (processed.has(_pkey)) return
-              processed.add(_pkey)
-              try {
-                const r = await sendWA(order.phone, msgFinal, inst, _autoDelayMs())
-                if (!r.ok) processed.delete(_pkey) // se falhou, permite retry
-              } catch(_) { processed.delete(_pkey) }
+              // Não manda na hora: espera alguns segundos e manda só o status em
+              // que o pedido parou (cliques duplos e mudanças rápidas viram 1 aviso).
+              const _msgSt = msgFinal
+              agendarAvisoStatus(tid, order.id, new_status, async () => {
+                const r = await sendWA(order.phone, _msgSt, inst, _autoDelayMs())
+                return !!r?.ok
+              })
             }
           }
         } catch(e) { log('❌',`Erro WA order-status #${order_id}:`,{error:e.message}) }

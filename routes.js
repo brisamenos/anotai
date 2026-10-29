@@ -56,6 +56,27 @@ async function _linkDiretoAppDesktop(pagina) {
   } catch { return '' } finally { clearTimeout(limite) }
 }
 
+// ── Avisos de pedido: mesmo controle do server.js (tabela wa_avisos_pedido) ──
+// Cada aviso sai uma vez só por pedido. "Pagamento confirmado" usa o mesmo tipo
+// para Pix e cartão, então webhook + consulta + job não repetem a mensagem.
+function _avisoPedidoReservar(db, tid, orderId, tipo) {
+  try {
+    db.exec('CREATE TABLE IF NOT EXISTS wa_avisos_pedido (tenant_id TEXT NOT NULL, order_id INTEGER NOT NULL, tipo TEXT NOT NULL, enviado_em INTEGER NOT NULL, PRIMARY KEY (tenant_id, order_id, tipo))')
+    return db.prepare('INSERT OR IGNORE INTO wa_avisos_pedido (tenant_id, order_id, tipo, enviado_em) VALUES (?,?,?,?)').run(tid, Number(orderId), tipo, Date.now()).changes === 1
+  } catch (e) { return true }
+}
+function _avisoPedidoLiberar(db, tid, orderId, tipo) {
+  try { db.prepare('DELETE FROM wa_avisos_pedido WHERE tenant_id=? AND order_id=? AND tipo=?').run(tid, Number(orderId), tipo) } catch (e) {}
+}
+// Loja na WuzAPI manda pelo WhatsApp dela (antes esses avisos iam pela Evolution).
+function _instAvisoPedido(db, tid, EVO_INST) {
+  try {
+    const c = db.prepare('SELECT evo_instance, whatsapp_provider FROM store_config WHERE tenant_id=?').get(tid)
+    if (c?.whatsapp_provider === 'wuzapi') return '__WUZAPI__:' + tid
+    return c?.evo_instance || EVO_INST
+  } catch (e) { return EVO_INST }
+}
+
 // ── Helper: notifica cliente quando PIX é confirmado (online ou manual) ──────
 function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
   if (!order?.phone) return
@@ -63,7 +84,7 @@ function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
   setImmediate(async () => {
     try {
       const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(tid)
-      const inst   = cfg?.evo_instance || EVO_INST
+      const inst   = _instAvisoPedido(db, tid, EVO_INST)
       const loja   = cfg?.store_name || 'Restaurante'
       const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
       const pixConf = auto['pix_confirmado'] || {}
@@ -75,7 +96,9 @@ function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
       const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
       const msgPad = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado*\n\nOlá, *${nome}*! Recebemos o PIX do pedido *#${idStr}*.\n\n*Itens*\n${items}\n\n*Total:* R$ ${total}\n\nSeu pedido já entrou em preparo.`
       const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total, loja }) : msgPad
-      await sendWA(order.phone, msgFin, inst)
+      if (!_avisoPedidoReservar(db, tid, order.id, 'pagamento_confirmado')) return
+      const r = await sendWA(order.phone, msgFin, inst)
+      if (!r?.ok) _avisoPedidoLiberar(db, tid, order.id, 'pagamento_confirmado')
     } catch(e) { /* silencia erros de notificação */ }
   })
 }
@@ -6473,14 +6496,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
               setImmediate(async () => {
                 try {
                   const cfg    = db.prepare('SELECT evo_instance, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(rowC.tenant_id)
-                  const inst   = cfg?.evo_instance || EVO_INST
+                  const inst   = _instAvisoPedido(db, rowC.tenant_id, EVO_INST)
                   const loja   = cfg?.store_name || 'Restaurante'
                   const offset = parseInt(cfg?.order_num_offset) || 0
                   const idStr  = _numeroPedidoPad(_foC, offset)
                   const nome   = (_foC.client || 'Cliente').split(' ')[0]
                   const total  = (parseFloat(_foC.total||0)+parseFloat(_foC.taxa||0)).toFixed(2).replace('.',',')
                   const msg    = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado*\n\nOlá, *${nome}*! Recebemos o pagamento no cartão do pedido *#${idStr}*.\n\n*Total:* R$ ${total}\n\nSeu pedido já entrou em preparo.`
-                  await sendWA(_foC.phone, msg, inst)
+                  if (!_avisoPedidoReservar(db, rowC.tenant_id, _foC.id, 'pagamento_confirmado')) return
+                  const r = await sendWA(_foC.phone, msg, inst)
+                  if (!r?.ok) _avisoPedidoLiberar(db, rowC.tenant_id, _foC.id, 'pagamento_confirmado')
                 } catch(e) { log('❌','Erro notif cartão:', e.message) }
               })
             }
@@ -7841,14 +7866,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
           setImmediate(async () => {
             try {
               const cfg    = db.prepare('SELECT evo_instance, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(rowBefore.tenant_id)
-              const inst   = cfg?.evo_instance || EVO_INST
+              const inst   = _instAvisoPedido(db, rowBefore.tenant_id, EVO_INST)
               const loja   = cfg?.store_name || 'Restaurante'
               const offset = parseInt(cfg?.order_num_offset) || 0
               const idStr  = _numeroPedidoPad(_fo, offset)
               const nome   = (_fo.client || 'Cliente').split(' ')[0]
               const total  = (parseFloat(_fo.total||0)+parseFloat(_fo.taxa||0)).toFixed(2).replace('.',',')
               const msg    = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado*\n\nOlá, *${nome}*! Recebemos o pagamento no cartão do pedido *#${idStr}*.\n\n*Total:* R$ ${total}\n\nSeu pedido já entrou em preparo.`
-              await sendWA(_fo.phone, msg, inst)
+              if (!_avisoPedidoReservar(db, rowBefore.tenant_id, _fo.id, 'pagamento_confirmado')) return
+              const r = await sendWA(_fo.phone, msg, inst)
+              if (!r?.ok) _avisoPedidoLiberar(db, rowBefore.tenant_id, _fo.id, 'pagamento_confirmado')
             } catch(e) { log('❌','Erro notif cartão (poll):', e.message) }
           })
         }
