@@ -3185,7 +3185,9 @@ async function handleREST(req, res, table, params, body) {
           // andamento fisicamente, só o cardápio online é que para.
           const _tenantAtivo = db.prepare('SELECT ativo, expires_at FROM tenants WHERE id=?').get(tenantId)
           if (_tenantAtivo) {
-            const _venceu = _tenantAtivo.expires_at && new Date(_tenantAtivo.expires_at + 'T23:59:59') < new Date()
+            // Vence no fim do dia pelo horário de Brasília. Antes a conta usava o
+            // relógio do servidor (UTC) e bloqueava o cardápio às 21h do último dia.
+            const _venceu = _tenantAtivo.expires_at && String(_tenantAtivo.expires_at).slice(0, 10) < brasiliaDateString()
             if (_tenantAtivo.ativo === 0 || _venceu) {
               return send(res, 503, { error: 'Loja temporariamente indisponível. Tente novamente mais tarde.' })
             }

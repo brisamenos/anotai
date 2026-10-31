@@ -382,6 +382,7 @@ async function _gerarCobrancaBotPix(ctx, tenant, opts) {
       payment_method_id: 'pix',
       external_reference: extRef,
       date_of_expiration: pixExpiraEm.replace('Z', '-03:00'),
+      notification_url: _mpWebhookUrlPadrao(),
       payer: { email: 'cobranca@estimafood.com', first_name: tenant.nome.split(' ')[0] || 'Cliente' }
     })
   })
@@ -937,6 +938,148 @@ function _urlBasePublica(req) {
   return `${proto || 'https'}://${host || 'estimafood.evocrm.sbs'}`
 }
 
+// Endereço que o Mercado Pago chama quando um pagamento muda. Sem ele nas
+// cobranças de mensalidade, o aviso só chegava se o webhook estivesse
+// configurado à mão no painel do Mercado Pago — e a loja pagava sem renovar.
+function _mpWebhookUrlPadrao() {
+  const b = String(process.env.PUBLIC_BASE_URL || process.env.APP_URL || process.env.BASE_URL || 'https://estimafood.evocrm.sbs').replace(/\/+$/, '')
+  return `${b}/webhook/mercadopago`
+}
+
+// Fatura de mensalidade aprovada no Mercado Pago: marca paga e renova a loja.
+// Uma vez só por fatura (o UPDATE só passa se ela ainda não estava paga), venha
+// a confirmação do aviso do Mercado Pago ou da conferência automática.
+// Aceita fatura que estava "cancelada": se o Mercado Pago aprovou, o dinheiro entrou.
+function _confirmarFaturaPaga(deps, rowF, pd, origem) {
+  const { db, log, marcarDirty, sseBroadcast, EVO_INST } = deps
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(rowF.tenant_id)
+  if (!tenant) return null
+  const r = db.transaction(() => {
+    const up = db.prepare("UPDATE faturas SET status='pago', pago_em=? WHERE id=? AND status<>'pago'")
+      .run(pd.date_approved || new Date().toISOString(), rowF.id)
+    if (!up.changes) return null
+    const hoje = new Date()
+    hoje.setHours(0,0,0,0)
+    const atual = _parseDateOnlyLocal(tenant.expires_at)
+    const baseDate = atual && atual > hoje ? atual : hoje
+    const novaExpISO = _dateOnlyISO(_addCalendarMonths(baseDate, parseInt(rowF.meses) || 1))
+    const planoNovo = ['premium','essencial','pro','fiscal'].includes(rowF.plano) ? rowF.plano : tenant.plano
+    db.prepare('UPDATE tenants SET expires_at=?, ativo=1, plano=?, updated_at=datetime(\'now\') WHERE id=?')
+      .run(novaExpISO, planoNovo, tenant.id)
+    return { novaExpISO, planoNovo }
+  })()
+  if (!r) return null
+  const { novaExpISO, planoNovo } = r
+  _limparRoboFaturaAlert(db, sseBroadcast, rowF.tenant_id)
+  try { marcarDirty && marcarDirty() } catch {}
+  try { if (sseBroadcast) sseBroadcast(`admin-alerts:${tenant.id}`, 'admin_alerts:REFRESH', { action: 'plano_renovado', ts: Date.now() }) } catch {}
+  log('✅', `FATURA PAGA (${origem}): tenant=${tenant.nome} valor=R$${rowF.valor} plano=${planoNovo} novo_vencimento=${novaExpISO}`)
+  try { _site.registrarCompra(tenant.id, rowF.valor, 'fatura') } catch {}
+          // Notifica gestor por WhatsApp
+  ;(async () => {
+    try {
+      let telefone = tenant.telefone_cobranca ? String(tenant.telefone_cobranca).replace(/\D/g, '') : null
+      if (!telefone) {
+        try {
+          const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(tenant.id)
+          if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
+        } catch {}
+      }
+      if (telefone && (telefone.length === 11 || telefone.length === 10)) telefone = '55' + telefone
+      if (telefone) {
+        const planoNome = _planoSaasLabel(planoNovo)
+        const valorTxt  = parseFloat(rowF.valor).toFixed(2).replace('.', ',')
+        const venceTxt  = _parseDateOnlyLocal(novaExpISO)?.toLocaleDateString('pt-BR') || novaExpISO
+        const msg = [
+          `✅ *Pagamento confirmado*`,
+          ``,
+          `Recebemos seu pagamento do plano *${planoNome}*.`,
+          ``,
+          `💰 *Valor:* R$ ${valorTxt}`,
+          `📅 *Próximo vencimento:* ${venceTxt}`,
+          ``,
+          `Seu acesso continua ativo. Obrigado por usar o *${_brandNome(tenant.segmento)}*! 🍽️`
+        ].join('\n')
+        const instCob = _getInstanciaCobranca(db, EVO_INST)
+        await _svBot.sendText(telefone, msg)
+        log('📨', `Confirmação fatura WA enviada: tenant=${tenant.nome} (instância: ${instCob})`)
+      }
+    } catch (e) { log('⚠️', 'Confirmação fatura WA erro:', e.message) }
+  })()
+  return r
+}
+
+// Conferência automática das mensalidades (a cada 3 min), para renovar mesmo
+// quando o aviso do Mercado Pago não chega:
+//  - faturas pendentes dos últimos 10 dias (Pix do robô, cobrança automática, admin);
+//  - cobranças das assinaturas automáticas no cartão dos últimos 3 dias.
+let _mensalidadeJobIniciado = false
+function _iniciarConferenciaMensalidadesJob(deps, MP_TOKEN_ENV) {
+  if (_mensalidadeJobIniciado) return
+  _mensalidadeJobIniciado = true
+  const { db, log, marcarDirty } = deps
+  const consultar = async (url, token) => {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    return r.ok ? r.json() : null
+  }
+  const rodar = async () => {
+    const token = _resolveMpGlobal(db, MP_TOKEN_ENV)
+    if (!token) return
+    // Faturas
+    let faturas = []
+    try {
+      faturas = db.prepare(`SELECT * FROM faturas WHERE status='pendente' AND created_at > datetime('now','-10 days')
+        AND (COALESCE(mp_payment_id,'')<>'' OR COALESCE(mp_external_ref,'')<>'')`).all()
+    } catch (e) { return }
+    for (const f of faturas) {
+      try {
+        let pd = null
+        if (f.mp_payment_id && /^\d+$/.test(String(f.mp_payment_id))) pd = await consultar(`https://api.mercadopago.com/v1/payments/${f.mp_payment_id}`, token)
+        if ((!pd || pd.status !== 'approved') && f.mp_external_ref) {
+          const busca = await consultar(`https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(f.mp_external_ref)}&sort=date_created&criteria=desc`, token)
+          const aprovado = (busca?.results || []).find(x => x.status === 'approved')
+          if (aprovado) pd = aprovado
+        }
+        if (pd?.status === 'approved') _confirmarFaturaPaga(deps, f, pd, 'conferencia')
+      } catch (e) { log('⚠️', `Conferência fatura ${f.id}:`, e.message) }
+    }
+    // Assinaturas automáticas (cartão)
+    let assinaturas = []
+    try {
+      _ensurePlanoAssinaturas(db)
+      assinaturas = db.prepare(`SELECT * FROM plano_assinaturas WHERE lower(status) IN ('authorized','pending')`).all()
+    } catch (e) { return }
+    const limite = Date.now() - 3 * 24 * 3600 * 1000
+    for (const a of assinaturas) {
+      try {
+        const achados = []
+        if (a.mp_preapproval_id) {
+          const ap = await consultar(`https://api.mercadopago.com/authorized_payments/search?preapproval_id=${encodeURIComponent(a.mp_preapproval_id)}`, token)
+          for (const x of ap?.results || []) {
+            const pid = x.payment?.id || x.payment_id
+            const st = x.payment?.status || x.status
+            const quando = Date.parse(x.payment?.date_approved || x.debit_date || x.date_created || '') || 0
+            if (pid && st === 'approved' && quando >= limite) achados.push({ id: String(pid), data: x.payment?.date_approved || x.debit_date || null, autorizado: String(x.id || '') })
+          }
+        }
+        if (!achados.length && a.mp_external_ref) {
+          const busca = await consultar(`https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(a.mp_external_ref)}&sort=date_created&criteria=desc`, token)
+          for (const x of busca?.results || []) {
+            const quando = Date.parse(x.date_approved || '') || 0
+            if (x.status === 'approved' && quando >= limite) achados.push({ id: String(x.id), data: x.date_approved, autorizado: '' })
+          }
+        }
+        for (const ach of achados) {
+          const atual = db.prepare('SELECT * FROM plano_assinaturas WHERE id=?').get(a.id)
+          _processarCobrancaAssinatura(db, log, marcarDirty, atual, ach.id, 'approved', ach.data, ach.autorizado)
+        }
+      } catch (e) { log('⚠️', `Conferência assinatura ${a.id}:`, e.message) }
+    }
+  }
+  setTimeout(() => { rodar().catch(e => log('⚠️', 'Conferência de mensalidades:', e.message)) }, 30_000)
+  setInterval(() => { rodar().catch(e => log('⚠️', 'Conferência de mensalidades:', e.message)) }, 3 * 60_000)
+}
+
 let _planoPixJobIniciado = false
 function _iniciarPlanoPixJob(db, log, marcarDirty, sse, MP_TOKEN_ENV) {
   if (_planoPixJobIniciado) return
@@ -1269,6 +1412,186 @@ async function _retentarLembretesNaoEntregues(ctx) {
   }
 }
 
+// ── Aviso de acesso suspenso (depois do vencimento) ─────────────────────
+// Loja paga que passou do vencimento sem renovar recebe pelo WhatsApp de
+// cobrança um aviso de que o acesso está suspenso, com o Pix para reativar:
+// no 1º, no 3º e no 7º dia depois do vencimento, uma vez cada (anotado na
+// tabela avisos_suspensao, que sobrevive a reinício do servidor). Pagou,
+// o vencimento muda e os avisos param sozinhos. Só das 9h às 19h. Loja em
+// teste grátis fica de fora (o teste já tem o recado próprio de fim) e loja
+// desativada no admin também. Para desligar: AVISO_SUSPENSAO=0
+const _SUSPENSAO_ETAPAS = [7, 3, 1] // do mais atrasado para o mais recente
+const _SUSPENSAO_MAX_DIAS = 10      // loja vencida há mais tempo que isso não recebe mais nada
+
+function _diasEntreDatas(a, b) {
+  const ta = Date.parse(String(a).slice(0, 10) + 'T12:00:00Z'), tb = Date.parse(String(b).slice(0, 10) + 'T12:00:00Z')
+  return Math.round((tb - ta) / 86400000)
+}
+
+function _valorRenovacaoTenant(db, t) {
+  let precoEss = 79.99, precoPre = 99.90, precoFiscal = 159.90, precoAddonVoz = 89.90
+  try {
+    const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+    if (g.preco_essencial !== undefined) precoEss = parseFloat(g.preco_essencial)
+    if (g.preco_premium   !== undefined) precoPre = parseFloat(g.preco_premium)
+    if (g.preco_addon_voz !== undefined) precoAddonVoz = parseFloat(g.preco_addon_voz)
+  } catch {}
+  const plano = (t.plano === 'premium') ? 'premium' : (t.plano === 'fiscal' ? 'fiscal' : 'essencial')
+  let valor = (plano === 'premium') ? precoPre : (plano === 'fiscal' ? precoFiscal : precoEss)
+  if (plano !== 'fiscal' && t.valor_mensalidade !== null && t.valor_mensalidade !== undefined) valor = parseFloat(t.valor_mensalidade)
+  if (t.voz_ativo) valor += precoAddonVoz
+  if (plano === 'fiscal') {
+    try {
+      const fiscal = _adminFiscalCobrancaAtual(db, t.id, { mes: _adminFiscalMesAtual(), plano_valor: precoFiscal })
+      if (fiscal.row) valor = fiscal.valor
+    } catch {}
+  }
+  return { plano, valor }
+}
+
+// Fatura Pix pendente que ainda dá para pagar; se não houver, gera uma nova
+async function _faturaParaReativar(ctx, t) {
+  const { db, log, MP_TOKEN, marcarDirty } = ctx
+  const ja = db.prepare(`
+    SELECT * FROM faturas
+    WHERE tenant_id=? AND status='pendente' AND metodo='pix'
+      AND qr_code IS NOT NULL AND qr_code<>''
+      AND created_at > datetime('now','-6 days')
+    ORDER BY id DESC LIMIT 1
+  `).get(t.id)
+  if (ja) return ja
+  const mpToken = _resolveMpGlobal(db, MP_TOKEN)
+  if (!mpToken) return null
+  const { plano, valor } = _valorRenovacaoTenant(db, t)
+  const valorMp = _mpValor(valor)
+  if (valorMp === null) return null
+  const extRef = `susp-${t.id.slice(0, 8)}-${plano}-${Date.now()}`
+  const mpResp = await fetch('https://api.mercadopago.com/v1/payments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
+    body: JSON.stringify({
+      transaction_amount: valorMp,
+      description: `Reativação Plano ${_planoSaasLabel(plano)} — ${t.nome}`,
+      payment_method_id: 'pix',
+      external_reference: extRef,
+      notification_url: _mpWebhookUrlPadrao(),
+      date_of_expiration: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().replace('Z', '-03:00'),
+      payer: { email: 'cobranca@estimafood.com', first_name: String(t.nome || '').split(' ')[0] || 'Cliente' }
+    })
+  })
+  const mpData = await mpResp.json().catch(() => ({}))
+  if (!mpResp.ok) { log('⚠️', `Aviso de suspensão: Pix não gerado para ${t.nome}: ${mpData.message || 'erro MP'}`); return null }
+  const td = mpData.point_of_interaction?.transaction_data || {}
+  // a fatura antiga (Pix vencido) sai da lista de pendentes para não ficar duas
+  db.prepare(`UPDATE faturas SET status='cancelado', cancelado_em=datetime('now'),
+      obs=TRIM(COALESCE(obs,'') || ' | substituida no aviso de suspensao')
+    WHERE tenant_id=? AND status='pendente' AND metodo='pix'`).run(t.id)
+  const info = db.prepare(`INSERT INTO faturas
+    (tenant_id, plano, valor, meses, metodo, status, link_pagamento, mp_payment_id, mp_external_ref, qr_code, qr_code_base64, vence_em, obs)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      t.id, plano, parseFloat(valor), 1, 'pix', 'pendente',
+      td.ticket_url || null, String(mpData.id), extRef, td.qr_code || null, td.qr_code_base64 || null,
+      String(t.expires_at).slice(0, 10), 'Gerada no aviso de acesso suspenso'
+    )
+  try { marcarDirty() } catch {}
+  return db.prepare('SELECT * FROM faturas WHERE id=?').get(info.lastInsertRowid)
+}
+
+async function _enviarAvisoSuspensao(db, t, fatura, dias) {
+  const telefone = _telefoneCobrancaTenant(db, t)
+  if (!telefone) return { ok: false, erro: 'Loja sem telefone de cobrança nem WhatsApp cadastrado' }
+  const vencTxt = String(t.expires_at).slice(0, 10).split('-').reverse().join('/')
+  const valorTxt = fatura ? parseFloat(fatura.valor).toFixed(2).replace('.', ',') : null
+  const titulo = dias >= 7 ? `🔒 *Seu acesso continua suspenso*` : `🔒 *Acesso suspenso*`
+  const linhas = [
+    titulo,
+    ``,
+    `Olá, *${t.nome}*! O plano *${_planoSaasLabel(t.plano)}* do ${_brandNome(t.segmento)} venceu em *${vencTxt}* e o pagamento não foi identificado.`,
+    ``,
+    `Por isso o acesso está *suspenso*: o painel e o cardápio online ficam fora do ar, e seus clientes não conseguem fazer pedidos.`,
+    ``
+  ]
+  if (fatura?.qr_code) {
+    linhas.push(`💰 *Valor para reativar:* R$ ${valorTxt}`, ``,
+      `💸 Pague pelo *Pix* com o código Copia e Cola abaixo ou pelo QR Code. Assim que o pagamento cair, o acesso volta *na hora*, sem precisar falar com ninguém. ✅`)
+  } else {
+    linhas.push(`Para reativar, responda esta mensagem que a gente te envia o Pix.`)
+  }
+  linhas.push(``, `_Seus produtos, pedidos e configurações continuam salvos._`)
+  const r = await _svBot.sendText(telefone, linhas.join('\n'))
+  if (!r?.ok) return { ok: false, erro: r?.error || r?.data?.message || 'O WhatsApp recusou o envio' }
+  if (fatura?.qr_code) {
+    await new Promise(res => setTimeout(res, 1000))
+    await _svBot.sendText(telefone, fatura.qr_code)
+    if (fatura.qr_code_base64) await _svBot.sendImage(telefone, fatura.qr_code_base64, `📱 QR Code PIX — R$ ${valorTxt}`)
+  }
+  return { ok: true }
+}
+
+let _avisoSuspensaoRodando = false
+async function _avisarAcessosSuspensos(ctx) {
+  if (process.env.AVISO_SUSPENSAO === '0' || _avisoSuspensaoRodando) return
+  _avisoSuspensaoRodando = true
+  const { db, log } = ctx
+  try {
+    db.prepare(`CREATE TABLE IF NOT EXISTS avisos_suspensao (
+      tenant_id TEXT NOT NULL, expires_at TEXT NOT NULL, etapa INTEGER NOT NULL,
+      enviado_em TEXT, tentativas INTEGER DEFAULT 0, tentativa_em TEXT, erro TEXT,
+      PRIMARY KEY (tenant_id, expires_at, etapa))`).run()
+    const hoje = _brasiliaDateString()
+    const tenants = db.prepare(`
+      SELECT * FROM tenants
+      WHERE ativo=1 AND slug NOT IN ('_admin','_global','admin')
+        AND expires_at IS NOT NULL AND substr(expires_at,1,10) < ?
+        AND substr(expires_at,1,10) >= date(?, '-${_SUSPENSAO_MAX_DIAS} days')
+    `).all(hoje, hoje)
+    let enviados = 0
+    for (const t of tenants) {
+      if (enviados >= 5) break // poucas por rodada, para o WhatsApp não estranhar
+      // teste grátis em andamento: quem cuida é o acompanhamento do teste
+      try {
+        const teste = db.prepare("SELECT 1 FROM testes_gratis WHERE tenant_id=? AND status='ativo' LIMIT 1").get(t.id)
+        if (teste) continue
+      } catch {}
+      const venc = String(t.expires_at).slice(0, 10)
+      const dias = _diasEntreDatas(venc, hoje)
+      const etapa = _SUSPENSAO_ETAPAS.find(e => dias >= e)
+      if (!etapa) continue
+      // já mandou esta etapa (ou uma mais adiantada) neste vencimento?
+      const feita = db.prepare(`SELECT 1 FROM avisos_suspensao
+        WHERE tenant_id=? AND expires_at=? AND etapa>=? AND enviado_em IS NOT NULL LIMIT 1`).get(t.id, venc, etapa)
+      if (feita) continue
+      const reg = db.prepare('SELECT * FROM avisos_suspensao WHERE tenant_id=? AND expires_at=? AND etapa=?').get(t.id, venc, etapa)
+      if (reg && (reg.tentativas || 0) >= 4) continue
+      if (reg?.tentativa_em && Date.parse(reg.tentativa_em.replace(' ', 'T') + 'Z') > Date.now() - 25 * 60_000) continue
+      db.prepare(`INSERT INTO avisos_suspensao (tenant_id, expires_at, etapa, tentativas, tentativa_em)
+        VALUES (?,?,?,1,datetime('now'))
+        ON CONFLICT(tenant_id, expires_at, etapa) DO UPDATE SET tentativas=tentativas+1, tentativa_em=datetime('now')`).run(t.id, venc, etapa)
+      try {
+        const fatura = await _faturaParaReativar(ctx, t).catch(e => { log('⚠️', 'Aviso de suspensão: erro ao preparar Pix:', e.message); return null })
+        const r = await _enviarAvisoSuspensao(db, t, fatura, dias)
+        if (r.ok) {
+          db.prepare("UPDATE avisos_suspensao SET enviado_em=datetime('now'), erro=NULL WHERE tenant_id=? AND expires_at=? AND etapa=?").run(t.id, venc, etapa)
+          if (fatura) _registrarEnvioFatura(db, fatura.id, true)
+          enviados++
+          log('📨', `Aviso de acesso suspenso entregue: ${t.nome} (${dias} dia(s) depois do vencimento)`)
+        } else {
+          db.prepare('UPDATE avisos_suspensao SET erro=? WHERE tenant_id=? AND expires_at=? AND etapa=?').run(String(r.erro).slice(0, 300), t.id, venc, etapa)
+          log('⚠️', `Aviso de acesso suspenso NÃO entregue: ${t.nome} — ${r.erro}. Nova tentativa em 30 min.`)
+        }
+      } catch (e) {
+        db.prepare('UPDATE avisos_suspensao SET erro=? WHERE tenant_id=? AND expires_at=? AND etapa=?').run(String(e.message).slice(0, 300), t.id, venc, etapa)
+      }
+      await new Promise(res => setTimeout(res, 3000))
+    }
+  } catch (e) {
+    log('⚠️', 'Aviso de acesso suspenso erro geral:', e.message)
+  } finally {
+    _avisoSuspensaoRodando = false
+  }
+}
+
 function _iniciarAutoCobrancaJob(ctx) {
   _svBotInit(ctx); _tenantWaInit(ctx)
   if (_autoCobrancaJobIniciado) return
@@ -1292,6 +1615,8 @@ function _iniciarAutoCobrancaJob(ctx) {
       // Lembretes que falharam: nova tentativa a cada 30 min, das 9h as 19h
       if (horaBrasilia >= 9 && horaBrasilia < 19) {
         await _retentarLembretesNaoEntregues(ctx).catch(e => log('⚠️', 'Nova tentativa de lembretes erro:', e.message))
+        // Loja que passou do vencimento sem pagar: aviso de acesso suspenso (1º, 3º e 7º dia)
+        await _avisarAcessosSuspensos(ctx).catch(e => log('⚠️', 'Aviso de acesso suspenso erro:', e.message))
       }
       if (horaBrasilia !== 9) return
 
@@ -3656,6 +3981,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // pedidos do tenant X consultam a conta MP do tenant X (com fallback global).
   _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN, aplicarBaixaEstoquePedido)
   _iniciarPlanoPixJob(db, log, marcarDirty, sseBroadcast, MP_TOKEN)
+  _iniciarConferenciaMensalidadesJob({ db, log, marcarDirty, sseBroadcast, EVO_INST }, MP_TOKEN)
 
   // ── Inicia job de auto-cobrança SaaS (uma vez) ────────────────────────────
   _iniciarAutoCobrancaJob(ctx)
@@ -6533,62 +6859,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
           db.prepare('UPDATE faturas SET mp_payment_id=? WHERE id=?').run(String(mpId), rowF.id)
         }
       }
-      if (rowF && rowF.status !== 'pago' && rowF.status !== 'cancelado' && novoStatus === 'aprovado') {
-        const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(rowF.tenant_id)
-        if (tenant) {
-          // Marca fatura paga
-          db.prepare("UPDATE faturas SET status='pago', pago_em=? WHERE id=?")
-            .run(pd.date_approved || new Date().toISOString(), rowF.id)
-          _limparRoboFaturaAlert(db, sseBroadcast, rowF.tenant_id)
-
-          // Renova plano: soma meses ao expires_at atual (ou hoje se já expirou/sem data)
-          const hoje = new Date()
-          hoje.setHours(0,0,0,0)
-          const atual = _parseDateOnlyLocal(tenant.expires_at)
-          const baseDate = atual && atual > hoje ? atual : hoje
-          const novaExpISO = _dateOnlyISO(_addCalendarMonths(baseDate, parseInt(rowF.meses) || 1))
-
-          // Atualiza plano também (caso fatura tenha sido pra upgrade)
-          const planoNovo = ['premium','essencial','pro','fiscal'].includes(rowF.plano) ? rowF.plano : tenant.plano
-          db.prepare('UPDATE tenants SET expires_at=?, ativo=1, plano=?, updated_at=datetime(\'now\') WHERE id=?')
-            .run(novaExpISO, planoNovo, tenant.id)
-
-          marcarDirty()
-          log('✅', `FATURA PAGA: tenant=${tenant.nome} valor=R$${rowF.valor} plano=${planoNovo} novo_vencimento=${novaExpISO}`)
-          try { _site.registrarCompra(tenant.id, rowF.valor, 'fatura') } catch {}
-
-          // Notifica gestor por WhatsApp
-          ;(async () => {
-            try {
-              let telefone = tenant.telefone_cobranca ? String(tenant.telefone_cobranca).replace(/\D/g, '') : null
-              if (!telefone) {
-                try {
-                  const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(tenant.id)
-                  if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
-                } catch {}
-              }
-              if (telefone && (telefone.length === 11 || telefone.length === 10)) telefone = '55' + telefone
-              if (telefone) {
-                const planoNome = _planoSaasLabel(planoNovo)
-                const valorTxt  = parseFloat(rowF.valor).toFixed(2).replace('.', ',')
-                const venceTxt  = _parseDateOnlyLocal(novaExpISO)?.toLocaleDateString('pt-BR') || novaExpISO
-                const msg = [
-                  `✅ *Pagamento confirmado*`,
-                  ``,
-                  `Recebemos seu pagamento do plano *${planoNome}*.`,
-                  ``,
-                  `💰 *Valor:* R$ ${valorTxt}`,
-                  `📅 *Próximo vencimento:* ${venceTxt}`,
-                  ``,
-                  `Seu acesso continua ativo. Obrigado por usar o *${_brandNome(tenant.segmento)}*! 🍽️`
-                ].join('\n')
-                const instCob = _getInstanciaCobranca(db, EVO_INST)
-                await _svBot.sendText(telefone, msg)
-                log('📨', `Confirmação fatura WA enviada: tenant=${tenant.nome} (instância: ${instCob})`)
-              }
-            } catch (e) { log('⚠️', 'Confirmação fatura WA erro:', e.message) }
-          })()
-        }
+      if (rowF && rowF.status !== 'pago' && novoStatus === 'aprovado') {
+        _confirmarFaturaPaga({ db, log, marcarDirty, sseBroadcast, EVO_INST }, rowF, pd, 'webhook')
       } else if (rowF && rowF.status !== novoStatus && (novoStatus === 'rejeitado' || novoStatus === 'cancelado')) {
         db.prepare("UPDATE faturas SET status=? WHERE id=?").run(novoStatus, rowF.id)
         marcarDirty()
@@ -9482,6 +9754,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           payment_method_id: 'pix',
           external_reference: extRef,
           date_of_expiration: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().replace('Z', '-03:00'),
+          notification_url: _mpWebhookUrlPadrao(),
           payer: { email: 'cobranca@estimafood.com', first_name: tenant.nome.split(' ')[0] || 'Cliente' }
         })
       })
@@ -9502,6 +9775,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           payment_methods: { excluded_payment_types: [{ id: 'ticket' }, { id: 'atm' }], installments: 12 },
           expires: true,
           expiration_date_to: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+          notification_url: _mpWebhookUrlPadrao(),
           metadata: { tenant_id: tenant.id, plano, meses }
         })
       })
