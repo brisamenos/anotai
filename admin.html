@@ -6022,9 +6022,14 @@ async function aagCarregar() {
   const sel = document.getElementById('aag-instancia');
   if (!sel) return;
   try {
+    if (st) st.textContent = 'Buscando instâncias na WuzAPI...';
     const r = await fetch('/api/admin/aviso-agendamento-wa', { headers: adminAuthHeader() });
-    if (r.status === 401) return;
-    const d = await r.json();
+    if (r.status === 401) { if (st) st.textContent = 'Sessão expirada. Entre de novo no painel.'; return; }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !Array.isArray(d.instancias)) {
+      if (st) st.innerHTML = `<span style="color:var(--danger)">O servidor ainda não tem esta função (código ${r.status}). Confira se o routes.js novo foi implantado no app.</span>`;
+      return;
+    }
     const atual = d.atual?.id || '';
     const ops = ['<option value="">Desligado</option>'].concat((d.instancias || []).map(u =>
       `<option value="${_aagEsc(u.id)}">${_aagEsc(u.nome || u.id)}${u.numero ? ' (' + _aagEsc(u.numero) + ')' : ''}${u.conectado ? '' : ' — desconectada'}</option>`));
@@ -6033,6 +6038,7 @@ async function aagCarregar() {
     sel.value = atual;
     if (st) {
       if (d.erro) st.innerHTML = `<span style="color:var(--danger)">Não consegui listar as instâncias da WuzAPI: ${_aagEsc(d.erro)}</span>`;
+      else if (!d.instancias.length) st.innerHTML = `<span style="color:var(--orange)">A WuzAPI não devolveu nenhuma instância.</span>`;
       else if (atual) {
         const u = (d.instancias || []).find(x => x.id === atual);
         st.innerHTML = u && u.conectado
