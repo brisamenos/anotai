@@ -1788,6 +1788,136 @@ function imprimirComprovanteMesa() {
 }
 
 // ─────────────────────────────────────────
+// RECIBO DE PEDIDO (delivery / balcão)
+// Botão "Imprimir recibo" no detalhe do pedido. Mesmo modelo e mesma
+// impressora do comprovante da mesa (impressora do caixa).
+// ─────────────────────────────────────────
+function _reciboEsc(t) {
+  return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function _montarReciboPedidoHtml(o) {
+  const money = v => 'R$ ' + (parseFloat(v) || 0).toFixed(2).replace('.', ',');
+  let itens = o.items;
+  if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
+  if (!Array.isArray(itens)) itens = [];
+  const ativos = itens.filter(i => (i?.item_status || 'active') !== 'cancelado');
+  const temCancelado = ativos.length !== itens.length;
+
+  const subtotal = ativos.reduce((s, i) => s + (parseFloat(i.price || 0) * (i.qty || 1)), 0);
+  const taxa = parseFloat(o.taxa || 0) || 0;
+  const orderTotal = parseFloat(o.total);
+  // Mesma regra da comanda: total do banco já inclui desconto de cupom/cashback
+  const desconto = (!temCancelado && !isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
+  const total = (temCancelado || isNaN(orderTotal)) ? (subtotal + taxa) : (orderTotal + taxa);
+
+  const pagMap = { dinheiro:'Dinheiro', cartao:'Cartão', credito:'Crédito', debito:'Débito', pix:'PIX', pix_manual:'PIX', pix_mp:'PIX online', cartao_mp:'Cartão online', voucher:'Voucher', mesa:'Conta da mesa' };
+  const pagNome = pagMap[String(o.pag || '').toLowerCase()] || o.pag || '—';
+  const pagoOnline = o.pag === 'pix_mp' || o.pag === 'cartao_mp';
+
+  let tipo = 'Entrega';
+  try {
+    const t = (typeof _printOrderType === 'function') ? _printOrderType(o) : '';
+    if (t === 'retirada') tipo = 'Retirada no balcão';
+    else if (t === 'mesa') tipo = 'Mesa ' + (o.mesa_num || '');
+  } catch {}
+  const addr = String(o.addr || '').trim();
+  const mostraEndereco = tipo === 'Entrega' && addr;
+
+  const nomeLoja = _sessao?.nome || 'Estabelecimento';
+  const num = o.num || o.order_num || o.id;
+  const fmtData = d => { const x = new Date(d); return isNaN(x) ? '' : x.toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); };
+  // created_at do SQLite vem sem fuso (UTC)
+  const criado = o.created_at ? fmtData(/[zZ]|[+-]\d\d:?\d\d$/.test(o.created_at) ? o.created_at : String(o.created_at).replace(' ', 'T') + 'Z') : '';
+  const agora = fmtData(Date.now());
+
+  const linha = (a, b, estilo) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;${estilo || ''}"><span>${a}</span><span style="white-space:nowrap">${b}</span></div>`;
+  const sep = '<hr style="border:none;border-top:1px dashed #ccc;margin:8px 0">';
+
+  const itensHtml = ativos.map(i =>
+    `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:13px;border-bottom:1px dashed #ddd">
+      <span>${i.qty || 1}× ${_reciboEsc(i.name)}</span>
+      <span style="white-space:nowrap">${money((parseFloat(i.price || 0)) * (i.qty || 1))}</span>
+    </div>`
+  ).join('') || '<div style="font-size:13px;color:#999;text-align:center;padding:8px">Sem itens registrados</div>';
+
+  let pagamentoHtml = linha('Pagamento', _reciboEsc(pagNome) + (pagoOnline ? ' (pago online)' : ''));
+  if (String(o.pag || '').toLowerCase() === 'dinheiro' && parseFloat(o.troco) > 0) {
+    pagamentoHtml += linha('Valor recebido', money(o.troco));
+    pagamentoHtml += linha('Troco', money(Math.max(0, parseFloat(o.troco) - total)));
+  }
+
+  return `
+    <div style="font-family:monospace;background:#fff;color:#111;padding:20px;border-radius:10px;max-width:300px;margin:0 auto">
+      <div style="text-align:center;margin-bottom:12px">
+        <div style="font-size:18px;font-weight:900">${_reciboEsc(nomeLoja)}</div>
+        <div style="font-size:13px;font-weight:700;margin-top:6px;letter-spacing:1px">RECIBO</div>
+        <div style="font-size:13px;font-weight:700;margin-top:2px">Pedido #${_reciboEsc(num)}</div>
+        ${criado ? `<div style="font-size:11px;color:#666">Pedido feito em ${criado}</div>` : ''}
+      </div>
+      ${sep}
+      ${o.client ? linha('Cliente', _reciboEsc(o.client)) : ''}
+      ${o.phone ? linha('Telefone', _reciboEsc(o.phone)) : ''}
+      ${linha('Tipo', _reciboEsc(tipo))}
+      ${mostraEndereco ? `<div style="font-size:12px;margin-top:2px">${_reciboEsc(addr)}</div>` : ''}
+      ${sep}
+      <div style="margin-bottom:10px">${itensHtml}</div>
+      ${linha('Subtotal', money(subtotal))}
+      ${desconto > 0 ? linha('Desconto', '− ' + money(desconto)) : ''}
+      ${taxa > 0 ? linha('Taxa de entrega', money(taxa)) : ''}
+      ${linha('TOTAL', money(total), 'font-weight:700;font-size:15px;margin:4px 0')}
+      ${pagamentoHtml}
+      ${sep}
+      <div style="text-align:center;font-size:11px;color:#666">Emitido em ${agora}</div>
+      <div style="text-align:center;font-size:11px;color:#999;margin-top:4px">Obrigado pela preferência!</div>
+      <div style="text-align:center;font-size:10px;color:#999;margin-top:2px">Este recibo não é documento fiscal.</div>
+    </div>`;
+}
+
+function imprimirReciboPedido() {
+  const id = window._currentDetailId;
+  const o = (typeof ordersKanban !== 'undefined' ? ordersKanban : []).find(x => x.id === id);
+  if (!o) { sbToast('err', 'Pedido não encontrado. Feche e abra o pedido de novo.'); return; }
+  const conteudo = _montarReciboPedidoHtml(o);
+  const fmt  = localStorage.getItem('printFormat') || _printFormat || '80mm';
+  const printer = (() => { try { const c = JSON.parse(localStorage.getItem('printConfig')||'{}'); return c.printer_caixa || c.printer || ''; } catch { return ''; } })() || localStorage.getItem('printPrinter') || '';
+
+  (async () => {
+    // 1. Aplicativo do computador (impressão direta)
+    if (window.ElectronPrint && window.ElectronPrint.printHtml) {
+      try {
+        const r = await window.ElectronPrint.printHtml(conteudo, { printer, paperWidth: fmt === '58mm' ? 58 : 80, landscape: false, scaleFactor: 100 });
+        if (r && r.ok) { sbToast('ok', 'Recibo impresso!'); return; }
+      } catch(e) { console.warn('[PRINT RECIBO] Electron falhou:', e.message); }
+    }
+    // 2. Agente de impressão
+    try {
+      const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+      if (tid) {
+        const statusRes = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } });
+        const statusData = await statusRes.json();
+        if (statusData.active) {
+          await fetch('/api/print-queue/job', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+            body: JSON.stringify({ html: conteudo, format: fmt, printer: printer || undefined, tipo: 'caixa' }),
+          });
+          sbToast('ok', 'Recibo enviado para a impressora!');
+          return;
+        }
+      }
+    } catch {}
+    // 3. Janela de impressão do navegador
+    const w = window.open('', '_blank', 'width=400,height=600');
+    if (!w) { sbToast('err', 'Permita pop-ups para imprimir'); return; }
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Recibo</title>
+      <style>body{margin:0;padding:16px;font-family:monospace;background:#fff;color:#000} @media print{@page{margin:2mm;size:${fmt} auto} body{margin:0}}</style>
+      </head><body>${conteudo}<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script></body></html>`);
+    w.document.close();
+  })();
+}
+
+// ─────────────────────────────────────────
 // GARÇONS
 // ─────────────────────────────────────────
 let garcons = [];
