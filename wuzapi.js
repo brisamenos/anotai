@@ -296,6 +296,7 @@ async function downloadAudio(token, audio) {
 module.exports = {
   isConfigured,
   createUser,
+  listUsers,
   deleteUser,
   tokenInvalido,
   checkUsers,
