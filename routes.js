@@ -1782,6 +1782,167 @@ function _iniciarAutoCobrancaJob(ctx) {
 // máximo a cada 24h, até 3 vezes por queda, e só entre 9h e 20h. Quando a
 // loja reconecta, zera tudo. Se a própria WuzAPI estiver fora do ar, não
 // avisa ninguém (não é culpa da loja). Para desligar: WA_AVISO_DESCONECTADO=0
+// ── Aviso de PEDIDO AGENDADO para o gestor ──────────────────────────────
+// Quando chega um pedido agendado (já confirmado: pago, se for online), o
+// gestor recebe no WhatsApp dele um resumo completo do pedido. Quem envia é
+// um número central da plataforma (uma instância da WuzAPI escolhida pelo
+// admin, por exemplo a mesma usada para os agendamentos da barbearia).
+// O robô das lojas ignora mensagens vindas desse número (ver server.js),
+// para não responder aviso com IA.
+// Config global (admin): ia_config do '_global' → aviso_agend_wuz {id,nome,token,jid}
+// Config da loja (gestor): tabela aviso_agend_loja (fora do store_config, que o cardápio público lê)
+const _wuzapiMod = require('./wuzapi')
+const _AVISO_AGEND_TIPO = 'gestor_agendado'
+const _avisoAgendTentativas = new Map()
+let _avisoAgendJobIniciado = false
+let _avisoAgendRodando = false
+
+function _avisoAgendGlobal(db) {
+  try {
+    const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+    const a = g.aviso_agend_wuz
+    return (a && a.token) ? a : null
+  } catch { return null }
+}
+
+function _avisoAgendTabela(db) {
+  db.exec('CREATE TABLE IF NOT EXISTS aviso_agend_loja (tenant_id TEXT PRIMARY KEY, ativo INTEGER DEFAULT 0, fones TEXT, atualizado_em TEXT)')
+}
+function _avisoAgendFonesLoja(db, tid) {
+  try {
+    _avisoAgendTabela(db)
+    const c = db.prepare('SELECT ativo, fones FROM aviso_agend_loja WHERE tenant_id=?').get(tid)
+    if (!c || !c.ativo) return []
+    return String(c.fones || '').split(/[,;\s]+/)
+      .map(f => f.replace(/\D/g, ''))
+      .filter(f => f.length >= 10 && f.length <= 13)
+      .map(f => (f.length <= 11 ? '55' + f : f))
+      .slice(0, 3)
+  } catch { return [] }
+}
+
+function _avisoAgendDataTxt(iso) {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return String(iso || '')
+  const dia = d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: '2-digit' })
+  const hora = d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })
+  return `${dia.charAt(0).toUpperCase()}${dia.slice(1)} às ${hora}`
+}
+
+function _avisoAgendMensagem(db, o) {
+  const cfg = db.prepare('SELECT store_name FROM store_config WHERE tenant_id=?').get(o.tenant_id) || {}
+  const loja = cfg.store_name || 'Sua loja'
+  const num = String(o.order_num || o.id).padStart(3, '0')
+  const fmt = v => (parseFloat(v || 0) || 0).toFixed(2).replace('.', ',')
+  let itens = []
+  try { itens = typeof o.items === 'string' ? JSON.parse(o.items) : (o.items || []) } catch {}
+  const linhasItens = (Array.isArray(itens) ? itens : []).map(i => {
+    const qtd = i.qty || 1
+    let l = `• ${qtd}x ${i.name || 'Item'}`
+    if (i.price) l += ` — R$ ${fmt((parseFloat(i.price) || 0) * qtd)}`
+    if (i.obs) l += `\n   _Obs: ${i.obs}_`
+    return l
+  }).join('\n') || '• (itens não informados)'
+  const addr = String(o.addr || '').trim()
+  const retirada = /^Retirada\b/i.test(addr)
+  const subtotal = parseFloat(o.total || 0) || 0
+  const taxa = parseFloat(o.taxa || 0) || 0
+  const pagRaw = String(o.pag || '').trim()
+  const pagoOnline = /^(pix_mp|cartao_mp)$/i.test(pagRaw)
+  const pag = ({ pix_mp: 'Pix online', cartao_mp: 'Cartão online', pix_manual: 'Pix' })[pagRaw.toLowerCase()] || pagRaw
+  const linhas = [
+    `📅 *Novo pedido agendado — ${loja}*`,
+    ``,
+    `*Pedido:* #${num}`,
+    `*Para:* ${_avisoAgendDataTxt(o.scheduled_for)}`,
+    `*Tipo:* ${retirada ? '🏪 Retirada na loja' : '🛵 Entrega'}`,
+    ``,
+    `*Cliente:* ${o.client || '—'}`
+  ]
+  if (o.phone) linhas.push(`*Telefone:* ${o.phone}`)
+  if (!retirada && addr) linhas.push(`*Endereço:* ${addr}`)
+  if (retirada && addr.length > 9) linhas.push(`*Local:* ${addr}`)
+  linhas.push(``, `*Itens*`, linhasItens, ``)
+  if (taxa > 0) linhas.push(`Subtotal: R$ ${fmt(subtotal)}`, `Taxa de entrega: R$ ${fmt(taxa)}`)
+  linhas.push(`*Total: R$ ${fmt(subtotal + taxa)}*`)
+  if (pag) linhas.push(`*Pagamento:* ${pag}${pagoOnline ? ' (já pago)' : ''}`)
+  if (o.troco) linhas.push(`*Troco para:* R$ ${fmt(o.troco)}`)
+  linhas.push(``, `_Aviso automático. Não precisa responder esta mensagem._`)
+  return linhas.join('\n')
+}
+
+// Confere o número no WhatsApp (resolve o caso do 9 a mais/a menos)
+async function _avisoAgendResolverFone(token, fone) {
+  try {
+    const r = await _wuzapiMod.checkUsers(token, [fone])
+    const u = r.find(x => x && (x.IsInWhatsapp || x.IsInWhatsApp))
+    const jid = String(u?.JID || u?.Jid || '')
+    if (jid) return jid.split('@')[0].split(':')[0]
+  } catch {}
+  return fone
+}
+
+async function _avisoAgendEnviar(cfgG, fones, texto) {
+  let algum = false, ultimoErro = ''
+  for (const f of fones) {
+    try {
+      const destino = await _avisoAgendResolverFone(cfgG.token, f)
+      await _wuzapiMod.sendText(cfgG.token, destino, texto)
+      algum = true
+    } catch (e) { ultimoErro = e.message }
+  }
+  return { ok: algum, erro: ultimoErro }
+}
+
+async function _avisoAgendTick(ctx) {
+  if (_avisoAgendRodando) return
+  _avisoAgendRodando = true
+  const { db, log } = ctx
+  try {
+    const cfgG = _avisoAgendGlobal(db)
+    if (!cfgG) return
+    const pedidos = db.prepare(`
+      SELECT * FROM orders
+      WHERE scheduled_for IS NOT NULL AND scheduled_for <> ''
+        AND created_at > datetime('now','-3 hours')
+        AND status NOT IN ('aguardando_pix','aguardando_cartao','cancelado','mesa_aberta')
+      ORDER BY id ASC LIMIT 50
+    `).all()
+    for (const o of pedidos) {
+      // horário agendado que já passou há mais de 1 hora: não avisa mais
+      const quando = Date.parse(o.scheduled_for)
+      if (!isNaN(quando) && quando < Date.now() - 3600 * 1000) continue
+      const fones = _avisoAgendFonesLoja(db, o.tenant_id)
+      if (!fones.length) continue
+      const chave = o.tenant_id + ':' + o.id
+      if ((_avisoAgendTentativas.get(chave) || 0) >= 5) continue
+      if (!_avisoPedidoReservar(db, o.tenant_id, o.id, _AVISO_AGEND_TIPO)) continue
+      const r = await _avisoAgendEnviar(cfgG, fones, _avisoAgendMensagem(db, o))
+      if (r.ok) {
+        _avisoAgendTentativas.delete(chave)
+        log('📅', `[aviso-agendado] Gestor avisado do pedido agendado #${o.order_num || o.id} [${o.tenant_id}]`)
+      } else {
+        _avisoPedidoLiberar(db, o.tenant_id, o.id, _AVISO_AGEND_TIPO)
+        _avisoAgendTentativas.set(chave, (_avisoAgendTentativas.get(chave) || 0) + 1)
+        log('⚠️', `[aviso-agendado] Falhou o aviso do pedido #${o.order_num || o.id} [${o.tenant_id}]: ${r.erro}`)
+      }
+      await new Promise(res => setTimeout(res, 1500))
+    }
+  } catch (e) {
+    log('⚠️', '[aviso-agendado] erro:', e.message)
+  } finally {
+    _avisoAgendRodando = false
+  }
+}
+
+function _iniciarAvisoAgendadoJob(ctx) {
+  if (_avisoAgendJobIniciado) return
+  _avisoAgendJobIniciado = true
+  setTimeout(() => _avisoAgendTick(ctx), 20 * 1000)
+  setInterval(() => _avisoAgendTick(ctx), 40 * 1000)
+}
+
 let _avisoWaJobIniciado = false
 const _AVISO_WA_MAX = 3
 function _iniciarAvisoWaDesconectadoJob(ctx) {
@@ -3986,6 +4147,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ── Inicia job de auto-cobrança SaaS (uma vez) ────────────────────────────
   _iniciarAutoCobrancaJob(ctx)
   _iniciarAvisoWaDesconectadoJob(ctx)
+  _iniciarAvisoAgendadoJob(ctx) // aviso de pedido agendado no WhatsApp do gestor
   _iniciarEvolutionOffJob(ctx)
 
   if (req.method === 'POST' && upath === '/api/entregador-login') {
@@ -10113,6 +10275,93 @@ module.exports = async function handleRoutes(req, res, ctx) {
       }, req.headers)
       send(res, 200, { ok: true })
     } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Aviso de pedido agendado: configuração da loja (painel do gestor) ──
+  if (upath === '/api/gestor/aviso-agendamento' && (req.method === 'GET' || req.method === 'POST')) {
+    const tidAv = req.headers['x-tenant-id']
+    if (!tidAv || !validarSessaoGestor(req, tidAv)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    _avisoAgendTabela(db)
+    if (req.method === 'GET') {
+      const c = db.prepare('SELECT ativo, fones FROM aviso_agend_loja WHERE tenant_id=?').get(tidAv)
+      send(res, 200, { ativo: !!c?.ativo, fones: c?.fones || '', disponivel: !!_avisoAgendGlobal(db) })
+      return true
+    }
+    const body = await readBody(req)
+    const ativo = body?.ativo ? 1 : 0
+    const lista = String(body?.fones || '').split(/[,;\s]+/).map(f => f.replace(/\D/g, '')).filter(Boolean)
+    if (lista.some(f => f.length < 10 || f.length > 13)) { send(res, 400, { error: 'número inválido (use DDD + número)' }); return true }
+    if (ativo && !lista.length) { send(res, 400, { error: 'informe o WhatsApp que vai receber os avisos' }); return true }
+    db.prepare(`INSERT INTO aviso_agend_loja (tenant_id, ativo, fones, atualizado_em) VALUES (?,?,?,datetime('now'))
+      ON CONFLICT(tenant_id) DO UPDATE SET ativo=excluded.ativo, fones=excluded.fones, atualizado_em=excluded.atualizado_em`)
+      .run(tidAv, ativo, lista.slice(0, 3).join(', '))
+    marcarDirty()
+    send(res, 200, { ok: true })
+    return true
+  }
+
+  // ── Aviso de pedido agendado para o gestor (número central na WuzAPI) ──
+  // GET: instância escolhida + lista das instâncias da WuzAPI (sem os tokens)
+  if (req.method === 'GET' && upath === '/api/admin/aviso-agendamento-wa') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const atual = _avisoAgendGlobal(db)
+    let instancias = [], erro = ''
+    try {
+      instancias = (await _wuzapiMod.listUsers()).map(u => ({
+        id: String(u.id ?? u.ID ?? ''),
+        nome: u.name || u.Name || '',
+        numero: String(u.jid || u.JID || '').split('@')[0].split(':')[0],
+        conectado: !!(u.loggedIn ?? u.LoggedIn ?? u.connected ?? u.Connected)
+      })).filter(u => u.id)
+    } catch (e) { erro = e.message }
+    send(res, 200, {
+      atual: atual ? { id: atual.id, nome: atual.nome, numero: atual.numero || '' } : null,
+      instancias, erro
+    })
+    return true
+  }
+  // POST { id } escolhe a instância ({ id: '' } desliga)
+  if (req.method === 'POST' && upath === '/api/admin/aviso-agendamento-wa') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const id = String(body?.id || '').trim()
+    try {
+      let novo = null
+      if (id) {
+        const u = (await _wuzapiMod.listUsers()).find(x => String(x.id ?? x.ID ?? '') === id)
+        if (!u) { send(res, 404, { error: 'Instância não encontrada na WuzAPI' }); return true }
+        const token = u.token || u.Token
+        if (!token) { send(res, 400, { error: 'A WuzAPI não devolveu o token dessa instância' }); return true }
+        novo = { id, nome: u.name || u.Name || '', token, numero: String(u.jid || u.JID || '').split('@')[0].split(':')[0] }
+      }
+      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+      g.aviso_agend_wuz = novo
+      db.prepare("INSERT INTO store_config (tenant_id, ia_config) VALUES ('_global', ?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config")
+        .run(JSON.stringify(g))
+      marcarDirty()
+      _registrarAudit(sess, {
+        acao: 'config.aviso_agendamento_wa', alvo_tipo: null, alvo_id: null, alvo_nome: null,
+        detalhes: { instancia: novo ? novo.nome : null }
+      }, req.headers)
+      send(res, 200, { ok: true, atual: novo ? { id: novo.id, nome: novo.nome, numero: novo.numero } : null })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+  // POST { telefone } manda uma mensagem de teste pelo número central
+  if (req.method === 'POST' && upath === '/api/admin/aviso-agendamento-wa/teste') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const cfgG = _avisoAgendGlobal(db)
+    if (!cfgG) { send(res, 400, { error: 'Escolha e salve a instância primeiro' }); return true }
+    let fone = String(body?.telefone || '').replace(/\D/g, '')
+    if (fone.length < 10) { send(res, 400, { error: 'Telefone inválido (DDD + número)' }); return true }
+    if (fone.length <= 11) fone = '55' + fone
+    const r = await _avisoAgendEnviar(cfgG, [fone], '📅 *Teste do aviso de pedido agendado*\n\nSe você recebeu esta mensagem, os gestores vão receber por este número os avisos de pedidos agendados.')
+    if (r.ok) send(res, 200, { ok: true })
+    else send(res, 500, { error: r.erro || 'Não foi possível enviar' })
     return true
   }
 

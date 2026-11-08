@@ -1837,6 +1837,33 @@ td{padding:12px 16px;color:#dce6f7}
           <div id="cob-wa-qr-area" style="text-align:center;padding:10px 0"></div>
         </div>
 
+        <!-- Aviso de pedido agendado para os gestores -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-head">
+            <div>
+              <div class="card-title">WhatsApp de avisos de pedido agendado <span style="font-size:11px;padding:2px 8px;border-radius:99px;background:rgba(37,211,102,.15);color:#25d366;margin-left:6px">WuzAPI</span></div>
+              <div class="card-sub">Número que avisa o gestor quando chega um pedido agendado, com o resumo completo do pedido. Pode ser uma instância que já está conectada na WuzAPI, como a dos agendamentos da barbearia. O robô das lojas não responde mensagens desse número.</div>
+            </div>
+          </div>
+          <div id="aag-status" style="margin-bottom:14px;font-size:12.5px;color:var(--muted)">Carregando...</div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label class="form-label">Instância que envia os avisos</label>
+            <select class="minput" id="aag-instancia"><option value="">Desligado</option></select>
+            <div class="form-hint">Lista das instâncias conectadas na sua WuzAPI. Os gestores ligam o aviso e informam o número deles em Cardápio público, na parte de agendamento.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+            <button class="btn bp bsm" onclick="aagSalvar()">Salvar</button>
+            <button class="btn bg2 bsm" onclick="aagCarregar()">Atualizar lista</button>
+          </div>
+          <div class="form-group" style="margin-bottom:6px">
+            <label class="form-label">Testar envio <span style="color:var(--muted);font-weight:400">(opcional)</span></label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <input class="minput" id="aag-teste-fone" type="text" placeholder="Ex: 88999998888" style="flex:1;min-width:160px" oninput="this.value=this.value.replace(/\D/g,'').slice(0,13)">
+              <button class="btn bg2 bsm" onclick="aagTestar()">Enviar teste</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Estatísticas de saques -->
         <div class="grid-3" style="margin-bottom:20px">
           <div class="stat-card" style="--ca:var(--orange)">
@@ -3362,7 +3389,7 @@ function navTo(id) {
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
   if (id==='backup')      { renderBackupList(); telegramBackupCarregar(); }
-  if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); carregarCobrancaWA(); svCarregar(); conectarAdminSSE(); }
+  if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); carregarCobrancaWA(); aagCarregar(); svCarregar(); conectarAdminSSE(); }
   if (id==='pix-geral')   { carregarPixGeral(); }
   if (id==='planos')      { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
   if (id==='marketing')   { window.MKUI && MKUI.init(); }
@@ -5985,6 +6012,55 @@ async function svSalvar() {
     toast('ok', 'Configuração salva!');
     svCarregar();
     carregarCobrancaWA();
+  } catch (e) { toast('err', 'Erro: ' + e.message); }
+}
+
+// ── WhatsApp de avisos de pedido agendado (instância da WuzAPI) ──────
+function _aagEsc(t) { return String(t || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+async function aagCarregar() {
+  const st = document.getElementById('aag-status');
+  const sel = document.getElementById('aag-instancia');
+  if (!sel) return;
+  try {
+    const r = await fetch('/api/admin/aviso-agendamento-wa', { headers: adminAuthHeader() });
+    if (r.status === 401) return;
+    const d = await r.json();
+    const atual = d.atual?.id || '';
+    const ops = ['<option value="">Desligado</option>'].concat((d.instancias || []).map(u =>
+      `<option value="${_aagEsc(u.id)}">${_aagEsc(u.nome || u.id)}${u.numero ? ' (' + _aagEsc(u.numero) + ')' : ''}${u.conectado ? '' : ' — desconectada'}</option>`));
+    if (atual && !(d.instancias || []).some(u => u.id === atual)) ops.push(`<option value="${_aagEsc(atual)}">${_aagEsc(d.atual.nome || atual)} — não encontrada na WuzAPI</option>`);
+    sel.innerHTML = ops.join('');
+    sel.value = atual;
+    if (st) {
+      if (d.erro) st.innerHTML = `<span style="color:var(--danger)">Não consegui listar as instâncias da WuzAPI: ${_aagEsc(d.erro)}</span>`;
+      else if (atual) {
+        const u = (d.instancias || []).find(x => x.id === atual);
+        st.innerHTML = u && u.conectado
+          ? `<span style="color:var(--success)">Ligado: avisos saem por <b>${_aagEsc(u.nome)}</b>${u.numero ? ' (' + _aagEsc(u.numero) + ')' : ''}</span>`
+          : `<span style="color:var(--orange)">A instância escolhida está desconectada. Os avisos só saem quando ela estiver conectada.</span>`;
+      } else st.textContent = 'Desligado: nenhum aviso de pedido agendado é enviado.';
+    }
+  } catch (e) { if (st) st.textContent = 'Erro ao carregar: ' + e.message; }
+}
+async function aagSalvar() {
+  const id = document.getElementById('aag-instancia')?.value || '';
+  try {
+    const r = await fetch('/api/admin/aviso-agendamento-wa', { method: 'POST', headers: adminAuthHeader(), body: JSON.stringify({ id }) });
+    if (r.status === 401) { toast('err','Sessão expirada'); setTimeout(doLogout,1500); return; }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    toast('ok', id ? 'Aviso de pedido agendado ligado!' : 'Aviso de pedido agendado desligado');
+    aagCarregar();
+  } catch (e) { toast('err', 'Erro: ' + e.message); }
+}
+async function aagTestar() {
+  const telefone = (document.getElementById('aag-teste-fone')?.value || '').trim();
+  if (!telefone) { toast('err', 'Digite o número para o teste'); return; }
+  try {
+    const r = await fetch('/api/admin/aviso-agendamento-wa/teste', { method: 'POST', headers: adminAuthHeader(), body: JSON.stringify({ telefone }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    toast('ok', 'Mensagem de teste enviada!');
   } catch (e) { toast('err', 'Erro: ' + e.message); }
 }
 

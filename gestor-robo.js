@@ -1841,6 +1841,7 @@ async function loadCardapioPublico() {
     setSel('cp-ag-dias', ag.dias, 2);
     setSel('cp-ag-antecedencia', ag.antecedencia, 60);
     setSel('cp-ag-intervalo', ag.intervalo, 30);
+    cpCarregarAgAviso();
   } catch(e) {}
   // Oculta opção de carrossel se for açougue (já usa por padrão)
   // Busca segmento direto para não depender de window._segmento que pode não ter carregado
@@ -2186,6 +2187,42 @@ function cpToggleMinimoRetirada(on) {
   if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
 }
 
+// Aviso de pedido agendado no WhatsApp do gestor. Fica fora do store_config
+// de propósito: o cardápio público lê o store_config e o número do gestor
+// não pode aparecer para os clientes.
+async function cpCarregarAgAviso() {
+  try {
+    const r = await fetch('/api/gestor/aviso-agendamento', { headers: _upHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('cp-ag-aviso');
+    if (el) { el.checked = !!d.ativo; cpToggleAgAviso(!!d.ativo); }
+    const f = document.getElementById('cp-ag-aviso-fone');
+    if (f) f.value = d.fones || '';
+  } catch(e) {}
+}
+async function cpSalvarAgAviso() {
+  const el = document.getElementById('cp-ag-aviso');
+  if (!el) return '';
+  const ativo = !!el.checked;
+  const fones = (document.getElementById('cp-ag-aviso-fone')?.value || '').replace(/[^\d,; ]/g, '').trim();
+  if (ativo && !fones.replace(/\D/g, '')) return 'informe o WhatsApp que vai receber os avisos';
+  try {
+    const r = await fetch('/api/gestor/aviso-agendamento', { method: 'POST', headers: _upHeaders(), body: JSON.stringify({ ativo, fones }) });
+    const d = await r.json().catch(() => ({}));
+    return r.ok ? '' : (d.error || 'erro ao salvar');
+  } catch(e) { return e.message; }
+}
+
+function cpToggleAgAviso(on) {
+  const track = document.getElementById('cp-ag-aviso-track');
+  const thumb = document.getElementById('cp-ag-aviso-thumb');
+  if (track) track.style.background = on ? 'var(--accent)' : 'var(--surface2)';
+  if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
+  const op = document.getElementById('cp-ag-aviso-opcoes');
+  if (op) op.style.display = on ? 'block' : 'none';
+}
+
 function cpToggleAgEscolher(on) {
   const track = document.getElementById('cp-ag-escolher-track');
   const thumb = document.getElementById('cp-ag-escolher-thumb');
@@ -2193,6 +2230,7 @@ function cpToggleAgEscolher(on) {
   if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
   const op = document.getElementById('cp-ag-opcoes');
   if (op) op.style.display = on ? 'grid' : 'none';
+  cpAtualizarVisAgAviso();
 }
 
 function cpToggleAgendamento(on) {
@@ -2200,6 +2238,16 @@ function cpToggleAgendamento(on) {
   const thumb = document.getElementById('cp-permitir-agendamento-thumb');
   if (track) track.style.background = on ? 'var(--accent)' : 'var(--surface2)';
   if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
+  cpAtualizarVisAgAviso();
+}
+
+// O aviso de pedido agendado só aparece quando alguma forma de agendamento
+// está ligada (loja fechada ou cliente escolhe o horário).
+function cpAtualizarVisAgAviso() {
+  const card = document.getElementById('cp-ag-aviso-card');
+  if (!card) return;
+  const on = !!document.getElementById('cp-permitir-agendamento')?.checked || !!document.getElementById('cp-ag-escolher')?.checked;
+  card.style.display = on ? 'block' : 'none';
 }
 
 function cpSelecionarTema(tema) {
@@ -2480,7 +2528,9 @@ async function salvarCardapioPublico() {
 
     const { error } = await sb.from('store_config').upsert(payload);
     if (error) throw error;
-    sbToast('ok', 'Cardápio público salvo!');
+    const _avisoErro = await cpSalvarAgAviso();
+    if (_avisoErro) sbToast('err', 'Cardápio salvo, mas o aviso de pedido agendado não: ' + _avisoErro);
+    else sbToast('ok', 'Cardápio público salvo!');
     // Sincroniza o tempo de entrega usado pela impressão (comanda) com o que
     // foi salvo no cardápio público — assim a comanda usa SEMPRE o mesmo
     // valor que o cliente vê.

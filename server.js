@@ -3185,9 +3185,7 @@ async function handleREST(req, res, table, params, body) {
           // andamento fisicamente, só o cardápio online é que para.
           const _tenantAtivo = db.prepare('SELECT ativo, expires_at FROM tenants WHERE id=?').get(tenantId)
           if (_tenantAtivo) {
-            // Vence no fim do dia pelo horário de Brasília. Antes a conta usava o
-            // relógio do servidor (UTC) e bloqueava o cardápio às 21h do último dia.
-            const _venceu = _tenantAtivo.expires_at && String(_tenantAtivo.expires_at).slice(0, 10) < brasiliaDateString()
+            const _venceu = _tenantAtivo.expires_at && new Date(_tenantAtivo.expires_at + 'T23:59:59') < new Date()
             if (_tenantAtivo.ativo === 0 || _venceu) {
               return send(res, 503, { error: 'Loja temporariamente indisponível. Tente novamente mais tarde.' })
             }
@@ -8363,6 +8361,25 @@ function _iaMsgJaVista(tenantId, msgId, origem) {
   return false
 }
 
+// Número central que avisa os gestores de pedido agendado (escolhido no admin).
+// Guardado em cache por 1 min para não ler o banco a cada mensagem.
+let _numAvisoAgendCache = { t: 0, num: '' }
+function _ehNumeroAvisoAgendamento(jidOuFone) {
+  try {
+    if (Date.now() - _numAvisoAgendCache.t > 60 * 1000) {
+      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+      _numAvisoAgendCache = { t: Date.now(), num: String(g?.aviso_agend_wuz?.numero || '').replace(/\D/g, '') }
+    }
+    const central = _numAvisoAgendCache.num
+    if (!central) return false
+    const d = String(jidOuFone || '').split('@')[0].split(':')[0].replace(/\D/g, '')
+    if (!d) return false
+    // compara DDI+DDD e os últimos 8 dígitos (ignora o 9 a mais/a menos)
+    return d.slice(0, 4) === central.slice(0, 4) && d.slice(-8) === central.slice(-8)
+  } catch { return false }
+}
+
 async function handleIAWebhook(req, res) {
   const body = req._parsedBody !== undefined ? req._parsedBody : await readBody(req)
   const upath = new URL(req.url,`http://x`).pathname
@@ -8381,6 +8398,11 @@ async function handleIAWebhook(req, res) {
     const from   = [data?.key?.remoteJid, data?.key?.remoteJidAlt, data?.key?.participant, data?.key?.participantAlt, data?.participant, data?.sender].find(j => phoneUtils.cleanWhatsappJid(j)) || data?.key?.remoteJid || ''
     const fromMe = body?.data?.key?.fromMe||false
     const msgId  = body?.data?.key?.id || null  // usado pra marcar como lida (visto azul)
+    // Mensagem vinda do número central de avisos (pedido agendado): é aviso
+    // da plataforma para o gestor, o robô da loja não responde.
+    if (!fromMe && from && _ehNumeroAvisoAgendamento(from)) {
+      send(res, 200, { ok: true, ignorado: 'numero de avisos da plataforma' }); return
+    }
     if (!fromMe && msgId && tenantId && _iaMsgJaVista(tenantId, msgId, req._origemWebhook || 'evolution')) {
       send(res, 200, { ok: true, repetida: true }); return
     }
