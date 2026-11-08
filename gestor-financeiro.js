@@ -1878,6 +1878,12 @@ function imprimirReciboPedido() {
   const id = window._currentDetailId;
   const o = (typeof ordersKanban !== 'undefined' ? ordersKanban : []).find(x => x.id === id);
   if (!o) { sbToast('err', 'Pedido não encontrado. Feche e abra o pedido de novo.'); return; }
+  imprimirReciboDoPedido(o);
+}
+
+// Imprime o recibo de um pedido qualquer (usado no detalhe e no Histórico)
+function imprimirReciboDoPedido(o) {
+  if (!o) return;
   const conteudo = _montarReciboPedidoHtml(o);
   const fmt  = localStorage.getItem('printFormat') || _printFormat || '80mm';
   const printer = (() => { try { const c = JSON.parse(localStorage.getItem('printConfig')||'{}'); return c.printer_caixa || c.printer || ''; } catch { return ''; } })() || localStorage.getItem('printPrinter') || '';

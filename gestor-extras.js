@@ -74,6 +74,7 @@ async function _histBuscar() {
     };
     const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
     const icoPrint = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="4" y="2" width="8" height="3.5" rx=".8" stroke="currentColor" stroke-width="1.4"/><rect x="4" y="10" width="8" height="4" rx=".8" stroke="currentColor" stroke-width="1.4"/><path d="M4 11.5H3a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/></svg>';
+    const icoRecibo = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3.5 1.5h9v13l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1v-13Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 5h4M6 7.5h4M6 10h2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
     const icoLixo = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4.5V3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1.5M4.5 4.5l.6 8.1a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
     list.innerHTML = `<div class="pf-table-wrap"><table>
@@ -108,6 +109,7 @@ async function _histBuscar() {
           <td style="white-space:nowrap;text-align:right">
             <button class="btn bg pf-sm" onclick="histDetalhe(${o.id})">Ver</button>
             <button class="btn bg pf-sm pf-icon" title="Imprimir de novo" aria-label="Imprimir de novo" onclick="histReimprimir(${o.id})">${icoPrint}</button>
+            <button class="btn bg pf-sm pf-icon" title="Imprimir recibo" aria-label="Imprimir recibo" onclick="histRecibo(${o.id})" style="color:#16a34a">${icoRecibo}</button>
             <button class="btn bd pf-sm pf-icon" title="Excluir pedido (não dá para desfazer)" aria-label="Excluir pedido" onclick="histExcluir(${o.id})">${icoLixo}</button>
           </td>
         </tr>`;
@@ -116,6 +118,14 @@ async function _histBuscar() {
   } catch(e) {
     if (list) list.innerHTML = `<div style="color:var(--danger);padding:20px;text-align:center">Erro: ${e.message}</div>`;
   }
+}
+
+// Recibo do pedido (mesmo do detalhe do pedido no quadro de pedidos)
+function histRecibo(orderId) {
+  const o = _histData.find(x => x.id === orderId);
+  if (!o) return;
+  if (o.status === 'cancelado' && !confirm('Este pedido foi cancelado. Imprimir o recibo mesmo assim?')) return;
+  if (typeof imprimirReciboDoPedido === 'function') imprimirReciboDoPedido(o);
 }
 
 function histPrev() { if (_histPage > 1) { _histPage--; _histBuscar(); } }

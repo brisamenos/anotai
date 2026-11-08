@@ -9591,7 +9591,7 @@ const server = http.createServer(async (req,res) => {
     if(ate){where+=' AND created_at<=?';vals.push(ate+'T23:59:59.999Z')}
     if(q){where+=' AND (client LIKE ? OR phone LIKE ? OR id=? OR order_num=?)';vals.push(`%${q}%`,`%${q}%`,parseInt(q)||0,parseInt(q)||0)}
     const total=db.prepare(`SELECT COUNT(*) as cnt FROM orders WHERE ${where}`).get(...vals)?.cnt||0
-    const rows=db.prepare(`SELECT id,order_num,client,phone,addr,items,total,taxa,pag,status,mesa_num,garcom_nome,created_at FROM orders WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...vals,limit,(page-1)*limit)
+    const rows=db.prepare(`SELECT id,order_num,client,phone,addr,items,total,taxa,pag,troco,status,mesa_num,garcom_nome,created_at FROM orders WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...vals,limit,(page-1)*limit)
     rows.forEach(r=>{try{r.items=JSON.parse(r.items)}catch{}})
     send(res,200,{orders:rows,total,page,pages:Math.ceil(total/limit)})
     return
