@@ -7711,14 +7711,32 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!tidWuz || !_tenantWa.webhookSecretMatches(tidWuz, secretWuz)) {
       send(res, 401, { error: 'unauthorized' }); return true
     }
+    // Aceita os dois formatos da WuzAPI: JSON ou formulario (jsonData=...).
+    // Antes so lia JSON: se a WuzAPI mandasse como formulario (WEBHOOK_FORMAT
+    // diferente de json, ou versao nova), chegava vazio e o robo nao respondia.
     let bodyWuz = {}
-    try { bodyWuz = await readBody(req) } catch(e) {}
+    try { bodyWuz = _parseWebhookWuz(await _lerCorpoCru(req), req.headers['content-type']) } catch(e) {}
+    if (bodyWuz && typeof bodyWuz.jsonData === 'string') { try { bodyWuz = JSON.parse(bodyWuz.jsonData) } catch {} }
     send(res, 200, { ok: true }) // responde rapido, processa em segundo plano
 
     ;(async () => {
       try {
         const msgs = _tenantWa.normalizeWuzToBaileys(bodyWuz)
-        if (!msgs.length) return
+        if (!msgs.length) {
+          // Diagnostico: chegou algo que nao virou mensagem (formato desconhecido).
+          // Registra no maximo 1 vez a cada 10 min por loja, para nao encher o log.
+          if (bodyWuz?.type !== 'Message' || !bodyWuz?.event) {
+            const kDiag = 'wuzdiag:' + tidWuz
+            const agoraDiag = Date.now()
+            if (!global.__wuzDiag) global.__wuzDiag = new Map()
+            if (agoraDiag - (global.__wuzDiag.get(kDiag) || 0) > 10 * 60 * 1000) {
+              global.__wuzDiag.set(kDiag, agoraDiag)
+              const chaves = Object.keys(bodyWuz || {}).slice(0, 10).join(',') || '(vazio)'
+              log('⚠️', `[wuz-webhook] Formato não reconhecido [${tidWuz}] type=${bodyWuz?.type || '-'} campos=${chaves} content-type=${req.headers['content-type'] || '-'}`)
+            }
+          }
+          return
+        }
         _ingestWaMessages(ctx, tidWuz, msgs)
 
         // Robo de pedidos automatico ja fala WuzAPI (sendWA/sendWAImage migrados —
