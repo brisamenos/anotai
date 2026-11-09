@@ -910,6 +910,12 @@ async function loadAllData(silent = false) {
     // pra não regressar se o storage tiver valor maior (gestor reabre depois
     // de pedidos serem cancelados/finalizados — o maxId do kanban atual pode
     // ser menor que o último ID que ele já viu antes de fechar).
+    // Lê de novo o valor salvo DESTA loja: na abertura da página a sessão
+    // ainda não existia e a leitura caía numa chave genérica (valor 0).
+    try {
+      const salvo = parseInt(localStorage.getItem(_maxKnownStorageKey()) || '0') || 0;
+      if (salvo > _maxKnownOrderId) _maxKnownOrderId = salvo;
+    } catch {}
     if (ordersKanban.length) {
       const maxId = Math.max(...ordersKanban.map(o=>o.id));
       orderIdSeq = maxId + 1;
@@ -994,6 +1000,8 @@ async function loadAllData(silent = false) {
     if (!silent) sbToast('err', 'Erro ao conectar ao banco de dados');
   } finally {
     if (!silent) sbLoading(false);
+    // Libera o polling de pedidos novos só depois da primeira carga (ver setInterval abaixo)
+    window._gestorCargaInicialOk = true;
   }
 }
 
@@ -2498,6 +2506,12 @@ function _saveMaxKnownOrderId() {
 // mesmo que o SSE falhe ou tenha problemas de canal
 setInterval(async () => {
   if (document.visibilityState !== 'visible') return;
+  // Espera a primeira carga do quadro terminar. Antes, num aparelho recém-
+  // logado (celular, outro computador), o polling rodava com o quadro ainda
+  // vazio e sem saber o último pedido, tratava TODOS os pedidos em andamento
+  // como novos e mandava imprimir tudo de novo (inclusive no computador da
+  // loja, pela fila de impressão).
+  if (!window._gestorCargaInicialOk) return;
   if (billingIsLocked()) {
     billingApplyLockUI();
     return;
