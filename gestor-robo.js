@@ -1191,6 +1191,340 @@ async function avisoWaConectar() {
 }
 
 // ═══════════════════════════════════════
+// POP-UP "CONECTE SEU WHATSAPP" (com tutorial e QR Code na própria janela)
+// Abre ao entrar no gestor quando o WhatsApp da loja está desconectado.
+// Mostra, num celular animado, onde tocar no WhatsApp para adicionar o
+// dispositivo; "Conectar agora" gera o QR Code ali mesmo e fica conferindo
+// até conectar. "Agora não" fecha até a próxima vez que o gestor abrir;
+// "Não mostrar mais" desliga de vez neste aparelho.
+// ═══════════════════════════════════════
+let _wcpPoll = null, _wcpTour = null, _wcpAbertoNestaSessao = false;
+function _wcpChaveNunca() { return 'estima_wa_conectar_nunca_' + (_sessao?.tenant_id || ''); }
+
+// Retorna true se abriu o pop-up
+async function waConectarPopupVerificar() {
+  try {
+    if (_wcpAbertoNestaSessao || document.getElementById('wcp')) return false;
+    if (!_sessao?.tenant_id) return false;
+    try { if (localStorage.getItem(_wcpChaveNunca()) === '1') return false; } catch (e) {}
+    if (wuzConnected || evoConnected) return false;
+    const r = await WUZ.req('GET', '/status');
+    if (!r.ok || !r.data) return false;                       // servidor não respondeu: não arrisca
+    if (r.data.wuzapi_configured === false) return false;     // servidor sem a conexão nova
+    const st = String(r.data.status || '');
+    if (st === 'connected') return false;
+    if (/^erro/i.test(st)) return false;                      // WuzAPI fora do ar: não é culpa da loja
+    if (r.data.provider !== 'wuzapi' && evoConnected) return false;
+    waConectarPopupAbrir();
+    return true;
+  } catch (e) { console.warn('waConectarPopupVerificar:', e); return false; }
+}
+
+function _wcpCss() {
+  if (document.getElementById('wcp-css')) return;
+  const st = document.createElement('style');
+  st.id = 'wcp-css';
+  st.textContent = `
+#wcp{position:fixed;inset:0;z-index:99991;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(6,14,11,.66);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+#wcp .wcp-card{position:relative;width:100%;max-width:880px;max-height:calc(100vh - 32px);overflow:auto;display:grid;grid-template-columns:340px 1fr;background:var(--surface,#fff);color:var(--text,#101828);border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,.45);animation:wcpIn .4s cubic-bezier(.2,.9,.3,1.12) both}
+@keyframes wcpIn{from{opacity:0;transform:translateY(18px) scale(.97)}to{opacity:1;transform:none}}
+#wcp .wcp-x{position:absolute;top:12px;right:12px;z-index:3;width:34px;height:34px;border-radius:50%;border:0;background:var(--surface2,#f1f5f9);color:var(--muted,#64748b);display:flex;align-items:center;justify-content:center;cursor:pointer}
+#wcp .wcp-vit{position:relative;overflow:hidden;background:radial-gradient(110% 80% at 20% 10%,#1f8a5b 0%,#0f5238 50%,#0a3324 100%);padding:28px 22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:540px}
+#wcp .wcp-vit::before{content:"";position:absolute;width:420px;height:420px;border-radius:50%;border:1px solid rgba(255,255,255,.08);top:-160px;left:-170px}
+#wcp .wcp-vit::after{content:"";position:absolute;width:300px;height:300px;border-radius:50%;border:1px solid rgba(255,255,255,.07);bottom:-140px;right:-130px}
+#wcp .wcp-fone{position:relative;z-index:1;width:226px;height:452px;border-radius:36px;background:#0b0f0d;padding:9px;box-shadow:0 24px 50px rgba(0,0,0,.45),inset 0 0 0 2px #2b3a33}
+#wcp .wcp-tela{position:relative;width:100%;height:100%;border-radius:28px;overflow:hidden;background:#fff;font-family:'DM Sans',system-ui,sans-serif;color:#111b21}
+#wcp .wcp-tela::before{content:"";position:absolute;top:7px;left:50%;transform:translateX(-50%);width:62px;height:17px;border-radius:10px;background:#0b0f0d;z-index:6}
+#wcp .wcp-cena{position:absolute;inset:0;opacity:0;transition:opacity .45s ease}
+#wcp .wcp-cena.on{opacity:1}
+#wcp .wcp-bar{background:#0f7a55;color:#fff;padding:32px 12px 10px;display:flex;align-items:center;gap:8px}
+#wcp .wcp-bar b{flex:1;font-size:15px;font-weight:700;letter-spacing:.1px}
+#wcp .wcp-bar .wcp-ic{width:18px;height:18px;opacity:.95}
+#wcp .wcp-dots{position:relative;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+#wcp .wcp-abas{display:flex;background:#0f7a55;color:rgba(255,255,255,.75);font-size:10.5px;font-weight:700}
+#wcp .wcp-abas span{flex:1;text-align:center;padding:7px 0}
+#wcp .wcp-abas span:first-child{color:#fff;border-bottom:2.5px solid #fff}
+#wcp .wcp-conv{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid #eef1f0}
+#wcp .wcp-av{width:32px;height:32px;border-radius:50%;flex-shrink:0}
+#wcp .wcp-ln{height:7px;border-radius:4px;background:#e3e8e6}
+#wcp .wcp-menu{position:absolute;top:30px;right:8px;width:150px;background:#fff;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.22);padding:5px 0;font-size:11px;z-index:4}
+#wcp .wcp-menu div{padding:8px 12px;color:#3b4a54}
+#wcp .wcp-menu .wcp-alvo{background:#e7f6ee;color:#0f5238;font-weight:700}
+#wcp .wcp-topo2{background:#0f7a55;color:#fff;padding:32px 12px 12px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px}
+#wcp .wcp-disp{padding:18px 14px;text-align:center}
+#wcp .wcp-disp-ilu{width:120px;height:74px;margin:6px auto 12px;border-radius:12px;background:#e7f6ee;display:flex;align-items:center;justify-content:center}
+#wcp .wcp-disp p{font-size:10.5px;color:#54656f;line-height:1.45;margin:0 0 14px}
+#wcp .wcp-disp-btn{position:relative;display:block;width:100%;padding:10px 0;border-radius:20px;background:#0f7a55;color:#fff;font-size:11.5px;font-weight:700}
+#wcp .wcp-cam{position:absolute;inset:0;background:linear-gradient(160deg,#1d2622,#0b100e);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+#wcp .wcp-mira{position:relative;width:150px;height:150px}
+#wcp .wcp-mira i{position:absolute;width:30px;height:30px;border-color:#3ddc84;border-style:solid}
+#wcp .wcp-mira i:nth-child(1){top:0;left:0;border-width:3px 0 0 3px;border-radius:8px 0 0 0}
+#wcp .wcp-mira i:nth-child(2){top:0;right:0;border-width:3px 3px 0 0;border-radius:0 8px 0 0}
+#wcp .wcp-mira i:nth-child(3){bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 8px}
+#wcp .wcp-mira i:nth-child(4){bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 8px 0}
+#wcp .wcp-mira .wcp-qrmini{position:absolute;inset:22px;border-radius:6px;background:#fff;opacity:.92;display:flex;align-items:center;justify-content:center}
+#wcp .wcp-mira .wcp-scan{position:absolute;left:10px;right:10px;height:2px;background:#3ddc84;box-shadow:0 0 12px #3ddc84;top:12px;animation:wcpScan 1.8s ease-in-out infinite alternate}
+@keyframes wcpScan{to{top:136px}}
+#wcp .wcp-cam small{color:#d6e2dc;font-size:10.5px;text-align:center;padding:0 22px;line-height:1.45}
+#wcp .wcp-toque{position:absolute;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;background:rgba(255,255,255,.55);border:2px solid #fff;box-shadow:0 0 0 0 rgba(255,255,255,.6);z-index:7;pointer-events:none;opacity:0;transition:left .5s ease,top .5s ease,opacity .3s}
+#wcp .wcp-toque.on{opacity:1;animation:wcpToque 1.3s ease-out infinite}
+@keyframes wcpToque{0%{box-shadow:0 0 0 0 rgba(255,255,255,.7);transform:scale(1)}50%{transform:scale(.82)}100%{box-shadow:0 0 0 16px rgba(255,255,255,0);transform:scale(1)}}
+#wcp .wcp-leg{position:relative;z-index:1;color:#e3f3ea;font-size:12.5px;font-weight:600;text-align:center;min-height:34px;max-width:260px;line-height:1.4}
+#wcp .wcp-info{padding:34px 34px 26px;display:flex;flex-direction:column}
+#wcp h2{font-size:24px;line-height:1.18;font-weight:800;margin:0 0 8px;letter-spacing:-.3px;max-width:22ch}
+#wcp .wcp-sub{font-size:14px;line-height:1.5;color:var(--muted,#64748b);margin:0 0 20px;max-width:52ch}
+#wcp .wcp-passos{list-style:none;margin:0 0 20px;padding:0;display:flex;flex-direction:column;gap:6px}
+#wcp .wcp-passos li{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:14px;border:1px solid transparent;transition:background .3s,border-color .3s;cursor:pointer}
+#wcp .wcp-passos li.on{background:rgba(22,163,74,.08);border-color:rgba(22,163,74,.28)}
+#wcp .wcp-n{width:26px;height:26px;border-radius:50%;background:var(--surface2,#f1f5f9);color:var(--muted,#64748b);font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .3s,color .3s}
+#wcp .wcp-passos li.on .wcp-n{background:#16a34a;color:#fff}
+#wcp .wcp-passos strong{display:block;font-size:14px;font-weight:700;margin-bottom:2px}
+#wcp .wcp-passos li div>span{display:block;font-size:12.5px;color:var(--muted,#64748b);line-height:1.45}
+#wcp .wcp-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;border:0;border-radius:14px;padding:15px 18px;background:#16a34a;color:#fff;font:inherit;font-size:15.5px;font-weight:800;cursor:pointer;box-shadow:0 10px 24px rgba(22,163,74,.32);transition:transform .15s,box-shadow .15s}
+#wcp .wcp-btn:hover{transform:translateY(-1px);box-shadow:0 14px 28px rgba(22,163,74,.38)}
+#wcp .wcp-btn:disabled{opacity:.7;cursor:wait;transform:none}
+#wcp .wcp-nota{display:flex;gap:9px;align-items:flex-start;margin-top:14px;padding:10px 12px;border-radius:12px;background:var(--surface2,#f1f5f9);font-size:12px;line-height:1.45;color:var(--muted,#64748b)}
+#wcp .wcp-rodape{display:flex;justify-content:space-between;gap:10px;margin-top:auto;padding-top:18px}
+#wcp .wcp-rodape button{border:0;background:none;font:inherit;font-size:13px;font-weight:700;color:var(--muted,#64748b);cursor:pointer;padding:8px 4px}
+#wcp .wcp-rodape .wcp-nunca{text-decoration:underline;text-underline-offset:3px;font-weight:600}
+#wcp .wcp-qrbox{display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;padding:6px 0 4px}
+#wcp .wcp-qr{position:relative;width:236px;height:236px;border-radius:18px;background:#fff;padding:10px;border:2px solid rgba(22,163,74,.45);box-shadow:0 12px 30px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center}
+#wcp .wcp-qr img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated}
+#wcp .wcp-qr .wcp-gira{width:34px;height:34px;border-radius:50%;border:3px solid #d1fae5;border-top-color:#16a34a;animation:wcpGira .8s linear infinite}
+@keyframes wcpGira{to{transform:rotate(360deg)}}
+#wcp .wcp-espera{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#15803d}
+#wcp .wcp-espera i{width:8px;height:8px;border-radius:50%;background:#16a34a;animation:wcpPulso 1.2s ease-in-out infinite}
+@keyframes wcpPulso{50%{opacity:.25}}
+#wcp .wcp-link{border:0;background:none;color:#15803d;font:inherit;font-size:13px;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+#wcp .wcp-ok{width:72px;height:72px;border-radius:50%;background:rgba(22,163,74,.12);color:#16a34a;display:flex;align-items:center;justify-content:center;margin:24px auto 6px;animation:wcpIn .4s ease both}
+#wcp .wcp-erro{font-size:13px;color:#b42318;background:#fef3f2;border:1px solid #fecdca;border-radius:12px;padding:10px 12px;text-align:left}
+#wcp button:focus-visible,#wcp li:focus-visible{outline:2px solid #16a34a;outline-offset:2px}
+@media(max-width:760px){
+  #wcp{padding:0;align-items:flex-end}
+  #wcp .wcp-card{grid-template-columns:1fr;border-radius:22px 22px 0 0;max-height:94vh}
+  #wcp .wcp-vit{min-height:0;padding:20px 16px 14px;flex-direction:row;gap:14px}
+  #wcp .wcp-fone{width:130px;height:260px;border-radius:24px;padding:6px;flex-shrink:0}
+  #wcp .wcp-tela{border-radius:19px;zoom:.57}
+  #wcp .wcp-leg{text-align:left;font-size:13px}
+  #wcp .wcp-info{padding:20px 16px 16px}
+  #wcp h2{font-size:20px}
+  #wcp .wcp-sub{margin-bottom:14px}
+  #wcp .wcp-passos{gap:2px;margin-bottom:14px}
+  #wcp .wcp-passos li{padding:8px 10px}
+  #wcp .wcp-btn{position:sticky;bottom:12px;z-index:2}
+  #wcp .wcp-qr{width:210px;height:210px}
+}
+@media(prefers-reduced-motion:reduce){
+  #wcp .wcp-card,#wcp .wcp-toque.on,#wcp .wcp-mira .wcp-scan,#wcp .wcp-espera i{animation:none}
+  #wcp .wcp-cena{transition:none}
+}`;
+  document.head.appendChild(st);
+}
+
+// As 4 cenas do celular (tela inicial, menu, aparelhos conectados, câmera)
+function _wcpCenasHtml() {
+  const conv = (cor, w1, w2) => `<div class="wcp-conv"><span class="wcp-av" style="background:${cor}"></span><div style="flex:1"><div class="wcp-ln" style="width:${w1}%;margin-bottom:6px;background:#cfd8d4"></div><div class="wcp-ln" style="width:${w2}%"></div></div></div>`;
+  const lista = conv('#f6c9a8', 52, 78) + conv('#b8d8f0', 40, 66) + conv('#d6c6ef', 58, 72) + conv('#c9ecd6', 46, 60) + conv('#f3d7a0', 50, 70) + conv('#f0b8c8', 36, 58);
+  const tresPontos = '<svg width="16" height="16" viewBox="0 0 16 16" fill="#fff"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>';
+  const lupa = '<svg class="wcp-ic" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>';
+  const camIc = '<svg class="wcp-ic" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+  const topo = `<div class="wcp-bar"><b>WhatsApp</b>${camIc}${lupa}<span class="wcp-dots">${tresPontos}</span></div><div class="wcp-abas"><span>Conversas</span><span>Atualizações</span><span>Ligações</span></div>`;
+  const qrMini = '<svg width="80" height="80" viewBox="0 0 21 21" shape-rendering="crispEdges"><path fill="#111" d="M0 0h7v7H0zM1 1v5h5V1zM2 2h3v3H2zM14 0h7v7h-7zM15 1v5h5V1zM16 2h3v3h-3zM0 14h7v7H0zM1 15v5h5v-5zM2 16h3v3H2zM9 0h2v2H9zM12 2h1v3h-1zM9 4h2v2H9zM8 8h3v1H8zM13 8h2v2h-2zM17 9h3v1h-3zM9 11h1v3H9zM11 12h3v2h-3zM15 12h2v1h-2zM18 12h3v2h-3zM14 15h2v2h-2zM17 16h4v1h-4zM9 16h3v1H9zM10 18h2v3h-2zM13 18h3v1h-3zM16 19h2v2h-2zM19 18h2v3h-2z"/></svg>';
+  return `
+    <div class="wcp-cena" data-c="0">${topo}${lista}</div>
+    <div class="wcp-cena" data-c="1">${topo}${lista}
+      <div class="wcp-menu"><div>Novo grupo</div><div>Nova transmissão</div><div class="wcp-alvo">Dispositivos conectados</div><div>Mensagens favoritas</div><div>Configurações</div></div>
+    </div>
+    <div class="wcp-cena" data-c="2">
+      <div class="wcp-topo2"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M10 3L5 8l5 5"/></svg>Dispositivos conectados</div>
+      <div class="wcp-disp">
+        <div class="wcp-disp-ilu"><svg width="70" height="46" viewBox="0 0 70 46" fill="none"><rect x="4" y="4" width="44" height="30" rx="3" stroke="#0f7a55" stroke-width="2.5"/><path d="M1 40h50" stroke="#0f7a55" stroke-width="2.5" stroke-linecap="round"/><rect x="52" y="12" width="15" height="28" rx="3" stroke="#0f7a55" stroke-width="2.5"/></svg></div>
+        <p>Use o WhatsApp em outros aparelhos, como o computador da loja.</p>
+        <span class="wcp-disp-btn">Conectar dispositivo</span>
+      </div>
+    </div>
+    <div class="wcp-cena" data-c="3"><div class="wcp-cam">
+      <div class="wcp-mira"><i></i><i></i><i></i><i></i><div class="wcp-qrmini">${qrMini}</div><div class="wcp-scan"></div></div>
+      <small>Aponte a câmera para o QR Code que aparece no painel</small>
+    </div></div>
+    <div class="wcp-toque"></div>`;
+}
+
+// Passos do tutorial: texto, legenda do celular e onde cai o "toque" (% da tela)
+const _WCP_PASSOS = [
+  { t: 'Abra o WhatsApp da loja', d: 'No celular que atende os clientes, abra o WhatsApp na tela de conversas.', leg: 'Abra o WhatsApp no celular da loja', toque: null },
+  { t: 'Toque nos três pontinhos', d: 'No canto de cima. No iPhone, toque em Configurações, embaixo.', leg: 'Toque nos três pontinhos no canto de cima', toque: [88, 9] },
+  { t: 'Entre em Dispositivos conectados', d: 'Depois toque no botão verde Conectar dispositivo.', leg: 'Dispositivos conectados e depois Conectar dispositivo', toque: [60, 27] },
+  { t: 'Aponte a câmera para o QR Code', d: 'Toque em Conectar agora aqui embaixo e leia o código que aparecer.', leg: 'Aponte a câmera para o QR Code do painel', toque: null }
+];
+
+function _wcpMostrarPasso(i) {
+  const el = document.getElementById('wcp');
+  if (!el) return;
+  // cena do celular: o passo 3 tem duas telas (menu e depois o botão)
+  const cena = i === 0 ? 0 : i === 1 ? 0 : i === 2 ? 1 : 3;
+  el.querySelectorAll('.wcp-cena').forEach(c => c.classList.toggle('on', Number(c.dataset.c) === cena));
+  el.querySelectorAll('.wcp-passos li').forEach((li, k) => li.classList.toggle('on', k === i));
+  const leg = el.querySelector('.wcp-leg');
+  if (leg) leg.textContent = _WCP_PASSOS[i].leg;
+  const toque = el.querySelector('.wcp-toque');
+  const alvo = _WCP_PASSOS[i].toque;
+  if (toque) {
+    if (alvo) { toque.style.left = alvo[0] + '%'; toque.style.top = alvo[1] + '%'; toque.classList.add('on'); }
+    else toque.classList.remove('on');
+  }
+  // no passo 3, depois de um instante, troca do menu para a tela do botão verde
+  if (i === 2) {
+    clearTimeout(el._sub);
+    el._sub = setTimeout(() => {
+      if (!document.getElementById('wcp') || !el.querySelector('.wcp-passos li.on')?.isSameNode(el.querySelectorAll('.wcp-passos li')[2])) return;
+      el.querySelectorAll('.wcp-cena').forEach(c => c.classList.toggle('on', c.dataset.c === '2'));
+      if (toque) { toque.style.left = '50%'; toque.style.top = '58%'; }
+    }, 1700);
+  }
+}
+
+function _wcpTourIniciar(deOnde) {
+  _wcpTourParar();
+  let i = typeof deOnde === 'number' ? deOnde : 0;
+  _wcpMostrarPasso(i);
+  _wcpTour = setInterval(() => { i = (i + 1) % _WCP_PASSOS.length; _wcpMostrarPasso(i); }, 3400);
+}
+function _wcpTourParar() { if (_wcpTour) { clearInterval(_wcpTour); _wcpTour = null; } }
+
+function waConectarPopupAbrir() {
+  if (document.getElementById('wcp')) return;
+  _wcpCss();
+  _wcpAbertoNestaSessao = true;
+  const el = document.createElement('div');
+  el.id = 'wcp';
+  el.innerHTML = `
+    <div class="wcp-card" role="dialog" aria-modal="true" aria-labelledby="wcp-titulo">
+      <button class="wcp-x" type="button" aria-label="Fechar" data-wcp="depois"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+      <div class="wcp-vit" aria-hidden="true">
+        <div class="wcp-fone"><div class="wcp-tela">${_wcpCenasHtml()}</div></div>
+        <div class="wcp-leg"></div>
+      </div>
+      <div class="wcp-info" id="wcp-info">${_wcpPainelInicialHtml()}</div>
+    </div>`;
+  el.addEventListener('click', ev => {
+    const alvo = ev.target.closest('[data-wcp]');
+    const acao = alvo?.dataset.wcp;
+    if (acao === 'conectar') _wcpConectar();
+    else if (acao === 'novo') _wcpConectar();
+    else if (acao === 'depois' || acao === 'concluir') waConectarPopupFechar();
+    else if (acao === 'nunca') { try { localStorage.setItem(_wcpChaveNunca(), '1'); } catch (e) {} waConectarPopupFechar(); sbToast('ok', 'Tudo bem. Para conectar depois, vá em Robô, na aba Conexão.'); }
+    else if (acao === 'passo') { _wcpTourIniciar(Number(alvo.dataset.i)); }
+  });
+  el.addEventListener('keydown', ev => { if (ev.key === 'Escape') waConectarPopupFechar(); });
+  document.body.appendChild(el);
+  _wcpTourIniciar(0);
+  setTimeout(() => el.querySelector('.wcp-btn')?.focus({ preventScroll: true }), 80);
+}
+
+function _wcpPainelInicialHtml() {
+  return `
+    <h2 id="wcp-titulo">Conecte o WhatsApp da sua loja</h2>
+    <p class="wcp-sub">Com o WhatsApp conectado, o robô responde seus clientes e as mensagens de pedido saem sozinhas. Leva menos de 1 minuto.</p>
+    <ol class="wcp-passos">${_WCP_PASSOS.map((p, i) => `<li data-wcp="passo" data-i="${i}" tabindex="0"><span class="wcp-n">${i + 1}</span><div><strong>${p.t}</strong><span>${p.d}</span></div></li>`).join('')}</ol>
+    <button class="wcp-btn" type="button" data-wcp="conectar"><svg width="19" height="19" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M9.5 9.5h1.5v1.5M13.5 9.5v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Conectar agora</button>
+    <div class="wcp-nota"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;margin-top:1px"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 7v4M8 4.8v.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Está usando o painel no mesmo celular do WhatsApp da loja? Abra o painel em um computador ou em outro celular para conseguir ler o código.</span></div>
+    ${_wcpRodapeHtml()}`;
+}
+function _wcpRodapeHtml() {
+  return `<div class="wcp-rodape"><button type="button" class="wcp-nunca" data-wcp="nunca">Não mostrar mais</button><button type="button" data-wcp="depois">Agora não</button></div>`;
+}
+
+async function _wcpConectar() {
+  const info = document.getElementById('wcp-info');
+  if (!info) return;
+  // celular fica na tela da câmera enquanto o QR Code está na tela
+  _wcpTourParar();
+  _wcpMostrarPasso(3);
+  info.innerHTML = `
+    <h2 id="wcp-titulo">Leia o QR Code com o WhatsApp da loja</h2>
+    <p class="wcp-sub">No celular: três pontinhos (ou Configurações no iPhone), Dispositivos conectados, Conectar dispositivo. Depois aponte a câmera para o código.</p>
+    <div class="wcp-qrbox">
+      <div class="wcp-qr" id="wcp-qr"><div class="wcp-gira" aria-label="Gerando o QR Code"></div></div>
+      <div class="wcp-espera" id="wcp-espera"><i></i>Gerando o código, pode levar até 20 segundos</div>
+    </div>
+    ${_wcpRodapeHtml()}`;
+  if (_wcpPoll) { clearInterval(_wcpPoll); _wcpPoll = null; }
+
+  // Loja que estava na conexão antiga passa a usar a nova (igual ao botão da aba Conexão)
+  if (_waTrocarAoConectar || _waProvider !== 'wuzapi') {
+    const ok = await waProviderChange('wuzapi');
+    if (!ok) { _wcpErro('Não foi possível preparar a conexão agora.'); return; }
+    _waTrocarAoConectar = false;
+  }
+  const r = await WUZ.req('POST', '/connect', {});
+  if (!document.getElementById('wcp')) return;
+  if (!r.ok) { _wcpErro('Não foi possível gerar o QR Code agora.', r); return; }
+  if (r.data?.status === 'connected') { _wcpSucesso(); return; }
+  if (r.data?.qr) _wcpMostrarQr(r.data.qr);
+
+  let tentativas = 0;
+  _wcpPoll = setInterval(async () => {
+    if (!document.getElementById('wcp')) { clearInterval(_wcpPoll); _wcpPoll = null; return; }
+    tentativas++;
+    const q = await WUZ.req('GET', '/qr');
+    if (q.data?.status === 'connected') { clearInterval(_wcpPoll); _wcpPoll = null; _wcpSucesso(); return; }
+    if (q.data?.qr) _wcpMostrarQr(q.data.qr);
+    if (tentativas > 45) { // ~3 minutos sem ler
+      clearInterval(_wcpPoll); _wcpPoll = null;
+      const box = document.getElementById('wcp-qr');
+      if (box) box.innerHTML = '<div style="font-size:13px;color:var(--muted,#64748b);padding:16px;text-align:center">O código expirou</div>';
+      const esp = document.getElementById('wcp-espera');
+      if (esp) esp.outerHTML = '<button type="button" class="wcp-link" data-wcp="novo">Gerar novo código</button>';
+    }
+  }, 4000);
+}
+
+function _wcpMostrarQr(src) {
+  const box = document.getElementById('wcp-qr');
+  if (!box) return;
+  const img = box.querySelector('img');
+  if (img) { if (img.src !== src) img.src = src; }
+  else box.innerHTML = `<img src="${src}" alt="QR Code para conectar o WhatsApp">`;
+  const esp = document.getElementById('wcp-espera');
+  if (esp && !esp.dataset.lendo) { esp.dataset.lendo = '1'; esp.innerHTML = '<i></i>Aguardando a leitura. O código se atualiza sozinho'; }
+}
+
+function _wcpErro(msg, r) {
+  const info = document.getElementById('wcp-info');
+  if (!info) return;
+  const det = (typeof _wuzDetalheErro === 'function' && r) ? _wuzDetalheErro(r) : '';
+  info.innerHTML = `
+    <h2 id="wcp-titulo">Não deu certo desta vez</h2>
+    <div class="wcp-erro">${msg} Tente de novo em instantes. Se continuar, fale com o suporte.${det}</div>
+    <button class="wcp-btn" type="button" data-wcp="novo" style="margin-top:18px">Tentar de novo</button>
+    ${_wcpRodapeHtml()}`;
+}
+
+function _wcpSucesso() {
+  const info = document.getElementById('wcp-info');
+  if (info) info.innerHTML = `
+    <div style="text-align:center;margin:auto 0">
+      <div class="wcp-ok"><svg width="34" height="34" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <h2 id="wcp-titulo" style="margin:10px auto 8px">WhatsApp conectado</h2>
+      <p class="wcp-sub" style="margin:0 auto 22px">O robô e as mensagens automáticas já estão funcionando pelo número da loja.</p>
+      <button class="wcp-btn" type="button" data-wcp="concluir">Concluir</button>
+    </div>`;
+  const leg = document.querySelector('#wcp .wcp-leg');
+  if (leg) leg.textContent = 'Pronto, conectado';
+  try { wuzCheckStatus(); } catch (e) {}
+  try { if (typeof iaAtivarTudoAoConectar === 'function') iaAtivarTudoAoConectar(); } catch (e) {}
+  sbToast('ok', 'WhatsApp conectado!');
+}
+
+function waConectarPopupFechar() {
+  _wcpTourParar();
+  if (_wcpPoll) { clearInterval(_wcpPoll); _wcpPoll = null; }
+  const el = document.getElementById('wcp');
+  if (el) { clearTimeout(el._sub); el.remove(); }
+}
+
+// ═══════════════════════════════════════
 // UPGRADE: PEDIDOS POR IA
 // O admin liga a oferta em Upgrade IA. Ela abre sozinha ao entrar no painel,
 // no máximo uma vez por dia e até o número de vezes que o admin escolheu.
@@ -1224,6 +1558,8 @@ async function avisosDoPainel() {
     const up = await upgradeIaInfo();
     if (up?.disponivel && up.mostrar && !document.getElementById('wa-aviso')) { upgradeIaMostrar(up, true); return; }
   } catch (e) {}
+  // WhatsApp desconectado: janela de conexão com tutorial (até "Não mostrar mais")
+  try { if (typeof waConectarPopupVerificar === 'function' && await waConectarPopupVerificar()) return; } catch (e) {}
   if (typeof avisoWhatsappVerificar === 'function') avisoWhatsappVerificar();
 }
 
