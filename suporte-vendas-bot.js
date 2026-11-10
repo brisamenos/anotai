@@ -175,7 +175,7 @@ async function sendButtons(phone, text, buttons, footer) {
 }
 
 async function sendList(phone, text, buttonText, sections, footer) {
-  const all = sections.flatMap(s => s.rows).slice(0, 10)
+  const all = sections.flatMap(s => s.rows).slice(0, 20)
   if (provider() === 'wuzapi') {
     try {
       const id = await wuzSend(phone, (t, to) => wuzapi.sendList(t, to, {
@@ -409,6 +409,14 @@ async function handleIncoming(list) {
     }
     // Admin respondeu pelo proprio WhatsApp → pausa o robo para esse contato
     if (m.fromMe) {
+      // /bloquear (ou /bloq) digitado por voce na conversa: o contato entra na lista negra
+      // e nao recebe mais nada automatico. /desbloquear desfaz. O comando some da conversa.
+      const cmd = !sentIds.has(m.id) ? String(m.text || '').trim().toLowerCase() : ''
+      if (/^\/(bloquear|bloqueia|bloqueio|bloq)$/.test(cmd) || /^\/desbloque(ar|ia|io)?$/.test(cmd)) {
+        comandoListaNegra(m.phone, m.id, !cmd.startsWith('/desbloq'))
+          .catch(e => D.log?.('⚠️', `Bot ${cmd} erro (${m.phone}): ${e.message}`))
+        continue
+      }
       // Fluxo de Marketing com "aceitar quando eu digitar" (palavra exata digitada por voce)
       if (!sentIds.has(m.id) && D.marketing?.onMessage({ ...m, paused: false }, { fromMe: true })) continue
       // Voce digitou so "/pix" na conversa → manda a chave + botao copiar para o cliente (sem pausar o robo)
@@ -419,6 +427,8 @@ async function handleIncoming(list) {
       if (!sentIds.has(m.id)) pause(m.phone)
       continue
     }
+    // Lista negra: contato bloqueado nao recebe menu, fluxo nem resposta automatica
+    if (estaBloqueado(m.phone)) continue
     // Fluxos de Marketing (palavra-chave / clique de botao). Retorna true se algum fluxo assumiu a mensagem.
     if (D.marketing?.onMessage({ ...m, paused: isPaused(m.phone) }, { fromMe: false })) continue
     if (isPaused(m.phone)) continue
@@ -430,6 +440,36 @@ async function handleIncoming(list) {
     if (!m.text && !m.choiceId && !m.hasImage) continue
     buffer(m)
   }
+}
+
+function estaBloqueado(phone) {
+  try { return !!D.marketing?.estaBloqueado?.(phone) } catch { return false }
+}
+
+async function comandoListaNegra(phone, msgId, bloquearContato) {
+  if (!D.marketing?.bloquear) { D.log?.('⚠️', 'Lista negra indisponível (módulo de Marketing não carregou)'); return }
+  if (bloquearContato) {
+    D.marketing.bloquear(phone, 'comando')
+    clearState(phone)
+    pause(phone)
+  } else {
+    D.marketing.desbloquear(phone)
+    try { D._pausaHumano.delete(pauseKey(phone)) } catch {}
+  }
+  // apaga o comando da conversa (para todos), para o contato nao ver
+  if (msgId && provider() === 'wuzapi') {
+    await wuzSend(phone, (t, to) => wuzapi.deleteMessage(t, to, msgId)).catch(e => D.log?.('⚠️', `Não consegui apagar o comando da conversa (${phone}): ${e.message}`))
+  }
+}
+
+// Comeca o atendimento de vendas (usado pelo botao "Saber mais" dos fluxos de Marketing):
+// pergunta o segmento, depois o nome do estabelecimento e o telefone, e avisa o atendente.
+async function iniciarVendas(phone, intro) {
+  try { D._pausaHumano.delete(pauseKey(phone)) } catch {}
+  setState(phone, { step: 'lead_segmento', origem: 'fluxo' })
+  const texto = String(intro || '').trim() ||
+    'Que bom que você quer saber mais! 🙌\nPara eu te mostrar como o *Estima Food* funciona no seu negócio, me conta: qual é o seu *tipo de estabelecimento*?'
+  return sendList(phone, texto, 'Escolher segmento', SEGMENTOS_SECOES)
 }
 
 // Junta mensagens rapidas (ex: "Oi" + "Boa tarde") numa resposta so
@@ -547,11 +587,18 @@ const SEGMENTOS = [
   { id: 'seg_hamburgueria', title: '🍔 Hamburgueria' },
   { id: 'seg_acai', title: '🍧 Açaí / Sorveteria' },
   { id: 'seg_marmitaria', title: '🍱 Marmitaria' },
+  { id: 'seg_salgaderia', title: '🥟 Salgaderia' },
+  { id: 'seg_churrascaria', title: '🍖 Churrascaria' },
   { id: 'seg_doceria', title: '🍰 Doceria / Confeitaria' },
   { id: 'seg_restaurante', title: '🍽️ Restaurante/Lanche' },
   { id: 'seg_acougue', title: '🥩 Açougue' },
   { id: 'seg_loja', title: '👕 Loja / Varejo' },
   { id: 'seg_outro', title: '✨ Outro' }
+]
+// WhatsApp aceita no maximo 10 linhas por secao da lista
+const SEGMENTOS_SECOES = [
+  { title: 'Alimentação', rows: SEGMENTOS.slice(0, 8) },
+  { title: 'Outros', rows: SEGMENTOS.slice(8) }
 ]
 
 // ==================== Fluxos ====================
@@ -849,7 +896,7 @@ async function processMsg(phone, text, choiceId, hasImage) {
     case 'v_assinar': {
       if (tenant) return oferecerRenovacao(phone, tenant)
       setState(phone, { step: 'lead_segmento' })
-      return sendList(phone, 'Show! 🙌 Para eu te atender melhor, qual é o seu *segmento*?', 'Escolher segmento', [{ title: 'Segmentos', rows: SEGMENTOS }])
+      return sendList(phone, 'Show! 🙌 Para eu te atender melhor, qual é o seu *segmento*?', 'Escolher segmento', SEGMENTOS_SECOES)
     }
     case 'a_pix':
       if (st?.step === 'renovar' && st.tenantId) return gerarPixRenovacao(phone, st.tenantId)
@@ -937,6 +984,7 @@ module.exports = {
   rememberSent,
   pausar: pause,
   despausar: phone => { try { D._pausaHumano.delete(pauseKey(phone)) } catch {} },
+  iniciarVendas,
   notificar: notifyAtendente,
   tenantByPhone,
   config: cfg,

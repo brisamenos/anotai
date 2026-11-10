@@ -67,6 +67,11 @@ function init(deps) {
       telefone TEXT PRIMARY KEY,
       created_at TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS mkt_bloqueados (
+      telefone TEXT PRIMARY KEY,
+      origem TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `)
   try { D.db.exec('ALTER TABLE mkt_flows ADD COLUMN grafo TEXT') } catch { /* coluna ja existe */ }
   D.db.exec(`
@@ -103,6 +108,46 @@ function n55(phone) {
   const n = String(phone || '').replace(/\D/g, '')
   if (!n) return ''
   return n.length <= 11 ? `55${n}` : n
+}
+
+// ── Lista negra ("bloqueados") ─────────────────────
+// Contato bloqueado não recebe NADA automático do WhatsApp de Suporte e Vendas:
+// nem menu do robô, nem fluxo, nem disparo. Você continua podendo falar com ele
+// pelo celular. Entra pelo botão "Bloquear" de um fluxo, pelo comando /bloquear
+// digitado por você na conversa, ou pelo painel (Marketing > Lista negra).
+// Guarda o número com 55; confere também a versão com/sem o 9 do celular.
+function variantesTel(tel) {
+  const t = n55(tel)
+  if (!t) return []
+  const v = new Set([t])
+  if (t.startsWith('55') && t.length === 13 && t[4] === '9') v.add(t.slice(0, 4) + t.slice(5))
+  if (t.startsWith('55') && t.length === 12) v.add(t.slice(0, 4) + '9' + t.slice(4))
+  return [...v]
+}
+function estaBloqueado(tel) {
+  try {
+    const vs = variantesTel(tel)
+    if (!vs.length) return false
+    return !!D.db.prepare(`SELECT 1 FROM mkt_bloqueados WHERE telefone IN (${vs.map(() => '?').join(',')}) LIMIT 1`).get(...vs)
+  } catch { return false }
+}
+function bloquear(tel, origem) {
+  const t = n55(tel)
+  if (!t || t.length < 12) throw new Error('Telefone inválido')
+  D.db.prepare('INSERT OR REPLACE INTO mkt_bloqueados (telefone, origem) VALUES (?, ?)').run(t, String(origem || 'painel').slice(0, 30))
+  try { limparAguardo(t) } catch {}
+  D.log?.('🚫', `Lista negra: ${t} bloqueado (${origem || 'painel'})`)
+  return t
+}
+function desbloquear(tel) {
+  const vs = variantesTel(tel)
+  if (!vs.length) return 0
+  const r = D.db.prepare(`DELETE FROM mkt_bloqueados WHERE telefone IN (${vs.map(() => '?').join(',')})`).run(...vs)
+  if (r.changes) D.log?.('✅', `Lista negra: ${n55(tel)} desbloqueado`)
+  return r.changes
+}
+function listarBloqueados() {
+  return D.db.prepare('SELECT telefone, origem, created_at FROM mkt_bloqueados ORDER BY created_at DESC LIMIT 2000').all()
 }
 
 const norm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
@@ -314,8 +359,8 @@ function carregarMidia(ref, tipo) {
 // ==================== Validacao / normalizacao do fluxo (grafo) ====================
 
 const TIPOS_MSG = ['texto', 'imagem', 'video', 'audio', 'documento', 'botoes', 'lista', 'carrossel', 'espera']
-const TIPOS_NO = [...TIPOS_MSG, 'aguardar', 'condicao', 'definir_var', 'notificar', 'pausar_robo', 'chamar_fluxo']
-const NOME_NO = { gatilho: 'Gatilho', texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', audio: 'Áudio', documento: 'Documento', botoes: 'Botões', lista: 'Lista', carrossel: 'Carrossel', espera: 'Espera', aguardar: 'Aguardar resposta', condicao: 'Condição', definir_var: 'Definir variável', notificar: 'Notificar atendente', pausar_robo: 'Pausar robô', chamar_fluxo: 'Chamar outro fluxo' }
+const TIPOS_NO = [...TIPOS_MSG, 'aguardar', 'condicao', 'definir_var', 'notificar', 'pausar_robo', 'chamar_fluxo', 'bloquear', 'vendas']
+const NOME_NO = { gatilho: 'Gatilho', texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', audio: 'Áudio', documento: 'Documento', botoes: 'Botões', lista: 'Lista', carrossel: 'Carrossel', espera: 'Espera', aguardar: 'Aguardar resposta', condicao: 'Condição', definir_var: 'Definir variável', notificar: 'Notificar atendente', pausar_robo: 'Pausar robô', chamar_fluxo: 'Chamar outro fluxo', bloquear: 'Bloquear contato', vendas: 'Atendimento de vendas' }
 const OPS = ['igual', 'contem', 'comeca', 'termina', 'regex', 'numero', 'email', 'telefone', 'maior', 'menor', 'vazio', 'preenchido']
 const ENTRADAS = ['texto', 'numero', 'email', 'telefone']
 const str = (v, max) => String(v ?? '').trim().slice(0, max)
@@ -390,6 +435,8 @@ function sanitizarCfg(tipo, c = {}) {
       return { texto: str(c.texto, 1000) }
     case 'chamar_fluxo':
       return { fluxo: parseInt(c.fluxo, 10) || null }
+    case 'vendas':
+      return { texto: str(c.texto, 1000) }
     default:
       return {}
   }
@@ -416,6 +463,7 @@ function portasDe(tipo, cfg = {}) {
     case 'aguardar': return [{ id: 'out', label: 'Resposta recebida' }, { id: 'timeout', label: 'Sem resposta' }]
     case 'condicao': return [...(cfg.casos || []).map((k, i) => ({ id: 'c' + i, label: `${k.variavel} ${k.op} ${k.valor}`.trim() })), { id: 'else', label: 'Senão' }]
     case 'chamar_fluxo': return []
+    case 'vendas': return []
     case 'gatilho': return [{ id: 'out', label: 'Início' }]
     default: return [{ id: 'out', label: 'Próximo' }]
   }
@@ -1011,6 +1059,14 @@ async function executarNo(flow, g, no, tel, ctx, prof) {
     case 'pausar_robo':
       D.bot.pausar(tel)
       return { porta: 'out' }
+    case 'bloquear':
+      bloquear(tel, 'fluxo')
+      return { porta: 'out' }
+    case 'vendas':
+      // Passa para o atendimento de vendas do robô: pergunta o segmento, o nome do
+      // estabelecimento e o telefone, e avisa o atendente com o lead
+      await D.bot.iniciarVendas(tel, aplicarVars(c.texto || '', ctx.vars))
+      return { fim: true }
     case 'chamar_fluxo': {
       const alvo = obterFluxo(c.fluxo)
       if (!alvo) throw new Error('O fluxo chamado não existe mais')
@@ -1075,6 +1131,10 @@ function fluxoVivo(id, tel) {
 }
 
 async function executarFluxo(flow, tel, { origem = 'palavra', nome = '', rodape = '', pushName = '', vars = null } = {}) {
+  if (origem !== 'meu_envio' && origem !== 'teste' && estaBloqueado(tel)) {
+    registrarLog(flow.id, tel, origem, 'erro', 'contato na lista negra')
+    return
+  }
   if (origem === 'teste') testes.set(`${flow.id}:${tel}`, Date.now())
   await rodar(flow, tel, origem, async () => {
     limparAguardo(tel)
@@ -1175,6 +1235,7 @@ function onMessage(m, { fromMe = false } = {}) {
   try {
     if (!D || !m?.phone) return false
     const tel = n55(m.phone)
+    if (!fromMe && estaBloqueado(tel)) return true // lista negra: ninguém responde
     if (!fromMe && m.pushName) { nomesPush.set(tel, m.pushName); if (nomesPush.size > 5000) nomesPush.delete(nomesPush.keys().next().value) }
     const texto = norm(m.choiceId || m.text)
     if (!texto && !m.choiceId) return false
@@ -1429,7 +1490,7 @@ function contatosDoPublico(publico, texto) {
     for (const r of rows) add(r.telefone_cobranca || r.store_whatsapp, r.nome)
   }
   const optout = new Set(D.db.prepare('SELECT telefone FROM mkt_optout').all().map(r => r.telefone))
-  return [...mapa].filter(([t]) => !optout.has(t)).map(([telefone, nome]) => ({ telefone, nome }))
+  return [...mapa].filter(([t]) => !optout.has(t) && !estaBloqueado(t)).map(([telefone, nome]) => ({ telefone, nome }))
 }
 
 function criarDisparo({ flowId, publico, telefones, intMin, intMax, descadastro }) {
@@ -1506,6 +1567,10 @@ async function rodarDisparo(d) {
 
     if (D.db.prepare('SELECT 1 FROM mkt_optout WHERE telefone=?').get(item.telefone)) {
       D.db.prepare("UPDATE mkt_disparo_itens SET status='ignorado', erro='descadastrado' WHERE id=?").run(item.id)
+      continue
+    }
+    if (estaBloqueado(item.telefone)) {
+      D.db.prepare("UPDATE mkt_disparo_itens SET status='ignorado', erro='lista negra' WHERE id=?").run(item.id)
       continue
     }
     try {
@@ -1601,6 +1666,17 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
       const c = contatosDoPublico(body?.publico, body?.telefones)
       send(res, 200, { total: c.length, amostra: c.slice(0, 5) }); return true
     }
+    if (met === 'GET' && sub === '/bloqueados') {
+      send(res, 200, { bloqueados: listarBloqueados() }); return true
+    }
+    if (met === 'POST' && sub === '/bloqueados') {
+      const body = await readBody(req)
+      send(res, 200, { ok: true, telefone: bloquear(body?.telefone, 'painel') }); return true
+    }
+    if (met === 'POST' && sub === '/bloqueados/remover') {
+      const body = await readBody(req)
+      send(res, 200, { ok: true, removidos: desbloquear(body?.telefone) }); return true
+    }
     if (met === 'GET' && sub === '/disparos') {
       send(res, 200, { disparos: listarDisparos() }); return true
     }
@@ -1664,6 +1740,7 @@ const canalFluxosAtivo = () => { try { return D.bot.provider() === 'wuzapi' } ca
 
 module.exports = {
   init, api, onMessage, naoCliente, atalhoMenu,
+  estaBloqueado, bloquear, desbloquear, listarBloqueados,
   executarFluxoId, canalFluxosAtivo, listarFluxos, obterFluxo, salvarFluxo, definirAtivo, salvarMidia,
   // uteis para testes
   _internals: { definirInicio, ligarParaUso, varrerTimeouts, sanitizarFluxo, sanitizarGrafo, passosParaGrafo, portasDe, problemas, casaGatilho, aplicarVars, norm, contatosDoPublico, executarFluxo, obterFluxo, salvarFluxo, criarDisparo, iniciarWorker, salvarMidia, definirAtivo, lerConfigNaoCliente, salvarConfigNaoCliente, situacaoNaoCliente, salvarMenuRobo, situacaoMenuRobo }

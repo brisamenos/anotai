@@ -142,6 +142,11 @@ async function sendText(token, phone, text) {
   return data?.Id || null;
 }
 
+// Apaga para todos uma mensagem que VOCÊ enviou (ex.: o comando /bloquear digitado na conversa)
+async function deleteMessage(token, phone, id) {
+  return wzFetch('/chat/delete', { method: 'POST', token, body: { Phone: phone, Id: id } });
+}
+
 // image (opcional): data URL ("data:image/jpeg;base64,...") ou URL http(s) publica; vira a foto no topo
 // imageDataUrl: "data:image/png;base64,..." (ex: QR Code do Pix)
 async function sendImage(token, phone, imageDataUrl, caption) {
@@ -297,6 +302,7 @@ module.exports = {
   isConfigured,
   createUser,
   listUsers,
+  deleteMessage,
   deleteUser,
   tokenInvalido,
   checkUsers,

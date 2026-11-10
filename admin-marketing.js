@@ -182,6 +182,7 @@
         <button class="mk-tab on" data-tab="fluxos" onclick="MKUI.aba('fluxos')">Fluxos</button>
         <button class="mk-tab" data-tab="disparos" onclick="MKUI.aba('disparos')">Disparos</button>
         <button class="mk-tab" data-tab="logs" onclick="MKUI.aba('logs')">Registro</button>
+        <button class="mk-tab" data-tab="bloqueados" onclick="MKUI.aba('bloqueados')">Lista negra</button>
       </div>
       <div id="mk-body"></div>
 
@@ -235,6 +236,41 @@
     if (nome === 'fluxos') renderFluxos();
     if (nome === 'disparos') { renderDisparos(); carregarDisparos(true); }
     if (nome === 'logs') { renderLogs(); carregarLogs(); }
+    if (nome === 'bloqueados') { renderBloqueados(); carregarBloqueados(); }
+  }
+
+  // ── Lista negra ────────────────────────────────────
+  async function carregarBloqueados() {
+    try { MK.bloqueados = (await req('GET', '/bloqueados')).bloqueados || []; } catch (e) { toast('err', e.message); }
+    if (MK.tab === 'bloqueados') renderBloqueados();
+  }
+  function renderBloqueados() {
+    const el = $('mk-body');
+    if (!el || MK.tab !== 'bloqueados') return;
+    const lista = MK.bloqueados || [];
+    const origem = { fluxo: 'Tocou em Bloquear', comando: 'Você digitou /bloquear', painel: 'Adicionado no painel' };
+    const fone = t => { const d = String(t || ''); return d.length >= 12 ? `(${d.slice(2, 4)}) ${d.slice(4, -4)}-${d.slice(-4)}` : d; };
+    el.innerHTML = `
+      <div class="mk-sub" style="margin-bottom:14px">
+        <div class="form-hint" style="margin-bottom:10px">Quem está aqui não recebe nada automático do WhatsApp de Suporte e Vendas: nem menu do robô, nem fluxo, nem disparo. Você continua podendo conversar com a pessoa pelo celular.<br>Para bloquear direto na conversa, digite <b>/bloquear</b>. Para liberar de novo, digite <b>/desbloquear</b>. O comando é apagado da conversa sozinho.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input class="minput" id="mk-bl-fone" type="text" inputmode="tel" placeholder="DDD + número, ex: 88999998888" style="flex:1;min-width:200px" oninput="this.value=this.value.replace(/\D/g,'').slice(0,13)">
+          <button class="btn bp bsm" onclick="MKUI.bloquearNumero()">Bloquear número</button>
+        </div>
+      </div>
+      ${lista.length ? '<div class="mk-tw"><table class="mk-tbl"><thead><tr><th>Contato</th><th>Como entrou</th><th>Desde (UTC)</th><th></th></tr></thead><tbody>' +
+        lista.map(b => `<tr><td>${esc(fone(b.telefone))}</td><td>${esc(origem[b.origem] || b.origem || '-')}</td><td>${esc(b.created_at)}</td>
+          <td style="text-align:right"><button class="btn bg2 bsm" onclick="MKUI.desbloquearNumero('${esc(b.telefone)}')">Desbloquear</button></td></tr>`).join('') +
+        '</tbody></table></div>' : '<div class="mk-empty">Nenhum contato bloqueado.</div>'}`;
+  }
+  async function bloquearNumero() {
+    const tel = ($('mk-bl-fone')?.value || '').trim();
+    if (tel.replace(/\D/g, '').length < 10) { toast('err', 'Digite o número com DDD'); return; }
+    try { await req('POST', '/bloqueados', { telefone: tel }); toast('ok', 'Contato bloqueado'); await carregarBloqueados(); } catch (e) { toast('err', e.message); }
+  }
+  async function desbloquearNumero(tel) {
+    if (!confirm('Desbloquear este contato? Ele volta a receber o menu do robô e os fluxos.')) return;
+    try { await req('POST', '/bloqueados/remover', { telefone: tel }); toast('ok', 'Contato desbloqueado'); await carregarBloqueados(); } catch (e) { toast('err', e.message); }
   }
 
   // ── Lista de fluxos ────────────────────────────────
@@ -245,7 +281,7 @@
     return `Quando a mensagem ${modo}: ` + (g.palavras || []).map(p => `<b>${esc(p)}</b>`).join(', ');
   }
 
-  const TIPO_NOME = { texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', audio: 'Áudio', documento: 'Documento', botoes: 'Botões', lista: 'Lista', carrossel: 'Carrossel', espera: 'Espera', aguardar: 'Aguardar', condicao: 'Condição', definir_var: 'Variável', notificar: 'Notificar', pausar_robo: 'Pausar robô', chamar_fluxo: 'Outro fluxo' };
+  const TIPO_NOME = { texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', audio: 'Áudio', documento: 'Documento', botoes: 'Botões', lista: 'Lista', carrossel: 'Carrossel', espera: 'Espera', aguardar: 'Aguardar', condicao: 'Condição', definir_var: 'Variável', notificar: 'Notificar', pausar_robo: 'Pausar robô', chamar_fluxo: 'Outro fluxo', bloquear: 'Bloquear', vendas: 'Vendas' };
 
   // ── Lista de fluxos: palavra-chave e liga/desliga direto no cartão ──
   // Regra única: fluxo ligado + palavra-chave = dispara, seja o cliente ou você quem enviou a
@@ -591,7 +627,26 @@
     ]);
     return d;
   };
+  // /publi: você digita na conversa; vai o vídeo + texto com os botões Saber mais e Bloquear
+  const publi = () => {
+    const d = novoDraft();
+    d.nome = 'Comando /publi';
+    d.gatilho = { tipo: 'palavra', palavras: ['/publi'], modo: 'exata', publico: 'todos' };
+    d.opcoes = { presenca: true, ignorar_pausa: true, pausar_robo: false, aceita_meu_envio: true, cooldown: 15 };
+    d.grafo = G([
+      { id: 'n1', tipo: 'video', x: 380, y: 140, cfg: { midia: '', nome: '', legenda: '' } },
+      { id: 'n2', tipo: 'botoes', x: 740, y: 140, cfg: { texto: '{{saudacao}}, {{primeiro_nome|tudo bem}}! 👋\n\nSua loja ainda perde pedido no WhatsApp por demora pra responder?\n\nCom o *Estima Food*, a inteligência artificial atende seus clientes 24 horas, entende texto e áudio, monta o pedido e manda direto pro seu painel, com a comanda já impressa.\n\nQuer saber como funciona na sua loja?', rodape: 'Estima Food', midia: '', nome: '', botoes: [{ tipo: 'resposta', titulo: 'Saber mais', valor: 'saber mais' }, { tipo: 'resposta', titulo: 'Bloquear', valor: 'bloquear' }] } },
+      { id: 'n3', tipo: 'vendas', x: 1120, y: 40, cfg: { texto: 'Que bom que você quer saber mais! 🙌\nPara eu te mostrar como o *Estima Food* funciona no seu negócio, me conta: qual é o seu *tipo de estabelecimento*?' } },
+      { id: 'n4', tipo: 'texto', x: 1120, y: 320, cfg: { texto: 'Tudo bem, obrigado pelo contato! 🙏 Você não vai mais receber nossas mensagens.' } },
+      { id: 'n5', tipo: 'bloquear', x: 1480, y: 320, cfg: {} }
+    ], [
+      { de: 'inicio', porta: 'out', para: 'n1' }, { de: 'n1', porta: 'out', para: 'n2' },
+      { de: 'n2', porta: 'b0', para: 'n3' }, { de: 'n2', porta: 'b1', para: 'n4' }, { de: 'n4', porta: 'out', para: 'n5' }
+    ]);
+    return d;
+  };
   const MODELOS = [
+    ['Comando /publi (vídeo, Saber mais e Bloquear)', 'Você digita /publi na conversa e vai o vídeo com o texto da propaganda. "Saber mais" começa o atendimento de vendas (tipo de estabelecimento, nome e telefone). "Bloquear" agradece e coloca o contato na lista negra.', publi],
     ['Em branco', 'Começar do zero, com um texto de boas-vindas.', () => novoDraft()],
     ['Catálogo em carrossel', 'Vários cartões em sequência, cada um com imagem, texto e botões que seguem caminhos diferentes.', carrossel],
     ['Botão "Saber mais" com ramificação', 'Exemplo pronto: cada botão segue por um caminho diferente. Use como base para montar seus próprios caminhos.', saberMais],
@@ -1034,7 +1089,7 @@
 
   // ── API publica da aba ─────────────────────────────
   window.MKUI = {
-    init, aba, novo, modelo, editar, ativar, duplicar, excluir,
+    init, aba, novo, modelo, editar, ativar, duplicar, excluir, bloquearNumero, desbloquearNumero,
     testar, enviarTeste, disparar, dispPub, dispPrevia, confirmarDisparo, disp, fecharSmall,
     req, fluxos: () => MK.fluxos, recarregar,
     importar, exportar, impArquivos, impSoltar: soltar, impValor, impFechar, impConfirmar,

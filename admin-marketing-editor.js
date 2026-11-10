@@ -14,12 +14,12 @@
   const ED = { d: null, sel: null, v: { x: 40, y: 40, z: 1 }, arm: null, drag: null, ptrs: new Map(), pinch: null, blobs: {}, lixo: new Set(), seq: 0, sujo: false, ultimoCampo: null };
 
   // ── Definicao dos nos ──────────────────────────────
-  const NOME = { gatilho: 'Gatilho', texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', audio: 'Áudio', documento: 'Documento', botoes: 'Botões', lista: 'Lista', carrossel: 'Carrossel', espera: 'Espera', aguardar: 'Aguardar resposta', condicao: 'Condição', definir_var: 'Definir variável', notificar: 'Notificar atendente', pausar_robo: 'Pausar robô', chamar_fluxo: 'Chamar outro fluxo' };
-  const CAT = { gatilho: 'g', texto: 'm', imagem: 'm', video: 'm', audio: 'm', documento: 'm', botoes: 'm', lista: 'm', carrossel: 'm', espera: 'l', aguardar: 'l', condicao: 'l', definir_var: 'l', notificar: 'a', pausar_robo: 'a', chamar_fluxo: 'a' };
+  const NOME = { gatilho: 'Gatilho', texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', audio: 'Áudio', documento: 'Documento', botoes: 'Botões', lista: 'Lista', carrossel: 'Carrossel', espera: 'Espera', aguardar: 'Aguardar resposta', condicao: 'Condição', definir_var: 'Definir variável', notificar: 'Notificar atendente', pausar_robo: 'Pausar robô', chamar_fluxo: 'Chamar outro fluxo', bloquear: 'Bloquear contato', vendas: 'Atendimento de vendas' };
+  const CAT = { gatilho: 'g', texto: 'm', imagem: 'm', video: 'm', audio: 'm', documento: 'm', botoes: 'm', lista: 'm', carrossel: 'm', espera: 'l', aguardar: 'l', condicao: 'l', definir_var: 'l', notificar: 'a', pausar_robo: 'a', chamar_fluxo: 'a', bloquear: 'a', vendas: 'a' };
   const GRUPOS = [
     ['Mensagens', ['texto', 'imagem', 'video', 'audio', 'documento', 'botoes', 'lista', 'carrossel']],
     ['Lógica', ['aguardar', 'condicao', 'espera', 'definir_var']],
-    ['Ações', ['notificar', 'pausar_robo', 'chamar_fluxo']]
+    ['Ações', ['notificar', 'pausar_robo', 'chamar_fluxo', 'vendas', 'bloquear']]
   ];
   const OPS = [['igual', 'é igual a'], ['contem', 'contém'], ['comeca', 'começa com'], ['termina', 'termina com'], ['regex', 'combina com regex'], ['numero', 'é um número'], ['email', 'é um e-mail'], ['telefone', 'é um telefone'], ['maior', 'é maior que'], ['menor', 'é menor que'], ['vazio', 'está vazio'], ['preenchido', 'está preenchido']];
   const OPS_SEM_VALOR = ['numero', 'email', 'telefone', 'vazio', 'preenchido'];
@@ -43,7 +43,9 @@
     definir_var: () => ({ variavel: 'valor', valor: '' }),
     notificar: () => ({ texto: 'Novo contato: {{nome}} ({{telefone}})' }),
     pausar_robo: () => ({}),
-    chamar_fluxo: () => ({ fluxo: null })
+    chamar_fluxo: () => ({ fluxo: null }),
+    vendas: () => ({ texto: '' }),
+    bloquear: () => ({})
   };
 
   // Saidas de cada no (mesma regra do servidor)
@@ -61,6 +63,7 @@
       case 'aguardar': return [{ id: 'out', label: 'Resposta recebida' }, { id: 'timeout', label: 'Sem resposta' }];
       case 'condicao': return [...(cfg.casos || []).map((k, i) => ({ id: 'c' + i, label: rotuloCaso(k) })), { id: 'else', label: 'Senão' }];
       case 'chamar_fluxo': return [];
+      case 'vendas': return [];
       case 'gatilho': return [{ id: 'out', label: 'Início' }];
       default: return [{ id: 'out', label: 'Próximo' }];
     }
@@ -90,6 +93,8 @@
       case 'definir_var': return `{{${c.variavel}}} = ${cortar(c.valor, 60)}`;
       case 'notificar': return cortar(c.texto, 100);
       case 'pausar_robo': return 'Passa a conversa para o atendimento humano';
+      case 'vendas': return 'Pergunta o tipo de estabelecimento, o nome e o telefone, e avisa o atendente';
+      case 'bloquear': return 'Coloca o contato na lista negra: não recebe mais nada automático';
       case 'chamar_fluxo': { const f = MKUI.fluxos().find(x => x.id === c.fluxo); return f ? 'Fluxo: ' + f.nome : 'Escolha o fluxo'; }
     }
     return '';
@@ -713,6 +718,11 @@
         return `<div class="form-hint" style="margin-bottom:8px">Envia este aviso ao WhatsApp do atendente (configurado em Saques PIX, card "WhatsApp de Suporte e Vendas"). O cliente não vê.</div>${txa(P + 'texto', c.texto, 'Ex: Lead quente: {{nome}} ({{telefone}})')}${chips()}`;
       case 'pausar_robo':
         return `<div class="form-hint">Pausa o robô de atendimento nesta conversa por 30 minutos, para você ou sua equipe assumir. Nada é enviado ao cliente.</div>`;
+      case 'vendas':
+        return `<div class="form-hint" style="margin-bottom:8px">Passa a conversa para o atendimento de vendas do robô: ele pergunta o tipo de estabelecimento (pizzaria, salgaderia, churrascaria...), o nome e o telefone, e avisa o atendente com o novo interessado. Este caminho termina aqui.</div>
+          <label class="form-label">Primeira mensagem <span style="color:var(--muted);font-weight:400">(opcional)</span></label>${txa(P + 'texto', c.texto, 'Se ficar vazio: Que bom que você quer saber mais! Qual é o seu tipo de estabelecimento?')}${chips()}`;
+      case 'bloquear':
+        return `<div class="form-hint">Coloca o contato na <b>lista negra</b>: ele não recebe mais menu do robô, fluxos nem disparos. Nada é enviado ao cliente; se quiser agradecer, coloque um Texto antes deste nó. Para tirar da lista, use Marketing &gt; Lista negra ou digite /desbloquear na conversa.</div>`;
       case 'chamar_fluxo':
         return `<label class="form-label">Fluxo a executar</label><select class="minput" data-k="${P}fluxo" onchange="MKED.in(this,'no')"><option value="">Escolha...</option>${MKUI.fluxos().filter(f => f.id !== ED.d.id).map(f => `<option value="${f.id}" ${c.fluxo === f.id ? 'selected' : ''}>${esc(f.nome)}</option>`).join('')}</select>
           <div class="form-hint">Passa a conversa para o começo do outro fluxo. Este caminho termina aqui.</div>`;
