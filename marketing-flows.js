@@ -238,7 +238,8 @@ function montarVars(tel, extra = {}) {
 
 const MIDIA_TIPOS = {
   imagem:    { exts: { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }, max: 10 * 1024 * 1024 },
-  video:     { exts: { mp4: 'video/mp4', mov: 'video/quicktime', '3gp': 'video/3gpp', webm: 'video/webm' }, max: 32 * 1024 * 1024 },
+  // vídeo: aceita qualquer tamanho (até 1 GB); o servidor reduz para 720p antes de usar
+  video:     { exts: { mp4: 'video/mp4', mov: 'video/quicktime', '3gp': 'video/3gpp', webm: 'video/webm', m4v: 'video/mp4', mkv: 'video/x-matroska' }, max: 1024 * 1024 * 1024 },
   audio:     { exts: { ogg: 'audio/ogg', opus: 'audio/ogg', mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', webm: 'audio/webm' }, max: 16 * 1024 * 1024 },
   documento: { exts: { pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', txt: 'text/plain', csv: 'text/csv', zip: 'application/zip' }, max: 32 * 1024 * 1024 }
 }
@@ -288,6 +289,55 @@ function lerBinario(req, limite) {
     req.on('end', () => ok(Buffer.concat(partes)))
     req.on('error', err)
   })
+}
+
+// Vídeo de qualquer tamanho: vai do upload direto para o disco e, com ffmpeg, é reduzido
+// para 720p (H.264 + AAC). Assim o WhatsApp recebe um arquivo leve e o envio não trava.
+function gravarUploadNoDisco(req, destino, limite) {
+  return new Promise((ok, err) => {
+    const hash = crypto.createHash('sha256'); let total = 0, falhou = false
+    const out = fs.createWriteStream(destino)
+    const fim = e => { if (falhou) return; falhou = true; try { out.destroy() } catch {} try { fs.unlinkSync(destino) } catch {} err(e) }
+    req.on('data', c => {
+      total += c.length
+      if (total > limite) { req.unpipe(out); req.resume(); return fim(new Error(`Arquivo grande demais (máximo ${Math.round(limite / 1048576)} MB)`)) }
+      hash.update(c)
+    })
+    req.on('error', fim); out.on('error', fim)
+    out.on('finish', () => { if (!falhou) ok({ total, hash: hash.digest('hex').slice(0, 16) }) })
+    req.pipe(out)
+  })
+}
+async function salvarVideoGrande(req, nome) {
+  const cfgTipo = MIDIA_TIPOS.video
+  const ext = path.extname(String(nome || '')).slice(1).toLowerCase()
+  if (!cfgTipo.exts[ext]) throw new Error(`Formato .${ext || '?'} não aceito para vídeo. Aceitos: ${Object.keys(cfgTipo.exts).join(', ')}`)
+  const dir = pastaMidia()
+  const tmp = path.join(dir, `up_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`)
+  const { total, hash } = await gravarUploadNoDisco(req, tmp, cfgTipo.max)
+  if (!total) { try { fs.unlinkSync(tmp) } catch {} throw new Error('Arquivo vazio') }
+  let arquivo = `${hash}.mp4`, fpath = path.join(dir, arquivo), aviso = null, convertido = false
+  if (temFfmpeg()) {
+    const saida = path.join(dir, `${hash}.tmp.mp4`)
+    try {
+      await exec('ffmpeg', ['-y', '-i', tmp,
+        '-vf', "scale='if(gt(iw,ih),min(1280,iw),-2)':'if(gt(iw,ih),-2,min(1280,ih))',fps=30",
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '28', '-pix_fmt', 'yuv420p', '-profile:v', 'main',
+        '-c:a', 'aac', '-b:a', '96k', '-ac', '2', '-movflags', '+faststart', saida], 15 * 60 * 1000)
+      fs.renameSync(saida, fpath); fs.unlinkSync(tmp); convertido = true
+    } catch (e) {
+      try { fs.unlinkSync(saida) } catch {}
+      D.log?.('⚠️', `Marketing: não consegui reduzir o vídeo (${e.message}); vai como está`)
+      arquivo = `${hash}.${ext}`; fpath = path.join(dir, arquivo); fs.renameSync(tmp, fpath)
+      aviso = 'Não consegui reduzir o vídeo; ele será enviado como está e pode demorar.'
+    }
+  } else {
+    arquivo = `${hash}.${ext}`; fpath = path.join(dir, arquivo); fs.renameSync(tmp, fpath)
+    if (total > 64 * 1048576) aviso = 'O servidor não tem ffmpeg para reduzir o vídeo; um arquivo tão grande pode falhar no envio pelo WhatsApp.'
+  }
+  const bytes = fs.statSync(fpath).size
+  D.log?.('🎬', `Marketing: vídeo recebido (${(total / 1048576).toFixed(1)} MB${convertido ? ` → ${(bytes / 1048576).toFixed(1)} MB em 720p` : ''})`)
+  return { arquivo, nome: String(nome || '').slice(0, 120), tipo: 'video', bytes, segundos: 0, convertido, aviso }
 }
 
 async function salvarMidia({ nome, dados, tipo, buffer }) {
@@ -1700,10 +1750,13 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
         const q = new URL(req.url, 'http://x').searchParams
         // arquivo grande demais: responde com a mensagem em vez de derrubar a conexão (que virava erro 502)
         const tam = parseInt(req.headers['content-length'], 10) || 0
-        const lim = (MIDIA_TIPOS[q.get('tipo')] || {}).max || 32 * 1024 * 1024
+        const lim = q.get('tipo') === 'video' ? MIDIA_TIPOS.video.max : (MIDIA_TIPOS[q.get('tipo')] || {}).max || 32 * 1024 * 1024
         if (tam > lim) {
           req.resume()
           send(res, 413, { error: `o arquivo tem ${(tam / 1048576).toFixed(1).replace('.', ',')} MB e o máximo é ${Math.round(lim / 1048576)} MB` }); return true
+        }
+        if (q.get('tipo') === 'video') {
+          send(res, 200, { ok: true, ...(await salvarVideoGrande(req, q.get('nome'))) }); return true
         }
         const buffer = await lerBinario(req, 40 * 1024 * 1024)
         send(res, 200, { ok: true, ...(await salvarMidia({ nome: q.get('nome'), tipo: q.get('tipo'), buffer })) }); return true

@@ -21,7 +21,7 @@ function isConfigured() {
   return Boolean(BASE_URL && ADMIN_TOKEN);
 }
 
-async function wzFetch(path, { method = 'GET', body, token, admin = false } = {}) {
+async function wzFetch(path, { method = 'GET', body, token, admin = false, timeoutMs = 30000 } = {}) {
   if (!isConfigured()) {
     throw new Error('WuzAPI não configurada (defina WUZAPI_URL e WUZAPI_ADMIN_TOKEN no .env)');
   }
@@ -34,7 +34,7 @@ async function wzFetch(path, { method = 'GET', body, token, admin = false } = {}
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(30000)
+    signal: AbortSignal.timeout(timeoutMs)
   }).catch(err => {
     throw new Error(err.name === 'TimeoutError' ? 'a WuzAPI demorou demais para responder' : `não consegui acessar a WuzAPI (${err.message})`);
   });
@@ -250,7 +250,8 @@ async function getContacts(token) {
 
 // video: data URL ("data:video/mp4;base64,...") ou URL http(s) publica
 async function sendVideo(token, phone, video, caption) {
-  const data = await wzFetch('/chat/send/video', { method: 'POST', token, body: { Phone: phone, Video: video, Caption: caption || '' } });
+  // vídeo leva mais tempo para subir ao WhatsApp: espera até 3 minutos
+  const data = await wzFetch('/chat/send/video', { method: 'POST', token, body: { Phone: phone, Video: video, Caption: caption || '' }, timeoutMs: 180000 });
   return data?.Id || null;
 }
 

@@ -902,7 +902,8 @@
       const h = adminAuthHeader();
       Object.keys(h).forEach(k => { if (k.toLowerCase() !== 'content-type') x.setRequestHeader(k, h[k]); });
       x.setRequestHeader('Content-Type', 'application/octet-stream');
-      x.timeout = 300000;
+      x.timeout = tipo === 'video' ? 0 : 300000; // vídeo grande pode demorar: sem limite de tempo
+      x.upload.onload = () => { if (tipo === 'video') statusUpload('Vídeo enviado. Reduzindo para 720p no servidor, aguarde...'); };
       x.upload.onprogress = ev => { if (ev.lengthComputable) statusUpload(`Enviando ${file.name}... ${Math.round(ev.loaded / ev.total * 100)}%`); };
       x.onload = () => {
         let d = {}; try { d = JSON.parse(x.responseText); } catch (_) {}
@@ -934,7 +935,7 @@
         toast('ok', 'Enviando arquivo...');
         if (tipo === 'imagem') file = await reduzImagem(file);
         // confere o tamanho antes de enviar (mesmo limite do servidor)
-        const LIM = { imagem: 10, video: 32, audio: 16, documento: 32 }[tipo] || 32;
+        const LIM = { imagem: 10, video: 1024, audio: 16, documento: 32 }[tipo] || 32;
         const mbArq = file.size / 1048576;
         if (mbArq > LIM) throw new Error(`o arquivo tem ${mbArq.toFixed(1).replace('.', ',')} MB e o máximo para ${tipo === 'video' ? 'vídeo' : tipo} é ${LIM} MB. ${tipo === 'video' ? 'Exporte o vídeo em 720p (no CapCut: Exportar, Resolução 720p) e envie de novo.' : 'Use um arquivo menor.'}`);
         const r = await enviarBinario(file, tipo);
