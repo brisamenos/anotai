@@ -1698,6 +1698,13 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin }) {
       // Envio binario direto (application/octet-stream): sem base64, bem mais leve para foto de celular
       if (/octet-stream/i.test(req.headers['content-type'] || '')) {
         const q = new URL(req.url, 'http://x').searchParams
+        // arquivo grande demais: responde com a mensagem em vez de derrubar a conexão (que virava erro 502)
+        const tam = parseInt(req.headers['content-length'], 10) || 0
+        const lim = (MIDIA_TIPOS[q.get('tipo')] || {}).max || 32 * 1024 * 1024
+        if (tam > lim) {
+          req.resume()
+          send(res, 413, { error: `o arquivo tem ${(tam / 1048576).toFixed(1).replace('.', ',')} MB e o máximo é ${Math.round(lim / 1048576)} MB` }); return true
+        }
         const buffer = await lerBinario(req, 40 * 1024 * 1024)
         send(res, 200, { ok: true, ...(await salvarMidia({ nome: q.get('nome'), tipo: q.get('tipo'), buffer })) }); return true
       }

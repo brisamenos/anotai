@@ -902,12 +902,12 @@
       const h = adminAuthHeader();
       Object.keys(h).forEach(k => { if (k.toLowerCase() !== 'content-type') x.setRequestHeader(k, h[k]); });
       x.setRequestHeader('Content-Type', 'application/octet-stream');
-      x.timeout = 120000;
+      x.timeout = 300000;
       x.upload.onprogress = ev => { if (ev.lengthComputable) statusUpload(`Enviando ${file.name}... ${Math.round(ev.loaded / ev.total * 100)}%`); };
       x.onload = () => {
         let d = {}; try { d = JSON.parse(x.responseText); } catch (_) {}
         if (x.status >= 200 && x.status < 300) return ok(d);
-        no(new Error(d.error || (x.status === 502 || x.status === 504 ? 'o servidor não respondeu (' + x.status + '). Tente uma imagem menor ou de novo em instantes' : 'HTTP ' + x.status)));
+        no(new Error(d.error || (x.status === 413 ? 'arquivo grande demais' : x.status === 502 || x.status === 504 ? 'o servidor não respondeu (' + x.status + '). Se o sistema acabou de ser atualizado, espere 1 minuto e tente de novo; se continuar, envie um arquivo menor' : 'HTTP ' + x.status)));
       };
       x.onerror = () => no(new Error('sem conexão com o servidor'));
       x.ontimeout = () => no(new Error('o envio demorou demais'));
@@ -933,6 +933,10 @@
         statusUpload('Enviando ' + file.name + '...');
         toast('ok', 'Enviando arquivo...');
         if (tipo === 'imagem') file = await reduzImagem(file);
+        // confere o tamanho antes de enviar (mesmo limite do servidor)
+        const LIM = { imagem: 10, video: 32, audio: 16, documento: 32 }[tipo] || 32;
+        const mbArq = file.size / 1048576;
+        if (mbArq > LIM) throw new Error(`o arquivo tem ${mbArq.toFixed(1).replace('.', ',')} MB e o máximo para ${tipo === 'video' ? 'vídeo' : tipo} é ${LIM} MB. ${tipo === 'video' ? 'Exporte o vídeo em 720p (no CapCut: Exportar, Resolução 720p) e envie de novo.' : 'Use um arquivo menor.'}`);
         const r = await enviarBinario(file, tipo);
         const n = cfgIdx(i), alvo = k == null ? n.cfg : n.cfg.cartoes[k];
         if (alvo.midia) ED.lixo.add(alvo.midia); // arquivo antigo sai do servidor ao salvar
