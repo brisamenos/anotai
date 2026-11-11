@@ -1707,6 +1707,12 @@ function renderGarcom() {
   }).join('');
 }
 
+// Item com o preço do salão (quando o produto tem um). Pedido de mesa usa
+// esse preço; sem preço de salão, fica o preço normal.
+function _itemPrecoSalao(it) {
+  return (it && it.priceMesa > 0) ? { ...it, price: it.priceMesa } : it;
+}
+
 function openGarcomMesa(num) {
   garcomMesa = num; garcomCart = [];
   document.getElementById('garcom-mesa-num').textContent = num;
@@ -1727,7 +1733,7 @@ function openGarcomMesa(num) {
     return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px;text-align:center;cursor:pointer;transition:all .15s;position:relative" onclick="garcomAddItem(${i.id},this)" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="if(!this.dataset.sel)this.style.borderColor='var(--border)'">
       <div style="height:48px;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:7px">${imgHtml}</div>
       <div style="font-size:11px;font-weight:600;margin-top:3px">${i.name}</div>
-      <div style="font-size:10.5px;color:var(--accent)">R$ ${i.price.toFixed(2).replace('.', ',')}</div>
+      <div style="font-size:10.5px;color:var(--accent)">R$ ${_itemPrecoSalao(i).price.toFixed(2).replace('.', ',')}</div>
       ${badge}
     </div>`;
   };
@@ -1778,7 +1784,7 @@ function openGarcomMesa(num) {
 }
 
 function garcomAddItem(id, el) {
-  const it = items.find(i => i.id === id);
+  const it = _itemPrecoSalao(items.find(i => i.id === id));
   if (!it) return;
 
   // Se tem adicionais, é pizza ou kg → abre modal completo

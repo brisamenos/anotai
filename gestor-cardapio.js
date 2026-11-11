@@ -1317,6 +1317,7 @@ async function duplicateCategory(id) {
         description:  it.desc         || '',
         price:        it.price        || 0,
         price_old:    it.priceOld     || null,
+        price_mesa:   it.priceMesa    || null,
         cat:          newCat.label,
         cat_key:      newCat.name,
         item_type:    it.itemType     || 'normal',
@@ -1356,6 +1357,7 @@ async function duplicateItem(id) {
       description:  it.desc         || '',
       price:        it.price        || 0,
       price_old:    it.priceOld     || null,
+      price_mesa:   it.priceMesa    || null,
       cat:          it.cat,
       cat_key:      it.catKey,
       item_type:    it.itemType     || 'normal',
@@ -1957,6 +1959,7 @@ async function addItem() {
 
   let price      = parseFloat(document.getElementById('new-price').value) || 0;
   const priceOld = parseFloat(document.getElementById('new-price-old').value) || null;
+  const priceMesa = parseFloat(document.getElementById('new-price-mesa')?.value) || null;
   const catEl    = document.getElementById('new-cat');
   const catKey   = catEl ? catEl.value : '';
   const catLabel = catEl ? (catEl.options[catEl.selectedIndex]?.text || catKey) : catKey;
@@ -2018,6 +2021,7 @@ async function addItem() {
     cat_key:      catKey,
     price,
     price_old:    priceOld,
+    price_mesa:   priceMesa,
     description:  desc,
     ingredients,
     item_type:    itemType,
@@ -2074,7 +2078,7 @@ async function addItem() {
 
   items.push(mapItem(data));
 
-  ['new-name','new-desc','new-ingredients','new-price','new-price-old'].forEach(id => {
+  ['new-name','new-desc','new-ingredients','new-price','new-price-old','new-price-mesa'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const t  = document.getElementById('new-img-thumb');        if(t)  { t.src = ''; t.style.display = 'none'; }
@@ -2112,6 +2116,7 @@ function openEditItem(id) {
   document.getElementById('edit-ingredients').value = (it.ingredients || []).join(', ');
   document.getElementById('edit-price').value       = it.price;
   document.getElementById('edit-price-old').value   = it.priceOld || '';
+  { const _pm = document.getElementById('edit-price-mesa'); if (_pm) _pm.value = it.priceMesa || ''; }
   document.getElementById('edit-cat').value         = it.catKey;
   document.getElementById('edit-status').value      = it.status;
   document.getElementById('edit-item-type').value   = it.itemType || 'normal';
@@ -2229,6 +2234,7 @@ async function saveEditItem() {
   const _novoPrecoRaw = parseFloat(document.getElementById('edit-price').value);
   it.price       = isNaN(_novoPrecoRaw) ? it.price : _novoPrecoRaw;
   it.priceOld    = parseFloat(document.getElementById('edit-price-old').value) || null;
+  { const _pm = document.getElementById('edit-price-mesa'); if (_pm) it.priceMesa = parseFloat(_pm.value) || null; }
   const catEl    = document.getElementById('edit-cat');
   it.catKey      = catEl ? catEl.value : it.catKey;
   it.cat         = catEl ? (catEl.options[catEl.selectedIndex]?.text || it.catKey) : it.catKey;
@@ -2288,6 +2294,7 @@ async function saveEditItem() {
     description:  it.desc,
     price:        it.price,
     price_old:    it.priceOld || null,
+    price_mesa:   it.priceMesa || null,
     cat:          it.cat,
     cat_key:      it.catKey,
     status:       it.status,

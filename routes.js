@@ -2076,6 +2076,470 @@ function _iniciarEvolutionOffJob(ctx) {
   setInterval(tick, 60 * 60_000)
 }
 
+// ── Biblioteca fiscal (NFC-e via Focus NFe) ──────────────────────────
+// Fica fora do handler para o job de emissão automática também usar.
+let _fiscalColsOk = false
+function _fiscalLib(db, marcarDirty) {
+  const _fiscalJson = (v, fallback) => {
+    try {
+      if (Array.isArray(v) || (v && typeof v === 'object')) return v
+      return v ? JSON.parse(v) : fallback
+    } catch { return fallback }
+  }
+  const _fiscalDigits = (v) => String(v || '').replace(/\D/g, '')
+  const _fiscalText = (v, max = 120) => String(v || '').trim().slice(0, max)
+  const _fiscalNorm = (v) => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const _fiscalMoney = (v) => Math.round((parseFloat(v) || 0) * 100) / 100
+  const _fiscalMoneyStr = (v) => _fiscalMoney(v).toFixed(2)
+  const _fiscalIsoNowBR = () => {
+    const d = new Date(Date.now() - 3 * 60 * 60 * 1000)
+    const p = (n) => String(n).padStart(2, '0')
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}-03:00`
+  }
+  const _fiscalPagamentoFiltro = (value) => {
+    const n = _fiscalNorm(value).replace(/[^a-z0-9_ -]/g, '').trim()
+    if (!n || n === 'todos' || n === 'all') return ''
+    if (n.includes('credito') || n === 'cartao' || n === 'cartao_credito') return 'credito'
+    if (n.includes('debito') || n === 'cartao_debito') return 'debito'
+    if (n.includes('pix')) return 'pix'
+    if (n.includes('dinheiro')) return 'dinheiro'
+    return n
+  }
+  const _fiscalPagamentoLabel = (filtro) => ({
+    credito: 'Cartao de credito',
+    debito: 'Cartao de debito',
+    pix: 'PIX',
+    dinheiro: 'Dinheiro'
+  }[filtro] || '')
+  const _fiscalOrderMatchesPagamento = (order, filtro) => {
+    if (!filtro) return true
+    const p = _fiscalNorm(order?.pag || order?.forma_pagamento || order?.payment_method || '')
+    if (filtro === 'credito') return p.includes('credito') || p.includes('cartao') || p.includes('card')
+    if (filtro === 'debito') return p.includes('debito')
+    if (filtro === 'pix') return p.includes('pix')
+    if (filtro === 'dinheiro') return p.includes('dinheiro')
+    return p === filtro
+  }
+  const _fiscalMask = (v) => {
+    const s = String(v || '')
+    if (!s) return ''
+    return s.length <= 6 ? '******' : `${'*'.repeat(Math.max(4, s.length - 4))}${s.slice(-4)}`
+  }
+  const _fiscalConfigOut = (row) => {
+    const out = { ...(row || {}) }
+    out.enabled = out.enabled === 1 || out.enabled === true
+    out.imprimir_auto = out.imprimir_auto === 1 || out.imprimir_auto === true
+    out.taxa_entrega_nota = out.taxa_entrega_nota === 1 || out.taxa_entrega_nota === true
+    out.token_homologacao_set = !!out.token_homologacao
+    out.token_producao_set = !!out.token_producao
+    out.csc_token_set = !!out.csc_token
+    out.token_homologacao_mask = _fiscalMask(out.token_homologacao)
+    out.token_producao_mask = _fiscalMask(out.token_producao)
+    out.csc_token_mask = _fiscalMask(out.csc_token)
+    delete out.token_homologacao
+    delete out.token_producao
+    delete out.csc_token
+    return out
+  }
+  const _fiscalEnsureConfig = (tid) => {
+    if (!_fiscalColsOk) {
+      for (const c of ['imprimir_auto INTEGER DEFAULT 0', 'taxa_entrega_nota INTEGER DEFAULT 0', 'auto_desde TEXT']) {
+        try { db.exec(`ALTER TABLE fiscal_config ADD COLUMN ${c}`) } catch (_) {}
+      }
+      _fiscalColsOk = true
+    }
+    db.prepare('INSERT OR IGNORE INTO fiscal_config (tenant_id, ambiente, emit_mode, uf_emitente, cfop_padrao, icms_origem_padrao, icms_situacao_padrao, unidade_padrao, natureza_operacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(tid, 'homologacao', 'fechamento', 'CE', '5102', '0', '102', 'UN', 'VENDA AO CONSUMIDOR')
+    return db.prepare('SELECT * FROM fiscal_config WHERE tenant_id=?').get(tid)
+  }
+  const _fiscalNoteOut = (row) => {
+    if (!row) return row
+    const out = { ...row }
+    out.total = _fiscalMoney(out.total)
+    out.payload_json = _fiscalJson(out.payload_json, {})
+    out.response_json = _fiscalJson(out.response_json, {})
+    return out
+  }
+  const _fiscalFormaCodigo = (forma) => {
+    const n = _fiscalNorm(forma)
+    if (n.includes('dinheiro')) return '01'
+    if (n.includes('debito')) return '04'
+    if (n.includes('credito') || n.includes('cartao') || n.includes('card')) return '03'
+    if (n.includes('pix')) return '17'
+    if (n.includes('cheque')) return '02'
+    if (n.includes('alimentacao')) return '10'
+    if (n.includes('refeicao') || n.includes('voucher') || n.includes('vale')) return '11'
+    if (n.includes('presente')) return '12'
+    if (n.includes('combustivel')) return '13'
+    return '99'
+  }
+  const _fiscalPagamentoItem = (forma, valor) => {
+    const codigo = _fiscalFormaCodigo(forma)
+    const item = {
+      forma_pagamento: codigo,
+      valor_pagamento: _fiscalMoneyStr(valor)
+    }
+    if (codigo === '03' || codigo === '04') item.tipo_integracao = '2'
+    if (codigo === '99') item.descricao_pagamento = _fiscalText(forma || 'Outros', 60) || 'Outros'
+    return item
+  }
+  const _fiscalBuildPagamentos = (forma, total, formas) => {
+    if (Array.isArray(formas) && formas.length) {
+      const rows = formas
+        .map(f => _fiscalPagamentoItem(f.forma || f.label || forma || 'PIX', f.valor))
+        .filter(f => _fiscalMoney(f.valor_pagamento) > 0)
+      if (rows.length) return rows
+    }
+    return [_fiscalPagamentoItem(forma || 'PIX', total)]
+  }
+  const _fiscalOrderItems = (orders) => {
+    const out = []
+    for (const order of orders || []) {
+      const itens = _fiscalJson(order.items, [])
+      for (const item of itens) {
+        const status = String(item?.item_status || '').toLowerCase()
+        if (status === 'cancelado') continue
+        if (String(item?.item_type || '').toLowerCase() === 'taxa' || item?.isTaxa) continue
+        const qty = parseFloat(item?.qty || item?.quantidade || 1) || 1
+        const price = parseFloat(item?.price ?? item?.valor ?? item?.unit_price ?? 0) || 0
+        if (qty <= 0 || price <= 0) continue
+        out.push({
+          order_id: order.id,
+          id: item.id || item.item_id || null,
+          name: item.name || item.nome || 'Item',
+          qty,
+          price,
+          obs: item.obs || ''
+        })
+      }
+    }
+    return out
+  }
+  const _fiscalRef = (tid, tipo, origemId) => {
+    const raw = `${tipo}-${tid}-${origemId}`
+    const hash = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 10)
+    return `ef-${tipo}-${String(origemId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 18)}-${hash}`.slice(0, 60)
+  }
+  const _fiscalBuildPayload = (tid, orders, cfg, opts = {}) => {
+    const cnpj = _fiscalDigits(cfg.cnpj_emitente)
+    if (!cnpj) throw new Error('Configure o CNPJ emitente no Fiscal.')
+    const itensBase = _fiscalOrderItems(orders)
+    if (!itensBase.length) throw new Error('Venda sem itens fiscais para emitir NFC-e.')
+
+    const ids = [...new Set(itensBase.map(i => parseInt(i.id)).filter(Boolean))]
+    const fiscalRows = ids.length
+      ? db.prepare(`SELECT id,fiscal_ncm,fiscal_cfop,fiscal_icms_origem,fiscal_icms_situacao,fiscal_cest,fiscal_unidade,fiscal_codigo_produto,fiscal_pis_situacao,fiscal_cofins_situacao FROM menu_items WHERE tenant_id=? AND id IN (${ids.map(()=>'?').join(',')})`).all(tid, ...ids)
+      : []
+    const fiscalMap = new Map(fiscalRows.map(r => [Number(r.id), r]))
+    const gross = itensBase.reduce((s, i) => s + i.qty * i.price, 0)
+    // taxa de entrega entra como "outras despesas" (só se o contador mandar: opção no Fiscal)
+    const taxaPedidos = _fiscalMoney((orders || []).reduce((s, o) => s + (parseFloat(o.taxa) || 0), 0))
+    const taxaEntrega = cfg.taxa_entrega_nota ? taxaPedidos : 0
+    // o total do pedido já inclui a taxa de entrega: tira ela para achar o desconto dos produtos
+    const orderTotal = _fiscalMoney(opts.total || ((orders || []).reduce((s, o) => s + (parseFloat(o.total) || 0), 0) - taxaPedidos) || gross)
+    const target = orderTotal > 0 && orderTotal <= gross + 0.02 ? orderTotal : _fiscalMoney(gross)
+    const discountTotal = Math.max(0, _fiscalMoney(gross - target))
+    const discountRate = gross > 0 ? discountTotal / gross : 0
+
+    let itemSeq = 0
+    let itemDiscountAcc = 0
+    let _fiscalTaxaAcc = 0
+    const items = itensBase.map((it, idx) => {
+      const row = fiscalMap.get(Number(it.id)) || {}
+      const ncm = _fiscalDigits(row.fiscal_ncm || cfg.ncm_padrao)
+      if (!/^\d{8}$/.test(ncm)) {
+        throw new Error(`Produto "${it.name}" sem NCM fiscal valido. Preencha o NCM no cadastro ou o NCM padrao.`)
+      }
+      const bruto = _fiscalMoney(it.qty * it.price)
+      let desconto = _fiscalMoney(bruto * discountRate)
+      if (idx === itensBase.length - 1) desconto = _fiscalMoney(discountTotal - itemDiscountAcc)
+      itemDiscountAcc = _fiscalMoney(itemDiscountAcc + desconto)
+      const unidade = _fiscalText(row.fiscal_unidade || cfg.unidade_padrao || 'UN', 6).toUpperCase()
+      const csosn = _fiscalText(row.fiscal_icms_situacao || cfg.icms_situacao_padrao || '102', 3)
+      // produto com substituição tributária (bebidas): SEFAZ exige o CEST
+      if ((csosn === '500' || csosn === '60') && !_fiscalDigits(row.fiscal_cest)) {
+        throw new Error(`Produto "${it.name}" está como substituição tributária (CSOSN ${csosn}) e está sem CEST. Preencha o CEST em Fiscal > Produtos.`)
+      }
+      itemSeq += 1
+      const out = {
+        numero_item: String(itemSeq),
+        codigo_produto: _fiscalText(row.fiscal_codigo_produto || it.id || `EF${itemSeq}`, 60),
+        descricao: _fiscalText(it.name, 120),
+        codigo_ncm: ncm,
+        cfop: _fiscalText(row.fiscal_cfop || ((csosn === '500' || csosn === '60') ? '5405' : '') || cfg.cfop_padrao || '5102', 4),
+        unidade_comercial: unidade,
+        unidade_tributavel: unidade,
+        quantidade_comercial: _fiscalMoneyStr(it.qty),
+        quantidade_tributavel: _fiscalMoneyStr(it.qty),
+        valor_unitario_comercial: _fiscalMoneyStr(it.price),
+        valor_unitario_tributavel: _fiscalMoneyStr(it.price),
+        valor_desconto: _fiscalMoneyStr(desconto),
+        icms_origem: _fiscalText(row.fiscal_icms_origem || cfg.icms_origem_padrao || '0', 1),
+        icms_situacao_tributaria: csosn,
+        valor_total_tributos: '0.00'
+      }
+      if (taxaEntrega > 0) {
+        // reparte a taxa entre os itens; o último fica com o resto do arredondamento
+        let outra = _fiscalMoney(taxaEntrega * (gross > 0 ? bruto / gross : 0))
+        if (idx === itensBase.length - 1) outra = _fiscalMoney(taxaEntrega - (_fiscalTaxaAcc || 0))
+        _fiscalTaxaAcc = _fiscalMoney((_fiscalTaxaAcc || 0) + outra)
+        if (outra > 0) out.valor_outras_despesas = _fiscalMoneyStr(outra)
+      }
+      if (row.fiscal_cest) out.cest = _fiscalDigits(row.fiscal_cest)
+      if (row.fiscal_pis_situacao) out.pis_situacao_tributaria = _fiscalText(row.fiscal_pis_situacao, 2)
+      if (row.fiscal_cofins_situacao) out.cofins_situacao_tributaria = _fiscalText(row.fiscal_cofins_situacao, 2)
+      return out
+    })
+
+    const payload = {
+      cnpj_emitente: cnpj,
+      data_emissao: _fiscalIsoNowBR(),
+      indicador_inscricao_estadual_destinatario: '9',
+      modalidade_frete: '9',
+      local_destino: '1',
+      presenca_comprador: opts.presenca_comprador || (/delivery|entrega/i.test(String(orders?.[0]?.addr || '')) ? '4' : '1'),
+      natureza_operacao: _fiscalText(cfg.natureza_operacao || 'VENDA AO CONSUMIDOR', 60),
+      tipo_documento: '1',
+      finalidade_emissao: '1',
+      valor_produtos: _fiscalMoneyStr(gross),
+      valor_total: _fiscalMoneyStr(target + taxaEntrega),
+      items,
+      formas_pagamento: _fiscalBuildPagamentos(opts.forma || orders?.[0]?.pag || 'PIX', target + taxaEntrega, opts.formas)
+    }
+    if (taxaEntrega > 0) payload.valor_outras_despesas = _fiscalMoneyStr(taxaEntrega)
+    const emitenteFields = [
+      'nome_emitente','nome_fantasia_emitente','telefone_emitente','logradouro_emitente','numero_emitente',
+      'bairro_emitente','municipio_emitente','uf_emitente','cep_emitente','inscricao_estadual_emitente',
+      'regime_tributario_emitente'
+    ]
+    for (const f of emitenteFields) {
+      const v = cfg[f]
+      if (!v && f !== 'uf_emitente') continue
+      payload[f] = f === 'cep_emitente' || f === 'telefone_emitente' ? _fiscalDigits(v) : _fiscalText(v, 120)
+    }
+    return { payload, total: _fiscalMoney(target + taxaEntrega) }
+  }
+  const _fiscalCreatePending = (tid, origemTipo, origemId, orders, opts = {}) => {
+    const existing = db.prepare('SELECT * FROM fiscal_nfce WHERE tenant_id=? AND origem_tipo=? AND origem_id=? LIMIT 1').get(tid, origemTipo, String(origemId))
+    if (existing) return { row: existing, created: false }
+    const cfg = _fiscalEnsureConfig(tid)
+    const built = _fiscalBuildPayload(tid, orders, cfg, opts)
+    const referencia = opts.referencia || _fiscalRef(tid, origemTipo, origemId)
+    db.prepare(`INSERT INTO fiscal_nfce
+      (tenant_id, origem_tipo, origem_id, order_id, mesa_num, session_ref, referencia, ambiente, status, total, forma_pagamento, payload_json)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(
+        tid, origemTipo, String(origemId), opts.order_id || null, opts.mesa_num || null, opts.session_ref || null,
+        referencia, cfg.ambiente || 'homologacao', 'pendente', built.total, opts.forma || orders?.[0]?.pag || 'PIX',
+        JSON.stringify(built.payload)
+      )
+    marcarDirty()
+    return { row: db.prepare('SELECT * FROM fiscal_nfce WHERE tenant_id=? AND referencia=?').get(tid, referencia), created: true }
+  }
+  const _fiscalFocusBase = (ambiente) => ambiente === 'producao' ? 'https://api.focusnfe.com.br' : 'https://homologacao.focusnfe.com.br'
+  const _fiscalToken = (cfg) => cfg.ambiente === 'producao' ? cfg.token_producao : cfg.token_homologacao
+  const _fiscalFocusRequest = async (cfg, method, pathFocus, body = null) => {
+    const token = _fiscalToken(cfg)
+    if (!token) throw new Error(`Token Focus ${cfg.ambiente === 'producao' ? 'producao' : 'homologacao'} nao configurado.`)
+    const resp = await fetch(_fiscalFocusBase(cfg.ambiente) + pathFocus, {
+      method,
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(`${token}:`).toString('base64'),
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: body ? JSON.stringify(body) : undefined
+    })
+    const text = await resp.text()
+    let data = null
+    try { data = text ? JSON.parse(text) : {} } catch { data = { raw: text } }
+    return { ok: resp.ok, statusCode: resp.status, data }
+  }
+  const _fiscalApplyFocusResponse = (tid, id, data, fallbackStatus = null) => {
+    const status = String(data?.status || fallbackStatus || 'erro_autorizacao')
+    const mensagem = data?.mensagem_sefaz || data?.mensagem || data?.erro || data?.error || (Array.isArray(data?.erros) ? data.erros.map(e => e.mensagem || e.message || e.codigo).filter(Boolean).join('; ') : '')
+    const chave = data?.chave_nfe || data?.chave_nfce || data?.chave || data?.chave_acesso || null
+    const xml = data?.caminho_xml_nota_fiscal || data?.caminho_xml || data?.caminho_xml_nfce || null
+    const danfe = data?.caminho_danfe || data?.caminho_danfce || data?.caminho_pdf || data?.caminho_danfe_nfce || null
+    const protocolo = data?.numero_protocolo || data?.protocolo || data?.protocolo_sefaz || null
+    db.prepare(`UPDATE fiscal_nfce SET
+      status=?, response_json=?, chave_nfe=?, numero=?, serie=?, protocolo=?, caminho_xml=?, caminho_danfe=?, qr_code=?, mensagem=?,
+      emitted_at=CASE WHEN ? IN ('autorizado','autorizada') AND emitted_at IS NULL THEN datetime('now') ELSE emitted_at END,
+      canceled_at=CASE WHEN ?='cancelado' AND canceled_at IS NULL THEN datetime('now') ELSE canceled_at END,
+      updated_at=datetime('now')
+      WHERE id=? AND tenant_id=?`)
+      .run(status, JSON.stringify(data || {}), chave, data?.numero || data?.numero_nfce || null, data?.serie || null,
+        protocolo, xml, danfe, data?.qr_code || data?.qrcode || data?.url_qrcode || null, mensagem || null,
+        status, status, id, tid)
+    marcarDirty()
+    return db.prepare('SELECT * FROM fiscal_nfce WHERE id=? AND tenant_id=?').get(id, tid)
+  }
+
+  return { _fiscalJson, _fiscalDigits, _fiscalText, _fiscalNorm, _fiscalMoney, _fiscalMoneyStr, _fiscalIsoNowBR, _fiscalPagamentoFiltro, _fiscalPagamentoLabel, _fiscalOrderMatchesPagamento, _fiscalMask, _fiscalConfigOut, _fiscalEnsureConfig, _fiscalNoteOut, _fiscalFormaCodigo, _fiscalPagamentoItem, _fiscalBuildPagamentos, _fiscalOrderItems, _fiscalRef, _fiscalBuildPayload, _fiscalCreatePending, _fiscalFocusBase, _fiscalToken, _fiscalFocusRequest, _fiscalApplyFocusResponse }
+}
+
+// ── NFC-e: cupom (DANFCE) para a impressora térmica ──────────────────────────
+// A Focus devolve o cupom pronto em HTML (com o QR Code). Baixamos e colocamos
+// um <base href> para as imagens dele carregarem na impressão.
+async function _fiscalDanfceHtml(db, tid, id) {
+  const lib = _fiscalLib(db, () => {})
+  const note = db.prepare('SELECT * FROM fiscal_nfce WHERE id=? AND tenant_id=?').get(id, tid)
+  if (!note) throw new Error('Nota não encontrada.')
+  if (!['autorizado', 'autorizada'].includes(String(note.status))) throw new Error('A nota ainda não foi autorizada. Só dá para imprimir o cupom depois de autorizada.')
+  if (!note.caminho_danfe) throw new Error('A Focus ainda não mandou o cupom desta nota. Clique em Consultar e tente de novo.')
+  const cfg = lib._fiscalEnsureConfig(tid)
+  const base = lib._fiscalFocusBase(note.ambiente || cfg.ambiente)
+  const url = /^https?:\/\//i.test(note.caminho_danfe) ? note.caminho_danfe : base + note.caminho_danfe
+  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 20000)
+  let resp
+  try {
+    resp = await fetch(url, { signal: ac.signal })
+    if (resp.status === 401 || resp.status === 403) {
+      const token = note.ambiente === 'producao' ? cfg.token_producao : cfg.token_homologacao
+      resp = await fetch(url, { signal: ac.signal, headers: { Authorization: 'Basic ' + Buffer.from(`${token || ''}:`).toString('base64') } })
+    }
+  } finally { clearTimeout(t) }
+  if (!resp.ok) throw new Error(`A Focus não entregou o cupom (erro ${resp.status}).`)
+  let html = await resp.text()
+  const origem = new URL(url)
+  const baseHref = `<base href="${origem.origin}${origem.pathname.replace(/[^/]*$/, '')}">`
+  html = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + baseHref) : baseHref + html
+  return html
+}
+
+function _fiscalEnfileirarImpressao(db, sseBroadcast, tid, html, dedupeKey) {
+  db.exec(`CREATE TABLE IF NOT EXISTS print_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT NOT NULL, html TEXT NOT NULL,
+    format TEXT DEFAULT 'A4', printer TEXT,
+    tipo TEXT DEFAULT NULL,
+    status TEXT DEFAULT 'pending', error TEXT,
+    created_at TEXT DEFAULT (datetime('now')), done_at TEXT
+  )`)
+  try { db.exec(`ALTER TABLE print_jobs ADD COLUMN tipo TEXT DEFAULT NULL`) } catch (_) {}
+  try { db.exec(`ALTER TABLE print_jobs ADD COLUMN dedupe_key TEXT DEFAULT NULL`) } catch (_) {}
+  if (dedupeKey && db.prepare('SELECT id FROM print_jobs WHERE tenant_id=? AND dedupe_key=? LIMIT 1').get(tid, dedupeKey)) return null
+  const info = db.prepare(`INSERT INTO print_jobs (tenant_id, html, format, printer, tipo, dedupe_key, status) VALUES (?, ?, '80mm', NULL, 'caixa', ?, 'pending')`)
+    .run(tid, html, dedupeKey || null)
+  const job = { id: info.lastInsertRowid, tenant_id: tid, html, format: '80mm', printer: '', tipo: 'caixa', status: 'pending' }
+  try { sseBroadcast && sseBroadcast(`print-jobs-rt:${tid}`, 'print_jobs:INSERT', job) } catch (_) {}
+  return job.id
+}
+
+// ── NFC-e automática: emite sozinha quando o pedido é finalizado ─────────────
+// Só para lojas com Fiscal ligado e modo "Automático". Só pega pedidos feitos
+// depois que o modo automático foi ligado (nada de emitir o histórico).
+let _fiscalAutoIniciado = false
+let _fiscalAutoRodando = false
+const _fiscalAutoFalhas = new Map() // chave -> horário da última falha (espera 30 min)
+function _iniciarFiscalAutoJob(ctx) {
+  if (_fiscalAutoIniciado) return
+  _fiscalAutoIniciado = true
+  if (String(process.env.FISCAL_AUTO || '') === '0') return
+  const { db, log, marcarDirty } = ctx
+  const L = (m) => { try { (log || console.log)(m) } catch (_) {} }
+
+  async function emitir(lib, tid, cfg, note) {
+    const payload = lib._fiscalJson(note.payload_json, {})
+    payload.data_emissao = lib._fiscalIsoNowBR()
+    db.prepare(`UPDATE fiscal_nfce SET payload_json=?, ambiente=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?`)
+      .run(JSON.stringify(payload), cfg.ambiente || note.ambiente || 'homologacao', note.id, tid)
+    const fr = await lib._fiscalFocusRequest(cfg, 'POST', `/v2/nfce?ref=${encodeURIComponent(note.referencia)}&completa=1`, payload)
+    return lib._fiscalApplyFocusResponse(tid, note.id, fr.data, fr.ok ? null : 'erro_autorizacao')
+  }
+
+  async function imprimirSePreciso(tid, cfg, note) {
+    if (!cfg.imprimir_auto || !note || !['autorizado', 'autorizada'].includes(String(note.status))) return
+    try {
+      const html = await _fiscalDanfceHtml(db, tid, note.id)
+      _fiscalEnfileirarImpressao(db, ctx.sseBroadcast, tid, html, `nfce:${note.id}`)
+    } catch (e) { L(`[fiscal-auto] cupom da nota ${note.id} não impresso: ${e.message}`) }
+  }
+
+  async function tick() {
+    if (_fiscalAutoRodando) return
+    _fiscalAutoRodando = true
+    try {
+      let lojas = []
+      try {
+        lojas = db.prepare(`SELECT tenant_id FROM fiscal_config WHERE enabled=1 AND emit_mode='automatico'`).all()
+      } catch (_) { return }
+      if (!lojas.length) return
+      const lib = _fiscalLib(db, marcarDirty)
+      for (const { tenant_id: tid } of lojas) {
+        const cfg = lib._fiscalEnsureConfig(tid)
+        const desde = cfg.auto_desde || new Date(Date.now() - 3600e3).toISOString().slice(0, 19).replace('T', ' ')
+        const limite = new Date(Date.now() - 24 * 3600e3).toISOString().slice(0, 19).replace('T', ' ')
+        const inicio = desde > limite ? desde : limite
+
+        // 1) notas que a SEFAZ ainda está processando: consulta de novo
+        const processando = db.prepare(`SELECT * FROM fiscal_nfce WHERE tenant_id=? AND status LIKE 'processando%' AND updated_at <= datetime('now','-20 seconds') ORDER BY id LIMIT 10`).all(tid)
+        for (const n of processando) {
+          try {
+            const fr = await lib._fiscalFocusRequest(cfg, 'GET', `/v2/nfce/${encodeURIComponent(n.referencia)}?completa=1`)
+            const up = lib._fiscalApplyFocusResponse(tid, n.id, fr.data, fr.ok ? null : n.status)
+            await imprimirSePreciso(tid, cfg, up)
+          } catch (e) { L(`[fiscal-auto] consulta nota ${n.id}: ${e.message}`) }
+        }
+
+        // 2) pedidos finalizados que ainda não têm nota
+        const pedidos = db.prepare(`
+          SELECT * FROM orders WHERE tenant_id=? AND status IN ('finalizado','entregue') AND COALESCE(total,0)>0
+            AND created_at>=? ORDER BY id ASC LIMIT 200`).all(tid, inicio)
+        const grupos = new Map()
+        for (const o of pedidos) {
+          const mesa = o.mesa_num ? parseInt(o.mesa_num) : null
+          const sess = String(o.session_ref || '').trim()
+          const key = mesa && sess ? `mesa:${mesa}:${sess}` : `order:${o.id}`
+          if (!grupos.has(key)) grupos.set(key, [])
+          grupos.get(key).push(o)
+        }
+        let emitidas = 0
+        for (const [key, ords] of grupos) {
+          if (emitidas >= 10) break // no máximo 10 por loja a cada rodada
+          const falhou = _fiscalAutoFalhas.get(tid + '|' + key)
+          if (falhou && Date.now() - falhou < 30 * 60e3) continue
+          const first = ords[0]
+          const isMesa = key.startsWith('mesa:')
+          let origemTipo = 'order', origemId = String(first.id)
+          if (isMesa) {
+            // mesa: só emite quando a conta inteira foi fechada
+            const aberta = db.prepare(`SELECT 1 FROM orders WHERE tenant_id=? AND mesa_num=? AND COALESCE(session_ref,'')=?
+              AND status NOT IN ('finalizado','entregue','cancelado','recusado') LIMIT 1`).get(tid, first.mesa_num, first.session_ref)
+            if (aberta) continue
+            origemTipo = 'mesa_session'
+            const idA = crypto.createHash('sha1').update(`${first.mesa_num}:${first.session_ref}:todos`).digest('hex').slice(0, 16)
+            const idB = crypto.createHash('sha1').update(`${first.mesa_num}:${first.session_ref}`).digest('hex').slice(0, 16)
+            if (db.prepare(`SELECT 1 FROM fiscal_nfce WHERE tenant_id=? AND origem_tipo='mesa_session' AND origem_id IN (?,?) LIMIT 1`).get(tid, idA, idB)) continue
+            if (db.prepare(`SELECT 1 FROM fiscal_nfce WHERE tenant_id=? AND mesa_num=? AND session_ref=? AND status!='cancelado' LIMIT 1`).get(tid, first.mesa_num, first.session_ref)) continue
+            origemId = idA
+          } else if (db.prepare(`SELECT 1 FROM fiscal_nfce WHERE tenant_id=? AND (order_id=? OR (origem_tipo='order' AND origem_id=?)) LIMIT 1`).get(tid, first.id, String(first.id))) {
+            continue
+          }
+          try {
+            const r = lib._fiscalCreatePending(tid, origemTipo, origemId, ords, {
+              order_id: isMesa ? null : first.id, mesa_num: first.mesa_num || null,
+              session_ref: first.session_ref || null, forma: first.pag || 'PIX'
+            })
+            if (!r.created) continue
+            const up = await emitir(lib, tid, cfg, r.row)
+            emitidas++
+            if (String(up.status).startsWith('erro')) L(`[fiscal-auto] loja ${tid} ${key}: ${up.mensagem || up.status}`)
+            await imprimirSePreciso(tid, cfg, up)
+          } catch (e) {
+            _fiscalAutoFalhas.set(tid + '|' + key, Date.now())
+            L(`[fiscal-auto] loja ${tid} ${key}: ${e.message}`)
+          }
+        }
+      }
+    } catch (e) {
+      L(`[fiscal-auto] erro: ${e.message}`)
+    } finally { _fiscalAutoRodando = false }
+  }
+  setTimeout(tick, 30 * 1000)
+  setInterval(tick, 45 * 1000)
+}
+
 module.exports = async function handleRoutes(req, res, ctx) {
   const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
           validarSessaoAdmin, criarSessaoAdmin, validarSessaoGestor, criarSessaoGestor, criarSessaoGarcom,
@@ -2091,6 +2555,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           emit } = ctx
 
   _svBotInit(ctx); _tenantWaInit(ctx)
+  _iniciarFiscalAutoJob(ctx) // NFC-e automática ao finalizar o pedido (roda 1 vez)
   _sseAvisoRef = sseBroadcast
 
   // Criar cardápio por foto (gestor)
@@ -2161,278 +2626,61 @@ module.exports = async function handleRoutes(req, res, ctx) {
   }
 
   const _fiscalTenantId = () => req.headers['x-tenant-id'] || params.get('tenant_id') || params.get('_tenant') || ''
-  const _fiscalJson = (v, fallback) => {
-    try {
-      if (Array.isArray(v) || (v && typeof v === 'object')) return v
-      return v ? JSON.parse(v) : fallback
-    } catch { return fallback }
-  }
-  const _fiscalDigits = (v) => String(v || '').replace(/\D/g, '')
-  const _fiscalText = (v, max = 120) => String(v || '').trim().slice(0, max)
-  const _fiscalNorm = (v) => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  const _fiscalMoney = (v) => Math.round((parseFloat(v) || 0) * 100) / 100
-  const _fiscalMoneyStr = (v) => _fiscalMoney(v).toFixed(2)
-  const _fiscalIsoNowBR = () => {
-    const d = new Date(Date.now() - 3 * 60 * 60 * 1000)
-    const p = (n) => String(n).padStart(2, '0')
-    return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}-03:00`
-  }
+  const { _fiscalJson, _fiscalDigits, _fiscalText, _fiscalNorm, _fiscalMoney, _fiscalMoneyStr, _fiscalIsoNowBR, _fiscalPagamentoFiltro, _fiscalPagamentoLabel, _fiscalOrderMatchesPagamento, _fiscalMask, _fiscalConfigOut, _fiscalEnsureConfig, _fiscalNoteOut, _fiscalFormaCodigo, _fiscalPagamentoItem, _fiscalBuildPagamentos, _fiscalOrderItems, _fiscalRef, _fiscalBuildPayload, _fiscalCreatePending, _fiscalFocusBase, _fiscalToken, _fiscalFocusRequest, _fiscalApplyFocusResponse } = _fiscalLib(db, marcarDirty)
   const _fiscalDateRange = (body = {}) => {
     const today = _brasiliaDateString ? _brasiliaDateString() : new Date().toISOString().slice(0, 10)
     const de = String(body.de || params.get('de') || today).slice(0, 10)
     const ate = String(body.ate || params.get('ate') || de).slice(0, 10)
     return { de, ate, start: `${de} 00:00:00`, end: `${ate} 23:59:59` }
   }
-  const _fiscalPagamentoFiltro = (value) => {
-    const n = _fiscalNorm(value).replace(/[^a-z0-9_ -]/g, '').trim()
-    if (!n || n === 'todos' || n === 'all') return ''
-    if (n.includes('credito') || n === 'cartao' || n === 'cartao_credito') return 'credito'
-    if (n.includes('debito') || n === 'cartao_debito') return 'debito'
-    if (n.includes('pix')) return 'pix'
-    if (n.includes('dinheiro')) return 'dinheiro'
-    return n
+  // Fiscal: só o gestor logado da própria loja (antes bastava saber o id da loja)
+  if (upath.startsWith('/api/fiscal/')) {
+    const tidAuth = _fiscalTenantId()
+    if (!tidAuth || !validarSessaoGestor(req, tidAuth)) { send(res, 401, { error: 'Sessão expirada. Entre de novo no painel.' }); return true }
   }
-  const _fiscalPagamentoLabel = (filtro) => ({
-    credito: 'Cartao de credito',
-    debito: 'Cartao de debito',
-    pix: 'PIX',
-    dinheiro: 'Dinheiro'
-  }[filtro] || '')
-  const _fiscalOrderMatchesPagamento = (order, filtro) => {
-    if (!filtro) return true
-    const p = _fiscalNorm(order?.pag || order?.forma_pagamento || order?.payment_method || '')
-    if (filtro === 'credito') return p.includes('credito') || p.includes('cartao') || p.includes('card')
-    if (filtro === 'debito') return p.includes('debito')
-    if (filtro === 'pix') return p.includes('pix')
-    if (filtro === 'dinheiro') return p.includes('dinheiro')
-    return p === filtro
-  }
-  const _fiscalMask = (v) => {
-    const s = String(v || '')
-    if (!s) return ''
-    return s.length <= 6 ? '******' : `${'*'.repeat(Math.max(4, s.length - 4))}${s.slice(-4)}`
-  }
-  const _fiscalConfigOut = (row) => {
-    const out = { ...(row || {}) }
-    out.enabled = out.enabled === 1 || out.enabled === true
-    out.token_homologacao_set = !!out.token_homologacao
-    out.token_producao_set = !!out.token_producao
-    out.csc_token_set = !!out.csc_token
-    out.token_homologacao_mask = _fiscalMask(out.token_homologacao)
-    out.token_producao_mask = _fiscalMask(out.token_producao)
-    out.csc_token_mask = _fiscalMask(out.csc_token)
-    delete out.token_homologacao
-    delete out.token_producao
-    delete out.csc_token
-    return out
-  }
-  const _fiscalEnsureConfig = (tid) => {
-    db.prepare('INSERT OR IGNORE INTO fiscal_config (tenant_id, ambiente, emit_mode, uf_emitente, cfop_padrao, icms_origem_padrao, icms_situacao_padrao, unidade_padrao, natureza_operacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(tid, 'homologacao', 'fechamento', 'CE', '5102', '0', '102', 'UN', 'VENDA AO CONSUMIDOR')
-    return db.prepare('SELECT * FROM fiscal_config WHERE tenant_id=?').get(tid)
-  }
-  const _fiscalNoteOut = (row) => {
-    if (!row) return row
-    const out = { ...row }
-    out.total = _fiscalMoney(out.total)
-    out.payload_json = _fiscalJson(out.payload_json, {})
-    out.response_json = _fiscalJson(out.response_json, {})
-    return out
-  }
-  const _fiscalFormaCodigo = (forma) => {
-    const n = _fiscalNorm(forma)
-    if (n.includes('dinheiro')) return '01'
-    if (n.includes('debito')) return '04'
-    if (n.includes('credito') || n.includes('cartao') || n.includes('card')) return '03'
-    if (n.includes('pix')) return '17'
-    if (n.includes('cheque')) return '02'
-    if (n.includes('alimentacao')) return '10'
-    if (n.includes('refeicao')) return '11'
-    if (n.includes('presente')) return '12'
-    if (n.includes('combustivel')) return '13'
-    return '99'
-  }
-  const _fiscalPagamentoItem = (forma, valor) => {
-    const codigo = _fiscalFormaCodigo(forma)
-    const item = {
-      forma_pagamento: codigo,
-      valor_pagamento: _fiscalMoneyStr(valor)
-    }
-    if (codigo === '03' || codigo === '04') item.tipo_integracao = '2'
-    return item
-  }
-  const _fiscalBuildPagamentos = (forma, total, formas) => {
-    if (Array.isArray(formas) && formas.length) {
-      const rows = formas
-        .map(f => _fiscalPagamentoItem(f.forma || f.label || forma || 'PIX', f.valor))
-        .filter(f => _fiscalMoney(f.valor_pagamento) > 0)
-      if (rows.length) return rows
-    }
-    return [_fiscalPagamentoItem(forma || 'PIX', total)]
-  }
-  const _fiscalOrderItems = (orders) => {
-    const out = []
-    for (const order of orders || []) {
-      const itens = _fiscalJson(order.items, [])
-      for (const item of itens) {
-        const status = String(item?.item_status || '').toLowerCase()
-        if (status === 'cancelado') continue
-        if (String(item?.item_type || '').toLowerCase() === 'taxa' || item?.isTaxa) continue
-        const qty = parseFloat(item?.qty || item?.quantidade || 1) || 1
-        const price = parseFloat(item?.price ?? item?.valor ?? item?.unit_price ?? 0) || 0
-        if (qty <= 0 || price <= 0) continue
-        out.push({
-          order_id: order.id,
-          id: item.id || item.item_id || null,
-          name: item.name || item.nome || 'Item',
-          qty,
-          price,
-          obs: item.obs || ''
-        })
-      }
-    }
-    return out
-  }
-  const _fiscalRef = (tid, tipo, origemId) => {
-    const raw = `${tipo}-${tid}-${origemId}`
-    const hash = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 10)
-    return `ef-${tipo}-${String(origemId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 18)}-${hash}`.slice(0, 60)
-  }
-  const _fiscalBuildPayload = (tid, orders, cfg, opts = {}) => {
-    const cnpj = _fiscalDigits(cfg.cnpj_emitente)
-    if (!cnpj) throw new Error('Configure o CNPJ emitente no Fiscal.')
-    const itensBase = _fiscalOrderItems(orders)
-    if (!itensBase.length) throw new Error('Venda sem itens fiscais para emitir NFC-e.')
 
-    const ids = [...new Set(itensBase.map(i => parseInt(i.id)).filter(Boolean))]
-    const fiscalRows = ids.length
-      ? db.prepare(`SELECT id,fiscal_ncm,fiscal_cfop,fiscal_icms_origem,fiscal_icms_situacao,fiscal_cest,fiscal_unidade,fiscal_codigo_produto,fiscal_pis_situacao,fiscal_cofins_situacao FROM menu_items WHERE tenant_id=? AND id IN (${ids.map(()=>'?').join(',')})`).all(tid, ...ids)
-      : []
-    const fiscalMap = new Map(fiscalRows.map(r => [Number(r.id), r]))
-    const gross = itensBase.reduce((s, i) => s + i.qty * i.price, 0)
-    const orderTotal = _fiscalMoney(opts.total || (orders || []).reduce((s, o) => s + (parseFloat(o.total) || 0), 0) || gross)
-    const target = orderTotal > 0 && orderTotal <= gross + 0.02 ? orderTotal : _fiscalMoney(gross)
-    const discountTotal = Math.max(0, _fiscalMoney(gross - target))
-    const discountRate = gross > 0 ? discountTotal / gross : 0
-
-    let itemSeq = 0
-    let itemDiscountAcc = 0
-    const items = itensBase.map((it, idx) => {
-      const row = fiscalMap.get(Number(it.id)) || {}
-      const ncm = _fiscalDigits(row.fiscal_ncm || cfg.ncm_padrao)
-      if (!/^\d{8}$/.test(ncm)) {
-        throw new Error(`Produto "${it.name}" sem NCM fiscal valido. Preencha o NCM no cadastro ou o NCM padrao.`)
-      }
-      const bruto = _fiscalMoney(it.qty * it.price)
-      let desconto = _fiscalMoney(bruto * discountRate)
-      if (idx === itensBase.length - 1) desconto = _fiscalMoney(discountTotal - itemDiscountAcc)
-      itemDiscountAcc = _fiscalMoney(itemDiscountAcc + desconto)
-      const unidade = _fiscalText(row.fiscal_unidade || cfg.unidade_padrao || 'UN', 6).toUpperCase()
-      itemSeq += 1
-      const out = {
-        numero_item: String(itemSeq),
-        codigo_produto: _fiscalText(row.fiscal_codigo_produto || it.id || `EF${itemSeq}`, 60),
-        descricao: _fiscalText(it.name, 120),
-        codigo_ncm: ncm,
-        cfop: _fiscalText(row.fiscal_cfop || cfg.cfop_padrao || '5102', 4),
-        unidade_comercial: unidade,
-        unidade_tributavel: unidade,
-        quantidade_comercial: _fiscalMoneyStr(it.qty),
-        quantidade_tributavel: _fiscalMoneyStr(it.qty),
-        valor_unitario_comercial: _fiscalMoneyStr(it.price),
-        valor_unitario_tributavel: _fiscalMoneyStr(it.price),
-        valor_desconto: _fiscalMoneyStr(desconto),
-        icms_origem: _fiscalText(row.fiscal_icms_origem || cfg.icms_origem_padrao || '0', 1),
-        icms_situacao_tributaria: _fiscalText(row.fiscal_icms_situacao || cfg.icms_situacao_padrao || '102', 3),
-        valor_total_tributos: '0.00'
-      }
-      if (row.fiscal_cest) out.cest = _fiscalDigits(row.fiscal_cest)
-      if (row.fiscal_pis_situacao) out.pis_situacao_tributaria = _fiscalText(row.fiscal_pis_situacao, 2)
-      if (row.fiscal_cofins_situacao) out.cofins_situacao_tributaria = _fiscalText(row.fiscal_cofins_situacao, 2)
-      return out
-    })
-
-    const payload = {
-      cnpj_emitente: cnpj,
-      data_emissao: _fiscalIsoNowBR(),
-      indicador_inscricao_estadual_destinatario: '9',
-      modalidade_frete: '9',
-      local_destino: '1',
-      presenca_comprador: opts.presenca_comprador || (/delivery|entrega/i.test(String(orders?.[0]?.addr || '')) ? '4' : '1'),
-      natureza_operacao: _fiscalText(cfg.natureza_operacao || 'VENDA AO CONSUMIDOR', 60),
-      tipo_documento: '1',
-      finalidade_emissao: '1',
-      valor_produtos: _fiscalMoneyStr(gross),
-      valor_total: _fiscalMoneyStr(target),
-      items,
-      formas_pagamento: _fiscalBuildPagamentos(opts.forma || orders?.[0]?.pag || 'PIX', target, opts.formas)
-    }
-    const emitenteFields = [
-      'nome_emitente','nome_fantasia_emitente','telefone_emitente','logradouro_emitente','numero_emitente',
-      'bairro_emitente','municipio_emitente','uf_emitente','cep_emitente','inscricao_estadual_emitente',
-      'regime_tributario_emitente'
-    ]
-    for (const f of emitenteFields) {
-      const v = cfg[f]
-      if (!v && f !== 'uf_emitente') continue
-      payload[f] = f === 'cep_emitente' || f === 'telefone_emitente' ? _fiscalDigits(v) : _fiscalText(v, 120)
-    }
-    return { payload, total: target }
+  // Dados fiscais de cada produto (NCM, CFOP, CSOSN, CEST)
+  if (upath === '/api/fiscal/produtos' && req.method === 'GET') {
+    const tid = _fiscalTenantId()
+    const rows = db.prepare(`SELECT m.id, m.name, m.category_id, c.name AS categoria, m.fiscal_ncm, m.fiscal_cfop, m.fiscal_icms_origem,
+        m.fiscal_icms_situacao, m.fiscal_cest, m.fiscal_unidade
+      FROM menu_items m LEFT JOIN categories c ON c.id=m.category_id AND c.tenant_id=m.tenant_id
+      WHERE m.tenant_id=? ORDER BY c.sort_order, c.name, m.name`).all(tid)
+    send(res, 200, rows)
+    return true
   }
-  const _fiscalCreatePending = (tid, origemTipo, origemId, orders, opts = {}) => {
-    const existing = db.prepare('SELECT * FROM fiscal_nfce WHERE tenant_id=? AND origem_tipo=? AND origem_id=? LIMIT 1').get(tid, origemTipo, String(origemId))
-    if (existing) return { row: existing, created: false }
-    const cfg = _fiscalEnsureConfig(tid)
-    const built = _fiscalBuildPayload(tid, orders, cfg, opts)
-    const referencia = opts.referencia || _fiscalRef(tid, origemTipo, origemId)
-    db.prepare(`INSERT INTO fiscal_nfce
-      (tenant_id, origem_tipo, origem_id, order_id, mesa_num, session_ref, referencia, ambiente, status, total, forma_pagamento, payload_json)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(
-        tid, origemTipo, String(origemId), opts.order_id || null, opts.mesa_num || null, opts.session_ref || null,
-        referencia, cfg.ambiente || 'homologacao', 'pendente', built.total, opts.forma || orders?.[0]?.pag || 'PIX',
-        JSON.stringify(built.payload)
-      )
-    marcarDirty()
-    return { row: db.prepare('SELECT * FROM fiscal_nfce WHERE tenant_id=? AND referencia=?').get(tid, referencia), created: true }
-  }
-  const _fiscalFocusBase = (ambiente) => ambiente === 'producao' ? 'https://api.focusnfe.com.br' : 'https://homologacao.focusnfe.com.br'
-  const _fiscalToken = (cfg) => cfg.ambiente === 'producao' ? cfg.token_producao : cfg.token_homologacao
-  const _fiscalFocusRequest = async (cfg, method, pathFocus, body = null) => {
-    const token = _fiscalToken(cfg)
-    if (!token) throw new Error(`Token Focus ${cfg.ambiente === 'producao' ? 'producao' : 'homologacao'} nao configurado.`)
-    const resp = await fetch(_fiscalFocusBase(cfg.ambiente) + pathFocus, {
-      method,
-      headers: {
-        'Authorization': 'Basic ' + Buffer.from(`${token}:`).toString('base64'),
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      body: body ? JSON.stringify(body) : undefined
-    })
-    const text = await resp.text()
-    let data = null
-    try { data = text ? JSON.parse(text) : {} } catch { data = { raw: text } }
-    return { ok: resp.ok, statusCode: resp.status, data }
-  }
-  const _fiscalApplyFocusResponse = (tid, id, data, fallbackStatus = null) => {
-    const status = String(data?.status || fallbackStatus || 'erro_autorizacao')
-    const mensagem = data?.mensagem_sefaz || data?.mensagem || data?.erro || data?.error || (Array.isArray(data?.erros) ? data.erros.map(e => e.mensagem || e.message || e.codigo).filter(Boolean).join('; ') : '')
-    const chave = data?.chave_nfe || data?.chave_nfce || data?.chave || data?.chave_acesso || null
-    const xml = data?.caminho_xml_nota_fiscal || data?.caminho_xml || data?.caminho_xml_nfce || null
-    const danfe = data?.caminho_danfe || data?.caminho_danfce || data?.caminho_pdf || data?.caminho_danfe_nfce || null
-    const protocolo = data?.numero_protocolo || data?.protocolo || data?.protocolo_sefaz || null
-    db.prepare(`UPDATE fiscal_nfce SET
-      status=?, response_json=?, chave_nfe=?, numero=?, serie=?, protocolo=?, caminho_xml=?, caminho_danfe=?, qr_code=?, mensagem=?,
-      emitted_at=CASE WHEN ? IN ('autorizado','autorizada') AND emitted_at IS NULL THEN datetime('now') ELSE emitted_at END,
-      canceled_at=CASE WHEN ?='cancelado' AND canceled_at IS NULL THEN datetime('now') ELSE canceled_at END,
-      updated_at=datetime('now')
+  if (upath === '/api/fiscal/produtos' && req.method === 'POST') {
+    const tid = _fiscalTenantId()
+    const body = await readBody(req, 2 * 1024 * 1024)
+    const itens = Array.isArray(body?.itens) ? body.itens.slice(0, 3000) : []
+    const up = db.prepare(`UPDATE menu_items SET fiscal_ncm=?, fiscal_cfop=?, fiscal_icms_situacao=?, fiscal_cest=?, fiscal_icms_origem=?
       WHERE id=? AND tenant_id=?`)
-      .run(status, JSON.stringify(data || {}), chave, data?.numero || data?.numero_nfce || null, data?.serie || null,
-        protocolo, xml, danfe, data?.qr_code || data?.qrcode || data?.url_qrcode || null, mensagem || null,
-        status, status, id, tid)
+    const erros = []
+    const tx = db.transaction(() => {
+      for (const it of itens) {
+        const ncm = _fiscalDigits(it.ncm), cfop = _fiscalDigits(it.cfop), csosn = _fiscalDigits(it.csosn), cest = _fiscalDigits(it.cest)
+        const origem = _fiscalDigits(it.origem).slice(0, 1)
+        if (ncm && ncm.length !== 8) { erros.push(`${it.nome || it.id}: NCM precisa ter 8 números`); continue }
+        if (cfop && cfop.length !== 4) { erros.push(`${it.nome || it.id}: CFOP precisa ter 4 números`); continue }
+        if (cest && cest.length !== 7) { erros.push(`${it.nome || it.id}: CEST precisa ter 7 números`); continue }
+        up.run(ncm || null, cfop || null, csosn || null, cest || null, origem || null, parseInt(it.id), tid)
+      }
+    })
+    tx()
     marcarDirty()
-    return db.prepare('SELECT * FROM fiscal_nfce WHERE id=? AND tenant_id=?').get(id, tid)
+    send(res, erros.length ? 207 : 200, { ok: !erros.length, salvos: itens.length - erros.length, erros })
+    return true
+  }
+
+  // Cupom fiscal (DANFCE) pronto para imprimir na impressora térmica
+  const fiscalDanfceMatch = upath.match(/^\/api\/fiscal\/nfce\/(\d+)\/danfce$/)
+  if (fiscalDanfceMatch && req.method === 'GET') {
+    const tid = _fiscalTenantId()
+    try {
+      const html = await _fiscalDanfceHtml(db, tid, parseInt(fiscalDanfceMatch[1]))
+      send(res, 200, { html })
+    } catch (e) { send(res, 400, { error: e.message }) }
+    return true
   }
 
   if (upath === '/api/fiscal/config') {
@@ -2449,19 +2697,24 @@ module.exports = async function handleRoutes(req, res, ctx) {
         'enabled','ambiente','emit_mode','cnpj_emitente','inscricao_estadual_emitente','regime_tributario_emitente',
         'nome_emitente','nome_fantasia_emitente','telefone_emitente','logradouro_emitente','numero_emitente',
         'bairro_emitente','municipio_emitente','uf_emitente','cep_emitente','csc_id','serie','proximo_numero',
-        'natureza_operacao','ncm_padrao','cfop_padrao','icms_origem_padrao','icms_situacao_padrao','unidade_padrao'
+        'natureza_operacao','ncm_padrao','cfop_padrao','icms_origem_padrao','icms_situacao_padrao','unidade_padrao',
+        'imprimir_auto','taxa_entrega_nota'
       ]
       const payload = {}
       for (const k of allowed) {
-        if (Object.prototype.hasOwnProperty.call(body || {}, k)) payload[k] = k === 'enabled' ? (body[k] ? 1 : 0) : body[k]
+        if (Object.prototype.hasOwnProperty.call(body || {}, k)) payload[k] = ['enabled','imprimir_auto','taxa_entrega_nota'].includes(k) ? (body[k] ? 1 : 0) : body[k]
       }
       for (const secret of ['token_homologacao','token_producao','csc_token']) {
         const val = String(body?.[secret] || '').trim()
         if (val && !/^\*+$/.test(val)) payload[secret] = val
       }
       payload.ambiente = ['homologacao','producao'].includes(String(payload.ambiente || current.ambiente)) ? (payload.ambiente || current.ambiente) : 'homologacao'
-      payload.emit_mode = ['fechamento','manual'].includes(String(payload.emit_mode || current.emit_mode)) ? (payload.emit_mode || current.emit_mode) : 'fechamento'
+      payload.emit_mode = ['fechamento','manual','automatico'].includes(String(payload.emit_mode || current.emit_mode)) ? (payload.emit_mode || current.emit_mode) : 'fechamento'
       payload.updated_at = new Date().toISOString()
+      // ao ligar o modo automático, só valem os pedidos daqui pra frente
+      if (payload.emit_mode === 'automatico' && (current.emit_mode !== 'automatico' || !current.auto_desde)) {
+        payload.auto_desde = new Date().toISOString().slice(0, 19).replace('T', ' ')
+      }
       const keys = Object.keys(payload)
       if (keys.length) {
         db.prepare(`UPDATE fiscal_config SET ${keys.map(k => `"${k}"=?`).join(', ')} WHERE tenant_id=?`).run(...keys.map(k => payload[k]), tid)
@@ -9418,7 +9671,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const tenant = db.prepare('SELECT id FROM tenants WHERE id=? AND ativo=1').get(tid)
       if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
 
-      const COLS_MI = ['tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url',
+      const COLS_MI = ['tenant_id','name','description','price','price_old','price_mesa','category_id','cat','cat_key','emoji','image_url',
                        'item_type','allow_half','max_flavors','promo','destaque','status',
                        'days','ingredients','custom_groups','sort_order']
       const COLS_CAT = ['tenant_id','name','label','type','promo','emoji','sort_order']
@@ -9467,6 +9720,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
                   description: itemDef.description || '',
                   price: parseFloat(itemDef.price) || 0,
                   price_old: itemDef.price_old || null,
+                  // Preço do salão (garçom/mesa). Vazio = usa o mesmo preço do delivery.
+                  price_mesa: (parseFloat(itemDef.price_mesa) > 0) ? parseFloat(itemDef.price_mesa) : null,
                   category_id: catInfo.lastInsertRowid,
                   cat: catDef.label,
                   cat_key: catDef.name,

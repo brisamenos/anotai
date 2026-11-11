@@ -4361,6 +4361,7 @@ function exportarCardapio() {
             description: i.desc || '',
             price: i.price || 0,
             price_old: i.priceOld || null,
+            price_mesa: i.priceMesa || null,
             image_url: i.imageUrl || null,
             status: i.status || 'active',
             item_type: i.itemType || 'normal',

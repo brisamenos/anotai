@@ -3959,6 +3959,7 @@ Use no seu próximo pedido.</textarea>
           <select class="form-input" id="fiscal-emit-mode">
             <option value="fechamento">Fechamento da noite</option>
             <option value="manual">Manual</option>
+            <option value="automatico">Automático ao finalizar o pedido</option>
           </select>
         </div>
         <div style="grid-column:1/-1">
@@ -4049,6 +4050,16 @@ Use no seu próximo pedido.</textarea>
           <label class="form-label">CSOSN/CST</label>
           <input class="form-input" id="fiscal-icms-situacao" value="102">
         </div>
+        <label style="grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+          <span><span style="display:block;font-size:13px;font-weight:700">Imprimir o cupom fiscal sozinho</span>
+          <span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px">No modo automático, o cupom sai na impressora do caixa assim que a nota é autorizada.</span></span>
+          <input id="fiscal-imprimir-auto" type="checkbox" style="width:18px;height:18px;flex-shrink:0;accent-color:var(--accent)">
+        </label>
+        <label style="grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+          <span><span style="display:block;font-size:13px;font-weight:700">Incluir taxa de entrega na nota</span>
+          <span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px">Deixe desligado se o seu contador não pedir.</span></span>
+          <input id="fiscal-taxa-entrega" type="checkbox" style="width:18px;height:18px;flex-shrink:0;accent-color:var(--accent)">
+        </label>
       </div>
       <button class="btn bp" style="width:100%;justify-content:center;margin-top:14px" onclick="fiscalSaveConfig()">Salvar configuração</button>
     </div>
@@ -4068,6 +4079,41 @@ Use no seu próximo pedido.</textarea>
       </div>
       <div id="fiscal-alert" style="display:none;margin-bottom:12px;border-radius:10px;padding:10px 12px;font-size:12.5px"></div>
       <div id="fiscal-notas-list" style="display:flex;flex-direction:column;gap:8px;min-height:160px"></div>
+    </div>
+  </div>
+
+  <div class="card" id="fiscal-prod-card" style="padding:18px;margin-top:14px;min-width:0">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <div>
+        <div class="card-title" style="margin:0">Dados fiscais dos produtos</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px;max-width:620px;line-height:1.4">Cada produto pode ter seu próprio NCM, CFOP, CSOSN e CEST. Produto em branco usa os valores padrão da configuração. Bebidas com substituição tributária (CSOSN 500) precisam do CEST.</div>
+      </div>
+      <span id="fiscal-prod-resumo" style="font-size:11px;font-weight:800;border-radius:999px;padding:4px 10px;background:rgba(148,163,184,.14);color:var(--muted)"></span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:12px">
+      <input class="form-input" id="fiscal-prod-busca" placeholder="Buscar produto" style="flex:1 1 160px;min-width:140px;height:36px;font-size:12.5px" oninput="fiscalProdRender()">
+      <select class="form-input" id="fiscal-prod-cat" style="flex:0 1 190px;height:36px;font-size:12.5px" onchange="fiscalProdRender()"></select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap"><input type="checkbox" id="fiscal-prod-faltando" onchange="fiscalProdRender()" style="accent-color:var(--accent)"> Só sem NCM</label>
+      <span style="flex-basis:100%;height:0"></span>
+      <select class="form-input" id="fiscal-prod-modelo" style="flex:1 1 240px;height:36px;font-size:12.5px"></select>
+      <button class="btn bg" style="height:36px;font-size:12px" onclick="fiscalProdAplicarModelo()">Aplicar nos produtos da lista</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin:-4px 0 10px">Os modelos são sugestões comuns para restaurante no Simples Nacional. Confirme com o seu contador antes de emitir em produção.</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:620px">
+        <thead><tr style="text-align:left;color:var(--muted);font-size:11px">
+          <th style="padding:6px 8px;font-weight:700">Produto</th>
+          <th style="padding:6px 8px;font-weight:700;width:118px">NCM</th>
+          <th style="padding:6px 8px;font-weight:700;width:78px">CFOP</th>
+          <th style="padding:6px 8px;font-weight:700;width:78px">CSOSN</th>
+          <th style="padding:6px 8px;font-weight:700;width:104px">CEST</th>
+        </tr></thead>
+        <tbody id="fiscal-prod-lista"></tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap">
+      <span id="fiscal-prod-status" style="font-size:12px;color:var(--muted)"></span>
+      <button class="btn bp" onclick="fiscalProdSalvar()">Salvar produtos</button>
     </div>
   </div>
 </div>
@@ -4513,6 +4559,7 @@ Use no seu próximo pedido.</textarea>
       <div class="form-row"><label class="form-label">Preço (R$) *</label><input class="form-input" id="new-price" placeholder="0,00" type="number" step="0.01" min="0" oninput="updatePorcaoPreview('new')"></div>
       <div class="form-row"><label class="form-label">Preço antigo (R$)</label><input class="form-input" id="new-price-old" placeholder="Opcional" type="number" step="0.01" min="0"></div>
     </div>
+    <div class="form-row"><label class="form-label">Preço no salão / garçom (R$) <span style="color:var(--muted);font-size:10.5px">(vazio = mesmo preço do delivery)</span></label><input class="form-input" id="new-price-mesa" placeholder="Opcional" type="number" step="0.01" min="0"></div>
     <div class="form-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
       <div>
         <div style="font-size:12.5px;font-weight:600">Não mostrar este preço no cardápio</div>
@@ -4744,6 +4791,7 @@ Use no seu próximo pedido.</textarea>
       <div class="form-row"><label class="form-label">Preço (R$) *</label><input class="form-input" id="edit-price" type="number" step="0.01" min="0" oninput="updatePorcaoPreview('edit')"></div>
       <div class="form-row"><label class="form-label">Preço antigo (R$)</label><input class="form-input" id="edit-price-old" type="number" step="0.01" min="0" placeholder="Opcional"></div>
     </div>
+    <div class="form-row"><label class="form-label">Preço no salão / garçom (R$) <span style="color:var(--muted);font-size:10.5px">(vazio = mesmo preço do delivery)</span></label><input class="form-input" id="edit-price-mesa" placeholder="Opcional" type="number" step="0.01" min="0"></div>
     <div class="form-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
       <div>
         <div style="font-size:12.5px;font-weight:600">Não mostrar este preço no cardápio</div>

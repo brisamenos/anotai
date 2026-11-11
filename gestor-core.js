@@ -721,6 +721,8 @@ function mapItem(i) {
     catKey: i.cat_key || i.cat || '',
     price: parseFloat(i.price) || 0,
     priceOld: i.price_old ? parseFloat(i.price_old) : undefined,
+    // Preço do salão (garçom/mesa). null = usa o mesmo preço do delivery.
+    priceMesa: parseFloat(i.price_mesa) > 0 ? parseFloat(i.price_mesa) : null,
     promo: !!i.promo,
     status: i.status || 'active',
     days: _safeParseArray(i.days).length ? _safeParseArray(i.days) : [1,1,1,1,1,1,1],
