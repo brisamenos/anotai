@@ -2684,7 +2684,6 @@ async function loadData() {
   allItems = (itemsRes.data || []);
   allCats  = (catsRes.data  || []);
   _garcomMontarOcultos();
-  _garcomAplicarPrecos();
   try { _garcomPrintCfg = cfgRes.data?.print_config ? JSON.parse(cfgRes.data.print_config) : {}; } catch { _garcomPrintCfg = {}; }
   _garcomOrderNumOffset = parseInt(cfgRes.data?.order_num_offset) || 0;
   _garcomTaxaServicoPct = parseFloat(cfgRes.data?.taxa_servico_pct) || 0;
@@ -3554,7 +3553,6 @@ async function closeSheet() {
   // Se veio do modo delivery/retirada, salva o cart e atualiza preview
   if (window._npMode) {
     window._npMode = false;
-    _garcomAplicarPrecos();
     _npCart = [...cart];
     cart = [];
     npAtualizarPreview();
@@ -3628,7 +3626,6 @@ document.addEventListener('visibilitychange', async () => {
     allItems = itemsRes.data;
     allCats = catsRes.data;
     _garcomMontarOcultos();
-    _garcomAplicarPrecos();
     const ativo = activeCatFilter;
     buildCatPills();
     if (ativo && allCats.some(c => c.name === ativo && _garcomCatVisivel(c))) {
@@ -3638,18 +3635,6 @@ document.addEventListener('visibilitychange', async () => {
     renderItemGrid();
   } catch (e) {}
 });
-// ── Preço do salão x preço do delivery ─────
-// O produto pode ter um preço só para o salão (price_mesa). Pedido de mesa usa
-// esse preço; pedido de delivery/retirada feito pelo garçom usa o preço normal.
-// Sem price_mesa, os dois são iguais (nada muda para quem não usa).
-function _garcomAplicarPrecos() {
-  const delivery = !!window._npMode;
-  (allItems || []).forEach(i => {
-    if (i._precoDelivery === undefined) i._precoDelivery = i.price;
-    const pm = parseFloat(i.price_mesa);
-    i.price = (!delivery && pm > 0) ? pm : i._precoDelivery;
-  });
-}
 function _garcomItemVisivel(i) {
   if (!i || Number(i.garcom_oculto) === 1) return false;
   if (i.category_id != null && _garcomCatsOcultas.has('id:' + i.category_id)) return false;
@@ -3678,7 +3663,6 @@ function filterItems(el, cat) {
 }
 
 function renderItemGrid() {
-  _garcomAplicarPrecos();
   const q = (activeSearchFilter || '').toLowerCase().trim();
   const filtered = allItems.filter(i => {
     if (i.status === 'esgotado') return false;
@@ -3715,7 +3699,6 @@ function renderItemGrid() {
 }
 
 function addItem(id) {
-  _garcomAplicarPrecos();
   const item = allItems.find(i=>i.id===id);
   if (!item) return;
   // Se tem adicionais/grupos ou é pizza meio a meio → abre modal completo
@@ -4456,7 +4439,6 @@ function npAbrirCardapio() {
   // Reutiliza o sheet de pedido de mesa mas com flag de delivery
   _npCart = [];
   window._npMode = true;
-  _garcomAplicarPrecos();
   activeMesa = null;
   cart = [];
   const titleEl = document.getElementById('sheet-title');
