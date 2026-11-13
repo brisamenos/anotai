@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://sdk.mercadopago.com">
 <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@700;900&family=DM+Sans:wght@400;500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700;900&family=DM+Sans:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════════════════════════
    TOKENS
@@ -44,199 +44,8 @@
   --r-lg:     20px;
 }
 
-/* ══════════════════════════════════════════
-   TEMAS DO CARDÁPIO PÚBLICO
-   Aplicados via data-tema no <html>
-══════════════════════════════════════════ */
-
-/* Tema: Clássico (padrão — sem overrides, usa :root) */
-[data-tema="classico"] {
-  --bg:#f8f9fb; --s1:#ffffff; --s2:#f1f3f7; --s3:#e4e8ef;
-  --border:rgba(0,0,0,.09); --border2:rgba(0,0,0,.14);
-  --text:#0f1117; --muted:#6b7280; --muted2:#9ca3af;
-}
-[data-tema="classico"] .hero { background: var(--bg); }
-[data-tema="classico"] .sticky-bar { background:var(--bg); border-bottom:1px solid var(--border); }
-[data-tema="classico"] .search-input { background:var(--s1); }
-
-/* Tema: Dark Luxo */
-[data-tema="dark"] {
-  --bg:#0f1117; --s1:#181b24; --s2:#1e2130; --s3:#242840;
-  --border:rgba(255,255,255,.07); --border2:rgba(255,255,255,.13);
-  --text:#e5e7eb; --muted:#9ca3af; --muted2:#6b7280;
-}
-[data-tema="dark"] body { background:var(--bg); color:var(--text); }
-[data-tema="dark"] .hero {
-  background: linear-gradient(180deg,#0a0c13 0%,#131720 100%);
-  border-bottom:1px solid rgba(255,255,255,.06);
-}
-[data-tema="dark"] .sticky-bar {
-  background:rgba(15,17,23,.92);
-  backdrop-filter:blur(12px);
-  border-bottom:1px solid rgba(255,255,255,.06);
-}
-[data-tema="dark"] .search-input {
-  background:var(--s2); border-color:var(--border); color:var(--text);
-}
-[data-tema="dark"] .search-input::placeholder { color:var(--muted2); }
-[data-tema="dark"] .cat-btn { color:var(--muted); border-color:var(--border); }
-[data-tema="dark"] .cat-btn.on { color:var(--accent); border-bottom-color:var(--accent); }
-[data-tema="dark"] .item-card {
-  background:var(--s1); border:1px solid var(--border);
-}
-[data-tema="dark"] .item-card:hover { background:var(--s2); }
-[data-tema="dark"] .sec-title { color:var(--text); }
-[data-tema="dark"] .splash { background:var(--bg); }
-[data-tema="dark"] .closed-banner {
-  background:#1a0a0a; border-bottom:1px solid rgba(239,68,68,.2); color:#fca5a5;
-}
-
-/* Tema: Tropical */
-[data-tema="tropical"] {
-  --bg:#fef9f0; --s1:#fff7ed; --s2:#ffedd5; --s3:#fed7aa;
-  --border:rgba(234,88,12,.14); --border2:rgba(234,88,12,.25);
-  --text:#431407; --muted:#92400e; --muted2:#b45309;
-}
-[data-tema="tropical"] body { background:var(--bg); color:var(--text); }
-[data-tema="tropical"] .hero {
-  background: linear-gradient(180deg,#431407 0%,#7c2d12 100%);
-}
-[data-tema="tropical"] .sticky-bar {
-  background:rgba(254,249,240,.95);
-  backdrop-filter:blur(8px);
-  border-bottom:1px solid var(--border);
-}
-[data-tema="tropical"] .search-input {
-  background:var(--s1); border-color:var(--border); color:var(--text);
-}
-[data-tema="tropical"] .search-input::placeholder { color:var(--muted2); }
-[data-tema="tropical"] .cat-btn { color:var(--muted); border-color:transparent; }
-[data-tema="tropical"] .cat-btn.on { color:var(--accent); border-bottom-color:var(--accent); }
-[data-tema="tropical"] .item-card {
-  background:var(--s1);
-  border:1px solid var(--border);
-  border-radius:14px;
-}
-[data-tema="tropical"] .sec-title { color:var(--text); font-weight:800; }
-[data-tema="tropical"] .splash { background:var(--bg); }
-[data-tema="tropical"] .closed-banner {
-  background:#fff7ed; border-bottom:1px solid var(--border); color:var(--muted);
-}
-
-/* Tema: Minimalista */
-[data-tema="minimalista"] {
-  --bg:#ffffff; --s1:#fafafa; --s2:#f5f5f5; --s3:#e5e5e5;
-  --border:rgba(0,0,0,.06); --border2:rgba(0,0,0,.10);
-  --text:#111111; --muted:#737373; --muted2:#a3a3a3;
-}
-[data-tema="minimalista"] body { background:var(--bg); color:var(--text); }
-[data-tema="minimalista"] .hero {
-  background:#111111;
-  border-bottom:none;
-}
-[data-tema="minimalista"] .hero-name { font-weight:800; letter-spacing:-.5px; }
-[data-tema="minimalista"] .sticky-bar {
-  background:#ffffff;
-  border-bottom:1px solid var(--border);
-  box-shadow:none;
-}
-[data-tema="minimalista"] .search-input {
-  background:var(--s2); border-color:var(--border); color:var(--text);
-  border-radius:6px;
-}
-[data-tema="minimalista"] .search-input::placeholder { color:var(--muted2); }
-[data-tema="minimalista"] .cat-btn {
-  color:var(--muted); border:none; border-bottom:2px solid transparent;
-  font-weight:500; font-size:13px;
-}
-[data-tema="minimalista"] .cat-btn.on {
-  color:var(--text); border-bottom-color:var(--text); font-weight:700;
-}
-[data-tema="minimalista"] .item-card {
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:8px;
-  box-shadow:none;
-}
-[data-tema="minimalista"] .item-card:hover { box-shadow:0 1px 4px rgba(0,0,0,.07); }
-[data-tema="minimalista"] .item-price { color:var(--text); font-weight:800; }
-[data-tema="minimalista"] .sec-title {
-  color:var(--text); font-weight:800; text-transform:uppercase;
-  font-size:11px; letter-spacing:1.2px;
-}
-[data-tema="minimalista"] .item-add-btn {
-  border-color:var(--text); color:var(--text);
-}
-[data-tema="minimalista"] .item-add-btn:hover { background:var(--text); color:#fff; }
-[data-tema="minimalista"] .splash { background:#fff; }
-
-/* ══════════════════════════════════════════
-   Tema: Moderno (inspirado no visual do iFood)
-   Fundo claro neutro, cards com sombra suave,
-   ícones de categoria redondos, botão de
-   adicionar em círculo preenchido.
-══════════════════════════════════════════ */
-[data-tema="moderno"] body { background:var(--bg); color:var(--text); }
-[data-tema="moderno"] .hero {
-  background:var(--s1);
-  border-bottom:1px solid var(--border);
-}
-[data-tema="moderno"] .hero-name { font-family:'DM Sans',sans-serif; font-weight:800; letter-spacing:-.3px; }
-[data-tema="moderno"] .sticky-bar {
-  background:var(--s1);
-  border-bottom:1px solid var(--border);
-  box-shadow:0 1px 0 var(--border);
-}
-[data-tema="moderno"] .search-input {
-  background:var(--s2); border:1px solid var(--border); color:var(--text);
-  border-radius:12px;
-}
-[data-tema="moderno"] .search-input::placeholder { color:var(--muted2); }
-[data-tema="moderno"] .cat-btn {
-  background:var(--s2); color:var(--muted); border:1px solid transparent;
-  font-weight:600; border-radius:99px;
-}
-[data-tema="moderno"] .cat-btn.on {
-  background:var(--accent); color:#fff; border-color:var(--accent);
-  box-shadow:0 3px 10px rgba(var(--accent-rgb,249,115,22),.28);
-}
-/* Ícones de categoria em círculo — estilo iFood (avatar redondo + rótulo) */
-[data-tema="moderno"] .cats-scroll.carousel .cat-btn {
-  background:transparent; border:none; padding:2px 2px 0; min-width:60px;
-  gap:5px;
-}
-[data-tema="moderno"] .cats-scroll.carousel .cat-btn .cat-btn-icon {
-  width:52px; height:52px; border-radius:50%; background:var(--s2);
-  border:1px solid var(--border); font-size:22px;
-}
-[data-tema="moderno"] .cats-scroll.carousel .cat-btn.on .cat-btn-icon {
-  background:rgba(var(--accent-rgb,249,115,22),.12); border-color:var(--accent);
-}
-[data-tema="moderno"] .cats-scroll.carousel .cat-btn.on { color:var(--accent); font-weight:700; }
-[data-tema="moderno"] .item-card {
-  background:var(--s1); border:none; border-radius:16px;
-  margin:0 16px 10px; padding:12px;
-  box-shadow:0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
-}
-[data-tema="moderno"] .item-card:active { background:var(--s1); transform:scale(.99); }
-[data-tema="moderno"] .item-img { border-radius:12px; }
-[data-tema="moderno"] .item-price { font-family:'DM Sans',sans-serif; font-weight:800; color:var(--accent); }
-[data-tema="moderno"] .item-add-btn {
-  width:30px; height:30px; border:none; background:var(--accent); color:#fff;
-}
-[data-tema="moderno"] .item-add-btn:hover { background:var(--accent-d,var(--accent)); }
-[data-tema="moderno"] .item-add-btn:disabled { background:var(--s3); color:var(--muted); }
-[data-tema="moderno"] .sec-title, [data-tema="moderno"] .section-label {
-  font-family:'DM Sans',sans-serif; font-weight:800; color:var(--text);
-}
-[data-tema="moderno"] .dest-card { border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
-[data-tema="moderno"] .dest-price { font-family:'DM Sans',sans-serif; color:var(--accent); }
-[data-tema="moderno"] .im-qty-btn { border-radius:50%; }
-[data-tema="moderno"] .checklist-item { border-radius:10px; }
-[data-tema="moderno"] .splash { background:var(--bg); }
-[data-tema="moderno"] .closed-banner {
-  background:#fff5f5; border-bottom:1px solid rgba(239,68,68,.15); color:#b91c1c;
-}
+/* Temas do cardápio: as cores, a fonte dos títulos e os cantos de cada
+   tema vêm de cardapio-temas.js (aplicados por applyTema em variáveis CSS). */
 
 /* ══════════════════════════════════════════════════════════
    IDENTIDADE VISUAL — AÇOUGUE
@@ -567,7 +376,7 @@ input,textarea{font-family:inherit}
 .hero-status-btn{
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
   margin:12px 0 0;padding:8px 16px;border-radius:99px;
-  background:var(--accent);color:#fff;font-size:12.5px;font-weight:700;
+  background:var(--accent);color:var(--accent-ink,#fff);font-size:12.5px;font-weight:700;
   border:none;cursor:pointer;width:auto;max-width:100%;
   font-family:inherit;transition:all .18s;
   box-shadow:0 4px 14px rgba(var(--accent-rgb,249,115,22),.32);
@@ -618,7 +427,7 @@ input,textarea{font-family:inherit}
   color:var(--muted);transition:all .18s;white-space:nowrap;cursor:pointer;
   display:inline-flex;align-items:center;
 }
-.cat-btn.on{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 2px 8px rgba(var(--accent-rgb,249,115,22),.3)}
+.cat-btn.on{background:var(--accent);color:var(--accent-ink,#fff);border-color:var(--accent);box-shadow:0 2px 8px rgba(var(--accent-rgb,249,115,22),.3)}
 /* Ícone redondo dentro da pílula de texto (categorias fora do modo carrossel) */
 .cat-btn-pill-icon{
   display:inline-flex;width:30px;height:30px;border-radius:50%;overflow:hidden;
@@ -693,7 +502,7 @@ input,textarea{font-family:inherit}
 .item-grid.carousel .item-porcao-ref{font-size:10px;margin-top:4px}
 .item-grid.carousel .item-add-btn{
   margin-left:auto;width:30px;height:30px;
-  background:var(--accent-g);border:none;color:#fff;
+  background:var(--accent-g);border:none;color:var(--accent-ink,#fff);
   box-shadow:0 3px 10px rgba(var(--accent-rgb,249,115,22),.35);
 }
 .item-grid.carousel .item-add-btn:active{transform:scale(.92)}
@@ -755,7 +564,7 @@ input,textarea{font-family:inherit}
   display:flex;align-items:center;justify-content:center;
   transition:all .15s;flex-shrink:0;line-height:1;
 }
-.item-add-btn:hover{background:var(--accent);color:#fff}
+.item-add-btn:hover{background:var(--accent);color:var(--accent-ink,#fff)}
 .item-add-btn:disabled{border-color:var(--s3);color:var(--muted);cursor:not-allowed}
 .item-img{
   width:88px;height:88px;border-radius:12px;flex-shrink:0;overflow:hidden;
@@ -809,7 +618,7 @@ input,textarea{font-family:inherit}
 ═══════════════════════════════════════ */
 .half-section{margin-top:16px}
 .half-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
-.half-title .half-badge{background:var(--accent);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.3px}
+.half-title .half-badge{background:var(--accent);color:var(--accent-ink,#fff);font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.3px}
 .half-selected{
   display:flex;align-items:center;gap:10px;
   background:rgba(var(--accent-rgb,249,115,22),.08);border:1.5px solid rgba(var(--accent-rgb,249,115,22),.3);
@@ -838,7 +647,7 @@ input,textarea{font-family:inherit}
 .half-opt-name{flex:1;font-size:13px;font-weight:600;min-width:0;white-space:normal;overflow:visible;word-break:break-word}
 .half-opt-price{font-size:12px;color:var(--amber);flex-shrink:0}
 .half-opt-check{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px}
-.half-opt.on .half-opt-check{background:var(--accent);border-color:var(--accent);color:#fff}
+.half-opt.on .half-opt-check{background:var(--accent);border-color:var(--accent);color:var(--accent-ink,#fff)}
 .pizza-size-wrap{margin:4px 0 12px}
 .pizza-size-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
 .pizza-size-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
@@ -1004,7 +813,7 @@ input,textarea{font-family:inherit}
   margin-bottom:10px;display:flex;align-items:center;gap:6px;
 }
 .im-ingr-count{
-  background:var(--accent);color:#fff;
+  background:var(--accent);color:var(--accent-ink,#fff);
   font-size:10px;font-weight:800;
   padding:1px 7px;border-radius:99px;
   display:none;
@@ -1049,7 +858,7 @@ input,textarea{font-family:inherit}
 .checklist-title{font-family:'Fraunces',serif;font-size:16px;font-weight:700}
 .checklist-subtitle{font-size:11.5px;color:var(--muted);margin-top:1px}
 .checklist-badge{
-  background:var(--accent);color:#fff;border-radius:99px;
+  background:var(--accent);color:var(--accent-ink,#fff);border-radius:99px;
   font-size:11px;font-weight:800;padding:2px 8px;
 }
 .checklist-arrow{
@@ -1092,21 +901,21 @@ input,textarea{font-family:inherit}
   display:flex;align-items:center;justify-content:center;
   cursor:pointer;transition:all .15s;flex-shrink:0;
 }
-.checklist-qty-btn:active{background:var(--accent);border-color:var(--accent);color:#fff}
+.checklist-qty-btn:active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink,#fff)}
 .checklist-qty-num{
   font-family:'Fraunces',serif;font-size:16px;font-weight:700;
   min-width:20px;text-align:center;
 }
 .checklist-add-btn{
   width:100%;padding:14px;border:none;border-radius:0 0 12px 12px;
-  background:var(--accent-g);color:#fff;font-size:14px;font-weight:700;
+  background:var(--accent-g);color:var(--accent-ink,#fff);font-size:14px;font-weight:700;
   cursor:pointer;transition:all .18s;font-family:'DM Sans',sans-serif;
   display:flex;align-items:center;justify-content:center;gap:8px;
 }
 .checklist-add-btn:disabled{background:var(--s3);color:var(--muted);cursor:not-allowed}
 .im-add-btn{
   width:100%;padding:16px;border-radius:14px;border:none;margin-top:18px;
-  background:var(--accent-g);color:#fff;font-size:15px;font-weight:700;
+  background:var(--accent-g);color:var(--accent-ink,#fff);font-size:15px;font-weight:700;
   display:flex;align-items:center;justify-content:center;gap:8px;
   transition:all .18s;box-shadow:0 6px 20px rgba(var(--accent-rgb,249,115,22),.3);
 }
@@ -1140,7 +949,7 @@ input,textarea{font-family:inherit}
   display:flex;align-items:center;justify-content:center;
   font-size:11px;font-weight:800;flex-shrink:0;
 }
-.bnav-item .profile-fab-av:not(.icon){background:var(--accent-g);color:#fff}
+.bnav-item .profile-fab-av:not(.icon){background:var(--accent-g);color:var(--accent-ink,#fff)}
 
 /* ═══════════════════════════════════════
    CART FLOAT
@@ -1152,7 +961,7 @@ input,textarea{font-family:inherit}
 .cart-float.show{display:block}
 @keyframes floatIn{from{opacity:0;transform:translateX(-50%) translateY(16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .cart-btn{
-  background:var(--accent-g);color:#fff;border:none;border-radius:99px;
+  background:var(--accent-g);color:var(--accent-ink,#fff);border:none;border-radius:99px;
   padding:14px 24px;font-size:14px;font-weight:700;
   display:flex;align-items:center;gap:12px;
   box-shadow:0 8px 32px rgba(var(--accent-rgb,249,115,22),.45);transition:all .18s;
@@ -1293,7 +1102,7 @@ input,textarea{font-family:inherit}
 /* botão confirmar */
 .confirm-btn{
   width:100%;padding:17px;border-radius:14px;border:none;
-  background:var(--accent-g);color:#fff;font-size:16px;font-weight:700;
+  background:var(--accent-g);color:var(--accent-ink,#fff);font-size:16px;font-weight:700;
   display:flex;align-items:center;justify-content:center;gap:8px;
   box-shadow:0 6px 24px rgba(var(--accent-rgb,249,115,22),.35);transition:all .2s;margin-bottom:24px;
 }
@@ -1471,7 +1280,7 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 .closed-banner-lg-sub{font-size:12px;color:var(--muted);margin-top:1px}
 .closed-banner-lg-btn{
   flex-shrink:0;padding:9px 16px;border-radius:99px;border:none;
-  background:var(--accent);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;
+  background:var(--accent);color:var(--accent-ink,#fff);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;
 }
 
 .cats-showcase-title{
@@ -1507,7 +1316,7 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 .promo-banner-sub{font-size:12.5px;color:rgba(255,255,255,.85);margin-top:6px;line-height:1.4}
 .promo-banner-btn{
   margin-top:14px;padding:10px 18px;border-radius:99px;border:none;
-  background:var(--accent);color:#fff;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;
+  background:var(--accent);color:var(--accent-ink,#fff);font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;
   align-self:flex-start;
 }
 .promo-banner-selo{
@@ -1569,7 +1378,7 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 .auth-row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .auth-btn{
   width:100%;padding:16px;border-radius:14px;border:none;
-  background:var(--accent-g);color:#fff;font-size:15px;font-weight:700;
+  background:var(--accent-g);color:var(--accent-ink,#fff);font-size:15px;font-weight:700;
   display:flex;align-items:center;justify-content:center;gap:8px;
   box-shadow:0 6px 20px rgba(var(--accent-rgb,249,115,22),.3);transition:all .18s;margin-top:4px;
 }
@@ -1718,7 +1527,7 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 .troco-valor-input:focus{border-color:var(--accent)}
 .troco-confirm{
   width:100%;padding:15px;border-radius:14px;border:none;
-  background:var(--accent-g);color:#fff;font-size:15px;font-weight:700;
+  background:var(--accent-g);color:var(--accent-ink,#fff);font-size:15px;font-weight:700;
   cursor:pointer;box-shadow:0 6px 20px rgba(var(--accent-rgb,249,115,22),.3);
   transition:all .18s;font-family:'DM Sans',sans-serif;
 }
@@ -1767,7 +1576,7 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 .pag-opt-radio.on::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:#fff}
 .pag-confirm{
   width:100%;padding:15px;border-radius:14px;border:none;
-  background:var(--accent-g);color:#fff;font-size:15px;font-weight:700;
+  background:var(--accent-g);color:var(--accent-ink,#fff);font-size:15px;font-weight:700;
   cursor:pointer;box-shadow:0 6px 20px rgba(var(--accent-rgb,249,115,22),.28);
   transition:all .18s;font-family:'DM Sans',sans-serif;margin-top:16px;
 }
@@ -1791,7 +1600,7 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 .rating-obs{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--text);font-size:13px;outline:none;resize:none;margin-bottom:18px;font-family:'DM Sans',sans-serif;transition:border-color .18s}
 .rating-obs:focus{border-color:rgba(var(--accent-rgb,249,115,22),.4)}
 .rating-obs::placeholder{color:var(--muted)}
-.rating-send-btn{width:100%;padding:15px;border-radius:14px;border:none;background:var(--accent-g);color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(var(--accent-rgb,249,115,22),.3);transition:all .18s;font-family:'DM Sans',sans-serif}
+.rating-send-btn{width:100%;padding:15px;border-radius:14px;border:none;background:var(--accent-g);color:var(--accent-ink,#fff);font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(var(--accent-rgb,249,115,22),.3);transition:all .18s;font-family:'DM Sans',sans-serif}
 .rating-send-btn:hover{transform:translateY(-1px)}
 .rating-send-btn:disabled{background:var(--s3);color:var(--muted);transform:none;box-shadow:none;cursor:not-allowed}
 .rating-skip-btn{margin-top:12px;background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif}
@@ -1919,9 +1728,9 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
   transition:all .15s;font-size:11px;
 }
-.grp-opt-item.on .grp-opt-indicator{ background:var(--accent);border-color:var(--accent);color:#fff }
+.grp-opt-item.on .grp-opt-indicator{ background:var(--accent);border-color:var(--accent);color:var(--accent-ink,#fff) }
 .grp-opt-indicator.multi{ border-radius:6px }
-.grp-opt-item.on .grp-opt-indicator.multi{ background:var(--accent);border-color:var(--accent);color:#fff }
+.grp-opt-item.on .grp-opt-indicator.multi{ background:var(--accent);border-color:var(--accent);color:var(--accent-ink,#fff) }
 .grp-opt-name{ font-size:14px;font-weight:600;color:var(--text) }
 .grp-opt-price{ font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0 }
 .grp-opt-price.free{ color:var(--muted) }
@@ -1938,7 +1747,7 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
   display:flex;align-items:center;justify-content:center;
   cursor:pointer;transition:all .15s;flex-shrink:0;
 }
-.grp-qty-btn:active{ background:var(--accent);border-color:var(--accent);color:#fff }
+.grp-qty-btn:active{ background:var(--accent);border-color:var(--accent);color:var(--accent-ink,#fff) }
 .grp-qty-num{ font-size:13px;font-weight:700;min-width:16px;text-align:center }
 
 /* ═══════════════════════════════════════
@@ -2017,7 +1826,7 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 }
 .corte-card-badge{
   display:inline-flex;align-items:center;gap:4px;
-  background:var(--accent);color:#fff;
+  background:var(--accent);color:var(--accent-ink,#fff);
   font-size:10.5px;font-weight:800;
   padding:3px 9px;border-radius:99px;
   margin-top:3px;
@@ -2449,7 +2258,7 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 /* Botão confirmar peso */
 .ac-peso-confirm{
   display:block;width:calc(100% - 40px);margin:14px 20px 20px;
-  padding:15px;background:var(--accent);color:#fff;
+  padding:15px;background:var(--accent);color:var(--accent-ink,#fff);
   border:none;border-radius:14px;
   font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;
   cursor:pointer;transition:all .18s;
@@ -2486,7 +2295,7 @@ body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
 .xsell-price{ font-size:12px;font-weight:700;color:var(--accent) }
 .xsell-check{
   position:absolute;top:5px;right:5px;width:18px;height:18px;border-radius:50%;
-  background:var(--accent);color:#fff;font-size:10px;
+  background:var(--accent);color:var(--accent-ink,#fff);font-size:10px;
   display:none;align-items:center;justify-content:center;
 }
 .xsell-card.on .xsell-check{ display:flex }
@@ -3343,7 +3152,7 @@ body{
     </div>
     <!-- Abas Gramas / Quilos -->
     <div style="display:flex;gap:8px;margin:0 16px 14px;background:var(--s2);border-radius:12px;padding:4px">
-      <button id="tab-gramas" onclick="switchPesoTab('gramas')" style="flex:1;padding:8px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;transition:all .18s;background:var(--accent);color:#fff;font-family:inherit">Gramas</button>
+      <button id="tab-gramas" onclick="switchPesoTab('gramas')" style="flex:1;padding:8px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;transition:all .18s;background:var(--accent);color:var(--accent-ink,#fff);font-family:inherit">Gramas</button>
       <button id="tab-quilos" onclick="switchPesoTab('quilos')" style="flex:1;padding:8px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;transition:all .18s;background:transparent;color:var(--muted);font-family:inherit">Quilos</button>
     </div>
 
@@ -3444,7 +3253,7 @@ body{
             <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Ou copie o código Pix Copia e Cola:</div>
             <div id="pix-code-actions" style="display:flex;gap:6px;align-items:stretch;margin-bottom:12px">
               <input id="pix-copy-code" readonly value="">
-              <button onclick="_pixCopiar()" style="background:var(--accent-g);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H2.5A1.5 1.5 0 0 0 1 3.5v8A1.5 1.5 0 0 0 2.5 13H5" stroke="currentColor" stroke-width="1.4"/></svg> Copiar</button>
+              <button onclick="_pixCopiar()" style="background:var(--accent-g);color:var(--accent-ink,#fff);border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H2.5A1.5 1.5 0 0 0 1 3.5v8A1.5 1.5 0 0 0 2.5 13H5" stroke="currentColor" stroke-width="1.4"/></svg> Copiar</button>
             </div>
             <div id="pix-status-label" style="font-size:12.5px;font-weight:700;color:var(--muted)">⏳ Aguardando pagamento...</div>
             </div>
@@ -3471,7 +3280,7 @@ body{
             <div id="pix-manual-banco-lbl" style="font-size:11px;color:var(--muted);margin-bottom:6px"></div>
             <div style="display:flex;gap:6px;align-items:stretch;margin-bottom:10px">
               <input id="pix-manual-key-show" readonly style="flex:1;background:var(--s3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-weight:600;color:var(--text);text-align:center" value="">
-              <button onclick="_pixCopiarManual()" style="background:var(--accent-g);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H2.5A1.5 1.5 0 0 0 1 3.5v8A1.5 1.5 0 0 0 2.5 13H5" stroke="currentColor" stroke-width="1.4"/></svg> Copiar</button>
+              <button onclick="_pixCopiarManual()" style="background:var(--accent-g);color:var(--accent-ink,#fff);border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H2.5A1.5 1.5 0 0 0 1 3.5v8A1.5 1.5 0 0 0 2.5 13H5" stroke="currentColor" stroke-width="1.4"/></svg> Copiar</button>
             </div>
             <div id="pix-manual-valor-show" style="font-size:20px;font-weight:700;font-family:'Fraunces',serif;color:var(--amber)"></div>
           </div>
@@ -3481,7 +3290,7 @@ body{
             <div style="font-size:22px;margin-bottom:6px">⚠️</div>
             <div style="font-size:13px;font-weight:700;margin-bottom:4px;color:var(--text)">Não foi possível gerar o PIX</div>
             <div id="pix-error-msg" style="font-size:12px;color:var(--muted);margin-bottom:14px">Verifique sua conexão e tente novamente.</div>
-            <button id="pix-retry-btn" style="background:var(--accent-g);color:#fff;border:none;border-radius:9px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer">Tentar novamente</button>
+            <button id="pix-retry-btn" style="background:var(--accent-g);color:var(--accent-ink,#fff);border:none;border-radius:9px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer">Tentar novamente</button>
           </div>
 
         </div>
@@ -3581,7 +3390,7 @@ body{
           <div style="font-size:22px">🎯</div>
           <div style="font-size:14px;font-weight:700">Acompanhe sempre seus pedidos</div>
           <div style="font-size:12.5px;color:var(--muted);line-height:1.5">Crie uma conta gratuita para ver histórico e rastrear</div>
-          <button onclick="closeCart();openAuth('register')" style="margin-top:4px;padding:10px 24px;background:var(--accent-g);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">Criar conta grátis</button>
+          <button onclick="closeCart();openAuth('register')" style="margin-top:4px;padding:10px 24px;background:var(--accent-g);color:var(--accent-ink,#fff);border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">Criar conta grátis</button>
           <button onclick="document.getElementById('invite-signup').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer">Agora não</button>
         </div>
 
@@ -4136,7 +3945,7 @@ body{
 // arquivo único combinado em vez de 12 requisições separadas. Ver os
 // comentários em cardapio-bundle.js pra mais detalhes de como regenerar
 // esse arquivo depois de editar algum dos 12 módulos-fonte.
-document.write('<script src="/cardapio/cardapio-bundle.js?v=v14"><\/script>');
+document.write('<script src="/cardapio-temas.js?v=1"><\/script><script src="/cardapio/cardapio-bundle.js?v=v15"><\/script>');
 </script>
 <canvas id="anim-particle-canvas"></canvas>
 <button id="im-close-fab" onclick="closeItemModal()" style="position:fixed;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.65);border:none;color:#fff;display:none;align-items:center;justify-content:center;z-index:600;cursor:pointer;backdrop-filter:blur(6px);box-shadow:0 2px 12px rgba(0,0,0,.4)">

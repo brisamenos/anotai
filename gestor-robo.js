@@ -2201,7 +2201,8 @@ async function loadCardapioPublico() {
   if (corEl) corEl.value = cor;
 
   // Carrega tema
-  cpSelecionarTema(data.store_tema || 'classico');
+  window._cpCarregandoTema = true;
+  try { cpSelecionarTema(data.store_tema || 'classico'); } finally { window._cpCarregandoTema = false; }
 
   if (data.store_logo_url) {
     _cpLogoUrl = data.store_logo_url;
@@ -2286,213 +2287,107 @@ function cpSetCor(hex) {
 }
 
 // ── Seleção de tema do cardápio público ──────────────────
-const _CP_CARDAPIO_TEMAS = [
-  {
-    key:'classico', group:'essenciais', nome:'Classico', desc:'Claro e direto para qualquer loja.',
-    tags:['Geral','Limpo'], accent:'#f97316', swatches:['#f97316','#0ea5e9','#16a34a'],
-    colors:{ bg:'#f8f9fb', surface:'#ffffff', soft:'#e4e8ef', text:'#0f1117', muted:'#6b7280', border:'rgba(0,0,0,.08)' }
-  },
-  {
-    key:'delivery_pro', group:'essenciais', nome:'Delivery Pro', desc:'Visual moderno para operacao diaria.',
-    tags:['Delivery','Moderno'], accent:'#2563eb', swatches:['#2563eb','#f97316','#10b981'],
-    colors:{ bg:'#f6f7fb', surface:'#ffffff', soft:'#d8e0ec', text:'#132032', muted:'#617089', border:'rgba(15,23,42,.08)' }
-  },
-  {
-    key:'minimalista', group:'essenciais', nome:'Minimalista', desc:'Muito limpo, com foco nos produtos.',
-    tags:['Clean','Premium'], accent:'#111111', swatches:['#111111','#64748b','#ea580c'],
-    colors:{ bg:'#ffffff', surface:'#fafafa', soft:'#e5e5e5', text:'#111111', muted:'#737373', border:'rgba(0,0,0,.07)' }
-  },
-  {
-    key:'premium_clean', group:'essenciais', nome:'Premium Clean', desc:'Neutro sofisticado para marcas fortes.',
-    tags:['Premium','Neutro'], accent:'#18181b', swatches:['#18181b','#be123c','#2563eb'],
-    colors:{ bg:'#f7f7f5', surface:'#ffffff', soft:'#deded8', text:'#18181b', muted:'#71717a', border:'rgba(24,24,27,.08)' }
-  },
-  {
-    key:'moderno', group:'essenciais', nome:'Moderno', desc:'Cards com sombra e icones redondos, estilo apps de entrega.',
-    tags:['Delivery','Clean'], accent:'#f97316', swatches:['#f97316','#2563eb','#16a34a'],
-    colors:{ bg:'#f7f7f8', surface:'#ffffff', soft:'#e4e4e8', text:'#1a1a1a', muted:'#767676', border:'rgba(0,0,0,.08)' }
-  },
-  {
-    key:'tropical', group:'lanches', nome:'Tropical', desc:'Quente e chamativo para lanches.',
-    tags:['Lanche','Quente'], accent:'#ea580c', swatches:['#ea580c','#dc2626','#f59e0b'],
-    colors:{ bg:'#fef9f0', surface:'#fff7ed', soft:'#fed7aa', text:'#431407', muted:'#92400e', border:'rgba(234,88,12,.15)' }
-  },
-  {
-    key:'burger_red', group:'lanches', nome:'Burger Red', desc:'Forte para hamburgueria e fast food.',
-    tags:['Burger','Fast food'], accent:'#dc2626', swatches:['#dc2626','#f97316','#facc15'],
-    colors:{ bg:'#fff6ed', surface:'#fffaf5', soft:'#fbc891', text:'#3b1606', muted:'#9a3412', border:'rgba(194,65,12,.14)' }
-  },
-  {
-    key:'pizzaria_italia', group:'lanches', nome:'Pizzaria Italia', desc:'Tradicional, bom para pizzas e massas.',
-    tags:['Pizza','Massas'], accent:'#dc2626', swatches:['#dc2626','#15803d','#b45309'],
-    colors:{ bg:'#fbf7ef', surface:'#ffffff', soft:'#f8d8b3', text:'#332014', muted:'#7d5a3a', border:'rgba(127,29,29,.12)' }
-  },
-  {
-    key:'noite_delivery', group:'lanches', nome:'Noite Delivery', desc:'Escuro, pratico e forte para madrugada.',
-    tags:['Delivery','Noite'], accent:'#22c55e', swatches:['#22c55e','#f97316','#38bdf8'],
-    colors:{ bg:'#0e1118', surface:'#161b24', soft:'#293244', text:'#f8fafc', muted:'#9aa4b2', border:'rgba(255,255,255,.08)' }
-  },
-  {
-    key:'verde', group:'naturais', nome:'Verde Natural', desc:'Leve para comida saudavel.',
-    tags:['Saudavel','Natural'], accent:'#16a34a', swatches:['#16a34a','#0f766e','#84cc16'],
-    colors:{ bg:'#f0faf2', surface:'#ffffff', soft:'#d1ecda', text:'#0d2b18', muted:'#3a7a52', border:'rgba(34,120,60,.12)' }
-  },
-  {
-    key:'fresh_verde', group:'naturais', nome:'Fresh Verde', desc:'Fresco para saladas, marmitas e fit.',
-    tags:['Fit','Fresh'], accent:'#10b981', swatches:['#10b981','#22c55e','#0284c7'],
-    colors:{ bg:'#f4fbf6', surface:'#ffffff', soft:'#cfeade', text:'#10291d', muted:'#3f7459', border:'rgba(22,101,52,.10)' }
-  },
-  {
-    key:'mercado_azul', group:'naturais', nome:'Mercado Azul', desc:'Organizado para mercado e conveniencia.',
-    tags:['Mercado','Confiavel'], accent:'#2563eb', swatches:['#2563eb','#0891b2','#16a34a'],
-    colors:{ bg:'#f3f8ff', surface:'#ffffff', soft:'#c8defa', text:'#10243c', muted:'#46637f', border:'rgba(37,99,235,.10)' }
-  },
-  {
-    key:'acougue', group:'segmentos', nome:'Acougue', desc:'Escuro e robusto para carnes.',
-    tags:['Carnes','Churrasco'], accent:'#dc2626', swatches:['#dc2626','#991b1b','#f97316'],
-    colors:{ bg:'#1a0a05', surface:'#2a100a', soft:'#4a2018', text:'#f5e6e0', muted:'#c9a090', border:'rgba(220,80,30,.2)' }
-  },
-  {
-    key:'acai_berry', group:'segmentos', nome:'Acai Berry', desc:'Vivo para acai, sorvetes e sobremesas.',
-    tags:['Acai','Sobremesa'], accent:'#a21caf', swatches:['#a21caf','#be185d','#7c3aed'],
-    colors:{ bg:'#fff7fb', surface:'#ffffff', soft:'#edc4dc', text:'#351123', muted:'#8a3a63', border:'rgba(134,25,80,.12)' }
-  },
-  {
-    key:'sushi_black', group:'segmentos', nome:'Sushi Black', desc:'Escuro elegante para sushi e oriental.',
-    tags:['Sushi','Oriental'], accent:'#06b6d4', swatches:['#06b6d4','#ef4444','#22c55e'],
-    colors:{ bg:'#070b0c', surface:'#101719', soft:'#203437', text:'#edfafa', muted:'#93b5b8', border:'rgba(125,211,252,.10)' }
-  },
-  {
-    key:'padaria_gold', group:'segmentos', nome:'Padaria Gold', desc:'Aconchegante para padaria e cafe.',
-    tags:['Padaria','Cafe'], accent:'#d97706', swatches:['#d97706','#b45309','#78350f'],
-    colors:{ bg:'#fff8ee', surface:'#fffdf8', soft:'#f5d29a', text:'#352411', muted:'#815c2b', border:'rgba(180,83,9,.12)' }
-  },
-  {
-    key:'rose', group:'segmentos', nome:'Rose', desc:'Delicado para doces, cafes e presentes.',
-    tags:['Doces','Cafe'], accent:'#e11d48', swatches:['#e11d48','#db2777','#f97316'],
-    colors:{ bg:'#fff5f7', surface:'#ffffff', soft:'#ffc9d5', text:'#3d0a14', muted:'#a03050', border:'rgba(220,60,90,.12)' }
-  },
-  {
-    key:'dark', group:'premium', nome:'Dark Luxo', desc:'Escuro premium para restaurantes.',
-    tags:['Escuro','Luxo'], accent:'#3b82f6', swatches:['#3b82f6','#f97316','#a855f7'],
-    colors:{ bg:'#0f1117', surface:'#181b24', soft:'#242840', text:'#e5e7eb', muted:'#9ca3af', border:'rgba(255,255,255,.08)' }
-  },
-  {
-    key:'noturno', group:'premium', nome:'Noturno', desc:'Profundo para bares e operacao noturna.',
-    tags:['Bar','Noite'], accent:'#8b5cf6', swatches:['#8b5cf6','#22c55e','#f97316'],
-    colors:{ bg:'#080810', surface:'#0f0f1c', soft:'#1e1e30', text:'#eeedf6', muted:'#7878a0', border:'rgba(255,255,255,.07)' }
-  },
-  {
-    key:'oceano', group:'premium', nome:'Oceano', desc:'Azul profundo para frutos do mar.',
-    tags:['Peixes','Sushi'], accent:'#0ea5e9', swatches:['#0ea5e9','#14b8a6','#2563eb'],
-    colors:{ bg:'#0a1628', surface:'#0f1f38', soft:'#1c3558', text:'#e0ecf8', muted:'#6890b0', border:'rgba(56,189,248,.10)' }
-  },
-  {
-    key:'dourado', group:'premium', nome:'Dourado', desc:'Luxuoso para churrascarias e restaurantes.',
-    tags:['Premium','Luxo'], accent:'#d4a574', swatches:['#d4a574','#f59e0b','#ef4444'],
-    colors:{ bg:'#0f0d08', surface:'#1a1610', soft:'#2e2820', text:'#f0e8d8', muted:'#a09070', border:'rgba(212,165,116,.12)' }
-  }
-];
-
-const _CP_TEMA_GRUPOS = [
-  { key:'essenciais', titulo:'Essenciais', desc:'Bases seguras para quase todo cardapio.' },
-  { key:'lanches', titulo:'Lanches e delivery', desc:'Mais energia visual para pedido rapido.' },
-  { key:'naturais', titulo:'Naturais e mercado', desc:'Cores leves para rotinas de compra.' },
-  { key:'segmentos', titulo:'Segmentos', desc:'Temas prontos para nichos especificos.' },
-  { key:'premium', titulo:'Escuros e premium', desc:'Visual mais marcante para marcas fortes.' },
-];
+// O catálogo de temas mora em /cardapio-temas.js (o mesmo arquivo que o
+// cardápio usa), então o que o gestor mostra é exatamente o que o cliente vê.
+function _cpTemasCat() { return window.TEMAS_CARDAPIO || { lista: [], grupos: [], aliases: {}, fontes: {}, resolver: k => null }; }
+let _cpTemaFiltro = 'todos';
 
 function cpTemaPreviewHtml(t) {
-  const c = t.colors || {};
-  const accent = t.accent || '#f97316';
+  const v = t.vars, r = Math.max(0, t.raio);
+  const linha = (w, cor, op) => `<span style="display:block;height:4px;width:${w};border-radius:9px;background:${cor};opacity:${op || 1}"></span>`;
+  const item = () => `
+    <div class="cpt-pv-item" style="border-color:${v['--border']}">
+      <div style="flex:1;display:flex;flex-direction:column;gap:4px">${linha('70%', v['--text'], .85)}${linha('90%', v['--muted'], .45)}${linha('34%', v['--text'], .7)}</div>
+      <i style="background:${v['--s3']};border-radius:${Math.min(r, 8)}px"></i>
+    </div>`;
   return `
-    <div class="cp-theme-preview" style="background:${c.bg || '#f8f9fb'}">
-      <div class="cp-theme-hero-mini" style="background:${c.surface || '#fff'};border-color:${c.border || 'rgba(0,0,0,.08)'}">
-        <span style="background:${c.text || '#111'}"></span>
-        <span style="background:${c.muted || '#777'}"></span>
-      </div>
-      <div class="cp-theme-products-mini">
-        <div style="background:${c.surface || '#fff'};border-color:${c.border || 'rgba(0,0,0,.08)'}">
-          <i style="background:${c.soft || '#e5e7eb'}"></i>
-          <b style="background:${c.text || '#111'}"></b>
-          <em style="background:${accent}"></em>
+    <div class="cpt-pv" style="background:${v['--bg']}">
+      <div class="cpt-pv-capa" style="background:${t.accent}"></div>
+      <div class="cpt-pv-sheet" style="background:${v['--bg']}">
+        <div class="cpt-pv-logo" style="background:${v['--s3']};border-color:${v['--bg']};border-radius:${Math.min(50, r * 1.6 + 12) > 26 ? '50%' : (r * 1.6 + 12) / 2 + 'px'}"></div>
+        <div class="cpt-pv-nome" data-f="${t.fonte}" style="color:${v['--text']}">Sua Loja</div>
+        <div class="cpt-pv-status" style="background:${v['--s2']};border-color:${v['--border']};border-radius:${Math.min(r + 2, 12)}px">
+          <b style="background:${t.escuro ? '#4ade80' : '#15803d'}"></b>${linha('40%', v['--muted'], .6)}
         </div>
-        <div style="background:${c.surface || '#fff'};border-color:${c.border || 'rgba(0,0,0,.08)'}">
-          <i style="background:${c.soft || '#e5e7eb'}"></i>
-          <b style="background:${c.text || '#111'}"></b>
-          <em style="background:${accent}"></em>
+        <div class="cpt-pv-tabs" style="border-color:${v['--border']}">
+          <span style="background:${v['--text']}"></span><span style="background:${v['--muted']};opacity:.5"></span><span style="background:${v['--muted']};opacity:.5"></span>
+          <em style="background:${t.accent}"></em>
         </div>
+        ${item()}${item()}
       </div>
-    </div>
-  `;
-}
-
-function cpTemaSwatchesHtml(t) {
-  return (t.swatches || [t.accent || '#f97316']).map(cor => `
-    <button type="button" class="cp-theme-swatch" style="background:${cor}" title="Usar cor ${cor}"
-      onclick="event.stopPropagation();cpSetCor('${cor}');cpSelecionarTema('${t.key}')"></button>
-  `).join('');
+      <div class="cpt-pv-cta" style="background:${t.accent};border-radius:${Math.min(r + 2, 12)}px"></div>
+    </div>`;
 }
 
 function cpTemaCardHtml(t) {
-  const tags = (t.tags || []).map(tag => `<span class="cp-theme-tag">${tag}</span>`).join('');
+  const segs = (t.segs || []).slice(0, 3).join(' · ');
+  const sw = (t.swatches || []).map(cor => `
+    <button type="button" class="cpt-sw" style="background:${cor}" title="Usar este tema com a cor ${cor}" aria-label="Usar com a cor ${cor}"
+      onclick="event.stopPropagation();cpSelecionarTema('${t.key}', '${cor}')"></button>`).join('');
   return `
-    <button type="button" class="cp-tema-card cp-theme-card" data-tema="${t.key}"
-      onclick="cpSelecionarTema('${t.key}')" title="${t.desc}">
+    <div class="cpt-card cp-tema-card" data-tema="${t.key}" role="button" tabindex="0" aria-pressed="false"
+      onclick="cpSelecionarTema('${t.key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();cpSelecionarTema('${t.key}')}">
       ${cpTemaPreviewHtml(t)}
-      <div class="cp-theme-info">
-        <div class="cp-theme-title-row">
-          <div>
-            <strong>${t.nome}</strong>
-            <small>${t.desc}</small>
-          </div>
-          <span class="cp-tema-check" aria-hidden="true">
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </span>
+      <div class="cpt-info">
+        <div class="cpt-nome-row">
+          <strong>${t.nome}</strong>
+          <span class="cpt-check cp-tema-check" aria-hidden="true"><svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
         </div>
-        <div class="cp-theme-tags">${tags}</div>
-        <div class="cp-theme-swatches">${cpTemaSwatchesHtml(t)}</div>
+        <small>${t.desc}</small>
+        <div class="cpt-segs">${segs}</div>
+        <div class="cpt-sws">${sw}</div>
       </div>
-    </button>
-  `;
+    </div>`;
 }
 
 function cpUpdateTemaSelection(tema) {
-  document.querySelectorAll('.cp-tema-card').forEach(card => {
-    const isSelected = card.dataset.tema === tema;
-    card.style.borderColor = isSelected ? 'var(--accent)' : 'var(--border)';
-    card.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
-    const check = card.querySelector('.cp-tema-check');
-    if (check) check.style.display = isSelected ? 'flex' : 'none';
+  const cat = _cpTemasCat();
+  const alvo = (cat.aliases && cat.aliases[tema]) || tema;
+  document.querySelectorAll('#cp-temas-grid .cpt-card').forEach(card => {
+    const on = card.dataset.tema === alvo;
+    card.classList.toggle('on', on);
+    card.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
+  const atual = document.getElementById('cp-tema-atual');
+  const def = cat.resolver ? cat.resolver(tema) : null;
+  if (atual && def) atual.textContent = def.nome;
+}
+
+function cpFiltrarTemas(f) {
+  _cpTemaFiltro = f;
+  cpRenderTemasGrid();
 }
 
 function cpRenderTemasGrid() {
   const grid = document.getElementById('cp-temas-grid');
   if (!grid) return;
-
-  document.body.classList.add('cp-theme-rendered');
-  grid.className = 'cp-theme-grid';
-  grid.style.cssText = 'display:flex;flex-direction:column;gap:14px';
-
-  grid.innerHTML = _CP_TEMA_GRUPOS.map(grupo => {
-    const temas = _CP_CARDAPIO_TEMAS.filter(t => t.group === grupo.key);
-    if (!temas.length) return '';
+  const cat = _cpTemasCat();
+  const filtros = document.getElementById('cp-temas-filtros');
+  if (filtros) {
+    const opts = [{ key: 'todos', titulo: 'Todos', n: cat.lista.length }].concat(cat.grupos.map(g => ({ key: g.key, titulo: g.titulo, n: cat.lista.filter(t => t.grupo === g.key).length })));
+    filtros.innerHTML = opts.map(o => `<button type="button" class="cpt-filtro${_cpTemaFiltro === o.key ? ' on' : ''}" onclick="cpFiltrarTemas('${o.key}')">${o.titulo} <span>${o.n}</span></button>`).join('');
+  }
+  const grupos = cat.grupos.filter(g => _cpTemaFiltro === 'todos' || g.key === _cpTemaFiltro);
+  grid.innerHTML = grupos.map(g => {
+    const temas = cat.lista.filter(t => t.grupo === g.key);
     return `
-      <section class="cp-theme-group">
-        <div class="cp-theme-group-head">
-          <div>
-            <strong>${grupo.titulo}</strong>
-            <span>${grupo.desc}</span>
-          </div>
-        </div>
-        <div class="cp-theme-list">${temas.map(cpTemaCardHtml).join('')}</div>
-      </section>
-    `;
+      <section class="cpt-grupo">
+        <div class="cpt-grupo-head"><strong>${g.titulo}</strong><span>${g.desc}</span></div>
+        <div class="cpt-lista">${temas.map(cpTemaCardHtml).join('')}</div>
+      </section>`;
   }).join('');
+  cpUpdateTemaSelection(document.getElementById('cp-tema-value')?.value || 'classico');
+}
 
-  const selected = document.getElementById('cp-tema-value')?.value || 'classico';
-  cpUpdateTemaSelection(selected);
+// Mostra o tema na hora no celular de pré-visualização (sem salvar)
+function cpPreviewTemaAoVivo(tema, cor) {
+  try {
+    const w = document.getElementById('cp-iframe')?.contentWindow;
+    if (!w || typeof w.applyTema !== 'function') return;
+    w.applyTema(tema);
+    if (cor && typeof w.setAccentColor === 'function') w.setAccentColor(cor);
+    w.document.documentElement.style.removeProperty('--text');
+  } catch (e) {}
 }
 
 function cpSetCorTexto(cor) {
@@ -2586,11 +2481,8 @@ function cpAtualizarVisAgAviso() {
   card.style.display = on ? 'block' : 'none';
 }
 
-function cpSelecionarTema(tema) {
-  if (!document.querySelector('#cp-temas-grid .cp-theme-card')) cpRenderTemasGrid();
-  // Atualiza borda visual de cada card
-  cpUpdateTemaSelection(tema);
-  // Armazena tema selecionado no input oculto
+function cpSelecionarTema(tema, corEscolhida) {
+  if (!document.querySelector('#cp-temas-grid .cpt-card')) cpRenderTemasGrid();
   let inp = document.getElementById('cp-tema-value');
   if (!inp) {
     inp = document.createElement('input');
@@ -2599,13 +2491,19 @@ function cpSelecionarTema(tema) {
     document.body.appendChild(inp);
   }
   inp.value = tema;
+  cpUpdateTemaSelection(tema);
 
-  // Cada tema tem uma paleta curada (destaque + texto) — aplica junto pra já sair
-  // com um visual completo e profissional, sem o gestor ter que ajustar cor por cor.
-  const def = _CP_CARDAPIO_TEMAS.find(t => t.key === tema);
+  // Cada tema já vem com a cor de destaque e a cor dos textos certas —
+  // o gestor não precisa ajustar nada (mas pode trocar depois).
+  const cat = _cpTemasCat();
+  const def = cat.resolver ? cat.resolver(tema) : null;
+  // Na carga da tela (sem clique) não mexe nas cores que a loja já salvou
+  if (window._cpCarregandoTema) return;
   if (def) {
-    if (def.accent) cpSetCor(def.accent);
-    if (def.colors?.text) cpSetCorTexto(def.colors.text);
+    const cor = corEscolhida || def.accent;
+    cpSetCor(cor);
+    cpSetCorTexto(def.vars['--text']);
+    cpPreviewTemaAoVivo(def.key, cor);
   }
 }
 
