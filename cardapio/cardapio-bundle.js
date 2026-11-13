@@ -10286,10 +10286,13 @@ function applyHeroBanners(list) {
 
   const items = Array.isArray(list) ? list.slice(0, 5) : [];
   if (!items.length) {
+    // Loja sem banner: mostra a capa padrão (cor da loja + padrão leve)
     heroBanner.classList.remove('show');
+    heroBanner.classList.add('padrao');
     heroBanner.innerHTML = '';
     return;
   }
+  heroBanner.classList.remove('padrao');
 
   const resolveUrl = (u) => (u.startsWith('http') || u.startsWith('data:')) ? u : location.origin + u;
   const slidesHtml = items.map((b, i) => {
