@@ -448,7 +448,7 @@ function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
     const isUnidade = _kitMontavelEhUnidade(i);
     const precoLabel = 'R$ ' + parseFloat(i.price || 0).toFixed(2).replace('.', ',') + (isUnidade ? '/un' : '/kg');
     const ilustracao = i.image_url
-      ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
+      ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
       : `<span style="font-size:28px">${i.emoji || '🥩'}</span>`;
     // Card fica compacto na grade — peso, tipo de corte e preparo são
     // escolhidos num modal próprio (_kitMontavelAbrirConfig), não expandindo
@@ -508,7 +508,7 @@ function _kitMontavelAbrirConfig(itemId) {
   body.innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
       <div style="width:52px;height:52px;border-radius:12px;overflow:hidden;flex-shrink:0;background:var(--s2);display:flex;align-items:center;justify-content:center">
-        ${it.image_url ? `<img src="${it.image_url}" style="width:100%;height:100%;object-fit:cover">` : `<span style="font-size:26px">${it.emoji || '🥩'}</span>`}
+        ${it.image_url ? `<img src="${_fotoMini(it.image_url, 480)}" style="width:100%;height:100%;object-fit:cover">` : `<span style="font-size:26px">${it.emoji || '🥩'}</span>`}
       </div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:800;font-size:15.5px">${it.name}</div>
@@ -1191,7 +1191,7 @@ function openPreparoDetail(preparoId) {
         const pesos  = (pesosGrp?.valores || []).map(p => `${p}g`).join(' / ');
 
         const imgEl = i.image_url
-          ? `<img src="${i.image_url}" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`
+          ? `<img src="${_fotoMini(i.image_url, 480)}" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`
           : `<span style="font-size:30px"><svg width='24' height='24' viewBox='0 0 24 24' fill='none'><path d='M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/><circle cx='12' cy='12' r='3' stroke='currentColor' stroke-width='1.4'/></svg></span>`;
 
         return `<div onclick="closePreparoDetail();openItemModal(${i.id})" style="display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent" onmouseenter="this.style.opacity='.8'" onmouseleave="this.style.opacity='1'">
@@ -1435,7 +1435,7 @@ function renderImXsell(item) {
 
   const cards = others.map(o => `
     <div class="xsell-card" id="xsell_${o.id}" onclick="xsellToggle(${o.id})" style="position:relative">
-      <div class="xsell-img">${o.image_url ? `<img src="${o.image_url}" >` : (o.emoji||'')}</div>
+      <div class="xsell-img">${o.image_url ? `<img src="${_fotoMini(o.image_url, 160)}" >` : (o.emoji||'')}</div>
       <div class="xsell-body">
         <div class="xsell-name">${o.name}</div>
         <div class="xsell-price">R$ ${fmt(o.price)}</div>

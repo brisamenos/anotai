@@ -105,6 +105,14 @@ function toast(iconOrEmoji, msg) {
   }, 2800);
 }
 
+// Foto reduzida do servidor (?w=): foto de celular de 4000px no tamanho
+// original deixava o cardápio pesado no 4G e travava celulares mais simples.
+function _fotoMini(url, w) {
+  if (!url || typeof url !== 'string' || url.startsWith('data:') || url.includes('?')) return url;
+  const rel = url.startsWith(location.origin + '/uploads/') ? url.slice(location.origin.length) : url;
+  return rel.startsWith('/uploads/') ? rel + '?w=' + w : url;
+}
+
 function fmt(n) {
   return Number(n||0).toFixed(2).replace('.',',');
 }

@@ -36,7 +36,7 @@ function openItemModal(id) {
     imgEl.innerHTML = `<video src="${i.video_url}" autoplay muted loop playsinline controls style="width:100%;height:100%;object-fit:cover" onerror="imVideoFallback(this,'${fallbackImg}','${(i.name||'').replace(/'/g,'%27')}')"></video>`;
     fixIosVideoAutoplay(imgEl);
   } else if (i.image_url) {
-    imgEl.innerHTML = `<img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover">`;
+    imgEl.innerHTML = `<img src="${_fotoMini(i.image_url, 1080)}" alt="${i.name}" decoding="async" style="width:100%;height:100%;object-fit:cover">`;
   } else {
     imgEl.innerHTML = `<div style="opacity:.25"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="1.5" opacity=".3"/><path d="M16 24h16M24 16v16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".3"/></svg></div>`;
   }
@@ -457,7 +457,7 @@ function renderHalfPicker(baseItem) {
   list.innerHTML = wholeOpt + siblings.map(s => {
     const on = (_halfItem && _halfItem.id === s.id && !_isWholeFlavorSelected()) ? ' on' : '';
     const thumbInner = s.image_url
-      ? `<img src="${s.image_url}" alt="${s.name}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`
+      ? `<img src="${_fotoMini(s.image_url, 160)}" alt="${s.name}" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`
       : `<span>$<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>`;
     const check = (_halfItem && _halfItem.id === s.id && !_isWholeFlavorSelected()) ? '✓' : '';
     const hasSizes = _pizzaHasSizePricing(baseItem);
@@ -505,7 +505,7 @@ function updateHalfUI() {
     // Pizza inteira — mesmo sabor
     const emoEl = document.getElementById('half-sel-emoji');
     if (base && base.image_url) {
-      emoEl.innerHTML = `<img src="${base.image_url}" alt="${base.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
+      emoEl.innerHTML = `<img src="${_fotoMini(base.image_url, 160)}" alt="${base.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
     } else {
       emoEl.innerHTML = (base && base.image_url ? '' : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`);
     }
@@ -519,7 +519,7 @@ function updateHalfUI() {
   // Emoji/img da 2ª metade
   const emoEl = document.getElementById('half-sel-emoji');
   if (_halfItem.image_url) {
-    emoEl.innerHTML = `<img src="${_halfItem.image_url}" alt="${_halfItem.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
+    emoEl.innerHTML = `<img src="${_fotoMini(_halfItem.image_url, 160)}" alt="${_halfItem.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
   } else {
     emoEl.innerHTML = (_halfItem.image_url ? '' : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`);
   }

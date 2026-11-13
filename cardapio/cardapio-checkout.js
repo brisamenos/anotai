@@ -553,15 +553,17 @@ async function _doSubmitOrder(addr, troco) {
       throw new Error('tenant_id ausente — pedido bloqueado para evitar vazamento entre tenants');
     }
 
-    // ── Consume do cupom (decrementa uses_left atomicamente no servidor) ──
-    // Anti-fraude: revalida o cupom no servidor e consome 1 uso antes de criar
-    // o pedido. Se o cupom expirou ou esgotou no meio do checkout, rejeita.
-    if (typeof appliedCupom !== 'undefined' && appliedCupom && appliedCupom.code) {
+    // ── Cupom: confere ANTES de criar o pedido, mas só gasta o uso DEPOIS ──
+    // Antes o uso era gasto aqui, antes do pedido: se o servidor recusasse o
+    // pedido (loja fechou, bairro fora da área, pedido mínimo), o cliente
+    // perdia o cupom. Agora só confere aqui e gasta logo após o pedido criado.
+    const _cupomParaGastar = (typeof appliedCupom !== 'undefined' && appliedCupom && appliedCupom.code) ? appliedCupom.code : null;
+    if (_cupomParaGastar) {
       try {
         const r = await fetch('/api/cupom/validar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
-          body: JSON.stringify({ code: appliedCupom.code, subtotal: cartSubtotal(), consume: true })
+          body: JSON.stringify({ code: _cupomParaGastar, subtotal: cartSubtotal(), consume: false })
         });
         const d = await r.json();
         if (!d.ok) {
@@ -610,6 +612,15 @@ async function _doSubmitOrder(addr, troco) {
     }).select().single();
 
     if (error) throw error;
+
+    // Pedido criado: agora sim gasta 1 uso do cupom (não trava o pedido se falhar)
+    if (_cupomParaGastar) {
+      fetch('/api/cupom/validar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
+        body: JSON.stringify({ code: _cupomParaGastar, subtotal: cartSubtotal(), consume: true })
+      }).catch(e => console.warn('[cupom] não registrou o uso:', e.message));
+    }
 
     // Celebração imediata só pra formas de pagamento já confirmadas na hora
     // (dinheiro/crédito/débito na entrega). PIX e cartão online têm sua

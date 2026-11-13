@@ -260,6 +260,14 @@ function toast(iconOrEmoji, msg) {
   }, 2800);
 }
 
+// Foto reduzida do servidor (?w=): foto de celular de 4000px no tamanho
+// original deixava o cardápio pesado no 4G e travava celulares mais simples.
+function _fotoMini(url, w) {
+  if (!url || typeof url !== 'string' || url.startsWith('data:') || url.includes('?')) return url;
+  const rel = url.startsWith(location.origin + '/uploads/') ? url.slice(location.origin.length) : url;
+  return rel.startsWith('/uploads/') ? rel + '?w=' + w : url;
+}
+
 function fmt(n) {
   return Number(n||0).toFixed(2).replace('.',',');
 }
@@ -1937,7 +1945,7 @@ function renderCartDrawer() {
     list.innerHTML = cart.map(i => `
       <div class="ci">
         <div class="ci-thumb">
-          ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : i.emoji||'🍽️'}
+          ${i.image_url ? `<img src="${_fotoMini(i.image_url, 160)}" alt="${i.name}" loading="lazy" decoding="async">` : i.emoji||'🍽️'}
         </div>
         <div class="ci-info">
           <div class="ci-name">${i.name}</div>
@@ -2379,7 +2387,7 @@ function buildCats() {
       b.onclick = () => filterCat(b, c.name);
       const emojiFallback = isModerno ? _emojiPorNome(c.label || c.name) : null;
       const iconHtml = c.image_url
-        ? `<img src="${c.image_url}" alt="${c.label||c.name}" loading="lazy" decoding="async">`
+        ? `<img src="${_fotoMini(c.image_url, 160)}" alt="${c.label||c.name}" loading="lazy" decoding="async">`
         : (c.emoji
             ? `<span style="font-size:16px;line-height:1">${c.emoji}</span>`
             : (emojiFallback
@@ -2401,7 +2409,7 @@ function buildCats() {
       b.dataset.key = c.name;
       b.onclick = () => filterCat(b, c.name);
       if (c.image_url) {
-        b.innerHTML = `<span class="cat-btn-pill-icon"><img src="${c.image_url}" alt="" loading="lazy" decoding="async"></span>${c.label || c.name}`;
+        b.innerHTML = `<span class="cat-btn-pill-icon"><img src="${_fotoMini(c.image_url, 160)}" alt="" loading="lazy" decoding="async"></span>${c.label || c.name}`;
       } else {
         b.textContent = (c.emoji ? c.emoji + ' ' : '') + (c.label || c.name);
       }
@@ -2442,7 +2450,7 @@ function buildCategoriaShowcase() {
     <div class="cats-showcase-scroll">
       ${cats.map(c => `
         <div class="cats-showcase-card" onclick="verMaisCat('${c.name.replace(/'/g,"\\'")}')">
-          <img src="${c.image_url}" alt="${c.label || c.name}" loading="lazy" decoding="async">
+          <img src="${_fotoMini(c.image_url, 160)}" alt="${c.label || c.name}" loading="lazy" decoding="async">
           <div class="cats-showcase-name">${c.label || c.name}</div>
         </div>
       `).join('')}
@@ -2659,7 +2667,7 @@ function renderMenu() {
         html += `
         <div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}>
           <div class="dest-img${i.image_url ? ' has-photo' : ''}">
-            ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`}
+            ${i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`}
             ${i.hide_price ? '' : `<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>`}
           </div>
           <div class="dest-body">
@@ -2739,7 +2747,7 @@ function renderMenu() {
         const esg = i.status === 'esgotado';
         const destMedia = i.video_url
           ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
-          : (i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : '');
+          : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : '');
         html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img${(i.image_url||i.video_url)?' has-photo':''}">${destMedia}${i.hide_price?'':`<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>`}</div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.hide_price?`<span class="dest-price" style="color:var(--muted)">Ver opções</span>`:`${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span>`}</div></div></div>`;
       });
       html += `</div></div>`;
@@ -3060,7 +3068,7 @@ function itemCard(i) {
     <div class="item-img${(i.image_url||i.video_url) ? ' has-photo' : ''}">
       ${i.video_url
         ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
-        : (i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`)}
+        : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`)}
       ${i.video_url ? `<span class="item-video-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></span>` : ''}
       ${i.promo||i.price_old ? '<span class="item-promo-badge">PROMO</span>' : (typeof promoAutomatica !== 'undefined' && promoAutomatica?.ativo && typeof _promoItemElegivel === 'function' && _promoItemElegivel(i) ? `<span class="item-promo-badge">${promoAutomatica.tipo === 'valor' ? '-R$ ' + fmt(promoAutomatica.valor) : '-' + promoAutomatica.valor + '% OFF'}</span>` : '')}
       ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}
@@ -3123,7 +3131,7 @@ function openItemModal(id) {
     imgEl.innerHTML = `<video src="${i.video_url}" autoplay muted loop playsinline controls style="width:100%;height:100%;object-fit:cover" onerror="imVideoFallback(this,'${fallbackImg}','${(i.name||'').replace(/'/g,'%27')}')"></video>`;
     fixIosVideoAutoplay(imgEl);
   } else if (i.image_url) {
-    imgEl.innerHTML = `<img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover">`;
+    imgEl.innerHTML = `<img src="${_fotoMini(i.image_url, 1080)}" alt="${i.name}" decoding="async" style="width:100%;height:100%;object-fit:cover">`;
   } else {
     imgEl.innerHTML = `<div style="opacity:.25"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="1.5" opacity=".3"/><path d="M16 24h16M24 16v16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".3"/></svg></div>`;
   }
@@ -3544,7 +3552,7 @@ function renderHalfPicker(baseItem) {
   list.innerHTML = wholeOpt + siblings.map(s => {
     const on = (_halfItem && _halfItem.id === s.id && !_isWholeFlavorSelected()) ? ' on' : '';
     const thumbInner = s.image_url
-      ? `<img src="${s.image_url}" alt="${s.name}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`
+      ? `<img src="${_fotoMini(s.image_url, 160)}" alt="${s.name}" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`
       : `<span>$<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>`;
     const check = (_halfItem && _halfItem.id === s.id && !_isWholeFlavorSelected()) ? '✓' : '';
     const hasSizes = _pizzaHasSizePricing(baseItem);
@@ -3592,7 +3600,7 @@ function updateHalfUI() {
     // Pizza inteira — mesmo sabor
     const emoEl = document.getElementById('half-sel-emoji');
     if (base && base.image_url) {
-      emoEl.innerHTML = `<img src="${base.image_url}" alt="${base.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
+      emoEl.innerHTML = `<img src="${_fotoMini(base.image_url, 160)}" alt="${base.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
     } else {
       emoEl.innerHTML = (base && base.image_url ? '' : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`);
     }
@@ -3606,7 +3614,7 @@ function updateHalfUI() {
   // Emoji/img da 2ª metade
   const emoEl = document.getElementById('half-sel-emoji');
   if (_halfItem.image_url) {
-    emoEl.innerHTML = `<img src="${_halfItem.image_url}" alt="${_halfItem.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
+    emoEl.innerHTML = `<img src="${_fotoMini(_halfItem.image_url, 160)}" alt="${_halfItem.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
   } else {
     emoEl.innerHTML = (_halfItem.image_url ? '' : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`);
   }
@@ -5097,15 +5105,17 @@ async function _doSubmitOrder(addr, troco) {
       throw new Error('tenant_id ausente — pedido bloqueado para evitar vazamento entre tenants');
     }
 
-    // ── Consume do cupom (decrementa uses_left atomicamente no servidor) ──
-    // Anti-fraude: revalida o cupom no servidor e consome 1 uso antes de criar
-    // o pedido. Se o cupom expirou ou esgotou no meio do checkout, rejeita.
-    if (typeof appliedCupom !== 'undefined' && appliedCupom && appliedCupom.code) {
+    // ── Cupom: confere ANTES de criar o pedido, mas só gasta o uso DEPOIS ──
+    // Antes o uso era gasto aqui, antes do pedido: se o servidor recusasse o
+    // pedido (loja fechou, bairro fora da área, pedido mínimo), o cliente
+    // perdia o cupom. Agora só confere aqui e gasta logo após o pedido criado.
+    const _cupomParaGastar = (typeof appliedCupom !== 'undefined' && appliedCupom && appliedCupom.code) ? appliedCupom.code : null;
+    if (_cupomParaGastar) {
       try {
         const r = await fetch('/api/cupom/validar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
-          body: JSON.stringify({ code: appliedCupom.code, subtotal: cartSubtotal(), consume: true })
+          body: JSON.stringify({ code: _cupomParaGastar, subtotal: cartSubtotal(), consume: false })
         });
         const d = await r.json();
         if (!d.ok) {
@@ -5154,6 +5164,15 @@ async function _doSubmitOrder(addr, troco) {
     }).select().single();
 
     if (error) throw error;
+
+    // Pedido criado: agora sim gasta 1 uso do cupom (não trava o pedido se falhar)
+    if (_cupomParaGastar) {
+      fetch('/api/cupom/validar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
+        body: JSON.stringify({ code: _cupomParaGastar, subtotal: cartSubtotal(), consume: true })
+      }).catch(e => console.warn('[cupom] não registrou o uso:', e.message));
+    }
 
     // Celebração imediata só pra formas de pagamento já confirmadas na hora
     // (dinheiro/crédito/débito na entrega). PIX e cartão online têm sua
@@ -8283,7 +8302,7 @@ function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
     const isUnidade = _kitMontavelEhUnidade(i);
     const precoLabel = 'R$ ' + parseFloat(i.price || 0).toFixed(2).replace('.', ',') + (isUnidade ? '/un' : '/kg');
     const ilustracao = i.image_url
-      ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
+      ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
       : `<span style="font-size:28px">${i.emoji || '🥩'}</span>`;
     // Card fica compacto na grade — peso, tipo de corte e preparo são
     // escolhidos num modal próprio (_kitMontavelAbrirConfig), não expandindo
@@ -8343,7 +8362,7 @@ function _kitMontavelAbrirConfig(itemId) {
   body.innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
       <div style="width:52px;height:52px;border-radius:12px;overflow:hidden;flex-shrink:0;background:var(--s2);display:flex;align-items:center;justify-content:center">
-        ${it.image_url ? `<img src="${it.image_url}" style="width:100%;height:100%;object-fit:cover">` : `<span style="font-size:26px">${it.emoji || '🥩'}</span>`}
+        ${it.image_url ? `<img src="${_fotoMini(it.image_url, 480)}" style="width:100%;height:100%;object-fit:cover">` : `<span style="font-size:26px">${it.emoji || '🥩'}</span>`}
       </div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:800;font-size:15.5px">${it.name}</div>
@@ -9026,7 +9045,7 @@ function openPreparoDetail(preparoId) {
         const pesos  = (pesosGrp?.valores || []).map(p => `${p}g`).join(' / ');
 
         const imgEl = i.image_url
-          ? `<img src="${i.image_url}" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`
+          ? `<img src="${_fotoMini(i.image_url, 480)}" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`
           : `<span style="font-size:30px"><svg width='24' height='24' viewBox='0 0 24 24' fill='none'><path d='M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/><circle cx='12' cy='12' r='3' stroke='currentColor' stroke-width='1.4'/></svg></span>`;
 
         return `<div onclick="closePreparoDetail();openItemModal(${i.id})" style="display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent" onmouseenter="this.style.opacity='.8'" onmouseleave="this.style.opacity='1'">
@@ -9270,7 +9289,7 @@ function renderImXsell(item) {
 
   const cards = others.map(o => `
     <div class="xsell-card" id="xsell_${o.id}" onclick="xsellToggle(${o.id})" style="position:relative">
-      <div class="xsell-img">${o.image_url ? `<img src="${o.image_url}" >` : (o.emoji||'')}</div>
+      <div class="xsell-img">${o.image_url ? `<img src="${_fotoMini(o.image_url, 160)}" >` : (o.emoji||'')}</div>
       <div class="xsell-body">
         <div class="xsell-name">${o.name}</div>
         <div class="xsell-price">R$ ${fmt(o.price)}</div>

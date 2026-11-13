@@ -701,7 +701,7 @@ function renderCartDrawer() {
     list.innerHTML = cart.map(i => `
       <div class="ci">
         <div class="ci-thumb">
-          ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : i.emoji||'🍽️'}
+          ${i.image_url ? `<img src="${_fotoMini(i.image_url, 160)}" alt="${i.name}" loading="lazy" decoding="async">` : i.emoji||'🍽️'}
         </div>
         <div class="ci-info">
           <div class="ci-name">${i.name}</div>

@@ -46,7 +46,7 @@ function buildCats() {
       b.onclick = () => filterCat(b, c.name);
       const emojiFallback = isModerno ? _emojiPorNome(c.label || c.name) : null;
       const iconHtml = c.image_url
-        ? `<img src="${c.image_url}" alt="${c.label||c.name}" loading="lazy" decoding="async">`
+        ? `<img src="${_fotoMini(c.image_url, 160)}" alt="${c.label||c.name}" loading="lazy" decoding="async">`
         : (c.emoji
             ? `<span style="font-size:16px;line-height:1">${c.emoji}</span>`
             : (emojiFallback
@@ -68,7 +68,7 @@ function buildCats() {
       b.dataset.key = c.name;
       b.onclick = () => filterCat(b, c.name);
       if (c.image_url) {
-        b.innerHTML = `<span class="cat-btn-pill-icon"><img src="${c.image_url}" alt="" loading="lazy" decoding="async"></span>${c.label || c.name}`;
+        b.innerHTML = `<span class="cat-btn-pill-icon"><img src="${_fotoMini(c.image_url, 160)}" alt="" loading="lazy" decoding="async"></span>${c.label || c.name}`;
       } else {
         b.textContent = (c.emoji ? c.emoji + ' ' : '') + (c.label || c.name);
       }
@@ -109,7 +109,7 @@ function buildCategoriaShowcase() {
     <div class="cats-showcase-scroll">
       ${cats.map(c => `
         <div class="cats-showcase-card" onclick="verMaisCat('${c.name.replace(/'/g,"\\'")}')">
-          <img src="${c.image_url}" alt="${c.label || c.name}" loading="lazy" decoding="async">
+          <img src="${_fotoMini(c.image_url, 160)}" alt="${c.label || c.name}" loading="lazy" decoding="async">
           <div class="cats-showcase-name">${c.label || c.name}</div>
         </div>
       `).join('')}
@@ -326,7 +326,7 @@ function renderMenu() {
         html += `
         <div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}>
           <div class="dest-img${i.image_url ? ' has-photo' : ''}">
-            ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`}
+            ${i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`}
             ${i.hide_price ? '' : `<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>`}
           </div>
           <div class="dest-body">
@@ -406,7 +406,7 @@ function renderMenu() {
         const esg = i.status === 'esgotado';
         const destMedia = i.video_url
           ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
-          : (i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : '');
+          : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : '');
         html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img${(i.image_url||i.video_url)?' has-photo':''}">${destMedia}${i.hide_price?'':`<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>`}</div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.hide_price?`<span class="dest-price" style="color:var(--muted)">Ver opções</span>`:`${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span>`}</div></div></div>`;
       });
       html += `</div></div>`;
@@ -727,7 +727,7 @@ function itemCard(i) {
     <div class="item-img${(i.image_url||i.video_url) ? ' has-photo' : ''}">
       ${i.video_url
         ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
-        : (i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`)}
+        : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`)}
       ${i.video_url ? `<span class="item-video-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></span>` : ''}
       ${i.promo||i.price_old ? '<span class="item-promo-badge">PROMO</span>' : (typeof promoAutomatica !== 'undefined' && promoAutomatica?.ativo && typeof _promoItemElegivel === 'function' && _promoItemElegivel(i) ? `<span class="item-promo-badge">${promoAutomatica.tipo === 'valor' ? '-R$ ' + fmt(promoAutomatica.valor) : '-' + promoAutomatica.valor + '% OFF'}</span>` : '')}
       ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}
