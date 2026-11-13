@@ -3048,6 +3048,21 @@ body:not([data-segmento="acougue"]) .item-grid.carousel .item-img{ order:-1; hei
 body:not([data-segmento="acougue"]) .item-grid.carousel .item-body{ display:flex; flex-direction:column; flex:1; }
 body:not([data-segmento="acougue"]) .item-grid.carousel .item-foot{ margin-top:auto; }
 body:not([data-segmento="acougue"]) .item-grid.carousel .item-price-old{ order:-1; flex-basis:100%; }
+/* Carrossel: o próximo cartão sempre aparece "entrando" pela direita, pra
+   mostrar que dá pra arrastar. A largura acompanha a tela (2 cartões
+   inteiros + um pedaço do terceiro) e o arrasto encaixa cartão a cartão. */
+body:not([data-segmento="acougue"]) .item-grid.carousel,
+body:not([data-segmento="acougue"]) .destaques-scroll{
+  gap:12px; scroll-snap-type:x mandatory; scroll-padding-left:16px; overscroll-behavior-x:contain;
+}
+body:not([data-segmento="acougue"]) .item-grid.carousel::after,
+body:not([data-segmento="acougue"]) .destaques-scroll::after{ content:''; flex:0 0 4px; }
+body:not([data-segmento="acougue"]) .item-grid.carousel .item-card,
+body:not([data-segmento="acougue"]) .dest-card{
+  width:min(calc((100vw - 92px) / 2), 200px); min-width:0; flex:0 0 auto; scroll-snap-align:start;
+}
+body:not([data-segmento="acougue"]) .dest-img{ height:auto; aspect-ratio:1/1; }
+body:not([data-segmento="acougue"]) .item-grid.carousel .item-img{ height:auto; aspect-ratio:1/1; }
 body:not([data-segmento="acougue"]) .item-grid.carousel .item-name{ font-weight:600; }
 body:not([data-segmento="acougue"]) .item-grid.carousel .item-price{ color:var(--text); font-weight:700; }
 body:not([data-segmento="acougue"]) .item-grid.carousel .item-add-btn{ background:var(--accent); box-shadow:none; }
@@ -3157,6 +3172,16 @@ body:not([data-segmento="acougue"]) #im-xsell-wrap:not(:empty){ padding:8px 0 24
   background:transparent; color:var(--text); font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;
 }
 
+
+/* Pontos de fidelidade: texto e botão de troca */
+.fid-txt{ font-size:13px; line-height:1.4; color:#5b21b6; font-weight:600; }
+:root[data-escuro] .fid-txt{ color:#c4b5fd; }
+.fid-usar-btn{
+  width:100%; padding:11px; border-radius:10px; border:none; cursor:pointer; font-family:inherit;
+  background:#7c3aed; color:#fff; font-size:14px; font-weight:700;
+}
+.fid-usar-btn.on{ background:transparent; color:#7c3aed; border:1.5px solid #7c3aed; }
+:root[data-escuro] .fid-usar-btn.on{ color:#c4b5fd; border-color:#a78bfa; }
 @media (min-width:600px){
   body:not([data-segmento="acougue"]) .hero-name{ font-size:24px; }
   body:not([data-segmento="acougue"]) .item-grid:not(.carousel) .item-img{ width:120px; height:120px; }
@@ -3836,7 +3861,7 @@ body:not([data-segmento="acougue"]) #im-xsell-wrap:not(:empty){ padding:8px 0 24
             </div>
             <div id="stamp-action" style="display:none">
               <button id="stamp-usar-btn" onclick="toggleStampUso()" style="width:100%;padding:9px;border-radius:9px;border:1.5px solid #f59e0b;background:rgba(245,158,11,.12);color:#92400e;font-size:13px;font-weight:700;cursor:pointer">
-                🎁 Usar recompensa
+                Usar recompensa
               </button>
             </div>
           </div>
@@ -3851,11 +3876,14 @@ body:not([data-segmento="acougue"]) #im-xsell-wrap:not(:empty){ padding:8px 0 24
                 <svg width="18" height="18" viewBox="0 0 16 16" fill="none" style="color:#8b5cf6"><path d="M8 1.5l1.8 3.9 4.2.4-3.2 2.9.9 4.2L8 11l-3.7 1.9.9-4.2-3.2-2.9 4.2-.4L8 1.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
               </div>
               <div style="flex:1">
-                <div id="fid-progress-txt" style="font-size:12.5px;color:#5b21b6;font-weight:600"></div>
+                <div id="fid-progress-txt" class="fid-txt"></div>
                 <div style="margin-top:7px;height:6px;background:rgba(139,92,246,.2);border-radius:3px;overflow:hidden">
                   <div id="fid-progress-bar" style="height:100%;background:#8b5cf6;border-radius:3px;width:0%;transition:width .4s"></div>
                 </div>
               </div>
+            </div>
+            <div id="fid-action" style="display:none;margin-top:12px">
+              <button type="button" id="fid-usar-btn" class="fid-usar-btn" onclick="toggleFidUso()">Usar desconto</button>
             </div>
           </div>
         </div>
@@ -4295,7 +4323,7 @@ body:not([data-segmento="acougue"]) #im-xsell-wrap:not(:empty){ padding:8px 0 24
 // celular mais fraca. Os 12 arquivos-fonte continuam existindo, e
 // sempre que algum deles for editado, o bundle precisa ser regenerado
 // juntando eles de novo, na mesma ordem.
-document.write('<script src="/cardapio/cardapio-bundle.js?v=v10"><\/script>');
+document.write('<script src="/cardapio/cardapio-bundle.js?v=v11"><\/script>');
 </script>
 <canvas id="anim-particle-canvas"></canvas>
 <button id="im-close-fab" onclick="closeItemModal()" style="position:fixed;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.65);border:none;color:#fff;display:none;align-items:center;justify-content:center;z-index:600;cursor:pointer;backdrop-filter:blur(6px);box-shadow:0 2px 12px rgba(0,0,0,.4)">

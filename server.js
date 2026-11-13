@@ -10027,6 +10027,33 @@ const server = http.createServer(async (req,res) => {
     send(res, 200, { ativo: true, pts, meta, faltam, elegivel, recompensa_reais: parseFloat(cfg.recompensa_reais || 0) }); return
   }
 
+  // ── Fidelidade (pontos): troca dos pontos por desconto no pedido ──
+  // Chamado pelo cardápio logo depois de criar o pedido em que o cliente
+  // escolheu "Usar R$ X de desconto". Desconta a meta de pontos do saldo
+  // de forma atômica (só se ainda tiver pontos suficientes).
+  if (req.method === 'POST' && upath === '/api/fidelidade/usar') {
+    const tid  = req.headers['x-tenant-id'] || ''
+    const body = await readBody(req)
+    const phone = String(body.phone || '').replace(/\D/g,'')
+    if (!tid || !phone) { send(res, 400, { error: 'tenant_id e phone obrigatórios' }); return }
+    try {
+      const row = db.prepare('SELECT fid_config FROM store_config WHERE tenant_id=?').get(tid)
+      const cfg = (() => { try { return JSON.parse(row?.fid_config||'{}') } catch { return {} } })()
+      const recompensa = parseFloat(cfg.recompensa_reais || 0)
+      if (!cfg.ativo || !(parseFloat(cfg.pts_por_real || 0) > 0) || !(recompensa > 0)) { send(res, 400, { error: 'Programa de pontos inativo' }); return }
+      const phone8 = phone.slice(-8)
+      const fid = db.prepare("SELECT id, pts, max_pts FROM fidelidade WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ?").get(tid, phone8)
+      const meta = parseInt(fid?.max_pts || cfg.meta_pts || 500, 10)
+      if (!fid || !(meta > 0)) { send(res, 400, { error: 'Pontos insuficientes' }); return }
+      const info = db.prepare('UPDATE fidelidade SET pts = pts - ?, resgates = COALESCE(resgates,0) + 1 WHERE id = ? AND pts >= ?').run(meta, fid.id, meta)
+      if (!info.changes) { send(res, 400, { error: 'Pontos insuficientes' }); return }
+      const atual = db.prepare('SELECT pts FROM fidelidade WHERE id=?').get(fid.id)
+      log('⭐', `Fidelidade: ${phone} trocou ${meta} pts por R$ ${recompensa.toFixed(2)}${body.order_id ? ' (pedido ' + body.order_id + ')' : ''}`)
+      marcarDirty()
+      send(res, 200, { ok: true, valor: recompensa, pts_usados: meta, pts_restante: atual?.pts || 0 }); return
+    } catch(e) { send(res, 500, { error: e.message }); return }
+  }
+
   // ── Fidelidade: sync automático ao cadastrar/logar ───
   if (req.method === 'POST' && upath === '/api/fidelidade/sync') {
     const tid = req.headers['x-tenant-id'] || ''
@@ -10131,7 +10158,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/manifest-cardapio','/api/pwa-install','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/estoque/movimentar','/api/estoque/movimentos','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/fidelidade/saldo','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao','/api/favoritos','/api/favoritos/toggle'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/manifest-cardapio','/api/pwa-install','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/estoque/movimentar','/api/estoque/movimentos','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/fidelidade/saldo','/api/fidelidade/usar','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao','/api/favoritos','/api/favoritos/toggle'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/')&&!upath.startsWith('/api/store-logo/')&&!upath.startsWith('/api/og-image/'))||upath.startsWith('/rest/v1/')){
     try {
       const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
