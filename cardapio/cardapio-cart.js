@@ -402,7 +402,8 @@ function updateCartFloat() {
     // pro estado "desabilitado", desfazendo a liberação do pedido agendado.
     const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
     const podeAgendado = !_lojaAberta && _pedidoAgendadoSeguro;
-    btn.disabled = cart.length === 0 || (!_lojaAberta && !podeAgendado);
+    const precisaAgendar = !_lojaAberta && !podeAgendado && typeof _agendamentoDisponivel === 'function' && _agendamentoDisponivel();
+    btn.disabled = cart.length === 0 || (!_lojaAberta && !podeAgendado && !precisaAgendar);
   }
 }
 

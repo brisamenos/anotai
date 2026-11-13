@@ -319,7 +319,7 @@ function renderMenu() {
   if (_segmento === 'acougue' && !searchQ && !activeCat && !_filterPreparo) {
     const destItems = normalItems.filter(_ehDestaque);
     if (destItems.length) {
-      html += `<div class="destaques-wrap"><div class="section-label">Mais Pedidos</div>`;
+      html += `<div class="destaques-wrap"><div class="section-label">Destaques</div>`;
       html += `<div class="destaques-scroll">`;
       destItems.forEach(i => {
         const esg = i.status === 'esgotado';
@@ -327,7 +327,7 @@ function renderMenu() {
         <div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}>
           <div class="dest-img${i.image_url ? ' has-photo' : ''}">
             ${i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`}
-            ${i.hide_price ? '' : `<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>`}
+            ${(!i.hide_price && _descontoPct(i)) ? `<span class="dest-promo-badge">${_descontoPct(i)}</span>` : ''}
           </div>
           <div class="dest-body">
             <div class="dest-name">${i.name}</div>
@@ -401,13 +401,13 @@ function renderMenu() {
   if (_segmento !== 'acougue' && !searchQ && !activeCat) {
     const destItems = normalItems.filter(_ehDestaque);
     if (destItems.length) {
-      html += `<div class="destaques-wrap"><div class="section-label">Mais Pedidos</div><div class="destaques-scroll">`;
+      html += `<div class="destaques-wrap"><div class="section-label">Destaques</div><div class="destaques-scroll">`;
       destItems.forEach(i => {
         const esg = i.status === 'esgotado';
         const destMedia = i.video_url
           ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
           : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : '');
-        html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img${(i.image_url||i.video_url)?' has-photo':''}">${destMedia}${i.hide_price?'':`<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>`}</div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.hide_price?`<span class="dest-price" style="color:var(--muted)">Ver opções</span>`:`${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span>`}</div></div></div>`;
+        html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img${(i.image_url||i.video_url)?' has-photo':''}">${destMedia}${(!i.hide_price && _descontoPct(i))?`<span class="dest-promo-badge">${_descontoPct(i)}</span>`:''}</div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.hide_price?`<span class="dest-price" style="color:var(--muted)">Ver opções</span>`:`${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span>`}</div></div></div>`;
       });
       html += `</div></div>`;
     }
@@ -688,6 +688,14 @@ function renderFavoritosPage() {
   wrap.innerHTML = `<div class="${gridClass}">${favItems.map(itemCard).join('')}</div>`;
 }
 
+// Desconto em % quando há preço antigo maior que o atual ("-17%")
+function _descontoPct(i) {
+  const a = Number(i && i.price_old), b = Number(i && i.price);
+  if (!(a > 0) || !(b >= 0) || b >= a) return '';
+  const p = Math.round((1 - b / a) * 100);
+  return p > 0 ? '-' + p + '%' : '';
+}
+
 function itemCard(i) {
   const esg  = i.status === 'esgotado';
   const click= esg ? '' : `onclick="openItemModal(${i.id})"`;
@@ -729,7 +737,7 @@ function itemCard(i) {
         ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
         : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`)}
       ${i.video_url ? `<span class="item-video-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></span>` : ''}
-      ${i.promo||i.price_old ? '<span class="item-promo-badge">PROMO</span>' : (typeof promoAutomatica !== 'undefined' && promoAutomatica?.ativo && typeof _promoItemElegivel === 'function' && _promoItemElegivel(i) ? `<span class="item-promo-badge">${promoAutomatica.tipo === 'valor' ? '-R$ ' + fmt(promoAutomatica.valor) : '-' + promoAutomatica.valor + '% OFF'}</span>` : '')}
+      ${i.promo||i.price_old ? `<span class="item-promo-badge">${_descontoPct(i) || 'Promo'}</span>` : (typeof promoAutomatica !== 'undefined' && promoAutomatica?.ativo && typeof _promoItemElegivel === 'function' && _promoItemElegivel(i) ? `<span class="item-promo-badge">${promoAutomatica.tipo === 'valor' ? '-R$ ' + fmt(promoAutomatica.valor) : '-' + promoAutomatica.valor + '% OFF'}</span>` : '')}
       ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}
       <button class="item-fav-btn${isFavorito(i.id)?' on':''}" onclick="event.stopPropagation();toggleFavorito(${i.id})" aria-label="Favoritar">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="${isFavorito(i.id)?'currentColor':'none'}"><path d="M12 20.5s-7.5-4.6-10-9.3C.5 7.8 2.3 4 6 4c2.1 0 3.7 1.2 6 3.5C14.3 5.2 15.9 4 18 4c3.7 0 5.5 3.8 4 7.2-2.5 4.7-10 9.3-10 9.3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>

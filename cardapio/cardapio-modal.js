@@ -90,7 +90,8 @@ function openItemModal(id) {
   document.getElementById('im-obs').value = '';
   {
     const _pedidoAgendadoSeguroInit = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
-    document.getElementById('im-add-btn').disabled = !_lojaAberta && !_pedidoAgendadoSeguroInit;
+    const _podeAgendarInit = typeof _agendamentoDisponivel === 'function' && _agendamentoDisponivel();
+    document.getElementById('im-add-btn').disabled = !_lojaAberta && !_pedidoAgendadoSeguroInit && !_podeAgendarInit;
   }
 
   // Açougue: oculta botões - 1 + (peso é selecionado pelo seletor de gramas)
@@ -583,14 +584,16 @@ function updateImAddBtn() {
   // agendamento mas trava logo no primeiro item que tenta montar.
   const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
   const podeAgendadoModal = !_lojaAberta && _pedidoAgendadoSeguro;
+  // Loja fechada com agendamento liberado: o botão agenda e já adiciona
+  const agendaAoAdicionar = !_lojaAberta && !podeAgendadoModal && typeof _agendamentoDisponivel === 'function' && _agendamentoDisponivel();
 
-  const disabled = (!_lojaAberta && !podeAgendadoModal) || needsSize || (isPizza && !_halfItem) || kitMontavelVazio;
+  const disabled = (!_lojaAberta && !podeAgendadoModal && !agendaAoAdicionar) || needsSize || (isPizza && !_halfItem) || kitMontavelVazio;
   document.getElementById('im-add-btn').disabled = disabled;
-  const label = (!_lojaAberta && !podeAgendadoModal) ? 'Loja fechada' : needsSize ? 'Escolha o tamanho da pizza' : (isPizza && !_halfItem
+  const label = (!_lojaAberta && !podeAgendadoModal && !agendaAoAdicionar) ? 'Loja fechada' : needsSize ? 'Escolha o tamanho da pizza' : (isPizza && !_halfItem
     ? 'Escolha como quer sua pizza acima'
     : (kitMontavelVazio
       ? 'Escolha ao menos um corte acima'
-      : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(price * _imQty)}`));
+      : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> ${agendaAoAdicionar ? 'Agendar e adicionar' : 'Adicionar'} · R$ ${fmt(price * _imQty)}`));
   document.getElementById('im-add-btn').innerHTML = label;
 }
 
@@ -1240,7 +1243,20 @@ function _flyToCartFromRect(startRect, imgSrc) {
   }, 560);
 }
 
+// Loja fechada com agendamento liberado: adiciona normalmente e, se o item
+// entrou mesmo no carrinho (passou nas validações), agenda o pedido.
 function imConfirm() {
+  const agendado = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
+  const precisaAgendar = !_lojaAberta && !agendado && typeof _agendamentoDisponivel === 'function' && _agendamentoDisponivel();
+  if (!_lojaAberta && !agendado && !precisaAgendar) return;
+  const qtdAntes = cart.reduce((s, c) => s + (c.qty || 0), 0);
+  try { _imConfirmCore(); }
+  finally {
+    if (precisaAgendar && cart.reduce((s, c) => s + (c.qty || 0), 0) > qtdAntes && typeof _agendarSePreciso === 'function') _agendarSePreciso();
+  }
+}
+
+function _imConfirmCore() {
   const i   = allItems.find(x => x.id === _imItemId);
   if (!i) return;
   const isPizza = isPizzaItem(i);

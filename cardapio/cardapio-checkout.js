@@ -340,7 +340,10 @@ async function submitOrder() {
   // Loja fechada bloqueia normalmente — mas libera se o cliente confirmou
   // um pedido agendado no modal de loja fechada (_pedidoAgendadoPara setado).
   { const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
-    if (!_lojaAberta && !_pedidoAgendadoSeguro) { toast('🔴','Loja fechada');     return; } }
+    if (!_lojaAberta && !_pedidoAgendadoSeguro) {
+      // Loja fechada com agendamento liberado: o botão vira "Agendar pedido"
+      if (typeof _agendamentoDisponivel === 'function' && _agendamentoDisponivel() && typeof confirmarAgendamento === 'function') { confirmarAgendamento(); return; }
+      toast('🔴','Loja fechada'); return; } }
   // Horário escolhido pelo cliente ainda precisa estar disponível
   if (typeof agValidarAntesDeEnviar === 'function' && !agValidarAntesDeEnviar()) return;
   // Sem isso, cancelar a modal de troco (dinheiro) ou a modal "pagar agora/
@@ -1056,7 +1059,10 @@ async function _iniciarSubmit() {
   // Loja fechada bloqueia normalmente — mas libera se o cliente confirmou
   // um pedido agendado no modal de loja fechada (_pedidoAgendadoPara setado).
   { const _pedidoAgendadoSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
-    if (!_lojaAberta && !_pedidoAgendadoSeguro) { toast('🔴','Loja fechada');     return; } }
+    if (!_lojaAberta && !_pedidoAgendadoSeguro) {
+      // Loja fechada com agendamento liberado: o botão vira "Agendar pedido"
+      if (typeof _agendamentoDisponivel === 'function' && _agendamentoDisponivel() && typeof confirmarAgendamento === 'function') { confirmarAgendamento(); return; }
+      toast('🔴','Loja fechada'); return; } }
   // Horário escolhido pelo cliente ainda precisa estar disponível
   if (typeof agValidarAntesDeEnviar === 'function' && !agValidarAntesDeEnviar()) return;
   if (!selectedPay) { toast('⚠️','Escolha uma forma de pagamento'); return; }

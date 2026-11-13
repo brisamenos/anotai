@@ -291,6 +291,8 @@ function applyTema(tema, accentCor) {
 
   const p = paletas[t] || paletas.classico;
   Object.entries(p).forEach(([k,v]) => { if(v !== '') root.style.setProperty(k, v); else root.style.removeProperty(k); });
+  // Marca temas de fundo escuro (o CSS usa pra cores que precisam de ajuste)
+  try { const L = _luminanciaCor(p['--bg']); root.toggleAttribute('data-escuro', L !== null && L < .2); } catch(e) {}
 
   // Força meta theme-color
   const metaTheme = document.querySelector('meta[name="theme-color"]');
@@ -365,6 +367,20 @@ function applyHeroBanners(list) {
   }
 }
 
+function _luminanciaCor(cor) {
+  const c = parseHexColor(cor); if (!c) return null;
+  const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); };
+  return .2126 * f(c.r) + .7152 * f(c.g) + .0722 * f(c.b);
+}
+function _corTextoLegivel(cor) {
+  try {
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    const a = _luminanciaCor(cor), b = _luminanciaCor(bg);
+    if (a === null || b === null) return true;
+    return (Math.max(a, b) + .05) / (Math.min(a, b) + .05) >= 3;
+  } catch (e) { return true; }
+}
+
 function applyBranding(b, nome) {
   const n = b?.store_name || nome || 'Cardápio';
   _storeName = n;
@@ -382,7 +398,10 @@ function applyBranding(b, nome) {
   setAccentColor(cor);
 
   // Cor dos textos personalizada
-  if (b?.store_cor_texto) {
+  // Só aplica se tiver contraste com o fundo do tema — senão (ex.: texto
+  // escuro escolhido no tema claro e depois trocado pro escuro) os nomes dos
+  // produtos ficavam invisíveis.
+  if (b?.store_cor_texto && _corTextoLegivel(b.store_cor_texto)) {
     document.documentElement.style.setProperty('--text', b.store_cor_texto);
   }
 
@@ -399,7 +418,7 @@ function applyBranding(b, nome) {
     img.alt = n;
     img.decoding = 'async';
     img.className = 'hero-logo-img';
-    img.onerror = () => { logoWrap.innerHTML = '<span id="hero-emoji">🍽️</span>'; };
+    img.onerror = () => { logoWrap.innerHTML = '<span id="hero-emoji"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M4 9.5 5.3 4.8A1 1 0 0 1 6.3 4h11.4a1 1 0 0 1 1 .8L20 9.5M4 9.5V19a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9.5M4 9.5h16M9.5 20v-5h5v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>'; };
     logoWrap.innerHTML = '';
     logoWrap.appendChild(img);
   }
@@ -975,14 +994,14 @@ function openStoreInfoModal() {
     const horarioTxt = janelas.length
       ? janelas.map(j => `${j.abertura||'?'} – ${j.fechamento||'?'}`).join(', ')
       : '?';
-    const badge  = isHoje ? `<span style="font-size:10px;background:#f97316;color:#fff;border-radius:4px;padding:1px 6px;margin-left:6px;font-weight:800">hoje</span>` : '';
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-radius:10px;background:${isHoje?'rgba(var(--accent-rgb,249,115,22),.07)':'#f8f9fb'};border:1.5px solid ${isHoje?'rgba(var(--accent-rgb,249,115,22),.2)':'transparent'}">
-      <span style="font-size:13px;font-weight:${isHoje?'700':'500'};color:${isHoje?'#f97316':'#374151'};display:flex;align-items:center">${diasNome[d]}${badge}</span>
-      <span style="font-size:13px;font-weight:600;color:${aberto?'#374151':'#9ca3af'}">${aberto ? horarioTxt : 'Fechado'}</span>
+    const badge  = isHoje ? `<span style="font-size:10px;background:var(--accent);color:#fff;border-radius:4px;padding:1px 6px;margin-left:6px;font-weight:700">hoje</span>` : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 2px;border-bottom:1px solid var(--border)">
+      <span style="font-size:13.5px;font-weight:${isHoje?'700':'500'};color:var(--text);display:flex;align-items:center">${diasNome[d]}${badge}</span>
+      <span style="font-size:13.5px;font-weight:${isHoje?'700':'500'};color:${aberto?'var(--text)':'var(--muted)'};font-variant-numeric:tabular-nums">${aberto ? horarioTxt : 'Fechado'}</span>
     </div>`;
   }).join('');
 
-  document.getElementById('sinfo-horarios').innerHTML = rows || '<div style="font-size:13px;color:#9ca3af;padding:8px 0">Horários não cadastrados</div>';
+  document.getElementById('sinfo-horarios').innerHTML = rows || '<div style="font-size:13px;color:var(--muted);padding:8px 0">Horários não cadastrados</div>';
   ov.style.display = 'flex';
 }
 
@@ -1020,6 +1039,57 @@ function initScrollSpy() {
   }, { passive: true });
 }
 
+// Agendamento disponível pra loja fechada (gestor permite ou cliente escolhe horário)
+function _agendamentoDisponivel() {
+  const permitir = (typeof _permitirAgendamento !== 'undefined') ? _permitirAgendamento : false;
+  const escolha = (typeof _agEscolhaAtiva === 'function') && _agEscolhaAtiva();
+  return !!(permitir || escolha);
+}
+
+// Loja fechada e o cliente ainda não agendou: agenda agora (se o gestor
+// permite). Devolve true quando dá pra seguir com o pedido.
+function _agendarSePreciso() {
+  if (_lojaAberta) return true;
+  const ag = () => (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
+  if (ag()) return true;
+  if (!_agendamentoDisponivel()) return false;
+  confirmarAgendamento();
+  return !!ag();
+}
+
+// Ação do aviso de status do topo: agenda (loja fechada) ou mostra horários
+function heroStatusAcao() {
+  const agendado = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
+  if (!_lojaAberta && !agendado && _agendamentoDisponivel()) { confirmarAgendamento(); return; }
+  openStoreInfoModal();
+}
+
+// Horário em que a janela aberta agora termina ("23:00"), ou '' se não houver
+function _calcularFechamentoAtual() {
+  const h = _cachedHorarios;
+  if (!h || !Object.keys(h).length) return '';
+  const dias = ['dom','seg','ter','qua','qui','sex','sab'];
+  const agora = new Date();
+  const min = agora.getHours() * 60 + agora.getMinutes();
+  const fmtH = m => String(Math.floor((m % 1440) / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  const hoje = h[dias[agora.getDay()]], ontem = h[dias[(agora.getDay() + 6) % 7]];
+  if (_horarioAtivo(hoje)) {
+    for (const j of _cpJanelasDia(hoje)) {
+      const ab = _horaParaMinutos(j.abertura) ?? 0, fe = _horaParaMinutos(j.fechamento) ?? 1439;
+      if (ab === fe) return '';
+      if (fe > ab && min >= ab && min < fe) return fmtH(fe);
+      if (fe < ab && min >= ab) return fmtH(fe);
+    }
+  }
+  if (_horarioAtivo(ontem)) {
+    for (const j of _cpJanelasDia(ontem)) {
+      const ab = _horaParaMinutos(j.abertura) ?? 0, fe = _horaParaMinutos(j.fechamento) ?? 1439;
+      if (fe < ab && min < fe) return fmtH(fe);
+    }
+  }
+  return '';
+}
+
 function applyStatus(store_open, horarios) {
   if (horarios !== undefined) _cachedHorarios = _parseHorariosConfig(horarios);
   if (store_open !== undefined) _cachedStoreOpen = store_open;
@@ -1027,31 +1097,43 @@ function applyStatus(store_open, horarios) {
   const dot  = document.getElementById('status-dot');
   const txt  = document.getElementById('status-txt');
   const badge= document.getElementById('status-badge');
-  const ban  = document.getElementById('closed-banner');
   const btn  = document.getElementById('confirm-btn');
-  if (dot)  dot.style.background = _lojaAberta ? 'var(--green)' : 'var(--red)';
+  if (dot)  { dot.style.background = ''; dot.classList.toggle('closed', !_lojaAberta); }
   if (badge) badge.classList.toggle('closed', !_lojaAberta);
+  // Um único aviso de status no topo (antes eram 3: o "Fechado" vermelho,
+  // o botão "Loja fechada, deixe seu pedido agendado" e a faixa "Esta loja
+  // está fechada..."). As faixas antigas ficam sempre escondidas.
+  ['closed-banner', 'closed-banner-lg'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.display = 'none'; el.classList.remove('show'); }
+  });
+  const _agSeguro = (typeof _pedidoAgendadoPara !== 'undefined') ? _pedidoAgendadoPara : null;
+  const _podeAgendar = !_lojaAberta && _agendamentoDisponivel();
   if (txt) {
-    txt.textContent = _lojaAberta ? 'Aberto' : 'Fechado';
+    txt.textContent = _lojaAberta ? 'Aberto agora' : 'Fechado';
     txt.className = 'hero-meta-status ' + (_lojaAberta ? 'open' : 'closed');
   }
-  if (ban) ban.style.display = (_lojaAberta || _segmento === 'acougue') ? 'none' : 'flex';
-  // Versão maior do banner de fechada (só aparece no visual do açougue,
-  // controlado via CSS — aqui só liga/desliga a classe).
-  const banLg = document.getElementById('closed-banner-lg');
-  if (banLg) banLg.classList.toggle('show', !_lojaAberta);
-  // Atualiza botão de status do novo layout
-  const statusBtn = document.getElementById('hero-status-btn');
-  const statusBtnTxt = document.getElementById('hero-status-btn-txt');
-  if (statusBtn && statusBtnTxt) {
+  const sub = document.getElementById('hero-status-sub');
+  if (sub) {
+    let t = '';
     if (_lojaAberta) {
-      statusBtn.className = 'hero-status-btn';
-      statusBtnTxt.textContent = 'Loja aberta — faça seu pedido!';
+      const fecha = _calcularFechamentoAtual();
+      if (fecha) t = '· até ' + fecha;
+    } else if (_agSeguro) {
+      t = '· pedido agendado';
     } else {
-      statusBtn.className = 'hero-status-btn closed-btn';
-      statusBtnTxt.textContent = 'Loja fechada, deixe seu pedido agendado';
+      const prox = _calcularProximaAbertura();
+      if (prox) t = '· abre ' + prox.label;
     }
+    sub.textContent = t;
   }
+  const statusBox = document.getElementById('hero-status-btn');
+  const statusBtnTxt = document.getElementById('hero-status-btn-txt');
+  if (statusBox) {
+    statusBox.classList.toggle('closed', !_lojaAberta);
+    statusBox.classList.toggle('can-schedule', _podeAgendar && !_agSeguro);
+  }
+  if (statusBtnTxt) statusBtnTxt.textContent = (_podeAgendar && !_agSeguro) ? 'Agendar pedido' : 'Horários';
   // Bloco "Quando?" do carrinho (agendamento com horário escolhido)
   try { if (typeof agRender === 'function') agRender(); } catch(e) {}
   if (btn) {
@@ -1063,24 +1145,16 @@ function applyStatus(store_open, horarios) {
     const podeAgendado = !_lojaAberta && _pedidoAgendadoSeguro;
     // Loja aberta, mas o cliente escolheu um horário: o botão também avisa que é agendado
     const agendadoEscolhido = _lojaAberta && _pedidoAgendadoSeguro && typeof _agModo !== 'undefined' && _agModo === 'agendar';
-    btn.disabled = (!_lojaAberta && !podeAgendado) || cart.length === 0;
-    if (!_lojaAberta && !podeAgendado) btn.innerHTML = '<span style="color:var(--red);font-size:10px">●</span> Loja fechada';
+    const precisaAgendar = !_lojaAberta && !podeAgendado && _agendamentoDisponivel();
+    btn.disabled = (!_lojaAberta && !podeAgendado && !precisaAgendar) || cart.length === 0;
+    if (precisaAgendar && cart.length) btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 4v4l2.5 2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg> Loja fechada · Agendar pedido';
+    else if (!_lojaAberta && !podeAgendado) btn.innerHTML = 'Loja fechada';
     else if (cart.length === 0) btn.innerHTML = podeAgendado ? 'Adicione itens para agendar' : 'Adicione itens ao carrinho';
     else if (podeAgendado || agendadoEscolhido) btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 4v4l2.5 2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg> Confirmar Pedido Agendado';
     else btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido';
   }
-  // Modal "loja fechada, quer agendar?" — mostra 1x por sessão quando a
-  // loja está fechada e o gestor não desligou o recurso de agendamento.
-  // Mesma blindagem: se _permitirAgendamento/_agendamentoModalMostrado não
-  // existirem (arquivo desatualizado), trata como recurso desligado em vez
-  // de travar o carregamento inteiro do cardápio.
-  const _permitirAgendamentoSeguro = (typeof _permitirAgendamento !== 'undefined') ? _permitirAgendamento : false;
-  const _modalJaMostradoSeguro = (typeof _agendamentoModalMostrado !== 'undefined') ? _agendamentoModalMostrado : true;
-  const _escolhaHorarioSegura = (typeof _agEscolhaAtiva === 'function') && _agEscolhaAtiva();
-  if (!_lojaAberta && (_permitirAgendamentoSeguro || _escolhaHorarioSegura) && !_modalJaMostradoSeguro) {
-    try { _agendamentoModalMostrado = true; } catch(e) {}
-    setTimeout(() => { if (typeof abrirModalAgendamento === 'function') abrirModalAgendamento(); }, 600);
-  }
+  // O modal automático de "loja fechada, quer agendar?" saiu: agendar agora
+  // é pelo botão do aviso de status no topo ou pelo botão do carrinho.
 }
 
 // ══════════════════════════════════════════
@@ -1499,7 +1573,7 @@ function applyBrandingLive(cfg) {
         const img = document.createElement('img');
         img.src = cfg.store_logo_url;
         img.className = 'hero-logo-img';
-        img.onerror = () => { logoWrap.innerHTML = '<span id="hero-emoji">🍽️</span>'; };
+        img.onerror = () => { logoWrap.innerHTML = '<span id="hero-emoji"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M4 9.5 5.3 4.8A1 1 0 0 1 6.3 4h11.4a1 1 0 0 1 1 .8L20 9.5M4 9.5V19a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9.5M4 9.5h16M9.5 20v-5h5v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>'; };
         logoWrap.innerHTML = '';
         logoWrap.appendChild(img);
       }
