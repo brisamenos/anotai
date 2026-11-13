@@ -252,6 +252,8 @@ function getDiscount() {
 
 function getTaxa() {
   if (deliveryType !== 'delivery') return 0;
+  // Recompensa do cartão fidelidade do tipo "frete grátis" aplicada
+  if (typeof _stampUsado !== 'undefined' && _stampUsado && _stampElegivel && _stampRecompensaTipo === 'frete_gratis') return 0;
   if (appliedCupom?.tipo === 'frete' || appliedCupom?.type === 'frete') {
     const minOrderFrete = parseFloat(appliedCupom.min_order ?? appliedCupom.minimo ?? 0);
     if (!(minOrderFrete > 0 && cartSubtotal() < minOrderFrete)) return 0;
@@ -359,10 +361,16 @@ function validarDelivery() {
 function getCashbackDesconto() {
   if (!_cbUsar || !(_cbSaldo > 0)) return 0;
   const sub  = cartSubtotal();
-  const disc = getDiscount();
+  const disc = getDiscount() + getDescontosFidelidade();
   const taxa = getTaxa();
   const maxDescontavel = Math.max(0, sub - disc + taxa);
   return Math.min(_cbSaldo, maxDescontavel);
+}
+
+// Descontos dos programas de fidelidade (cartão de carimbos + pontos)
+function getDescontosFidelidade() {
+  return (typeof getStampDesconto === 'function' ? getStampDesconto() : 0)
+       + (typeof getFidDesconto === 'function' ? getFidDesconto() : 0);
 }
 
 function grandTotal() {
@@ -376,7 +384,7 @@ function grandTotal() {
   // Desconto de cashback aplica primeiro na taxa, depois no subtotal — assim o total do pedido
   // reflete o que o restaurante efetivamente recebe pelos itens.
   const cbSobraProTotal = Math.max(0, cbDesc - taxa);
-  const net = Math.max(0, sub - disc - cbSobraProTotal);
+  const net = Math.max(0, sub - disc - getDescontosFidelidade() - cbSobraProTotal);
   return net;
 }
 
@@ -386,7 +394,7 @@ function displayTotal() {
   const disc  = getDiscount();
   const taxa  = getTaxa();
   const cb    = getCashbackDesconto();
-  return Math.max(0, sub - disc + taxa - cb);
+  return Math.max(0, sub - disc - getDescontosFidelidade() + taxa - cb);
 }
 
 function updateCartFloat() {
@@ -755,6 +763,8 @@ function renderTotals() {
     <div class="total-row"><span>Subtotal</span><span>R$ ${fmt(sub)}</span></div>
     ${deliveryType === 'delivery' ? `<div class="total-row ${isCupomFrete?'total-disc':''}"><span>${taxaLabel}</span><span>${taxaTxt}</span></div>` : ''}
     ${disc > 0 ? `<div class="total-row total-disc"><span>${discLabel}</span><span>− R$ ${fmt(disc)}</span></div>` : ''}
+    ${stDesc > 0 ? `<div class="total-row total-disc"><span>Cartão fidelidade</span><span>− R$ ${fmt(stDesc)}</span></div>` : ''}
+    ${getFidDesconto() > 0 ? `<div class="total-row total-disc"><span>Pontos de fidelidade</span><span>− R$ ${fmt(getFidDesconto())}</span></div>` : ''}
     ${cbDesc > 0 ? `<div class="total-row total-disc"><span>Cashback usado</span><span>− R$ ${fmt(cbDesc)}</span></div>` : ''}
     <div class="total-row big"><span>Total</span><span>R$ ${fmt(tot)}</span></div>`;
 }
@@ -819,7 +829,7 @@ let _stampUsado         = false;  // true quando a recompensa já foi aplicada n
 
 function getStampDesconto() {
   if (!_stampElegivel || !_stampUsado) return 0;
-  const sub = cartSubtotal();
+  const sub = Math.max(0, cartSubtotal() - getDiscount());
   if (_stampRecompensaTipo === 'pedido_gratis') return sub;
   if (_stampRecompensaTipo === 'frete_gratis')  return 0; // taxa zerada separado
   if (_stampRecompensaTipo === 'percent')        return Math.min(sub, parseFloat((sub * _stampRecompensaValor / 100).toFixed(2)));
@@ -882,8 +892,8 @@ async function onPhoneCashback(raw) {
             const pct = Math.min(100, Math.round((_stampCompras / _stampMeta) * 100));
             if (pbar) pbar.style.width = pct + '%';
             if (prog) prog.textContent = _stampElegivel
-              ? '🎁 Recompensa disponível! Aplicar no pedido?'
-              : `🃏 ${_stampCompras}/${_stampMeta} pedidos — faltam ${_stampMeta - _stampCompras}`;
+              ? 'Cartão completo. Quer usar a recompensa neste pedido?'
+              : `${_stampCompras} de ${_stampMeta} pedidos. Faltam ${_stampMeta - _stampCompras} para a recompensa.`;
             if (act) act.style.display = _stampElegivel ? '' : 'none';
           }
           renderTotals();
@@ -900,15 +910,17 @@ async function onPhoneCashback(raw) {
         if (!df.ativo) { _resetFidelidadeUI(); }
         else {
           const bl   = document.getElementById('fid-block');
-          const prog = document.getElementById('fid-progress-txt');
-          const pbar = document.getElementById('fid-progress-bar');
           if (bl && (df.pts > 0 || df.meta > 0)) {
             bl.style.display = '';
-            const pct = Math.min(100, Math.round((df.pts / df.meta) * 100));
-            if (pbar) pbar.style.width = pct + '%';
-            if (prog) prog.textContent = df.elegivel
-              ? `🎁 Você tem ${df.pts} pontos — resgate ${df.recompensa_reais > 0 ? 'R$ ' + df.recompensa_reais.toFixed(2).replace('.', ',') + ' de desconto' : 'sua recompensa'}!`
-              : `⭐ ${df.pts}/${df.meta} pontos — faltam ${df.faltam} para a recompensa`;
+            const eraElegivel = _fidElegivel;
+            _fidPts        = parseInt(df.pts || 0, 10);
+            _fidMeta       = parseInt(df.meta || 0, 10);
+            _fidElegivel   = !!df.elegivel;
+            _fidRecompensa = parseFloat(df.recompensa_reais || 0);
+            if (!_fidElegivel || !(_fidRecompensa > 0)) _fidUsar = false;
+            else if (!eraElegivel) _fidUsar = false;
+            _fidRender();
+            renderTotals();
           } else {
             _resetFidelidadeUI();
           }
@@ -918,17 +930,73 @@ async function onPhoneCashback(raw) {
   }, 600);
 }
 
+// ── Pontos de fidelidade: resgate no próprio pedido ──
+// Quando o cliente junta a meta de pontos, pode trocar por R$ de desconto
+// neste pedido (uma troca por pedido). Os pontos só são descontados do
+// saldo depois que o pedido é criado (ver submitOrder → /api/fidelidade/usar).
+let _fidElegivel   = false;
+let _fidPts        = 0;
+let _fidMeta       = 0;
+let _fidRecompensa = 0;
+let _fidUsar       = false;
+
+function getFidDesconto() {
+  if (!_fidUsar || !_fidElegivel || !(_fidRecompensa > 0)) return 0;
+  const base = Math.max(0, cartSubtotal() - getDiscount() - (typeof getStampDesconto === 'function' ? getStampDesconto() : 0));
+  return Math.min(_fidRecompensa, base);
+}
+
+function _fidFmtPts(n) { return Number(n || 0).toLocaleString('pt-BR'); }
+
+function _fidRender() {
+  const prog = document.getElementById('fid-progress-txt');
+  const pbar = document.getElementById('fid-progress-bar');
+  const act  = document.getElementById('fid-action');
+  const btn  = document.getElementById('fid-usar-btn');
+  const pct = _fidMeta > 0 ? Math.min(100, Math.round((_fidPts / _fidMeta) * 100)) : 0;
+  if (pbar) pbar.style.width = pct + '%';
+  const podeTrocar = _fidElegivel && _fidRecompensa > 0;
+  if (prog) {
+    if (podeTrocar) {
+      prog.textContent = _fidUsar
+        ? `R$ ${fmt(_fidRecompensa)} de desconto aplicado neste pedido (${_fidFmtPts(_fidMeta)} pontos).`
+        : `Você tem ${_fidFmtPts(_fidPts)} pontos. Troque ${_fidFmtPts(_fidMeta)} pontos por R$ ${fmt(_fidRecompensa)} de desconto.`;
+    } else if (_fidElegivel) {
+      prog.textContent = `Você tem ${_fidFmtPts(_fidPts)} pontos. Fale com a loja para trocar pela sua recompensa.`;
+    } else {
+      prog.textContent = `${_fidFmtPts(_fidPts)} de ${_fidFmtPts(_fidMeta)} pontos. Faltam ${_fidFmtPts(Math.max(0, _fidMeta - _fidPts))} para a recompensa.`;
+    }
+  }
+  if (act) act.style.display = podeTrocar ? '' : 'none';
+  if (btn) {
+    btn.textContent = _fidUsar ? 'Remover desconto' : `Usar R$ ${fmt(_fidRecompensa)} de desconto`;
+    btn.classList.toggle('on', _fidUsar);
+  }
+}
+
+function toggleFidUso() {
+  if (!_fidElegivel || !(_fidRecompensa > 0)) return;
+  _fidUsar = !_fidUsar;
+  _fidRender();
+  renderTotals();
+  if (typeof updateCartFloat === 'function') updateCartFloat();
+}
+
 function _resetFidelidadeUI() {
+  const estavaUsando = _fidUsar;
+  _fidElegivel = false; _fidPts = 0; _fidMeta = 0; _fidRecompensa = 0; _fidUsar = false;
   const bl = document.getElementById('fid-block');
   if (bl) bl.style.display = 'none';
+  if (estavaUsando) { try { renderTotals(); } catch(e) {} }
 }
 
 function toggleStampUso() {
   if (!_stampElegivel) return;
   _stampUsado = !_stampUsado;
   const btn = document.getElementById('stamp-usar-btn');
-  if (btn) btn.textContent = _stampUsado ? '✅ Aplicado — remover' : '🎁 Usar recompensa';
+  if (btn) btn.textContent = _stampUsado ? 'Recompensa aplicada · remover' : 'Usar recompensa';
   renderTotals();
+  if (typeof updateCartFloat === 'function') updateCartFloat();
 }
 
 function _resetCashbackUI() {

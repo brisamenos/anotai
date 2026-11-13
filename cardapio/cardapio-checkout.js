@@ -496,7 +496,9 @@ async function _doSubmitOrder(addr, troco) {
   // Total bruto (o que o cliente efetivamente paga — já considera cashback e cupom)
   const _grossTotal = displayTotal();
   const _cbDesconto = getCashbackDesconto();
-  const _totalSemCashback = Math.max(0, cartSubtotal() - getDiscount());
+  const _fidDescontoPedido = (typeof getFidDesconto === 'function') ? getFidDesconto() : 0;
+  const _descFidelidade = (typeof getDescontosFidelidade === 'function') ? getDescontosFidelidade() : 0;
+  const _totalSemCashback = Math.max(0, cartSubtotal() - getDiscount() - _descFidelidade);
   const _clientRequestId = _getOrderRequestId(_buildOrderRequestSignature({
     tenant_id: _tenantId,
     client: name,
@@ -510,7 +512,8 @@ async function _doSubmitOrder(addr, troco) {
     taxa: getTaxa(),
     troco: troco || null,
     cupom: appliedCupom?.code || '',
-    cashback: _cbUsar ? _cbDesconto : 0
+    cashback: _cbUsar ? _cbDesconto : 0,
+    pontos: _fidDescontoPedido
   }));
 
   try {
@@ -652,6 +655,29 @@ async function _doSubmitOrder(addr, troco) {
         toast('⚠️','Cashback não pôde ser debitado. O pedido seguirá sem esse desconto.');
       }
       _resetCashbackUI();
+    }
+
+    // ── Trocar pontos de fidelidade se o cliente usou ──
+    // Os pontos só saem do saldo agora, com o pedido já criado. Se a troca
+    // falhar (ex.: saldo mudou), o pedido segue sem esse desconto.
+    if (_fidDescontoPedido > 0) {
+      try {
+        const fr = await fetch('/api/fidelidade/usar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId || '' },
+          body: JSON.stringify({ phone: phone.replace(/\D/g,''), order_id: order.id })
+        });
+        const fd = await fr.json().catch(() => ({}));
+        if (!fr.ok || !fd.ok) throw new Error(fd.error || 'Pontos não trocados');
+      } catch(e) {
+        try {
+          const novoTotal = parseFloat(order.total || 0) + _fidDescontoPedido;
+          await sb.from('orders').update({ total: novoTotal }).eq('id', order.id);
+          order.total = novoTotal;
+        } catch(_) {}
+        toast('⚠️','Não foi possível trocar seus pontos. O pedido seguirá sem esse desconto.');
+      }
+      if (typeof _resetFidelidadeUI === 'function') _resetFidelidadeUI();
     }
 
     // ── Registrar uso do carimbinho se aplicado ──────
