@@ -627,26 +627,78 @@
     ]);
     return d;
   };
-  // /publi: você digita na conversa; vai o vídeo + texto com os botões Saber mais e Bloquear
+  // /publi: você digita na conversa; vai o vídeo + a propaganda com "Saber mais" e "Bloquear".
+  // "Saber mais" leva a um funil de vendas completo dentro do WhatsApp:
+  // tipo de estabelecimento → como recebe pedidos hoje (dor certa para cada caso) →
+  // o que o sistema faz → plano e preço → teste grátis / consultor / "agora não".
+  // Pergunta escrita pelo cliente ou silêncio de 3 h viram aviso para o atendente.
   const publi = () => {
     const d = novoDraft();
     d.nome = 'Comando /publi';
     d.gatilho = { tipo: 'palavra', palavras: ['/publi'], modo: 'exata', publico: 'todos' };
-    d.opcoes = { presenca: true, ignorar_pausa: true, pausar_robo: false, aceita_meu_envio: true, cooldown: 15 };
-    d.grafo = G([
-      { id: 'n1', tipo: 'video', x: 380, y: 140, cfg: { midia: '', nome: '', legenda: '' } },
-      { id: 'n2', tipo: 'botoes', x: 740, y: 140, cfg: { texto: '{{saudacao}}, {{primeiro_nome|tudo bem}}! 👋\n\nSua loja ainda perde pedido no WhatsApp por demora pra responder?\n\nCom o *Estima Food*, a inteligência artificial atende seus clientes 24 horas, entende texto e áudio, monta o pedido e manda direto pro seu painel, com a comanda já impressa.\n\nQuer saber como funciona na sua loja?', rodape: 'Estima Food', midia: '', nome: '', botoes: [{ tipo: 'resposta', titulo: 'Saber mais', valor: 'saber mais' }, { tipo: 'resposta', titulo: 'Bloquear', valor: 'bloquear' }] } },
-      { id: 'n3', tipo: 'vendas', x: 1120, y: 40, cfg: { texto: 'Que bom que você quer saber mais! 🙌\nPara eu te mostrar como o *Estima Food* funciona no seu negócio, me conta: qual é o seu *tipo de estabelecimento*?' } },
-      { id: 'n4', tipo: 'texto', x: 1120, y: 320, cfg: { texto: 'Tudo bem, obrigado pelo contato! 🙏 Você não vai mais receber nossas mensagens.' } },
-      { id: 'n5', tipo: 'bloquear', x: 1480, y: 320, cfg: {} }
-    ], [
-      { de: 'inicio', porta: 'out', para: 'n1' }, { de: 'n1', porta: 'out', para: 'n2' },
-      { de: 'n2', porta: 'b0', para: 'n3' }, { de: 'n2', porta: 'b1', para: 'n4' }, { de: 'n4', porta: 'out', para: 'n5' }
-    ]);
+    // pausar_robo: o menu do robô não se mete enquanto o cliente navega no funil
+    d.opcoes = { presenca: true, ignorar_pausa: true, pausar_robo: true, aceita_meu_envio: true, cooldown: 15 };
+    const R = (titulo, valor) => ({ tipo: 'resposta', titulo, valor: valor || titulo.toLowerCase() });
+    const segs = ['Pizzaria', 'Hamburgueria', 'Açaí / Sorveteria', 'Marmitaria', 'Salgaderia', 'Churrascaria', 'Restaurante / Lanche', 'Doceria', 'Açougue', 'Outro'];
+    const nodes = [
+      { id: 'vid', tipo: 'video', x: 380, y: 160, cfg: { midia: '', nome: '', legenda: '' } },
+      { id: 'pub', tipo: 'botoes', x: 740, y: 160, cfg: { texto: '{{saudacao}}, {{primeiro_nome|tudo bem}}! 👋\n\nSua loja ainda perde pedido no WhatsApp por demora pra responder?\n\nCom o *Estima Food*, a inteligência artificial atende seus clientes 24 horas, entende texto e áudio, monta o pedido e manda direto pro seu painel, com a comanda já impressa.\n\nQuer saber como funciona na sua loja?', rodape: 'Estima Food', midia: '', nome: '', botoes: [R('Saber mais'), R('Bloquear')] } },
+      // bloquear
+      { id: 'blt', tipo: 'texto', x: 1100, y: 2300, cfg: { texto: 'Tudo bem, obrigado pelo contato! 🙏 Você não vai mais receber nossas mensagens.' } },
+      { id: 'blq', tipo: 'bloquear', x: 1460, y: 2300, cfg: {} },
+      // 1. tipo de estabelecimento
+      { id: 'seg', tipo: 'lista', x: 1100, y: 160, cfg: { titulo: 'Seu estabelecimento', texto: 'Que bom! 🙌 Pra eu te mostrar como funciona no *seu* negócio, me conta: qual é o seu tipo de estabelecimento?', rodape: 'Estima Food', botao_texto: 'Escolher', secoes: [{ titulo: 'Tipo de estabelecimento', linhas: segs.map(t => ({ titulo: t, descricao: '', valor: t })) }] } },
+      ...segs.map((t, i) => ({ id: 'sv' + i, tipo: 'definir_var', x: 1480, y: i * 150, cfg: { variavel: 'segmento', valor: t } })),
+      // 2. como recebe pedidos hoje
+      { id: 'can', tipo: 'botoes', x: 1860, y: 600, cfg: { texto: 'Show! E hoje, como os pedidos da sua {{segmento}} chegam?', rodape: '', midia: '', nome: '', botoes: [R('Só pelo WhatsApp', 'whatsapp'), R('iFood e outros apps', 'apps'), R('Os dois', 'os dois')] } },
+      { id: 'dw', tipo: 'texto', x: 2240, y: 380, cfg: { texto: 'Entendi. Atender tudo no WhatsApp na mão toma muito tempo: no horário de pico as mensagens acumulam e o cliente que espera acaba pedindo em outro lugar. 😕\n\nCom o Estima Food, a IA responde na hora, entende até áudio, monta o pedido com total e taxa e ele já cai no seu painel e na impressora. Você só prepara e entrega.' } },
+      { id: 'da', tipo: 'texto', x: 2240, y: 640, cfg: { texto: 'Entendi. Os apps cobram comissão em *cada* pedido, e no fim do mês isso pesa muito no seu lucro. 💸\n\nCom o Estima Food você tem seu próprio cardápio digital e pedidos pelo WhatsApp com IA, *sem taxa por pedido*: o lucro fica todo com você. E o cliente que hoje pede pelo app pode passar a pedir direto com você.' } },
+      { id: 'dd', tipo: 'texto', x: 2240, y: 900, cfg: { texto: 'Entendi. Com o Estima Food você centraliza tudo: cardápio digital próprio, sem taxa por pedido, e a IA atendendo o WhatsApp na hora, com o pedido caindo pronto no painel e na impressora. Assim você depende menos dos apps e não perde mais pedido por demora.' } },
+      { id: 'cw', tipo: 'definir_var', x: 2600, y: 380, cfg: { variavel: 'canal', valor: 'só WhatsApp' } },
+      { id: 'ca', tipo: 'definir_var', x: 2600, y: 640, cfg: { variavel: 'canal', valor: 'iFood e apps' } },
+      { id: 'cd', tipo: 'definir_var', x: 2600, y: 900, cfg: { variavel: 'canal', valor: 'WhatsApp e apps' } },
+      // 3. o que o sistema faz
+      { id: 'fun', tipo: 'botoes', x: 2960, y: 600, cfg: { texto: 'Pra sua {{segmento}}, o Estima Food já vem com:\n\n✅ Cardápio digital com a sua marca\n✅ Pedidos por IA no WhatsApp (texto e áudio)\n✅ Pix com confirmação automática\n✅ Comanda impressa na hora\n✅ Entregas e taxa por bairro\n✅ Relatórios e controle de caixa\n✅ *Sem taxa por pedido*', rodape: '', midia: '', nome: '', botoes: [R('Ver plano e preço', 'plano'), { tipo: 'link', titulo: 'Ver demonstração', valor: '{{link_demo}}' }, R('Falar com consultor', 'consultor')] } },
+      // 4. plano e preço
+      { id: 'pla', tipo: 'botoes', x: 3340, y: 400, cfg: { texto: '💰 *Plano único, tudo incluso*\n\n*{{preco_plano}} por mês*\n\n✅ Todas as funções liberadas\n✅ Sem taxa por pedido\n✅ Suporte pelo WhatsApp\n\n🎁 Você pode *testar grátis por 7 dias*, com tudo liberado, antes de decidir.', rodape: '', midia: '', nome: '', botoes: [R('Quero testar grátis', 'testar'), R('Falar com consultor', 'consultor'), R('Agora não', 'agora nao')] } },
+      // 5a. quer testar
+      { id: 'tn', tipo: 'notificar', x: 3720, y: 200, cfg: { texto: '🔥 *Lead quer testar grátis*\n\n{{nome}} ({{telefone}})\nSegmento: {{segmento}}\nRecebe pedidos: {{canal}}\n\nAcompanhe o cadastro e ajude se precisar.' } },
+      { id: 'tl', tipo: 'botoes', x: 4080, y: 200, cfg: { texto: 'Ótima escolha! 🎉 No teste grátis de 7 dias você usa *todas* as funções.\n\nÉ só criar sua conta pelo botão abaixo, leva uns 2 minutos. Se travar em algo, me chama aqui que eu te ajudo.', rodape: '', midia: '', nome: '', botoes: [{ tipo: 'link', titulo: 'Criar minha conta', valor: '{{link_site}}' }, R('Ajuda no cadastro', 'ajuda')] } },
+      // 5b. consultor
+      { id: 'kn', tipo: 'notificar', x: 4080, y: 760, cfg: { texto: '💬 *Lead pediu consultor*\n\n{{nome}} ({{telefone}})\nSegmento: {{segmento}}\nRecebe pedidos: {{canal}}\n\nChame agora, o cliente está esperando.' } },
+      { id: 'kt', tipo: 'texto', x: 4440, y: 760, cfg: { texto: 'Combinado! 🙌 Já avisei nossa equipe: um consultor vai te chamar aqui mesmo em instantes.' } },
+      { id: 'kp', tipo: 'pausar_robo', x: 4800, y: 760, cfg: {} },
+      // 5c. agora não
+      { id: 'an', tipo: 'botoes', x: 3720, y: 1100, cfg: { texto: 'Sem problema! 😉 Quando quiser começar, é só tocar no botão abaixo ou me chamar aqui. Seu teste grátis de 7 dias fica reservado.', rodape: '', midia: '', nome: '', botoes: [R('Quero testar grátis', 'testar'), R('Tenho uma dúvida', 'duvida')] } },
+      // pergunta escrita ou silêncio depois do preço
+      { id: 'ag', tipo: 'aguardar', x: 3720, y: 1460, cfg: { variavel: 'pergunta', tipo_entrada: 'texto', msg_invalida: '', timeout_min: 180 } },
+      { id: 'qn', tipo: 'notificar', x: 4080, y: 1360, cfg: { texto: '❓ *Lead perguntou*\n\n{{nome}} ({{telefone}})\nSegmento: {{segmento}}\n\n"{{pergunta}}"\n\nResponda pelo WhatsApp de suporte.' } },
+      { id: 'qt', tipo: 'texto', x: 4440, y: 1360, cfg: { texto: 'Boa pergunta! Já passei pra um consultor, ele te responde aqui em instantes. 🙌' } },
+      { id: 'qp', tipo: 'pausar_robo', x: 4800, y: 1360, cfg: {} },
+      { id: 'fu', tipo: 'botoes', x: 4080, y: 1620, cfg: { texto: 'Oi, {{primeiro_nome|tudo bem}}! 😊 Ficou alguma dúvida sobre o Estima Food?\n\nPosso liberar agora o seu *teste grátis de 7 dias*, com tudo funcionando na sua {{segmento}}.', rodape: '', midia: '', nome: '', botoes: [R('Quero testar grátis', 'testar'), R('Falar com consultor', 'consultor')] } },
+      { id: 'fn', tipo: 'notificar', x: 4440, y: 1620, cfg: { texto: '⏰ *Lead esfriou* (3 h sem responder depois do preço)\n\n{{nome}} ({{telefone}})\nSegmento: {{segmento}}\n\nVale uma mensagem sua.' } }
+    ];
+    const e = (de, porta, para) => ({ de, porta, para });
+    const edges = [
+      e('inicio', 'out', 'vid'), e('vid', 'out', 'pub'),
+      e('pub', 'b0', 'seg'), e('pub', 'b1', 'blt'), e('blt', 'out', 'blq'),
+      ...segs.map((_, i) => e('seg', 'l' + i, 'sv' + i)), ...segs.map((_, i) => e('sv' + i, 'out', 'can')),
+      e('can', 'b0', 'dw'), e('can', 'b1', 'da'), e('can', 'b2', 'dd'),
+      e('dw', 'out', 'cw'), e('da', 'out', 'ca'), e('dd', 'out', 'cd'),
+      e('cw', 'out', 'fun'), e('ca', 'out', 'fun'), e('cd', 'out', 'fun'),
+      e('fun', 'b0', 'pla'), e('fun', 'b2', 'kn'),
+      e('pla', 'b0', 'tn'), e('pla', 'b1', 'kn'), e('pla', 'b2', 'an'), e('pla', 'out', 'ag'),
+      e('tn', 'out', 'tl'), e('tl', 'b1', 'kn'),
+      e('kn', 'out', 'kt'), e('kt', 'out', 'kp'),
+      e('an', 'b0', 'tn'), e('an', 'b1', 'kn'),
+      e('ag', 'out', 'qn'), e('qn', 'out', 'qt'), e('qt', 'out', 'qp'),
+      e('ag', 'timeout', 'fu'), e('fu', 'out', 'fn'), e('fu', 'b0', 'tn'), e('fu', 'b1', 'kn')
+    ];
+    d.grafo = G(nodes, edges);
     return d;
   };
   const MODELOS = [
-    ['Comando /publi (vídeo, Saber mais e Bloquear)', 'Você digita /publi na conversa e vai o vídeo com o texto da propaganda. "Saber mais" começa o atendimento de vendas (tipo de estabelecimento, nome e telefone). "Bloquear" agradece e coloca o contato na lista negra.', publi],
+    ['Comando /publi (funil de vendas completo)', 'Você digita /publi na conversa: vai o vídeo e a propaganda com "Saber mais" e "Bloquear". "Saber mais" leva o cliente pelo funil: tipo de estabelecimento, como recebe pedidos hoje, o que o sistema faz, plano e preço, e fecha com teste grátis ou consultor. Perguntas e quem some viram aviso para você. "Bloquear" coloca na lista negra.', publi],
     ['Em branco', 'Começar do zero, com um texto de boas-vindas.', () => novoDraft()],
     ['Catálogo em carrossel', 'Vários cartões em sequência, cada um com imagem, texto e botões que seguem caminhos diferentes.', carrossel],
     ['Botão "Saber mais" com ramificação', 'Exemplo pronto: cada botão segue por um caminho diferente. Use como base para montar seus próprios caminhos.', saberMais],

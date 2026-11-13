@@ -3265,6 +3265,27 @@ async function handleREST(req, res, table, params, body) {
               }
             }
           } catch(e) { log('⚠️', 'validação de preço falhou:', e.message) }
+
+          // Pedido mínimo: antes só o cardápio conferia (dava pra burlar mandando
+          // o pedido direto). Mesma conta do cardápio: soma dos itens, antes do
+          // cupom; delivery sempre, retirada só com a chave ligada no gestor.
+          try {
+            const _scMin = db.prepare('SELECT pedido_minimo, pedido_minimo_retirada FROM store_config WHERE tenant_id=?').get(tenantId)
+            const _minimo = parseFloat(_scMin?.pedido_minimo) || 0
+            if (_minimo > 0 && !payload.mesa_num) {
+              const _addrMin = String(payload.addr || '').trim()
+              const _ehRetirada = /^Retirada\b/i.test(_addrMin)
+              const _aplica = _ehRetirada ? !!_scMin.pedido_minimo_retirada : _addrMin.length > 0
+              if (_aplica) {
+                const _itensMin = Array.isArray(payload.items) ? payload.items
+                  : (typeof payload.items === 'string' ? JSON.parse(payload.items) : [])
+                const _soma = _itensMin.reduce((s, i) => s + (parseFloat(i?.price) || 0) * (parseFloat(i?.qty) || 1), 0)
+                if (_soma + 0.005 < _minimo) {
+                  return send(res, 422, { error: `Pedido mínimo ${_ehRetirada ? 'para retirada' : 'para delivery'}: R$ ${_minimo.toFixed(2).replace('.', ',')}` })
+                }
+              }
+            }
+          } catch(e) { log('⚠️', 'validação de pedido mínimo falhou:', e.message) }
         }
 
         const addrRaw = String(payload.addr || '').trim()
@@ -3299,7 +3320,11 @@ async function handleREST(req, res, table, params, body) {
             const bloqueados = Array.isArray(cfg.bairros_bloqueados) ? cfg.bairros_bloqueados : []
             if (bloqueados.length) {
               const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()
-              const addrNorm = norm(addrRaw)
+              // Endere\u00e7o = "Rua, n\u00famero, Bairro, complemento, Ref: ...". Ignora o
+              // nome da rua e a refer\u00eancia: quem mora na "Rua Planalto" de um
+              // bairro atendido n\u00e3o pode ser recusado por o Planalto estar bloqueado.
+              const _partes = norm(addrRaw.replace(/,?\s*Ref:.*$/i, '')).split(',').map(t => t.trim()).filter(Boolean)
+              const addrNorm = _partes.length > 1 ? _partes.slice(1).join(', ') : norm(addrRaw)
               for (const bb of bloqueados) {
                 const bbNorm = norm(bb)
                 if (bbNorm && new RegExp(`(^|[^a-z0-9])${bbNorm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}([^a-z0-9]|$)`).test(addrNorm)) {
@@ -3345,16 +3370,25 @@ async function handleREST(req, res, table, params, body) {
                 if (_origemPublica) return send(res, 422, { error: 'A área de entrega ainda não foi configurada pela loja para cobrança por bairro.' })
               } else {
                 const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()
+                // O endere\u00e7o chega como "Rua, n\u00famero, Bairro, Ref: ...". Compara
+                // primeiro com cada trecho entre v\u00edrgulas (sem a refer\u00eancia):
+                // antes procurava o nome em qualquer lugar, e "Rua Planalto, 10,
+                // Centro" era cobrado com a taxa do Planalto (maior que a da tela).
                 const addrNorm = norm(addrRaw)
+                const trechos = norm(addrRaw.replace(/,?\s*Ref:.*$/i, '')).split(',').map(t => t.trim()).filter(Boolean)
+                let achado = bairrosCfg.find(b => norm(b.bairro) && trechos.includes(norm(b.bairro)))
+                if (!achado) {
+                  // Sem trecho id\u00eantico: usa o nome mais completo que aparece
+                  // (assim "Centro Norte" n\u00e3o \u00e9 confundido com "Centro").
+                  achado = bairrosCfg
+                    .filter(b => norm(b.bairro) && addrNorm.includes(norm(b.bairro)))
+                    .sort((a, b) => norm(b.bairro).length - norm(a.bairro).length)[0]
+                }
                 let bateu = false
-                for (const b of bairrosCfg) {
-                  const bNorm = norm(b.bairro)
-                  if (bNorm && addrNorm.includes(bNorm)) {
-                    bateu = true
-                    const taxaConf = parseFloat(b.taxa) || 0
-                    if ((parseFloat(payload.taxa)||0) < taxaConf) payload.taxa = taxaConf
-                    break
-                  }
+                if (achado) {
+                  bateu = true
+                  const taxaConf = parseFloat(achado.taxa) || 0
+                  if ((parseFloat(payload.taxa)||0) < taxaConf) payload.taxa = taxaConf
                 }
                 if (!bateu && _origemPublica) {
                   return send(res, 422, { error: 'Não foi possível confirmar a taxa de entrega para o bairro informado. Confira o endereço ou fale com a loja.' })
@@ -9335,6 +9369,104 @@ async function _ogGerar(tid) {
   _ogGerando.set(arq, p)
   return p
 }
+// ── Fotos reduzidas (miniaturas) ─────────────────────────────────────────
+// Gera uma vez e guarda em uploads/_mini; nas próximas vezes só entrega.
+// Larguras fixas para não gerar uma versão por pixel pedido.
+let _sharp = null
+try { _sharp = require('sharp'); _sharp.concurrency(1); _sharp.cache(false) } catch (e) { _sharp = null }
+const _MINI_LARGURAS = [160, 320, 480, 720, 1080]
+const _miniGerando = new Map()
+async function _fotoMini(fpath, fname, largPedida) {
+  if (!_sharp) return null
+  try {
+    const larg = _MINI_LARGURAS.find(l => l >= largPedida) || _MINI_LARGURAS[_MINI_LARGURAS.length - 1]
+    const dir = path.join(UPLOADS_DIR, '_mini')
+    const mini = path.join(dir, `${larg}_${fname.replace(/\.[^.]+$/, '')}.webp`)
+    if (fs.existsSync(mini) && fs.statSync(mini).mtimeMs >= fs.statSync(fpath).mtimeMs) return mini
+    if (_miniGerando.has(mini)) return await _miniGerando.get(mini)
+    const p = (async () => {
+      fs.mkdirSync(dir, { recursive: true })
+      await _sharp(fpath, { failOn: 'none', animated: false })
+        .rotate().resize({ width: larg, withoutEnlargement: true })
+        .webp({ quality: 78 }).toFile(mini + '.tmp')
+      fs.renameSync(mini + '.tmp', mini)
+      return mini
+    })().catch(e => { log('⚠️', `Miniatura de ${fname} falhou: ${e.message}`); return null })
+      .finally(() => _miniGerando.delete(mini))
+    _miniGerando.set(mini, p)
+    return await p
+  } catch (e) { return null }
+}
+
+// Banners do cardápio gravados como texto base64 dentro da config da loja
+// (jeito antigo) viram arquivos na pasta de uploads. Um vídeo de banner em
+// base64 passava do limite de 8MB e fazia TODO "Salvar alterações" do
+// cardápio público dar erro 502 — além de pesar no carregamento do cardápio
+// e na memória do servidor. Roda uma vez ao ligar; loja já convertida é pulada.
+function _migrarBannersBase64() {
+  const extDe = { 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mp4', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }
+  const paraArquivo = (dataUrl, tid, i) => {
+    const m = String(dataUrl).match(/^data:([\w/+.-]+);base64,([\s\S]+)$/)
+    if (!m) return null
+    const ext = extDe[m[1].toLowerCase()] || (m[1].startsWith('video/') ? 'mp4' : 'jpg')
+    const nome = `banner-${String(tid).replace(/[^\w-]/g, '')}-${Date.now()}-${i}.${ext}`
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true })
+    fs.writeFileSync(path.join(UPLOADS_DIR, nome), Buffer.from(m[2], 'base64'))
+    return `/uploads/${nome}`
+  }
+  let lojas = []
+  try {
+    lojas = db.prepare(`SELECT tenant_id, store_banners, store_banner_url FROM store_config
+      WHERE store_banners LIKE '%"data:%' OR store_banner_url LIKE 'data:%'`).all()
+  } catch (e) { log('⚠️', 'Converter banners: ' + e.message); return }
+  for (const l of lojas) {
+    try {
+      const trocados = new Map() // mesmo base64 → mesmo arquivo
+      let banners = []
+      try { banners = JSON.parse(l.store_banners || '[]') } catch (e) { banners = [] }
+      if (!Array.isArray(banners)) banners = []
+      banners = banners.map((b, i) => {
+        if (!b || typeof b.url !== 'string' || !b.url.startsWith('data:')) return b
+        const url = trocados.get(b.url) || paraArquivo(b.url, l.tenant_id, i)
+        if (!url) return b
+        trocados.set(b.url, url)
+        return { ...b, url }
+      })
+      let principal = l.store_banner_url
+      if (typeof principal === 'string' && principal.startsWith('data:')) {
+        principal = trocados.get(principal) || paraArquivo(principal, l.tenant_id, 'p') || principal
+      }
+      db.prepare('UPDATE store_config SET store_banners=?, store_banner_url=? WHERE tenant_id=?')
+        .run(JSON.stringify(banners), principal, l.tenant_id)
+      marcarDirty()
+      log('🖼️', `Banners da loja ${l.tenant_id} convertidos em arquivo (${trocados.size})`)
+    } catch (e) { log('⚠️', `Converter banners da loja ${l.tenant_id}: ${e.message}`) }
+  }
+}
+// Mesma coisa para fotos de produto e de categoria gravadas como base64: o
+// app do garçom e o cardápio baixavam todas de uma vez ao abrir.
+function _migrarFotosBase64() {
+  const extDe = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }
+  for (const tabela of ['menu_items', 'categories']) {
+    let linhas = []
+    try { linhas = db.prepare(`SELECT id, tenant_id, image_url FROM ${tabela} WHERE image_url LIKE 'data:image/%'`).all() } catch (e) { continue }
+    let n = 0
+    for (const l of linhas) {
+      try {
+        const m = String(l.image_url).match(/^data:(image\/[\w+.-]+);base64,([\s\S]+)$/)
+        if (!m) continue
+        const nome = `${tabela === 'menu_items' ? 'item' : 'cat'}-${String(l.tenant_id).replace(/[^\w-]/g, '')}-${l.id}-${Date.now()}.${extDe[m[1].toLowerCase()] || 'jpg'}`
+        fs.mkdirSync(UPLOADS_DIR, { recursive: true })
+        fs.writeFileSync(path.join(UPLOADS_DIR, nome), Buffer.from(m[2], 'base64'))
+        db.prepare(`UPDATE ${tabela} SET image_url=? WHERE id=?`).run(`/uploads/${nome}`, l.id)
+        n++
+      } catch (e) { log('⚠️', `Converter foto ${tabela} ${l.id}: ${e.message}`) }
+    }
+    if (n) { marcarDirty(); log('🖼️', `${n} foto(s) de ${tabela === 'menu_items' ? 'produto' : 'categoria'} convertidas em arquivo`) }
+  }
+}
+setTimeout(() => { _migrarBannersBase64(); _migrarFotosBase64() }, 3000)
+
 // Deixa a imagem pronta das lojas que usam WuzAPI logo depois que o
 // servidor sobe — assim a primeira mensagem do dia já sai com ela.
 setTimeout(async () => {
@@ -10130,6 +10262,17 @@ const server = http.createServer(async (req,res) => {
 
   if(req.method==='GET'&&(upath.startsWith('/uploads/')||upath.startsWith('/storage/v1/object/public/'))){
     const fname=path.basename(upath),fpath=path.join(UPLOADS_DIR,fname)
+    // Versão reduzida da foto (?w=480): foto de celular de 4000px no tamanho
+    // original pesa no 4G do cliente e derruba o Chrome do celular do garçom
+    // (cada foto ocupa ~48MB de memória). Sem o sharp instalado, entrega a original.
+    const _wMini = parseInt(new URL(req.url, 'http://x').searchParams.get('w'), 10)
+    if (_wMini > 0 && /\.(jpe?g|png|webp|gif|bmp)$/i.test(fname) && fs.existsSync(fpath)) {
+      const mini = await _fotoMini(fpath, fname, _wMini)
+      if (mini) {
+        res.setHeader('Content-Type','image/webp');res.setHeader('Cache-Control','public, max-age=2592000')
+        res.writeHead(200);fs.createReadStream(mini).pipe(res);return
+      }
+    }
     if(fs.existsSync(fpath)){const ext=path.extname(fpath);res.setHeader('Content-Type',MIME[ext]||'application/octet-stream');res.setHeader('Cache-Control','public, max-age=2592000');res.writeHead(200);fs.createReadStream(fpath).pipe(res)}
     else{res.writeHead(404);res.end('Not found')}
     return

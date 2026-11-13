@@ -331,6 +331,37 @@ body.theme-light .sa-chave span{background:#cbd5e1}
       </div>`;
   }
 
+  // Oferta Black Friday: página /blackfriday com o 1º mês por um preço especial
+  function blocoOferta() {
+    const c = T.dados?.config || {};
+    const o = T.dados?.oferta || {};
+    const v = (k, pad) => (k in T.rascunho ? T.rascunho[k] : pad);
+    const link = location.origin + '/blackfriday';
+    const vendas = (T.dados?.compras || []).filter(x => x.oferta === 'blackfriday' && x.status === 'aprovado').length;
+    const aviso = !c.compra_ativa ? 'A compra pelo site está desligada (quadro acima): ligue para a oferta vender.'
+      : o.encerrada ? 'A data final já passou: a página mostra que a oferta terminou.'
+      : (c.bf_ativa && !o.ativa) ? 'O Mercado Pago da plataforma não está configurado: confira o token em Configurações do admin.' : '';
+    return `
+      <div class="card">
+        <div class="sa-liga">
+          <div>
+            <div class="sa-liga-titulo">Oferta Black Friday ${o.ativa ? '<span class="badge bg-green">No ar</span>' : (c.bf_ativa ? '<span class="badge bg-orange">Ligada, mas fora do ar</span>' : '<span class="badge bg-gray">Desligada</span>')}</div>
+            <div class="sa-liga-texto">Página <a href="${esc(link)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">${esc(link)}</a> para os anúncios. O cliente paga o 1º mês por R$ ${Number(c.bf_valor || 0).toFixed(2).replace('.', ',')} (Pix ou cartão), a conta é criada sozinha e o acesso chega no WhatsApp. Do 2º mês em diante a mensalidade é R$ ${Number(o.depois || 0).toFixed(2).replace('.', ',')}.${vendas ? ' Vendas pela oferta: ' + vendas + '.' : ''}</div>
+            ${aviso ? `<div class="sa-dica" style="margin-top:8px;color:var(--orange);font-weight:600">${aviso}</div>` : ''}
+          </div>
+          <label class="sa-chave" title="${c.bf_ativa ? 'Desligar a oferta' : 'Ligar a oferta'}">
+            <input type="checkbox" id="sa-bf-ativa" ${c.bf_ativa ? 'checked' : ''} aria-label="Oferta Black Friday">
+            <span></span>
+          </label>
+        </div>
+        <div class="sa-cfg" style="margin-top:14px">
+          <div class="sa-campo"><label for="sa-bf-valor">Valor do 1º mês (R$)</label><input class="minput" id="sa-bf-valor" type="number" min="1" max="999" step="0.01" value="${esc(v('sa-bf-valor', c.bf_valor))}"></div>
+          <div class="sa-campo"><label for="sa-bf-ate">Oferta válida até</label><input class="minput" id="sa-bf-ate" type="date" value="${esc(v('sa-bf-ate', c.bf_ate))}"></div>
+        </div>
+        <div style="margin-top:12px"><button class="btn bp" data-acao="salvar-oferta">Salvar oferta</button></div>
+      </div>`;
+  }
+
   // Escolha do fluxo do Marketing (vídeo, imagem e botões) de uma etapa do teste
   function seletorFluxo(k) {
     const lista = T.dados?.fluxos_mkt || [];
@@ -517,6 +548,8 @@ body.theme-light .sa-chave span{background:#cbd5e1}
 
       ${blocoCompras()}
 
+      ${blocoOferta()}
+
       <div class="tw">
         <div class="tmeta">
           <div class="sa-filtros" role="group" aria-label="Filtrar testes">
@@ -657,6 +690,10 @@ body.theme-light .sa-chave span{background:#cbd5e1}
       if (a.dataset.acao === 'ativar') abrirAtivar(id);
       if (a.dataset.acao === 'excluir') abrirExcluir(id);
       if (a.dataset.acao === 'excluir-expirados') abrirExcluir(null, true);
+      if (a.dataset.acao === 'salvar-oferta') {
+        salvarConfig({ bf_valor: $('sa-bf-valor').value, bf_ate: $('sa-bf-ate').value }, 'Oferta salva').then(() => carregarTestes(true));
+        return;
+      }
       if (a.dataset.acao === 'salvar-config') salvarConfig({
         dias: $('sa-teste-dias').value, limite_dia: $('sa-teste-limite').value,
         gestor_url: $('sa-teste-gestor').value.trim(), download_url: $('sa-teste-download').value.trim(),
@@ -690,6 +727,10 @@ body.theme-light .sa-chave span{background:#cbd5e1}
         const ligar = ev.target.checked;
         salvarConfig({ ativo: ligar }, ligar ? 'Teste grátis ligado: o site já está oferecendo' : 'Teste grátis desligado: o site parou de oferecer', true);
       }
+      if (ev.target.id === 'sa-bf-ativa') {
+        const ligar = ev.target.checked;
+        salvarConfig({ bf_ativa: ligar }, ligar ? 'Oferta Black Friday ligada' : 'Oferta Black Friday desligada: a página volta para o WhatsApp', true).then(() => carregarTestes(true));
+      }
       if (ev.target.id === 'sa-compra-ativa') {
         const ligar = ev.target.checked;
         salvarConfig({ compra_ativa: ligar }, ligar ? 'Compra pelo site ligada: o botão da oferta abre o pagamento' : 'Compra pelo site desligada: o botão da oferta volta para o WhatsApp', true).then(() => carregarTestes(true));
@@ -712,7 +753,7 @@ body.theme-light .sa-chave span{background:#cbd5e1}
       if (ev.target.id === 'sa-teste-seq-hora') { T.rascunho['sa-teste-seq-hora'] = ev.target.value; }
     });
     sec.addEventListener('input', ev => {
-      if (/^sa-teste-(dias|limite|gestor|download|msg-min|msg-texto|cobranca)$/.test(ev.target.id) || /^sa-(seq-(dia1|dia2|dia3|dia5|vespera|expirou)|meta-(pixel|token|teste))$/.test(ev.target.id)) { T.rascunho[ev.target.id] = ev.target.value; return; }
+      if (/^sa-teste-(dias|limite|gestor|download|msg-min|msg-texto|cobranca)$/.test(ev.target.id) || /^sa-(seq-(dia1|dia2|dia3|dia5|vespera|expirou)|meta-(pixel|token|teste)|bf-valor|bf-ate)$/.test(ev.target.id)) { T.rascunho[ev.target.id] = ev.target.value; return; }
       if (ev.target.id !== 'sa-teste-busca') return;
       T.busca = ev.target.value;
       const pos = ev.target.selectionStart;

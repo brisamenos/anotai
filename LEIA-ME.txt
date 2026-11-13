@@ -1,0 +1,29 @@
+ATUALIZAÇÃO ESTIMAFOOD — 12/11/2026
+
+COMO INSTALAR
+1. Extraia este zip DENTRO da pasta do projeto, substituindo os arquivos.
+   As pastas "cardapio" e "bf-assets" já estão no lugar certo.
+2. Faça o deploy no EasyPanel. O package.json ganhou o "sharp" (reduz as
+   fotos); o deploy instala sozinho.
+3. Confira no log do deploy:
+   - "Banners da loja ... convertidos em arquivo"
+   - "foto(s) de produto convertidas em arquivo" (se houver fotos antigas)
+4. Variável OG_IMAGEM=0 no Ambiente do EasyPanel: pode manter.
+
+O QUE FOI CORRIGIDO
+- Fechar a loja / salvar o Cardápio Público dava erro 502 e não salvava
+  (banner de vídeo embutido estourava o limite do servidor).
+- Fotos de produto agora chegam reduzidas: o cardápio e o app do garçom
+  pesavam mais de 1 GB de memória com fotos de celular (causa provável
+  das quedas "Ah, não!" no Chrome).
+- Aceite automático aceitava Pix manual ainda não pago.
+- Taxa por bairro podia cobrar a mais pelo nome da rua.
+- Bairro bloqueado recusava cliente de bairro atendido pelo nome da rua.
+- Cupom era gasto mesmo quando o pedido era recusado.
+- Pedido mínimo agora também é conferido no servidor.
+- Lista de cupons do gestor mostrava tipo e usos errados.
+- Relatórios deixavam de contar pedidos que saíram para entrega.
+- Tela de cardápio do gestor não identificava o tipo da loja.
+- Ícone da lixeira quebrado; robô cobrindo o título "Estamos fechados".
+- Servidor não cai mais por erro inesperado (registra no log) e mostra
+  o uso de memória a cada 5 minutos.

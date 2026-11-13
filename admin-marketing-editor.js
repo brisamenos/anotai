@@ -23,7 +23,7 @@
   ];
   const OPS = [['igual', 'é igual a'], ['contem', 'contém'], ['comeca', 'começa com'], ['termina', 'termina com'], ['regex', 'combina com regex'], ['numero', 'é um número'], ['email', 'é um e-mail'], ['telefone', 'é um telefone'], ['maior', 'é maior que'], ['menor', 'é menor que'], ['vazio', 'está vazio'], ['preenchido', 'está preenchido']];
   const OPS_SEM_VALOR = ['numero', 'email', 'telefone', 'vazio', 'preenchido'];
-  const VARS_BASE = ['primeiro_nome', 'nome', 'loja', 'saudacao', 'pix', 'pix_chave', 'telefone', 'link_demo', 'cliente', 'hora', 'dia_semana',
+  const VARS_BASE = ['primeiro_nome', 'nome', 'loja', 'saudacao', 'pix', 'pix_chave', 'telefone', 'link_demo', 'link_site', 'preco_plano', 'cliente', 'hora', 'dia_semana',
     // só nos fluxos do acompanhamento do teste grátis
     'validade', 'dias', 'email', 'link_gestor', 'link_cardapio', 'link_download', 'preco', 'ia_liberada'];
 

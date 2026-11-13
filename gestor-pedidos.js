@@ -1808,7 +1808,7 @@ function _odRenderCatalogGrid() {
   grid.style.display = 'grid';
   grid.innerHTML = lista.map(i => {
     const imgEl = i.imageUrl
-      ? `<div style="width:100%;aspect-ratio:1;border-radius:10px;overflow:hidden;margin-bottom:8px;background:var(--surface2)"><img src="${i.imageUrl}" style="width:100%;height:100%;object-fit:cover"></div>`
+      ? `<div style="width:100%;aspect-ratio:1;border-radius:10px;overflow:hidden;margin-bottom:8px;background:var(--surface2)"><img src="${_fotoMini(i.imageUrl, 320)}" style="width:100%;height:100%;object-fit:cover"></div>`
       : `<div style="width:100%;aspect-ratio:1;border-radius:10px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:8px">${i.emoji || '🍽️'}</div>`;
     return `<div onclick="_odSelecionarProduto(${i.id})" style="background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:10px;cursor:pointer;transition:border-color .15s" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
       ${imgEl}
@@ -2258,7 +2258,7 @@ function noFilterItems(q) {
       : (temAdicionais ? '<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600">+ adicionais</div>' : '');
     return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;active:background:var(--surface2)" onclick="noAddItem(${item.id})">
         ${item.imageUrl
-        ? `<img src="${item.imageUrl}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+        ? `<img src="${_fotoMini(item.imageUrl, 320)}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">`
         : `<div style="width:44px;height:44px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${item.emoji || '🍽️'}</div>`}
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.name}</div>

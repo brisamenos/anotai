@@ -3642,6 +3642,13 @@ document.addEventListener('visibilitychange', async () => {
 // O produto pode ter um preço só para o salão (price_mesa). Pedido de mesa usa
 // esse preço; pedido de delivery/retirada feito pelo garçom usa o preço normal.
 // Sem price_mesa, os dois são iguais (nada muda para quem não usa).
+// Foto reduzida do servidor (?w=): o original de celular (4000px) derrubava o
+// Chrome do aparelho do garçom com muitos produtos na tela.
+function _fotoMini(url, w) {
+  if (!url || typeof url !== 'string' || url.startsWith('data:') || url.includes('?')) return url;
+  const rel = url.startsWith(location.origin + '/uploads/') ? url.slice(location.origin.length) : url;
+  return rel.startsWith('/uploads/') ? rel + '?w=' + w : url;
+}
 function _garcomAplicarPrecos() {
   const delivery = !!window._npMode;
   (allItems || []).forEach(i => {
@@ -3702,7 +3709,7 @@ function renderItemGrid() {
     const qty     = inCart ? inCart.qty : 0;
     const isPizza = i.item_type === 'pizza';
     const imgHtml = i.image_url
-      ? `<img src="${i.image_url}" alt="${i.name}">`
+      ? `<img src="${_fotoMini(i.image_url, 320)}" alt="${i.name}" loading="lazy" decoding="async">`
       : i.emoji || '🍽️';
     return `<div class="item-tile ${qty>0?'selected':''}" onclick="addItem(${i.id})" id="tile-${i.id}">
       ${qty > 0 ? `<div class="item-tile-badge">${qty}</div>` : ''}
@@ -3763,7 +3770,7 @@ function openItemModal(id) {
   // Imagem
   const imgEl = document.getElementById('im-img');
   if (i.image_url) {
-    imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover">`;
+    imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><img src="${_fotoMini(i.image_url, 720)}" alt="${i.name}" decoding="async" style="width:100%;height:100%;object-fit:cover">`;
   } else {
     imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><span style="font-size:72px">${i.emoji||'🍽️'}</span>`;
   }
@@ -3974,7 +3981,7 @@ function renderImXsell(item) {
   if (!others.length) { wrap.innerHTML = ''; return; }
   const cards = others.map(o => `
     <div class="xsell-card" id="xsim_${o.id}" onclick="xsellToggle(${o.id})">
-      <div class="xsell-img">${o.image_url ? `<img src="${o.image_url}" loading="lazy">` : (o.emoji||'🍽️')}</div>
+      <div class="xsell-img">${o.image_url ? `<img src="${_fotoMini(o.image_url, 160)}" loading="lazy" decoding="async">` : (o.emoji||'🍽️')}</div>
       <div class="xsell-body">
         <div class="xsell-name">${o.name}</div>
         <div class="xsell-price">R$ ${fmtMoney(o.price)}</div>
@@ -4005,7 +4012,7 @@ function _renderHalfPicker(baseItem) {
   if (!siblings.length) { list.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--muted);text-align:center">Nenhuma opção disponível</div>'; return; }
   list.innerHTML = siblings.map(s => {
     const on = _halfItem && _halfItem.id === s.id ? ' on' : '';
-    const thumbInner = s.image_url ? `<img src="${s.image_url}" alt="${s.name}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">` : `<span>${s.emoji||'🍕'}</span>`;
+    const thumbInner = s.image_url ? `<img src="${_fotoMini(s.image_url, 160)}" alt="${s.name}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:7px">` : `<span>${s.emoji||'🍕'}</span>`;
     return `<div class="half-opt${on}" onclick="selectHalf(${s.id})">
       <div class="half-opt-emoji">${thumbInner}</div>
       <span class="half-opt-name">${s.name}</span>
@@ -4037,7 +4044,7 @@ function _updateHalfUI() {
   const base = allItems.find(x => x.id === _imItemId);
   const avg  = base ? (parseFloat(base.price) + parseFloat(_halfItem.price)) / 2 : parseFloat(_halfItem.price);
   const emoEl = document.getElementById('half-sel-emoji');
-  if (_halfItem.image_url) emoEl.innerHTML = `<img src="${_halfItem.image_url}" alt="${_halfItem.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
+  if (_halfItem.image_url) emoEl.innerHTML = `<img src="${_fotoMini(_halfItem.image_url, 160)}" alt="${_halfItem.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
   else emoEl.textContent = _halfItem.emoji || '🍕';
   document.getElementById('half-sel-name').textContent = _halfItem.name;
   document.getElementById('half-sel-hint').textContent = 'Toque para trocar';
@@ -6376,7 +6383,7 @@ function pzRenderSlots() {
     const isActive = pz.activeSlot===i;
     const isFilled = fl!==null;
     const imgHtml  = fl && fl.image_url
-      ? `<div class="pz-slot-img"><img src="${fl.image_url}" alt="${fl.name}"></div>`
+      ? `<div class="pz-slot-img"><img src="${_fotoMini(fl.image_url, 160)}" alt="${fl.name}"></div>`
       : `<div class="pz-slot-img">${fl?'🍕':'＋'}</div>`;
     return `<div class="pz-slot${isActive?' active':''}${isFilled?' filled':''}" onclick="pzOpenSlot(${i})">
       <div class="pz-slot-num">${i+1}</div>
@@ -6401,7 +6408,7 @@ function pzOpenSlot(idx) {
     ? flavors.map(f=>{
         const isOn = pz.selected[idx]?.id===f.id;
         const img  = f.image_url
-          ? `<div class="pz-flavor-icon"><img src="${f.image_url}"></div>`
+          ? `<div class="pz-flavor-icon"><img src="${_fotoMini(f.image_url, 160)}" loading="lazy"></div>`
           : `<div class="pz-flavor-icon">🍕</div>`;
         return `<button class="pz-flavor-btn${isOn?' on':''}" onclick="pzSelectFlavor(${f.id})">
           ${img}

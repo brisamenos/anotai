@@ -112,7 +112,7 @@ const META_PIXEL_ANTIGO = '1075636798774814' // pixel usado antes; quem salvou c
 const META_GRAPH = process.env.META_GRAPH_VERSION || 'v23.0'
 const TESTE_PADRAO = { ativo: false, dias: 7, limite_dia: 30, download_url: '', gestor_url: '', msg_ativa: true, msg_minutos: 2, msg_texto: MSG_PADRAO,
   seq_ativa: true, seq_hora: 9, seq: SEQ_PADRAO, meta_pixel: META_PIXEL_PADRAO, meta_token: '', meta_teste: '', ia_teste: true, compra_ativa: true,
-  aviso_wa_teste: true, aviso_wa_clientes: false }
+  aviso_wa_teste: true, aviso_wa_clientes: false, bf_ativa: true, bf_valor: 1.99, bf_ate: '2026-11-30' }
 const MSG_TENTATIVAS = 5        // quantas vezes tenta enviar antes de marcar como falha
 const MSG_NOVA_TENTATIVA = 5    // minutos entre uma tentativa e outra
 const MAX_CONTEUDO_BYTES = 600 * 1024
@@ -232,6 +232,11 @@ function init(deps) {
     CREATE INDEX IF NOT EXISTS idx_upgrade_ia_mp ON upgrade_ia_pagamentos(mp_payment_id);
     CREATE INDEX IF NOT EXISTS idx_upgrade_ia_tenant ON upgrade_ia_pagamentos(tenant_id);
   `)
+  // compra feita pela página de uma oferta (ex.: 'blackfriday'); vazio = preço normal do site
+  try {
+    const colsCompra = new Set(D.db.prepare('PRAGMA table_info(site_compras)').all().map(c => c.name))
+    if (!colsCompra.has('oferta')) D.db.exec('ALTER TABLE site_compras ADD COLUMN oferta TEXT')
+  } catch (e) { D.log('⚠️', 'site_compras.oferta:', e.message) }
   try { D.db.prepare("DELETE FROM site_visitas WHERE dia < ?").run(somaDias(hojeBR(), -400)) } catch {}
   // Confere a cada minuto se há mensagem de boas-vindas na hora de sair
   const relogio = setInterval(() => { processarMensagens().catch(() => {}) }, 60 * 1000)
@@ -445,7 +450,11 @@ function cfgTeste() {
     fluxos: Object.fromEntries(ETAPAS_FLUXO.map(k => { const n = parseInt(salvo.fluxos?.[k], 10); return [k, n > 0 ? n : null] })),
     aviso_wa_teste: salvo.aviso_wa_teste !== false,
     aviso_wa_clientes: salvo.aviso_wa_clientes === true,
-    cobranca_texto: typeof salvo.cobranca_texto === 'string' && salvo.cobranca_texto.trim() ? salvo.cobranca_texto.slice(0, 1500) : COBRANCA_TESTE_PADRAO
+    cobranca_texto: typeof salvo.cobranca_texto === 'string' && salvo.cobranca_texto.trim() ? salvo.cobranca_texto.slice(0, 1500) : COBRANCA_TESTE_PADRAO,
+    // Oferta Black Friday (página /blackfriday): 1º mês por um preço especial até a data
+    bf_ativa: salvo.bf_ativa !== undefined ? salvo.bf_ativa === true : TESTE_PADRAO.bf_ativa,
+    bf_valor: (() => { const v = parseFloat(salvo.bf_valor); return Number.isFinite(v) && v >= 1 && v <= 999 ? Math.round(v * 100) / 100 : TESTE_PADRAO.bf_valor })(),
+    bf_ate: /^\d{4}-\d{2}-\d{2}$/.test(String(salvo.bf_ate || '')) ? String(salvo.bf_ate) : TESTE_PADRAO.bf_ate
   }
 }
 
@@ -1064,6 +1073,28 @@ function infoCompra(cfg) {
   const pk = D.mpPublicKey ? D.mpPublicKey() : ''
   return { ativo: !!(cfg.compra_ativa && token && valor), valor, public_key: pk, cartao: !!pk }
 }
+// Mensalidade cobrada depois do 1º mês (loja criada pelo site entra no plano premium)
+function precoMensalPlataforma() {
+  try {
+    const r = D.db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const g = r?.ia_config ? JSON.parse(r.ia_config) : {}
+    const v = parseFloat(g.preco_premium)
+    if (Number.isFinite(v) && v > 0) return Math.round(v * 100) / 100
+  } catch {}
+  return 99.90
+}
+// Oferta Black Friday: ligada no admin, dentro da data e com o Mercado Pago configurado
+function infoOferta(cfg) {
+  const token = D.mpToken ? D.mpToken() : ''
+  const pk = D.mpPublicKey ? D.mpPublicKey() : ''
+  const noPrazo = hojeBR() <= cfg.bf_ate
+  return {
+    ativa: !!(cfg.bf_ativa && noPrazo && cfg.compra_ativa && token && cfg.bf_valor >= 1),
+    encerrada: !noPrazo,
+    valor: cfg.bf_valor, depois: precoMensalPlataforma(), ate: cfg.bf_ate,
+    public_key: pk, cartao: !!pk
+  }
+}
 // "2026-10-14T18:30:00.000-03:00" (formato que o Mercado Pago aceita para o vencimento do Pix)
 function isoBrasilia(ms) {
   return new Date(ms - 3 * 3600 * 1000).toISOString().replace('Z', '-03:00')
@@ -1099,7 +1130,13 @@ function respostaCompra(c) {
 
 async function iniciarCompra(req, body) {
   const cfg = cfgTeste()
-  const info = infoCompra(cfg)
+  const oferta = body.oferta === 'blackfriday' ? 'blackfriday' : ''
+  let info = infoCompra(cfg)
+  if (oferta) {
+    const o = infoOferta(cfg)
+    if (!o.ativa) return { http: 403, json: { error: o.encerrada ? 'A oferta de Black Friday terminou. Fale com a gente pelo WhatsApp.' : 'A oferta não está disponível agora. Fale com a gente pelo WhatsApp.' } }
+    info = { ativo: true, valor: o.valor, public_key: o.public_key, cartao: o.cartao }
+  }
   if (!info.ativo) return { http: 403, json: { error: 'A compra pelo site não está disponível agora. Fale com a gente pelo WhatsApp.' } }
   if (String(body.website || '').trim()) return { http: 400, json: { error: 'Não foi possível concluir.' } }
   const nome = String(body.nome || '').trim().replace(/\s+/g, ' ').slice(0, 80)
@@ -1136,17 +1173,17 @@ async function iniciarCompra(req, body) {
 
     const txtMeta = (v, re, max) => { const t = String(v || '').trim().slice(0, max); return re.test(t) ? t : '' }
     const chave = crypto.randomBytes(16).toString('hex')
-    const ins = db.prepare(`INSERT INTO site_compras (chave,nome,restaurante,telefone,email,senha_cifrada,valor,metodo,ip,ua,fbp,fbc,origem_url,ev_id)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(chave, nome, restaurante, telefone, email, cifrar(senha), info.valor, metodo, ip,
+    const ins = db.prepare(`INSERT INTO site_compras (chave,nome,restaurante,telefone,email,senha_cifrada,valor,metodo,ip,ua,fbp,fbc,origem_url,ev_id,oferta)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(chave, nome, restaurante, telefone, email, cifrar(senha), info.valor, metodo, ip,
       String(req.headers['user-agent'] || '').slice(0, 400),
       txtMeta(body.fbp, /^fb\.\d\.\d+\.\d+$/, 80) || null, txtMeta(body.fbc, /^fb\.\d\.\d+\.[\w-]+$/, 300) || null,
-      txtMeta(body.url, /^https?:\/\/[^\s"'<>]+$/i, 500) || null, txtMeta(body.ev_id, /^[\w-]{8,64}$/, 64) || null)
+      txtMeta(body.url, /^https?:\/\/[^\s"'<>]+$/i, 500) || null, txtMeta(body.ev_id, /^[\w-]{8,64}$/, 64) || null, oferta || null)
     const id = ins.lastInsertRowid
     const ref = 'site-compra-' + id
     const pn = nome.split(' ')
     const pagamento = {
       transaction_amount: info.valor,
-      description: 'EstimaFood - primeiro mês',
+      description: oferta ? 'EstimaFood Black Friday - primeiro mês' : 'EstimaFood - primeiro mês',
       external_reference: ref,
       notification_url: `${D.urlBase ? D.urlBase(req) : BASE_URL}/webhook/mercadopago`,
       statement_descriptor: 'ESTIMAFOOD',
@@ -1234,13 +1271,18 @@ async function finalizarCompra(id) {
         if (D.bot?.sendText && novaConta) {
           const v = { nome: String(f.nome || '').split(' ')[0], loja: f.restaurante, email: f.email, validade: String(f.expira_em || '').split('-').reverse().join('/'),
             link_gestor: gestorUrl(cfg), link_download: downloadUrl(cfg) }
-          await D.bot.sendText(f.telefone, MSG_COMPRA.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m)), 1200)
+          let txt = MSG_COMPRA.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m))
+          if (f.oferta === 'blackfriday') {
+            const dep = precoMensalPlataforma().toFixed(2).replace('.', ',')
+            txt += `\n\n_Oferta Black Friday: o 1º mês saiu por R$ ${Number(f.valor).toFixed(2).replace('.', ',')}. A partir do 2º mês a mensalidade é R$ ${dep}, sem fidelidade._`
+          }
+          await D.bot.sendText(f.telefone, txt, 1200)
         }
       } catch (e) { D.log('⚠️', 'Boas-vindas da compra não enviadas:', e.message) }
       avisarAdmin([
         '*🛒 NOVA VENDA PELO SITE*', '',
         `*Loja:* ${f.restaurante}`, `*Responsável:* ${f.nome}`, `*WhatsApp:* ${f.telefone}`, `*E-mail:* ${f.email}`,
-        `*Valor:* R$ ${Number(f.valor).toFixed(2).replace('.', ',')} (${f.metodo === 'pix' ? 'Pix' : 'cartão'})`,
+        `*Valor:* R$ ${Number(f.valor).toFixed(2).replace('.', ',')} (${f.metodo === 'pix' ? 'Pix' : 'cartão'})${f.oferta === 'blackfriday' ? ' — Black Friday' : ''}`,
         `*Ativa até:* ${String(f.expira_em || '').split('-').reverse().join('/')}`, '',
         novaConta ? '_Conta criada automaticamente_' : '_E-mail já tinha conta: a loja foi renovada_'
       ].join('\n'))
@@ -1310,7 +1352,7 @@ async function conferirComprasPendentes() {
 
 function listarCompras() {
   return D.db.prepare(`SELECT c.id, c.nome, c.restaurante, c.telefone, c.email, c.valor, c.metodo, c.status, c.status_detalhe, c.erro,
-      c.created_at, c.aprovado_em, c.expira_em, c.tenant_id, t.nome AS loja
+      c.created_at, c.aprovado_em, c.expira_em, c.tenant_id, c.oferta, t.nome AS loja
     FROM site_compras c LEFT JOIN tenants t ON t.id = c.tenant_id
     ORDER BY c.id DESC LIMIT 40`).all()
 }
@@ -1963,6 +2005,16 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin, valida
     return true
   }
 
+  // ── Público: oferta Black Friday (página /blackfriday) ──
+  if (metodo === 'GET' && upath === '/api/site/oferta') {
+    const cfg = cfgTeste()
+    let whatsapp = ''
+    try { whatsapp = String(conteudoAtual().conteudo?.geral?.whatsapp || '').replace(/\D/g, '') } catch {}
+    res.setHeader('Cache-Control', 'no-cache')
+    send(res, 200, { ok: true, oferta: infoOferta(cfg), pixel: cfg.meta_pixel, whatsapp, login_url: gestorUrl(cfg), download_url: downloadUrl(cfg) })
+    return true
+  }
+
   // ── Público: comprar o plano pelo site ────────────────
   if (metodo === 'POST' && upath === '/api/site/compra') {
     let body
@@ -2232,7 +2284,7 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin, valida
     try { compras = listarCompras() } catch (e) { D.log('⚠️', 'Compras do site:', e.message) }
     let fluxosMkt = []
     try { fluxosMkt = D.marketing ? D.marketing.listarFluxos().map(f => ({ id: f.id, nome: f.nome, ativo: f.ativo })) : [] } catch {}
-    send(res, 200, { ...listarTestes(), config: cfgParaPainel(cfg), hoje: hojeBR(), visitas, compras, compra: infoCompra(cfg),
+    send(res, 200, { ...listarTestes(), config: cfgParaPainel(cfg), hoje: hojeBR(), visitas, compras, compra: infoCompra(cfg), oferta: infoOferta(cfg),
       fluxos_mkt: fluxosMkt, canal_fluxos: !!(D.marketing && D.marketing.canalFluxosAtivo()), midia_teste: fs.existsSync(PASTA_MIDIA_TESTE) })
     return true
   }
@@ -2313,6 +2365,16 @@ async function api(req, res, { upath, send, readBody, validarSessaoAdmin, valida
     if (body.meta_teste !== undefined) novo.meta_teste = String(body.meta_teste || '').trim().slice(0, 40)
     if (body.ia_teste !== undefined) novo.ia_teste = body.ia_teste === true
     if (body.compra_ativa !== undefined) novo.compra_ativa = body.compra_ativa === true
+    if (body.bf_ativa !== undefined) novo.bf_ativa = body.bf_ativa === true
+    if (body.bf_valor !== undefined) {
+      const v = parseFloat(String(body.bf_valor).replace(',', '.'))
+      if (!Number.isFinite(v) || v < 1 || v > 999) { send(res, 400, { error: 'O valor da oferta precisa ser de R$ 1,00 a R$ 999,00' }); return true }
+      novo.bf_valor = Math.round(v * 100) / 100
+    }
+    if (body.bf_ate !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.bf_ate))) { send(res, 400, { error: 'Data final da oferta inválida' }); return true }
+      novo.bf_ate = String(body.bf_ate)
+    }
     if (body.fluxos && typeof body.fluxos === 'object') {
       novo.fluxos = { ...atual.fluxos }
       for (const k of ETAPAS_FLUXO) {

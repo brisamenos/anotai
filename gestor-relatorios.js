@@ -866,7 +866,7 @@ async function renderDesempenho() {
 
     const orders = allOrders || [];
     console.log('[DESEMPENHO]', _desempPrd, '| desde:', since, '| ate:', ate, '| pedidos:', orders.length);
-    const entregues = orders.filter(o => ['pronto','entregue','finalizado'].includes(o.status));
+    const entregues = orders.filter(o => ['pronto','saiu','entregue','finalizado'].includes(o.status));
 
     // ── KPIs ─────────────────────────────
     const totalPedidos   = entregues.length; // só pedidos concluídos contam
@@ -1207,7 +1207,7 @@ async function renderRelatorios() {
     ]);
 
     const mesPedidos = periodOrdersRaw || [];
-    const mesValidos = mesPedidos.filter(o => ['pronto','entregue','finalizado'].includes(o.status));
+    const mesValidos = mesPedidos.filter(o => ['pronto','saiu','entregue','finalizado'].includes(o.status));
     const allYear    = anoOrdersRaw || [];
 
     // ─── Relatório de Mesas — horário de abertura (Brasília) e consumo ────
@@ -1350,7 +1350,7 @@ async function renderRelatorios() {
         granLabel = 'Faturamento mensal';
         points = new Array(12).fill(0);
         labels = ['J','F','M','A','M','J','J','A','S','O','N','D'];
-        allYear.filter(o=>['pronto','entregue','finalizado'].includes(o.status)).forEach(o=>{
+        allYear.filter(o=>['pronto','saiu','entregue','finalizado'].includes(o.status)).forEach(o=>{
           points[new Date(o.created_at).getMonth()] += parseFloat(o.total||0);
         });
       } else if (_relPeriodo === 'mensal') {
@@ -1463,7 +1463,7 @@ async function renderRelatorios() {
     const mTitle = document.getElementById('rel-month-title');
     if (mbEl) {
       const monthData = new Array(12).fill(0);
-      allYear.filter(o=>['pronto','entregue','finalizado'].includes(o.status)).forEach(o=>{
+      allYear.filter(o=>['pronto','saiu','entregue','finalizado'].includes(o.status)).forEach(o=>{
         monthData[new Date(o.created_at).getMonth()] += parseFloat(o.total||0);
       });
       const maxMB = Math.max(...monthData, 1);
@@ -1985,7 +1985,7 @@ async function relImprimirCaixa() {
 
     const orders   = ordersRaw || [];
     // Apenas pedidos efetivamente concluídos — exclui cancelados, mesas abertas e mesas em espera
-    const validos  = orders.filter(o => ['pronto','entregue','finalizado'].includes(o.status));
+    const validos  = orders.filter(o => ['pronto','saiu','entregue','finalizado'].includes(o.status));
 
     // Recalcula total de cada pedido pelos itens ativos (exclui item_status=cancelado e item_type=taxa)
     const _calcTotalItens = o => {

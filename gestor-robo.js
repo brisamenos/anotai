@@ -2779,14 +2779,19 @@ async function cpAddBanner(input) {
 
   sbLoading(true);
   try {
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload  = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
-      reader.readAsDataURL(file);
-    });
+    // Envia como ARQUIVO (pasta de uploads), igual ao vídeo dos produtos.
+    // Antes virava texto base64 dentro da config da loja: um vídeo de 10MB
+    // estourava o limite do servidor e TODO "Salvar alterações" do cardápio
+    // público dava erro 502 (inclusive fechar a loja).
+    const ext = (String(file.name || '').split('.').pop() || (isVideo ? 'mp4' : 'jpg')).toLowerCase().replace(/[^a-z0-9]/g, '') || (isVideo ? 'mp4' : 'jpg');
+    const caminho = `banners/banner-${Date.now()}.${ext}`;
+    const bucket = sb.storage.from('banners');
+    const { data: up, error: upErr } = await bucket.upload(caminho, file, { upsert: true });
+    if (upErr) throw new Error(upErr.message || upErr.error || 'Falha ao enviar arquivo');
+    const urlArquivo = up?.publicUrl || up?.url || bucket.getPublicUrl(caminho).data.publicUrl;
+    if (!urlArquivo) throw new Error('Envio sem endereço do arquivo');
 
-    _cpBanners.push({ type: isVideo ? 'video' : 'image', url: dataUrl });
+    _cpBanners.push({ type: isVideo ? 'video' : 'image', url: urlArquivo });
     cpRenderBanners();
     await cpSalvarBanners();
     sbToast('ok', `${isVideo ? 'Vídeo' : 'Banner'} adicionado!`);
@@ -2859,8 +2864,9 @@ async function salvarCardapioPublico() {
       pickup_addresses:    JSON.stringify(cpGetPickupAddresses()),
     };
     if (_cpLogoUrl)   payload.store_logo_url   = _cpLogoUrl;
-    payload.store_banners    = JSON.stringify(_cpBanners);
-    payload.store_banner_url = _cpBannerUrl;
+    // Banners NÃO vão aqui: já são gravados na hora em que são adicionados,
+    // removidos ou reordenados (cpSalvarBanners). Reenviar aqui mandava o
+    // vídeo do banner inteiro junto e estourava o limite (erro 502 ao salvar).
 
     const { error } = await sb.from('store_config').upsert(payload);
     if (error) throw error;

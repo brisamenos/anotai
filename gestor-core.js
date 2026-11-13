@@ -770,6 +770,14 @@ function _parseItemsAtivos(items) {
   return _parseItems(items).filter(i => (i?.item_status || 'active') !== 'cancelado');
 }
 
+// Foto reduzida do servidor (?w=): fotos de celular no tamanho original
+// deixavam o gestor pesado (e travando) no celular do lojista.
+function _fotoMini(url, w) {
+  if (!url || typeof url !== 'string' || url.startsWith('data:') || url.includes('?')) return url;
+  const rel = url.startsWith(location.origin + '/uploads/') ? url.slice(location.origin.length) : url;
+  return rel.startsWith('/uploads/') ? rel + '?w=' + w : url;
+}
+
 function mapOrder(o) {
   const pixPendente = o.status === 'aguardando_pix' && o.pag === 'pix_manual';
   const rawTime = o.created_at || o.time || '';
@@ -882,7 +890,7 @@ async function loadAllData(silent = false) {
     }));
     if (cuponsRes.data?.length)   cupons        = cuponsRes.data.map(c => ({
       id:c.id, code:c.code, tipo:c.type||'percent', val:parseFloat(c.value)||0,
-      minimo:parseFloat(c.min_order)||0, usos:c.uses_left||-1, ativo:!!c.ativo
+      minimo:parseFloat(c.min_order)||0, usos:(c.uses_left === null || c.uses_left === undefined) ? -1 : parseInt(c.uses_left), ativo:!!c.ativo
     }));
     if (mesasRes.data?.length)    tables        = mesasRes.data.map(t => ({
       id: t.id, num: t.num, status: t.status, guests: t.guests||0,
@@ -1861,7 +1869,8 @@ function _subscribeOrdersSSE() {
         const itemsList = Array.isArray(items) ? items.map(i => `${i.qty}x ${i.name}`).join(', ') : '';
         showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(order.id, order.order_num)} - ${order.client}`);
         sendBrowserNotif(`Novo pedido #${_orderNum(order.id, order.order_num)}`, `${order.client} - ${itemsList}`);
-        if (_autoAcceptOn && mapped.status === 'analise') setTimeout(() => advanceOrderById(order.id), 800);
+        // Pix manual ainda não pago aparece em 'analise' (com _pixPendente): não aceita sozinho
+        if (_autoAcceptOn && mapped.status === 'analise' && !mapped._pixPendente) setTimeout(() => advanceOrderById(order.id), 800);
         if ((window._printMode || _printMode) === 'auto' && !order.mesa_num) printOrder(mapped);
       }
     } catch(err) { console.error('[ORDERS-SSE INSERT] error:', err); }
@@ -2660,7 +2669,7 @@ if (!billingIsLocked()) {
 const _ICON_OK  = `<svg width='13' height='13' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'><circle cx='8' cy='8' r='6' stroke='currentColor' stroke-width='1.4'/><path d='M5.5 8l2 2 3-3' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg>`;
 const _ICON_ERR = `<svg width='13' height='13' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M8 2L14 13H2L8 2z' stroke='currentColor' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/><path d='M8 6v3' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/><circle cx='8' cy='11' r='.6' fill='currentColor'/></svg>`;
 const _ICON_SAV = `<svg width='13' height='13' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z' stroke='currentColor' stroke-width='1.4'/><path d='M5 2v5h6V2' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg>`;
-const _ICON_TRS = `<svg width='13' height='13' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M3 4h10M6 4V2.5A.5 0 0 1 6.5 2h3a.5 0 0 1 .5.5V4M5 4l.7 9.5a.5 0 0 0 .5.5h3.6a.5 0 0 0 .5-.5L11 4' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg>`;
+const _ICON_TRS = `<svg width='13' height='13' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M3 4h10M6 4V2.5A.5.5 0 0 1 6.5 2h3a.5.5 0 0 1 .5.5V4M5 4l.7 9.5a.5.5 0 0 0 .5.5h3.6a.5.5 0 0 0 .5-.5L11 4' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg>`;
 const _ICON_IMG = `<svg width='13' height='13' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'><rect x='2' y='3' width='12' height='10' rx='1.5' stroke='currentColor' stroke-width='1.4'/><circle cx='6' cy='7' r='1.5' stroke='currentColor' stroke-width='1.4'/><path d='M2 11l3.5-3.5 2 2 3-4 3.5 5.5' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg>`;
 
 function sbToast(type, msg) {
@@ -3134,7 +3143,7 @@ async function advanceOrderById(id) {
   // Dedupe: se já temos um advance em voo para este pedido, ignora cliques extras
   if (_advancingIds.has(id)) return;
   _advancingIds.add(id);
-  if (o.status === 'aguardando_pix') {
+  if (o.status === 'aguardando_pix' || o._pixPendente) {
     _advancingIds.delete(id);
     sbToast('err', 'Use o botão "Confirmar Pago PIX" para este pedido.');
     return;

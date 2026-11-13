@@ -894,7 +894,7 @@ async function detectSegmento() {
 
   // 2. Busca da API e atualiza
   try {
-    const r = await fetch('/api/tenant-segmento', { headers: { 'x-tenant-id': window._tenantId || '' } });
+    const r = await fetch('/api/tenant-segmento', { headers: { 'x-tenant-id': window._tenantId || (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || '' } });
     if (r.ok) {
       const d = await r.json();
       _gestorSegmento = d.segmento || 'restaurante';
@@ -962,7 +962,7 @@ function renderGestor(){
             <div class="cat-item-row" data-id="${item.id}" draggable="true" ondragstart="itemDragStart(event,${item.id})" ondragover="itemDragOver(event)" ondrop="itemDrop(event,${item.id})" ondragend="itemDragEnd(event)" onclick="openEditItem(+this.dataset.id)">
               <span class="cat-drag" style="cursor:grab;padding:0 6px 0 2px;opacity:.35;flex-shrink:0;font-size:16px;align-self:center" onmousedown="event.stopPropagation()" title="Arrastar para reordenar">⠿</span>
               <div class="cat-item-thumb">${item.imageUrl
-                ? `<img src="${item.imageUrl}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;display:block">`
+                ? `<img src="${_fotoMini(item.imageUrl, 320)}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;display:block">`
                 : `<svg viewBox="0 0 24 24" fill="none" width="18" height="18" style="opacity:.35"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" stroke="currentColor" stroke-width="1.5"/><path d="M3 16l5-5 3 3 3-4 4 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" opacity=".5"/></svg>`
               }</div>
               <div class="cat-item-info" style="flex:1;min-width:0">
@@ -2439,7 +2439,7 @@ function renderImagens() {
          onmouseleave="this.style.borderColor='var(--border)'">
       <div style="height:110px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:48px;border-bottom:1px solid var(--border);position:relative;overflow:hidden">
         ${i.imageUrl
-          ? `<img src="${i.imageUrl}" style="width:100%;height:100%;object-fit:cover">`
+          ? `<img src="${_fotoMini(i.imageUrl, 320)}" style="width:100%;height:100%;object-fit:cover">`
           : `<div>${i.emoji}</div>`}
       </div>
       <div style="padding:10px">

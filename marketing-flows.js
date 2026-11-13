@@ -230,7 +230,10 @@ function montarVars(tel, extra = {}) {
     dia_semana: agoraSP().dia,
     pix: pix.length === 14 ? formatCnpj(pix) : '',
     pix_chave: pix,
-    link_demo: g.bot_demo_link || ''
+    link_demo: g.bot_demo_link || '',
+    // usados no fluxo de vendas (/publi): preço do plano e site para criar o teste grátis
+    preco_plano: 'R$ ' + (g.preco_premium !== undefined ? parseFloat(g.preco_premium) : 99.90).toFixed(2).replace('.', ','),
+    link_site: g.bot_site_link || 'https://estimafood.com.br'
   }
 }
 

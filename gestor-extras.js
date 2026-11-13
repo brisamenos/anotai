@@ -576,7 +576,7 @@ async function renderDRE() {
       sb.from('contas_pagar').select('*').gte('vencimento', de).lte('vencimento', ate)
     ]);
 
-    const validos = (ordersRaw||[]).filter(o => ['pronto','entregue','finalizado'].includes(o.status));
+    const validos = (ordersRaw||[]).filter(o => ['pronto','saiu','entregue','finalizado'].includes(o.status));
     const receita = validos.reduce((s,o) => s + parseFloat(o.total||0) + parseFloat(o.taxa||0), 0);
 
     // Movimentos no período
@@ -684,7 +684,7 @@ async function relExportarCompleto() {
     });
 
     // ── Resumo ──
-    const validos = (data.orders||[]).filter(o => ['pronto','entregue','finalizado'].includes(o.status));
+    const validos = (data.orders||[]).filter(o => ['pronto','saiu','entregue','finalizado'].includes(o.status));
     const fat = validos.reduce((s,o) => s + parseFloat(o.total||0) + parseFloat(o.taxa||0), 0);
     csv += `\nRESUMO\n`;
     csv += `Total de pedidos;${data.orders?.length||0}\n`;

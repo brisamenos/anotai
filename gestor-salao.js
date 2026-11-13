@@ -285,7 +285,7 @@ function _pdvAbrirModalItem(it, grupos, isKg) {
       <!-- Header do produto -->
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
         ${it.imageUrl
-      ? `<img src="${it.imageUrl}" style="width:60px;height:60px;border-radius:12px;object-fit:cover;flex-shrink:0">`
+      ? `<img src="${_fotoMini(it.imageUrl, 320)}" style="width:60px;height:60px;border-radius:12px;object-fit:cover;flex-shrink:0">`
       : `<div style="width:60px;height:60px;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">${it.emoji || '🍽️'}</div>`}
         <div>
           <div style="font-size:16px;font-weight:800">${it.name}</div>
@@ -1041,8 +1041,8 @@ function renderCupons() {
       <div class="coupon-icon" style="background:${c.ativo ? 'rgba(34,197,94,.12)' : 'rgba(100,116,139,.1)'}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 6a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1a2 2 0 0 0 0 4v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1a2 2 0 0 0 0-4V6z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 4v2M10 10v2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div style="flex:1">
         <div class="coupon-code">${c.code}</div>
-        <div class="coupon-desc">${c.tipo === '%' ? c.val + '% de desconto' : c.tipo === 'frete' ? 'Frete grátis' : 'Desconto R$' + c.val}</div>
-        <div class="coupon-use">Usado ${c.usos} ${c.usos === 1 ? 'vez' : 'vezes'}, ${c.minimo > 0 ? 'pedido mínimo de R$ ' + c.minimo : 'sem pedido mínimo'}</div>
+        <div class="coupon-desc">${(c.tipo === '%' || c.tipo === 'percent') ? c.val + '% de desconto' : 'R$ ' + Number(c.val).toFixed(2).replace('.', ',') + ' de desconto'}</div>
+        <div class="coupon-use">${c.usos === -1 ? 'Usos ilimitados' : c.usos <= 0 ? 'Esgotado' : 'Restam ' + c.usos + (c.usos === 1 ? ' uso' : ' usos')}, ${c.minimo > 0 ? 'pedido mínimo de R$ ' + Number(c.minimo).toFixed(2).replace('.', ',') : 'sem pedido mínimo'}</div>
       </div>
       <span class="pf-chip ${c.ativo ? 'ok' : ''}"><span class="pf-dot"></span>${c.ativo ? 'Ativo' : 'Pausado'}</span>
       <button class="btn bg pf-sm" onclick="toggleCupom(${i})">${c.ativo ? 'Pausar' : 'Ativar'}</button>
@@ -1083,7 +1083,7 @@ async function addCupom() {
   }).select().single();
   sbLoading(false);
   if (error) { sbToast('err', error.code === '23505' ? 'Código já existe' : 'Erro ao criar cupom'); return; }
-  cupons.push({ id: data.id, code, tipo, val, minimo, usos: 0, ativo: true });
+  cupons.push({ id: data.id, code, tipo: tipo === '%' ? 'percent' : 'fixed', val, minimo, usos: usesLeft, ativo: true });
   closeModal('modal-add-cupom');
   document.getElementById('cupom-code').value = '';
   if (document.getElementById('cupom-minimo')) document.getElementById('cupom-minimo').value = '';
@@ -1724,7 +1724,7 @@ function openGarcomMesa(num) {
     const isKg    = i.itemType === 'kg';
     const hasAdd  = Array.isArray(i.customGroups) && i.customGroups.length > 0;
     const imgHtml = i.imageUrl
-      ? `<img src="${i.imageUrl}" style="width:100%;height:48px;object-fit:cover;border-radius:7px">`
+      ? `<img src="${_fotoMini(i.imageUrl, 320)}" style="width:100%;height:48px;object-fit:cover;border-radius:7px">`
       : `<span style="font-size:22px">${i.emoji || '🍽️'}</span>`;
     const badge   = isPizza ? '<div style="font-size:8px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:3px;padding:1px 4px;font-weight:700;margin-top:2px;display:inline-block">PIZZA</div>'
                   : isKg    ? '<div style="font-size:8px;background:rgba(34,197,94,.15);color:#16a34a;border-radius:3px;padding:1px 4px;font-weight:700;margin-top:2px;display:inline-block">KG</div>'

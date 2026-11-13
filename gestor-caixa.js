@@ -217,7 +217,7 @@ function pdvRenderSlots() {
     const isActive = pdvPz.activeSlot === i;
     const isFilled = fl !== null;
     const imgHtml = fl && fl.imageUrl
-      ? `<div class="pz-slot-img"><img src="${fl.imageUrl}" alt="${fl.name}"></div>`
+      ? `<div class="pz-slot-img"><img src="${_fotoMini(fl.imageUrl, 320)}" alt="${fl.name}"></div>`
       : `<div class="pz-slot-img" style="font-size:22px">${isFilled ? '🍕' : '＋'}</div>`;
     return `<div class="pz-slot${isActive?' active':''}${isFilled?' filled':''}" onclick="pdvOpenSlot(${i})">
       <div class="pz-slot-num">${i+1}</div>
@@ -242,7 +242,7 @@ function pdvOpenSlot(idx) {
     ? pizzas.map(f => {
         const isOn = pdvPz.selected[idx]?.id === f.id;
         const thumb = f.imageUrl
-          ? `<img src="${f.imageUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`
+          ? `<img src="${_fotoMini(f.imageUrl, 320)}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`
           : `<span style="font-size:18px">${f.emoji||'🍕'}</span>`;
         const check = isOn
           ? `<div style="width:20px;height:20px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;flex-shrink:0">✓</div>`
@@ -501,7 +501,7 @@ function pdvbRenderGrid(){
   if(!fil.length){g.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:40px;font-size:13px;opacity:.7">Nenhum item encontrado</div>';return;}
   g.innerHTML=fil.map((i,idx)=>`
     <div class="pdvb-item${pdvbFocusIdx===idx?' focused':''}" onclick="pdvbAddItem(${i.id})" id="pdvbi-${idx}">
-      <div class="pdvb-item-img">${i.imageUrl?`<img src="${i.imageUrl}" style="width:100%;height:100%;object-fit:cover">`:(i.emoji||'🍽️')}</div>
+      <div class="pdvb-item-img">${i.imageUrl?`<img src="${_fotoMini(i.imageUrl, 320)}" style="width:100%;height:100%;object-fit:cover">`:(i.emoji||'🍽️')}</div>
       <div class="pdvb-item-info">
         <div class="pdvb-item-name">${i.name}</div>
         <div class="pdvb-item-price">R$ ${i.price.toFixed(2).replace('.',',')}${i.promo?'<span style="font-size:9px;background:rgba(34,197,94,.12);color:var(--success);border-radius:3px;padding:1px 4px;margin-left:4px;font-weight:700">PROMO</span>':''}</div>
@@ -668,7 +668,7 @@ function _pdvbAbrirModalItem(it, grupos, isKg) {
       <div style="width:40px;height:4px;background:var(--border);border-radius:99px;margin:0 auto 18px"></div>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
         ${it.imageUrl
-          ? `<img src="${it.imageUrl}" style="width:60px;height:60px;border-radius:12px;object-fit:cover;flex-shrink:0">`
+          ? `<img src="${_fotoMini(it.imageUrl, 320)}" style="width:60px;height:60px;border-radius:12px;object-fit:cover;flex-shrink:0">`
           : `<div style="width:60px;height:60px;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">${it.emoji||'🍽️'}</div>`}
         <div>
           <div style="font-size:16px;font-weight:800">${it.name}</div>
