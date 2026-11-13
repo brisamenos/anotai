@@ -10273,7 +10273,28 @@ const server = http.createServer(async (req,res) => {
         res.writeHead(200);fs.createReadStream(mini).pipe(res);return
       }
     }
-    if(fs.existsSync(fpath)){const ext=path.extname(fpath);res.setHeader('Content-Type',MIME[ext]||'application/octet-stream');res.setHeader('Cache-Control','public, max-age=2592000');res.writeHead(200);fs.createReadStream(fpath).pipe(res)}
+    if(fs.existsSync(fpath)){
+      const ext=path.extname(fpath).toLowerCase()
+      res.setHeader('Content-Type',MIME[ext]||'application/octet-stream');res.setHeader('Cache-Control','public, max-age=2592000')
+      // Vídeo: entrega por trechos (Range). Vídeo gravado no celular guarda o
+      // índice no fim do arquivo; sem trechos o Chrome não consegue tocar e o
+      // banner/vídeo do produto some (o Safari do iPhone também exige isso).
+      if(ext==='.mp4'||ext==='.webm'){
+        const tam=fs.statSync(fpath).size
+        res.setHeader('Accept-Ranges','bytes')
+        const rg=/^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range||'').trim())
+        if(rg&&(rg[1]||rg[2])){
+          const ini=rg[1]?parseInt(rg[1],10):Math.max(0,tam-parseInt(rg[2],10))
+          const fim=(rg[1]&&rg[2])?Math.min(parseInt(rg[2],10),tam-1):tam-1
+          if(ini>fim||ini>=tam){res.setHeader('Content-Range',`bytes */${tam}`);res.writeHead(416);res.end();return}
+          res.setHeader('Content-Range',`bytes ${ini}-${fim}/${tam}`)
+          res.setHeader('Content-Length',fim-ini+1)
+          res.writeHead(206);fs.createReadStream(fpath,{start:ini,end:fim}).pipe(res);return
+        }
+        res.setHeader('Content-Length',tam)
+      }
+      res.writeHead(200);fs.createReadStream(fpath).pipe(res)
+    }
     else{res.writeHead(404);res.end('Not found')}
     return
   }

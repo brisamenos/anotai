@@ -3649,6 +3649,11 @@ function _fotoMini(url, w) {
   const rel = url.startsWith(location.origin + '/uploads/') ? url.slice(location.origin.length) : url;
   return rel.startsWith('/uploads/') ? rel + '?w=' + w : url;
 }
+// Rede de segurança: se uma foto reduzida (?w=) falhar, carrega a original.
+document.addEventListener('error', function (e) {
+  const t = e.target;
+  if (t && t.tagName === 'IMG' && !t.dataset.o && /[?&]w=\d+$/.test(t.src)) { t.dataset.o = '1'; t.src = t.src.replace(/[?&]w=\d+$/, ''); }
+}, true);
 function _garcomAplicarPrecos() {
   const delivery = !!window._npMode;
   (allItems || []).forEach(i => {
