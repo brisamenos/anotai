@@ -2083,11 +2083,82 @@ function renderTotals() {
     <div class="total-row big"><span>Total</span><span>R$ ${fmt(tot)}</span></div>`;
 }
 
+// ══════════════════════════════════════════
+//  EFEITO "DESCONTO APLICADO"
+// ══════════════════════════════════════════
+// Confete saindo do botão que o cliente tocou + um cartão subindo com quanto
+// ele economizou (o valor conta de 0 até o total). Usado no cupom, nos
+// pontos, no cartão fidelidade e no cashback. Quem pediu ao celular menos
+// movimento (acessibilidade) vê só o cartão, sem confete.
+function _celebrarDesconto(origemEl, titulo, valor, sub) {
+  try {
+    const calmo = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Confete
+    if (!calmo && document.body.animate) {
+      const r = origemEl && origemEl.getBoundingClientRect ? origemEl.getBoundingClientRect() : null;
+      const ox = r ? r.left + r.width / 2 : innerWidth / 2;
+      const oy = r ? r.top + r.height / 2 : innerHeight * .6;
+      const cores = [getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#f97316', '#22c55e', '#facc15', '#38bdf8', '#f472b6', '#ffffff'];
+      const camada = document.createElement('div');
+      camada.className = 'desc-confete';
+      document.body.appendChild(camada);
+      const N = 44;
+      for (let i = 0; i < N; i++) {
+        const pc = document.createElement('span');
+        const w = 6 + Math.random() * 6, h = Math.random() < .5 ? w : w * .45;
+        pc.style.cssText = `left:${ox}px;top:${oy}px;width:${w}px;height:${h}px;background:${cores[i % cores.length]};border-radius:${Math.random() < .35 ? '50%' : '2px'}`;
+        camada.appendChild(pc);
+        const ang = (-90 + (Math.random() * 140 - 70)) * Math.PI / 180;
+        const forca = 140 + Math.random() * 220;
+        const dx = Math.cos(ang) * forca, dy = Math.sin(ang) * forca;
+        const giro = (Math.random() * 720 - 360);
+        pc.animate([
+          { transform: 'translate(-50%,-50%) translate(0,0) rotate(0deg)', opacity: 1 },
+          { transform: `translate(-50%,-50%) translate(${dx * .9}px,${dy}px) rotate(${giro / 2}deg)`, opacity: 1, offset: .45 },
+          { transform: `translate(-50%,-50%) translate(${dx}px,${dy + 260 + Math.random() * 160}px) rotate(${giro}deg)`, opacity: 0 }
+        ], { duration: 1300 + Math.random() * 700, easing: 'cubic-bezier(.2,.7,.4,1)', fill: 'forwards' });
+      }
+      setTimeout(() => camada.remove(), 2300);
+    }
+    // Cartão com o valor economizado
+    document.querySelectorAll('.desc-toast').forEach(e => e.remove());
+    const card = document.createElement('div');
+    card.className = 'desc-toast';
+    card.setAttribute('role', 'status');
+    const temValor = valor > 0.009;
+    card.innerHTML = `
+      <span class="desc-toast-ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none"><path d="m6 12.5 4 4 8-9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span class="desc-toast-txt">
+        <span class="desc-toast-tit">${titulo}</span>
+        <span class="desc-toast-sub">${temValor ? 'Você economizou <strong>R$ <span class="desc-toast-val">0,00</span></strong>' : (sub || '')}</span>
+      </span>`;
+    document.body.appendChild(card);
+    requestAnimationFrame(() => card.classList.add('on'));
+    if (temValor) {
+      const alvo = card.querySelector('.desc-toast-val');
+      const ini = performance.now(), dur = calmo ? 1 : 900;
+      const passo = (t) => {
+        const k = Math.min(1, (t - ini) / dur), e = 1 - Math.pow(1 - k, 3);
+        alvo.textContent = fmt(valor * e);
+        if (k < 1) requestAnimationFrame(passo);
+      };
+      requestAnimationFrame(passo);
+    }
+    setTimeout(() => { card.classList.remove('on'); setTimeout(() => card.remove(), 400); }, 2600);
+    // Destaca o total do carrinho
+    const tot = document.querySelector('#totals-wrap .total-row.big');
+    if (tot) { tot.classList.remove('desc-flash'); void tot.offsetWidth; tot.classList.add('desc-flash'); }
+    if (navigator.vibrate && !calmo) { try { navigator.vibrate(30); } catch (e) {} }
+  } catch (e) {}
+}
+
 async function applyCupom() {
   const code = document.getElementById('cupom-input').value.trim().toUpperCase();
   const msg  = document.getElementById('cupom-msg');
   if (!code) return;
-  msg.innerHTML = '<div class="cupom-msg">⏳ Validando...</div>';
+  const _totalAntes = displayTotal();
+  const _cupomAntes = appliedCupom ? (appliedCupom.code || '') : '';
+  msg.innerHTML = '<div class="cupom-msg">Validando…</div>';
 
   // Valida no servidor (anti-fraude). consume=false: só checa, não decrementa
   // o uses_left. O decremento real acontece no /api/cupom/validar com consume=true
@@ -2100,7 +2171,7 @@ async function applyCupom() {
     });
     const d = await r.json();
     if (!d.ok) {
-      msg.innerHTML = `<div class="cupom-err">❌ ${d.error || 'Cupom inválido'}</div>`;
+      msg.innerHTML = `<div class="cupom-err">${d.error || 'Cupom inválido'}</div>`;
       appliedCupom = null;
     } else {
       // Usa os dados oficiais retornados pelo servidor (não os do client)
@@ -2110,26 +2181,34 @@ async function applyCupom() {
         value: d.value,
         min_order: d.min_order,
       };
-      msg.innerHTML = `<div class="cupom-ok">✅ Cupom "${d.code}" aplicado!</div>`;
+      msg.innerHTML = `<div class="cupom-ok">Cupom "${d.code}" aplicado</div>`;
     }
   } catch (e) {
     // Fallback offline: valida só com os dados do client (cupons já carregados)
     const found = allCupons.find(c => (c.code||'').toUpperCase() === code && c.ativo);
     if (!found) {
-      msg.innerHTML = '<div class="cupom-err">❌ Cupom inválido ou expirado</div>';
+      msg.innerHTML = '<div class="cupom-err">Cupom inválido ou expirado</div>';
       appliedCupom = null;
     } else {
       const minOrder = parseFloat(found.min_order || found.minimo || 0);
       if (minOrder > 0 && cartSubtotal() < minOrder) {
-        msg.innerHTML = `<div class="cupom-err">❌ Pedido mínimo de R$ ${fmt(minOrder)}</div>`;
+        msg.innerHTML = `<div class="cupom-err">Pedido mínimo de R$ ${fmt(minOrder)}</div>`;
         appliedCupom = null;
       } else {
         appliedCupom = found;
-        msg.innerHTML = `<div class="cupom-ok">✅ Cupom "${found.code}" aplicado!</div>`;
+        msg.innerHTML = `<div class="cupom-ok">Cupom "${found.code}" aplicado</div>`;
       }
     }
   }
   renderTotals();
+  if (typeof updateCartFloat === 'function') updateCartFloat();
+  // Efeito só quando um cupom novo entrou de verdade
+  if (appliedCupom && (appliedCupom.code || '') !== _cupomAntes) {
+    const economia = Math.max(0, _totalAntes - displayTotal());
+    const ehFrete = appliedCupom.type === 'frete' || appliedCupom.tipo === 'frete';
+    _celebrarDesconto(document.querySelector('.cupom-btn'), 'Cupom aplicado', economia,
+      ehFrete ? 'Frete grátis na entrega' : 'O desconto entra no total');
+  }
 }
 
 // ── Cashback no checkout ─────────────────────────────
@@ -2294,6 +2373,7 @@ function toggleFidUso() {
   _fidRender();
   renderTotals();
   if (typeof updateCartFloat === 'function') updateCartFloat();
+  if (_fidUsar) _celebrarDesconto(document.getElementById('fid-usar-btn'), 'Pontos trocados', getFidDesconto());
 }
 
 function _resetFidelidadeUI() {
@@ -2306,11 +2386,13 @@ function _resetFidelidadeUI() {
 
 function toggleStampUso() {
   if (!_stampElegivel) return;
+  const _totalAntes = displayTotal();
   _stampUsado = !_stampUsado;
   const btn = document.getElementById('stamp-usar-btn');
   if (btn) btn.textContent = _stampUsado ? 'Recompensa aplicada · remover' : 'Usar recompensa';
   renderTotals();
   if (typeof updateCartFloat === 'function') updateCartFloat();
+  if (_stampUsado) _celebrarDesconto(btn, 'Recompensa do cartão aplicada', Math.max(0, _totalAntes - displayTotal()), 'Aproveite seu prêmio');
 }
 
 function _resetCashbackUI() {
@@ -2327,6 +2409,7 @@ function _resetCashbackUI() {
 function toggleUsarCashback() {
   const check = document.getElementById('cb-usar-check');
   _cbUsar = check?.checked || false;
+  if (_cbUsar) setTimeout(() => _celebrarDesconto(check, 'Cashback aplicado', getCashbackDesconto()), 0);
   const msg = document.getElementById('cb-usar-msg');
   if (_cbUsar) {
     const usar = getCashbackDesconto();
