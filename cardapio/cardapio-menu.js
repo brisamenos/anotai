@@ -5,7 +5,9 @@
 function buildCats() {
   const scroll = document.getElementById('cats-scroll');
   const isAcougue = _segmento === 'acougue';
-  const isModerno = document.documentElement.getAttribute('data-tema') === 'moderno';
+  // O antigo tema "Moderno" (hoje igual ao Clássico) sempre mostrava as
+  // categorias em carrossel — mantém isso pras lojas que usavam ele.
+  const isModerno = window._temaOriginal === 'moderno';
   const useCarrossel = isAcougue || _catsCarrossel || isModerno;
 
   scroll.classList.toggle('carousel', useCarrossel);

@@ -2568,7 +2568,9 @@ document.addEventListener('click', (e) => {
 function buildCats() {
   const scroll = document.getElementById('cats-scroll');
   const isAcougue = _segmento === 'acougue';
-  const isModerno = document.documentElement.getAttribute('data-tema') === 'moderno';
+  // O antigo tema "Moderno" (hoje igual ao Clássico) sempre mostrava as
+  // categorias em carrossel — mantém isso pras lojas que usavam ele.
+  const isModerno = window._temaOriginal === 'moderno';
   const useCarrossel = isAcougue || _catsCarrossel || isModerno;
 
   scroll.classList.toggle('carousel', useCarrossel);
@@ -10183,7 +10185,7 @@ function rgbToHex(r, g, b) {
   return '#' + toHex(r) + toHex(g) + toHex(b);
 }
 
-function setAccentColor(cor) {
+function setAccentColor(cor, _tentativa) {
   const root = document.documentElement;
   const base = String(cor || '#f97316').trim() || '#f97316';
   root.style.setProperty('--accent', base);
@@ -10193,6 +10195,25 @@ function setAccentColor(cor) {
     root.style.setProperty('--accent-g', `linear-gradient(135deg, ${base}, ${base})`);
     return;
   }
+
+  // Cor da loja que some no fundo do tema (ex.: preto no tema escuro):
+  // usa a cor sugerida do tema no lugar.
+  try {
+    const bg = getComputedStyle(root).getPropertyValue('--bg').trim();
+    const La = _luminanciaCor(parsed.hex), Lb = _luminanciaCor(bg);
+    const alt = window._temaAccentPadrao && parseHexColor(window._temaAccentPadrao);
+    if (!_tentativa && La !== null && Lb !== null && alt && parsed.hex.toLowerCase() !== String(window._temaAccentPadrao).toLowerCase()
+        && (Math.max(La, Lb) + .05) / (Math.min(La, Lb) + .05) < 1.45) {
+      return setAccentColor(window._temaAccentPadrao, 1);
+    }
+  } catch (e) {}
+
+  // Cor do texto em cima da cor de destaque (branco, ou escuro em cores claras
+  // como amarelo e dourado, pra continuar legível)
+  try {
+    const L = _luminanciaCor(parsed.hex);
+    root.style.setProperty('--accent-ink', (1.05 / (L + .05)) >= 2.6 ? '#ffffff' : '#141414');
+  } catch (e) { root.style.setProperty('--accent-ink', '#ffffff'); }
 
   const darker = rgbToHex(parsed.r * 0.82, parsed.g * 0.82, parsed.b * 0.82);
   root.style.setProperty('--accent', parsed.hex);
@@ -10231,179 +10252,33 @@ async function resolveTenant() {
 
 function applyTema(tema, accentCor) {
   const root = document.documentElement;
-  const t = tema || 'classico';
-  // Remove tema anterior
-  root.removeAttribute('data-tema');
+  const original = tema || 'classico';
+  window._temaOriginal = original;
+  // Catálogo único de temas (cardapio-temas.js). Temas antigos repetidos
+  // viram o tema atual equivalente (ex.: "moderno" → "classico").
+  const cat = window.TEMAS_CARDAPIO;
+  const def = cat ? cat.resolver(original) : null;
+  const t = def ? def.key : original;
   root.setAttribute('data-tema', t);
+  window._temaAccentPadrao = def ? def.accent : '#f97316';
 
-  // Paletas de cada tema (variáveis CSS sobrescritas)
-  const paletas = {
-    classico: {
-      '--bg':'#f8f9fb','--s1':'#ffffff','--s2':'#f1f3f7','--s3':'#e4e8ef',
-      '--border':'rgba(0,0,0,.09)','--border2':'rgba(0,0,0,.14)',
-      '--text':'#0f1117','--muted':'#6b7280','--muted2':'#9ca3af','--white':'#fff',
-      '--hero-bg':'','--hero-text':'#fff','--hero-desc-color':'rgba(255,255,255,.85)',
-      '--hero-overlay':'rgba(0,0,0,.55)','--sticky-bg':'#f8f9fb'
-    },
-    dark: {
-      '--bg':'#0f1117','--s1':'#181b24','--s2':'#1e2130','--s3':'#242840',
-      '--border':'rgba(255,255,255,.07)','--border2':'rgba(255,255,255,.13)',
-      '--text':'#e5e7eb','--muted':'#9ca3af','--muted2':'#6b7280','--white':'#fff',
-      '--hero-bg':'#0a0c13','--hero-text':'#fff','--hero-desc-color':'rgba(255,255,255,.7)',
-      '--hero-overlay':'rgba(0,0,0,.65)','--sticky-bg':'#0f1117'
-    },
-    tropical: {
-      '--bg':'#fef9f0','--s1':'#fff7ed','--s2':'#ffedd5','--s3':'#fed7aa',
-      '--border':'rgba(234,88,12,.14)','--border2':'rgba(234,88,12,.22)',
-      '--text':'#431407','--muted':'#92400e','--muted2':'#b45309','--white':'#fff',
-      '--hero-bg':'#431407','--hero-text':'#fff','--hero-desc-color':'rgba(255,220,180,.9)',
-      '--hero-overlay':'rgba(67,20,7,.65)','--sticky-bg':'#fef9f0'
-    },
-    minimalista: {
-      '--bg':'#ffffff','--s1':'#fafafa','--s2':'#f5f5f5','--s3':'#e5e5e5',
-      '--border':'rgba(0,0,0,.06)','--border2':'rgba(0,0,0,.10)',
-      '--text':'#111111','--muted':'#737373','--muted2':'#a3a3a3','--white':'#fff',
-      '--hero-bg':'#111111','--hero-text':'#fff','--hero-desc-color':'rgba(255,255,255,.75)',
-      '--hero-overlay':'rgba(0,0,0,.7)','--sticky-bg':'#ffffff'
-    },
-    acougue: {
-      '--bg':'#1a0a05','--s1':'#2a100a','--s2':'#3a1810','--s3':'#4a2018',
-      '--border':'rgba(220,80,30,.2)','--border2':'rgba(220,80,30,.35)',
-      '--text':'#f5e6e0','--muted':'#c9a090','--muted2':'#a07060','--white':'#fff',
-      '--hero-bg':'#0f0503','--hero-text':'#fff','--hero-desc-color':'rgba(255,210,190,.9)',
-      '--hero-overlay':'rgba(15,5,3,.7)','--sticky-bg':'#1a0a05'
-    },
-    verde: {
-      '--bg':'#f0faf2','--s1':'#ffffff','--s2':'#e8f5eb','--s3':'#d1ecda',
-      '--border':'rgba(34,120,60,.12)','--border2':'rgba(34,120,60,.2)',
-      '--text':'#0d2b18','--muted':'#3a7a52','--muted2':'#5a9a72','--white':'#fff',
-      '--hero-bg':'#0d3320','--hero-text':'#fff','--hero-desc-color':'rgba(210,255,225,.9)',
-      '--hero-overlay':'rgba(13,50,32,.65)','--sticky-bg':'#f0faf2'
-    },
-    noturno: {
-      '--bg':'#080810','--s1':'#0f0f1c','--s2':'#161625','--s3':'#1e1e30',
-      '--border':'rgba(255,255,255,.06)','--border2':'rgba(255,255,255,.10)',
-      '--text':'#eeedf6','--muted':'#7878a0','--muted2':'#50506a','--white':'#fff',
-      '--hero-bg':'#04040c','--hero-text':'#fff','--hero-desc-color':'rgba(230,228,248,.80)',
-      '--hero-overlay':'rgba(4,4,12,.72)','--sticky-bg':'#080810'
-    },
-    rose: {
-      '--bg':'#fff5f7','--s1':'#ffffff','--s2':'#ffe4ea','--s3':'#ffc9d5',
-      '--border':'rgba(220,60,90,.12)','--border2':'rgba(220,60,90,.2)',
-      '--text':'#3d0a14','--muted':'#a03050','--muted2':'#c06070','--white':'#fff',
-      '--hero-bg':'#5c0a1e','--hero-text':'#fff','--hero-desc-color':'rgba(255,210,220,.9)',
-      '--hero-overlay':'rgba(92,10,30,.65)','--sticky-bg':'#fff5f7'
-    },
-    oceano: {
-      '--bg':'#0a1628','--s1':'#0f1f38','--s2':'#152a48','--s3':'#1c3558',
-      '--border':'rgba(56,189,248,.1)','--border2':'rgba(56,189,248,.18)',
-      '--text':'#e0ecf8','--muted':'#6890b0','--muted2':'#4a7090','--white':'#fff',
-      '--hero-bg':'#040c18','--hero-text':'#fff','--hero-desc-color':'rgba(200,230,255,.85)',
-      '--hero-overlay':'rgba(4,12,24,.7)','--sticky-bg':'#0a1628'
-    },
-    dourado: {
-      '--bg':'#0f0d08','--s1':'#1a1610','--s2':'#242018','--s3':'#2e2820',
-      '--border':'rgba(212,165,116,.12)','--border2':'rgba(212,165,116,.2)',
-      '--text':'#f0e8d8','--muted':'#a09070','--muted2':'#807060','--white':'#fff',
-      '--hero-bg':'#0a0806','--hero-text':'#fff','--hero-desc-color':'rgba(240,232,216,.85)',
-      '--hero-overlay':'rgba(10,8,6,.7)','--sticky-bg':'#0f0d08'
-    },
-    delivery_pro: {
-      '--bg':'#f6f7fb','--s1':'#ffffff','--s2':'#edf2f7','--s3':'#d8e0ec',
-      '--border':'rgba(15,23,42,.08)','--border2':'rgba(15,23,42,.14)',
-      '--text':'#132032','--muted':'#617089','--muted2':'#94a3b8','--white':'#fff',
-      '--hero-bg':'#101827','--hero-text':'#fff','--hero-desc-color':'rgba(226,232,240,.86)',
-      '--hero-overlay':'rgba(16,24,39,.62)','--sticky-bg':'#f6f7fb'
-    },
-    fresh_verde: {
-      '--bg':'#f4fbf6','--s1':'#ffffff','--s2':'#e8f6ee','--s3':'#cfeade',
-      '--border':'rgba(22,101,52,.10)','--border2':'rgba(22,101,52,.18)',
-      '--text':'#10291d','--muted':'#3f7459','--muted2':'#6b9a80','--white':'#fff',
-      '--hero-bg':'#10351f','--hero-text':'#fff','--hero-desc-color':'rgba(220,252,231,.88)',
-      '--hero-overlay':'rgba(16,53,31,.66)','--sticky-bg':'#f4fbf6'
-    },
-    burger_red: {
-      '--bg':'#fff6ed','--s1':'#fffaf5','--s2':'#fee8cc','--s3':'#fbc891',
-      '--border':'rgba(194,65,12,.14)','--border2':'rgba(194,65,12,.24)',
-      '--text':'#3b1606','--muted':'#9a3412','--muted2':'#c25b19','--white':'#fff',
-      '--hero-bg':'#3f0f08','--hero-text':'#fff','--hero-desc-color':'rgba(255,237,213,.9)',
-      '--hero-overlay':'rgba(63,15,8,.68)','--sticky-bg':'#fff6ed'
-    },
-    acai_berry: {
-      '--bg':'#fff7fb','--s1':'#ffffff','--s2':'#f7e6f0','--s3':'#edc4dc',
-      '--border':'rgba(134,25,80,.12)','--border2':'rgba(134,25,80,.22)',
-      '--text':'#351123','--muted':'#8a3a63','--muted2':'#ad5a82','--white':'#fff',
-      '--hero-bg':'#3d1028','--hero-text':'#fff','--hero-desc-color':'rgba(252,231,243,.88)',
-      '--hero-overlay':'rgba(61,16,40,.68)','--sticky-bg':'#fff7fb'
-    },
-    sushi_black: {
-      '--bg':'#070b0c','--s1':'#101719','--s2':'#172426','--s3':'#203437',
-      '--border':'rgba(125,211,252,.10)','--border2':'rgba(125,211,252,.18)',
-      '--text':'#edfafa','--muted':'#93b5b8','--muted2':'#6b8f93','--white':'#fff',
-      '--hero-bg':'#020607','--hero-text':'#fff','--hero-desc-color':'rgba(224,242,254,.84)',
-      '--hero-overlay':'rgba(2,6,7,.74)','--sticky-bg':'#070b0c'
-    },
-    pizzaria_italia: {
-      '--bg':'#fbf7ef','--s1':'#ffffff','--s2':'#fff0df','--s3':'#f8d8b3',
-      '--border':'rgba(127,29,29,.12)','--border2':'rgba(21,128,61,.18)',
-      '--text':'#332014','--muted':'#7d5a3a','--muted2':'#9b7652','--white':'#fff',
-      '--hero-bg':'#12351f','--hero-text':'#fff','--hero-desc-color':'rgba(240,253,244,.86)',
-      '--hero-overlay':'rgba(18,53,31,.66)','--sticky-bg':'#fbf7ef'
-    },
-    padaria_gold: {
-      '--bg':'#fff8ee','--s1':'#fffdf8','--s2':'#ffeccf','--s3':'#f5d29a',
-      '--border':'rgba(180,83,9,.12)','--border2':'rgba(180,83,9,.22)',
-      '--text':'#352411','--muted':'#815c2b','--muted2':'#a3773d','--white':'#fff',
-      '--hero-bg':'#4a2a08','--hero-text':'#fff','--hero-desc-color':'rgba(254,243,199,.88)',
-      '--hero-overlay':'rgba(74,42,8,.66)','--sticky-bg':'#fff8ee'
-    },
-    mercado_azul: {
-      '--bg':'#f3f8ff','--s1':'#ffffff','--s2':'#e4f0ff','--s3':'#c8defa',
-      '--border':'rgba(37,99,235,.10)','--border2':'rgba(37,99,235,.18)',
-      '--text':'#10243c','--muted':'#46637f','--muted2':'#6c86a3','--white':'#fff',
-      '--hero-bg':'#0b2340','--hero-text':'#fff','--hero-desc-color':'rgba(219,234,254,.88)',
-      '--hero-overlay':'rgba(11,35,64,.66)','--sticky-bg':'#f3f8ff'
-    },
-    premium_clean: {
-      '--bg':'#f7f7f5','--s1':'#ffffff','--s2':'#ededeb','--s3':'#deded8',
-      '--border':'rgba(24,24,27,.07)','--border2':'rgba(24,24,27,.12)',
-      '--text':'#18181b','--muted':'#71717a','--muted2':'#a1a1aa','--white':'#fff',
-      '--hero-bg':'#111827','--hero-text':'#fff','--hero-desc-color':'rgba(244,244,245,.82)',
-      '--hero-overlay':'rgba(17,24,39,.64)','--sticky-bg':'#f7f7f5'
-    },
-    noite_delivery: {
-      '--bg':'#0e1118','--s1':'#161b24','--s2':'#202635','--s3':'#293244',
-      '--border':'rgba(255,255,255,.07)','--border2':'rgba(255,255,255,.12)',
-      '--text':'#f8fafc','--muted':'#9aa4b2','--muted2':'#778295','--white':'#fff',
-      '--hero-bg':'#070a10','--hero-text':'#fff','--hero-desc-color':'rgba(226,232,240,.82)',
-      '--hero-overlay':'rgba(7,10,16,.72)','--sticky-bg':'#0e1118'
-    },
-    moderno: {
-      '--bg':'#f7f7f8','--s1':'#ffffff','--s2':'#f1f1f3','--s3':'#e4e4e8',
-      '--border':'rgba(0,0,0,.08)','--border2':'rgba(0,0,0,.14)',
-      '--text':'#1a1a1a','--muted':'#767676','--muted2':'#a3a3a3','--white':'#fff',
-      '--hero-bg':'','--hero-text':'#1a1a1a','--hero-desc-color':'rgba(26,26,26,.65)',
-      '--hero-overlay':'rgba(255,255,255,0)','--sticky-bg':'#ffffff'
-    }
+  const vars = def ? def.vars : {
+    '--bg':'#f7f7f8','--s1':'#ffffff','--s2':'#f0f1f3','--s3':'#e3e5e9',
+    '--border':'rgba(17,24,39,.08)','--border2':'rgba(17,24,39,.14)',
+    '--text':'#111827','--muted':'#6b7280','--muted2':'#9ca3af'
   };
-
-  const p = paletas[t] || paletas.classico;
-  Object.entries(p).forEach(([k,v]) => { if(v !== '') root.style.setProperty(k, v); else root.style.removeProperty(k); });
+  Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  root.style.setProperty('--sticky-bg', vars['--bg']);
+  // Personalidade do tema: fonte dos títulos e arredondamento dos cantos
+  const fontes = cat ? cat.fontes : null;
+  root.style.setProperty('--fonte-titulo', fontes ? (fontes[def?.fonte] || fontes.sans) : 'inherit');
+  root.style.setProperty('--raio', ((def && def.raio != null) ? def.raio : 10) + 'px');
+  root.setAttribute('data-fonte', def?.fonte || 'sans');
   // Marca temas de fundo escuro (o CSS usa pra cores que precisam de ajuste)
-  try { const L = _luminanciaCor(p['--bg']); root.toggleAttribute('data-escuro', L !== null && L < .2); } catch(e) {}
+  try { const L = _luminanciaCor(vars['--bg']); root.toggleAttribute('data-escuro', L !== null && L < .2); } catch(e) {}
 
-  // Força meta theme-color
   const metaTheme = document.querySelector('meta[name="theme-color"]');
-  const bgMap = {
-    classico:'#f8f9fb', dark:'#0f1117', tropical:'#fef9f0', minimalista:'#ffffff',
-    acougue:'#1a0a05', verde:'#f0faf2', noturno:'#080810', rose:'#fff5f7',
-    oceano:'#0a1628', dourado:'#0f0d08', delivery_pro:'#f6f7fb',
-    fresh_verde:'#f4fbf6', burger_red:'#fff6ed', acai_berry:'#fff7fb',
-    sushi_black:'#070b0c', pizzaria_italia:'#fbf7ef', padaria_gold:'#fff8ee',
-    mercado_azul:'#f3f8ff', premium_clean:'#f7f7f5', noite_delivery:'#0e1118',
-    moderno:'#f7f7f8'
-  };
-  if (metaTheme) metaTheme.content = bgMap[t] || '#f8f9fb';
+  if (metaTheme) metaTheme.content = vars['--bg'] || '#f7f7f8';
 }
 
 // ══════════════════════════════════════════
