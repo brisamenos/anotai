@@ -1,0 +1,14 @@
+REPAGINADA DO CARDÁPIO (visual estilo iFood) — versão v10
+
+Substitua estes arquivos no projeto, mantendo as mesmas pastas:
+  index.html
+  totem.html
+  cardapio/cardapio-bundle.js
+  cardapio/cardapio-core.js
+  cardapio/cardapio-menu.js
+  cardapio/cardapio-modal.js
+  cardapio/cardapio-cart.js
+  cardapio/cardapio-checkout.js
+
+Depois é só fazer o deploy normal no EasyPanel. Não mexe no banco de dados.
+O cardápio já pede a versão nova sozinho (v10), não precisa limpar cache.
