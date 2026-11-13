@@ -15,6 +15,7 @@ const handleRoutes = require('./routes')
 const { buildOrderTrackingMessage } = require('./order-message')
 const phoneUtils = require('./phone-utils')
 const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (como sempre foi) ou WuzAPI (alternativa leve)
+const _waCardFoto = require('./wa-card-foto') // foto dos cartões do carrossel no pedido pelo WhatsApp
 
 const PORT        = process.env.PORT           || 3001
 const EVO_URL     = (process.env.EVOLUTION_URL || 'https://projeto-evolution-api.xtknqq.easypanel.host').replace(/\/+$/,'')
@@ -4110,6 +4111,25 @@ async function sendWAButtons(phone, inst, opts) {
     return true
   } catch (e) { log('⚠️', '[VOZ] sendButtons falhou:', e.message); return false }
 }
+// Carrossel nativo (cartões com foto + botão). Se a WuzAPI não tiver o
+// endpoint (404/405), não tenta de novo por 30 minutos.
+let _waCarrosselOffAte = 0
+async function sendWACarousel(phone, inst, opts) {
+  if (typeof inst !== 'string' || !inst.startsWith(WUZAPI_SENTINEL)) return false
+  if (Date.now() < _waCarrosselOffAte) return false
+  const tenantId = inst.slice(WUZAPI_SENTINEL.length)
+  try {
+    await _wuzDigitando(tenantId, phone)
+    const r = await _tenantWa.sendCarousel(tenantId, phone, opts)
+    const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
+    if (id) _tenantWa.markBotSent(id)
+    return true
+  } catch (e) {
+    if (e.status === 404 || e.status === 405) _waCarrosselOffAte = Date.now() + 30 * 60 * 1000
+    log('⚠️', '[VOZ] sendCarousel falhou:', e.message)
+    return false
+  }
+}
 
 // Mensagem com o link do cardápio (loja na WuzAPI): sai como card com a
 // imagem da loja no topo, o texto e o botão "Abrir cardápio" embaixo.
@@ -6132,6 +6152,57 @@ async function _vozListarCategorias(tenantId, phone, inst, draft) {
   })
 }
 
+// Carrossel de produtos do pedido pelo WhatsApp: cada produto vira um
+// cartão com foto, nome, preço, descrição curta e um único botão
+// "Adicionar". O WhatsApp aceita até 10 cartões por carrossel; categoria
+// maior vai em mais de um (até 30 produtos; o resto fica só na lista).
+// Retorna true se mandou ao menos um carrossel. Se a WuzAPI não aceitar
+// carrossel, manda as fotos com legenda (sem botão), que abrem em qualquer
+// WhatsApp, e a lista logo depois resolve a escolha.
+async function _vozEnviarCarrosselItens(tenantId, phone, inst, itens, catNome) {
+  if (!itens.length) return false
+  let cor = ''
+  try { cor = db.prepare('SELECT store_cor FROM store_config WHERE tenant_id=?').get(tenantId)?.store_cor || '' } catch {}
+  const urlAbsoluta = u => _vozUrlAbsoluta(tenantId, u)
+  const cards = []
+  for (const i of itens.slice(0, 30)) {
+    let foto = null
+    try { foto = await _waCardFoto.fotoCartao(i, { uploadsDir: UPLOADS_DIR, cor, urlAbsoluta }) } catch {}
+    if (!foto) continue
+    const nome = String(i.name || '').replace(/[*_~]/g, '').trim()
+    let preco = ''
+    if (!i.hide_price) {
+      const antigo = parseFloat(i.price_old)
+      preco = antigo > (parseFloat(i.price) || 0) ? `~R$ ${_fmtR$(antigo)}~  R$ ${_fmtR$(i.price)}` : `R$ ${_fmtR$(i.price)}`
+    }
+    let corpo = `*${nome}*` + (preco ? `\n${preco}` : '')
+    const desc = String(i.description || '').replace(/\s+/g, ' ').trim()
+    const sobra = 160 - corpo.length - 1
+    if (desc && sobra > 20) corpo += `\n${desc.length > sobra ? desc.slice(0, sobra - 1).trimEnd() + '…' : desc}`
+    cards.push({ image: foto, text: corpo.slice(0, 160), buttons: [{ id: `item:${i.id}`, text: 'Adicionar' }] })
+  }
+  if (!cards.length) return false
+  let enviou = false
+  for (let k = 0; k < cards.length; k += 10) {
+    const lote = cards.slice(k, k + 10)
+    const intro = k === 0
+      ? `${catNome ? `*${String(catNome).replace(/[*_~]/g, '')}*\n` : ''}Deslize para o lado e toque em *Adicionar* no que você quiser.`
+      : 'Mais opções:'
+    const ok = await sendWACarousel(phone, inst, { text: intro, cards: lote })
+    if (ok) { enviou = true; continue }
+    if (enviou) break // um lote já foi; o resto fica na lista
+    // Carrossel recusado: fotos com legenda (só produtos que têm foto)
+    for (const i of itens.filter(x => x.image_url).slice(0, 10)) {
+      const precoTxt = i.hide_price ? '' : `R$ ${_fmtR$(i.price)}`
+      const desc = String(i.description || '').trim()
+      const legenda = `*${i.name}*${precoTxt ? `\n${precoTxt}` : ''}${desc ? `\n${desc}` : ''}`
+      try { await sendWAImage(phone, _vozUrlAbsoluta(tenantId, i.image_url), legenda, inst) } catch {}
+    }
+    return false
+  }
+  return enviou
+}
+
 // Lista os itens de uma categoria (ou, se for categoria de pizza, os sabores
 // disponíveis pra montar a pizza) — passo seguinte a escolher uma categoria.
 async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId, opts = {}) {
@@ -6159,36 +6230,21 @@ async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId, opt
     }
   })
   rows.push({ id: '__voltar', title: opts.voltarLabel ? opts.voltarLabel.slice(0, 24) : '⬅️ Voltar às categorias' })
-  // Manda todo item com foto como "card" (imagem+botão) ANTES da lista de
-  // escolha — assim o cliente toca direto no botão embaixo da própria foto
-  // pra adicionar aquele item, sem precisar abrir a lista separada depois.
-  // Sem limite por padrão (categoria normal). opts.semCards pula esse bloco
-  // inteiro e manda só a lista (ex: upsell de bebida — fica só a listinha,
-  // sem cards).
+  // Antes da lista, mostra os produtos da categoria num carrossel (cartões
+  // com foto, nome, preço e o botão "Adicionar"), igual ao do robô de
+  // marketing. O botão manda o mesmo id da lista (item:ID), então tocar no
+  // cartão ou na lista dá no mesmo. opts.semCards pula o carrossel e manda
+  // só a lista (ex: upsell de bebida).
+  let enviouCarrossel = false
   if (!opts.semCards) {
-    const comFoto = itens.filter(i => i.image_url)
-    for (const i of comFoto) {
-      const precoTxt = i.hide_price ? '' : `R$${_fmtR$(i.price)}`
-      const desc = String(i.description || '').trim()
-      const corpo = [i.name, precoTxt].filter(Boolean).join(' — ') + (desc ? `\n${desc}` : '')
-      const ehPizzaItem = _vozEhPizza(i)
-      let enviouComBotao = false
-      try {
-        enviouComBotao = await sendWAButtons(phone, inst, {
-          text: corpo,
-          image: _vozUrlAbsoluta(tenantId, i.image_url),
-          buttons: [{ id: `item:${i.id}`, text: ehPizzaItem ? 'Escolher' : 'Adicionar ✅' }]
-        })
-      } catch {}
-      if (!enviouComBotao) {
-        const legenda = `${i.name}${precoTxt ? ` — ${precoTxt}` : ''}${desc ? `\n${desc}` : ''}`
-        try { await sendWAImage(phone, _vozUrlAbsoluta(tenantId, i.image_url), legenda, inst) } catch {}
-      }
-    }
+    const cat = db.prepare('SELECT name FROM categories WHERE tenant_id=? AND id=?').get(tenantId, catId)
+    enviouCarrossel = await _vozEnviarCarrosselItens(tenantId, phone, inst, itens, cat?.name || '')
   }
   await _vozEnviarOpcoes(phone, inst, {
     titulo: opts.titulo || (ehPizza ? 'Escolha o sabor' : 'Itens'),
-    texto: opts.texto || (ehPizza ? 'Toque no primeiro sabor da pizza:' : 'Toque no item que você quer:'),
+    texto: opts.texto || (enviouCarrossel
+      ? (ehPizza ? 'Se preferir, escolha o sabor pela lista:' : 'Se preferir, escolha pela lista:')
+      : (ehPizza ? 'Toque no primeiro sabor da pizza:' : 'Toque no item que você quer:')),
     buttonText: 'Ver opções',
     rows
   })

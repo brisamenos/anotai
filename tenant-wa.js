@@ -189,6 +189,18 @@ async function sendButtons(tenantId, phone, opts) {
   return wuzapi.sendButtons(cfg.wuzapi_token, first, opts);
 }
 
+// opts: { text, footer, cards:[{ image, text, footer, buttons:[{id,text}] }] }
+// Carrossel nativo (cartões com foto e botão) — usado no pedido pelo WhatsApp.
+async function sendCarousel(tenantId, phone, opts) {
+  const cfg = getConfig(tenantId);
+  if (!cfg.wuzapi_token) throw new Error('WhatsApp (WuzAPI) não conectado para esta loja');
+  const n = String(phone || '').replace(/\D/g, '');
+  const digits = n.startsWith('55') ? n : `55${n}`;
+  const known = _resolved.get(`${tenantId}:${digits}`);
+  const first = known && Date.now() - known.at < 24 * 3600 * 1000 ? known.to : digits;
+  return wuzapi.sendCarousel(cfg.wuzapi_token, first, opts);
+}
+
 // tipo: 'image' | 'video' | 'audio' | 'document'
 async function downloadMedia(tenantId, tipo, media) {
   const cfg = getConfig(tenantId);
@@ -283,6 +295,7 @@ module.exports = {
   sendImage,
   sendList,
   sendButtons,
+  sendCarousel,
   downloadMedia,
   webhookSecretMatches,
   normalizeWuzToBaileys,
