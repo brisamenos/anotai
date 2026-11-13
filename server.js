@@ -41,6 +41,21 @@ function log(emoji, msg, data) {
   console.log(`[${t}] ${emoji}  ${msg}`, data ? JSON.stringify(data) : '')
 }
 
+// Rede de segurança: um erro inesperado numa rotina (job, webhook, etc.) não
+// pode derrubar o sistema de TODAS as lojas. Registra no log e segue no ar.
+// Procure no log por "ERRO NÃO TRATADO" para achar a causa.
+process.on('unhandledRejection', (e) => {
+  try { log('🔥', 'ERRO NÃO TRATADO (promessa): ' + (e && e.stack ? e.stack : String(e))) } catch (_) {}
+})
+process.on('uncaughtException', (e) => {
+  try { log('🔥', 'ERRO NÃO TRATADO: ' + (e && e.stack ? e.stack : String(e))) } catch (_) {}
+})
+// Memória a cada 5 min no log: se o EasyPanel reiniciar o sistema por falta de
+// memória, a última linha antes da queda mostra quanto estava usando.
+setInterval(() => {
+  try { const m = process.memoryUsage(); log('📊', `Memória: ${Math.round(m.rss / 1048576)} MB em uso (heap ${Math.round(m.heapUsed / 1048576)} MB)`) } catch (_) {}
+}, 5 * 60 * 1000).unref()
+
 const _dbExistia = fs.existsSync(DB_PATH)
 log('💾', `Banco: ${DB_PATH}`)
 log(_dbExistia ? '✅' : '🆕', _dbExistia
@@ -9281,6 +9296,9 @@ ${fundoImg ? `<img class="capa${desfoca ? ' blur' : ''}" src="${esc(fundoImg)}">
 // deixava a geração lenta (e a mensagem saía sem a imagem).
 let _ogFila = Promise.resolve()
 async function _ogGerar(tid) {
+  // OG_IMAGEM=0 no EasyPanel desliga o Chrome escondido (servidor com pouca
+  // memória): o link compartilhado passa a mostrar a logo da loja.
+  if (String(process.env.OG_IMAGEM || '') === '0') return null
   const d = _ogDadosLoja(tid)
   if (!d) return null
   const arq = _ogArquivo(tid, d.hash)
@@ -10122,6 +10140,12 @@ const server = http.createServer(async (req,res) => {
   // e busca info do indicador via /api/indicacao/info/{codigo})
   if(req.method==='GET'&&upath.startsWith('/indicacao/')){
     const fpath=path.join(__dirname,'indicacao.html')
+    if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
+  }
+
+  // ── Página da oferta Black Friday (para os anúncios) ──
+  if(req.method==='GET'&&(upath==='/blackfriday'||upath==='/blackfriday/'||upath==='/black-friday')){
+    const fpath=path.join(__dirname,'blackfriday.html')
     if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
   }
 
