@@ -268,6 +268,12 @@ function _fotoMini(url, w) {
   return rel.startsWith('/uploads/') ? rel + '?w=' + w : url;
 }
 
+// Rede de segurança: se uma foto reduzida (?w=) falhar, carrega a original.
+document.addEventListener('error', function (e) {
+  const t = e.target;
+  if (t && t.tagName === 'IMG' && !t.dataset.o && /[?&]w=\d+$/.test(t.src)) { t.dataset.o = '1'; t.src = t.src.replace(/[?&]w=\d+$/, ''); }
+}, true);
+
 function fmt(n) {
   return Number(n||0).toFixed(2).replace('.',',');
 }
@@ -3128,10 +3134,14 @@ function openItemModal(id) {
   const imgEl = document.getElementById('im-img');
   if (i.video_url) {
     const fallbackImg = (i.image_url || '').replace(/'/g, '%27');
-    imgEl.innerHTML = `<video src="${i.video_url}" autoplay muted loop playsinline controls style="width:100%;height:100%;object-fit:cover" onerror="imVideoFallback(this,'${fallbackImg}','${(i.name||'').replace(/'/g,'%27')}')"></video>`;
+    // Foto como capa (poster): aparece na hora, enquanto o vídeo carrega.
+    // Antes a área ficava vazia até o vídeo baixar (vídeo de celular pesado).
+    const capa = i.image_url ? _fotoMini(i.image_url, 1080) : '';
+    imgEl.innerHTML = `<video src="${i.video_url}"${capa ? ` poster="${capa}"` : ''} autoplay muted loop playsinline controls preload="metadata" style="width:100%;height:100%;object-fit:cover;background:#000" onerror="imVideoFallback(this,'${fallbackImg}','${(i.name||'').replace(/'/g,'%27')}')"></video>`;
     fixIosVideoAutoplay(imgEl);
   } else if (i.image_url) {
-    imgEl.innerHTML = `<img src="${_fotoMini(i.image_url, 1080)}" alt="${i.name}" decoding="async" style="width:100%;height:100%;object-fit:cover">`;
+    const _orig = String(i.image_url).replace(/'/g, '%27');
+    imgEl.innerHTML = `<img src="${_fotoMini(i.image_url, 1080)}" alt="${i.name}" decoding="async" onerror="if(!this.dataset.o){this.dataset.o=1;this.src='${_orig}'.replace(/%27/g,String.fromCharCode(39))}" style="width:100%;height:100%;object-fit:cover">`;
   } else {
     imgEl.innerHTML = `<div style="opacity:.25"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="1.5" opacity=".3"/><path d="M16 24h16M24 16v16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".3"/></svg></div>`;
   }

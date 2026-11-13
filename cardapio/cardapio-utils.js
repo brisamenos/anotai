@@ -113,6 +113,12 @@ function _fotoMini(url, w) {
   return rel.startsWith('/uploads/') ? rel + '?w=' + w : url;
 }
 
+// Rede de segurança: se uma foto reduzida (?w=) falhar, carrega a original.
+document.addEventListener('error', function (e) {
+  const t = e.target;
+  if (t && t.tagName === 'IMG' && !t.dataset.o && /[?&]w=\d+$/.test(t.src)) { t.dataset.o = '1'; t.src = t.src.replace(/[?&]w=\d+$/, ''); }
+}, true);
+
 function fmt(n) {
   return Number(n||0).toFixed(2).replace('.',',');
 }
