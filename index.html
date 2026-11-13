@@ -3032,7 +3032,6 @@ body:not([data-segmento="acougue"]) .item-grid:not(.carousel) .item-add-btn{ dis
 body:not([data-segmento="acougue"]) .item-grid:not(.carousel) .item-img{
   width:104px; height:104px; border-radius:10px; align-self:center; background:var(--s2);
 }
-body:not([data-segmento="acougue"]) .item-img:not(.has-photo){ display:none; }
 body:not([data-segmento="acougue"]) .item-fav-btn{
   width:28px; height:28px; top:auto; bottom:6px; right:6px; background:rgba(255,255,255,.92); color:#4b5563;
   box-shadow:0 1px 3px rgba(0,0,0,.18); border:none;
@@ -3184,6 +3183,19 @@ body:not([data-segmento="acougue"]) .hero-banner.padrao{
 body:not([data-segmento="acougue"]) .hero-banner.padrao::before{
   content:''; position:absolute; inset:0; background:rgba(0,0,0,.08); pointer-events:none;
 }
+
+/* Produto sem foto: ícone do tipo do produto na cor da loja */
+.prod-ph{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  background:rgba(var(--accent-rgb,249,115,22),.10); color:var(--accent);
+}
+:root[data-escuro] .prod-ph{ background:rgba(var(--accent-rgb,249,115,22),.16); }
+.prod-ph svg{ width:42%; height:42%; max-width:72px; max-height:72px; }
+.ci-thumb{ position:relative; overflow:hidden; }
+.ci-thumb .prod-ph svg{ width:56%; height:56%; }
+.im-img.sem-foto{ height:180px!important; aspect-ratio:auto!important; }
+.im-img.sem-foto::after{ display:none!important; }
+.im-img.sem-foto .prod-ph svg{ width:72px; height:72px; }
 
 /* Pontos de fidelidade: texto e botão de troca */
 .fid-txt{ font-size:13px; line-height:1.4; color:#5b21b6; font-weight:600; }
@@ -4335,7 +4347,7 @@ body:not([data-segmento="acougue"]) .hero-banner.padrao::before{
 // celular mais fraca. Os 12 arquivos-fonte continuam existindo, e
 // sempre que algum deles for editado, o bundle precisa ser regenerado
 // juntando eles de novo, na mesma ordem.
-document.write('<script src="/cardapio/cardapio-bundle.js?v=v12"><\/script>');
+document.write('<script src="/cardapio/cardapio-bundle.js?v=v13"><\/script>');
 </script>
 <canvas id="anim-particle-canvas"></canvas>
 <button id="im-close-fab" onclick="closeItemModal()" style="position:fixed;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.65);border:none;color:#fff;display:none;align-items:center;justify-content:center;z-index:600;cursor:pointer;backdrop-filter:blur(6px);box-shadow:0 2px 12px rgba(0,0,0,.4)">
