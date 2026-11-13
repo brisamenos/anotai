@@ -326,7 +326,7 @@ function renderMenu() {
         html += `
         <div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}>
           <div class="dest-img${i.image_url ? ' has-photo' : ''}">
-            ${i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`}
+            ${i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : _placeholderProduto(i)}
             ${(!i.hide_price && _descontoPct(i)) ? `<span class="dest-promo-badge">${_descontoPct(i)}</span>` : ''}
           </div>
           <div class="dest-body">
@@ -406,7 +406,7 @@ function renderMenu() {
         const esg = i.status === 'esgotado';
         const destMedia = i.video_url
           ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
-          : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : '');
+          : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : _placeholderProduto(i));
         html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img${(i.image_url||i.video_url)?' has-photo':''}">${destMedia}${(!i.hide_price && _descontoPct(i))?`<span class="dest-promo-badge">${_descontoPct(i)}</span>`:''}</div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.hide_price?`<span class="dest-price" style="color:var(--muted)">Ver opções</span>`:`${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span>`}</div></div></div>`;
       });
       html += `</div></div>`;
@@ -732,10 +732,10 @@ function itemCard(i) {
       </div>
       ${porcaoBadge}
     </div>
-    <div class="item-img${(i.image_url||i.video_url) ? ' has-photo' : ''}">
+    <div class="item-img${(i.image_url||i.video_url) ? ' has-photo' : ' sem-foto'}">
       ${i.video_url
         ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
-        : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`)}
+        : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : _placeholderProduto(i))}
       ${i.video_url ? `<span class="item-video-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></span>` : ''}
       ${i.promo||i.price_old ? `<span class="item-promo-badge">${_descontoPct(i) || 'Promo'}</span>` : (typeof promoAutomatica !== 'undefined' && promoAutomatica?.ativo && typeof _promoItemElegivel === 'function' && _promoItemElegivel(i) ? `<span class="item-promo-badge">${promoAutomatica.tipo === 'valor' ? '-R$ ' + fmt(promoAutomatica.valor) : '-' + promoAutomatica.valor + '% OFF'}</span>` : '')}
       ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}

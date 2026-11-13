@@ -42,8 +42,9 @@ function openItemModal(id) {
     const _orig = String(i.image_url).replace(/'/g, '%27');
     imgEl.innerHTML = `<img src="${_fotoMini(i.image_url, 1080)}" alt="${i.name}" decoding="async" onerror="if(!this.dataset.o){this.dataset.o=1;this.src='${_orig}'.replace(/%27/g,String.fromCharCode(39))}" style="width:100%;height:100%;object-fit:cover">`;
   } else {
-    imgEl.innerHTML = `<div style="opacity:.25"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="1.5" opacity=".3"/><path d="M16 24h16M24 16v16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".3"/></svg></div>`;
+    imgEl.innerHTML = _placeholderProduto(i);
   }
+  imgEl.classList.toggle('sem-foto', !i.video_url && !i.image_url);
   document.getElementById('im-name').textContent = i.name;
   document.getElementById('im-desc').textContent = i.description || '';
   const hasPizzaSizesAtOpen = _pizzaHasSizePricing(i);

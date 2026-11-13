@@ -1435,7 +1435,7 @@ function renderImXsell(item) {
 
   const cards = others.map(o => `
     <div class="xsell-card" id="xsell_${o.id}" onclick="xsellToggle(${o.id})" style="position:relative">
-      <div class="xsell-img">${o.image_url ? `<img src="${_fotoMini(o.image_url, 160)}" >` : (o.emoji||'')}</div>
+      <div class="xsell-img" style="position:relative">${o.image_url ? `<img src="${_fotoMini(o.image_url, 160)}" >` : _placeholderProduto(o)}</div>
       <div class="xsell-body">
         <div class="xsell-name">${o.name}</div>
         <div class="xsell-price">R$ ${fmt(o.price)}</div>
