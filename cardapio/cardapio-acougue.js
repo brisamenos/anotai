@@ -274,11 +274,11 @@ function _renderImGruposNow(item) {
           const esgotado = _isAddonEsgotado(o.nome);
           const indisponivelHoje = !esgotado && _addonIndisponivelHoje(o.dias);
           const bloqueado = esgotado || indisponivelHoje;
-          const priceLabel = bloqueado
+          const priceLabel = (bloqueado && o.preco > 0)
             ? `<span class="grp-opt-price" style="color:var(--muted);text-decoration:line-through">+ R$ ${fmt(o.preco||0)}</span>`
             : (o.preco > 0
               ? `<span class="grp-opt-price">+ R$ ${fmt(o.preco)}</span>`
-              : `<span class="grp-opt-price free">Grátis</span>`);
+              : ''); // opção sem custo: não mostra preço ("Grátis" confundia o cliente)
           const indicator = g.tipo === 'checkbox'
             ? `<div class="grp-opt-indicator multi"></div>`
             : `<div class="grp-opt-indicator"></div>`;
@@ -367,11 +367,11 @@ function _renderGenericGruposHtml(genericGrupos) {
       const esgotado = _isAddonEsgotado(o.nome);
       const indisponivelHoje = !esgotado && _addonIndisponivelHoje(o.dias);
       const bloqueado = esgotado || indisponivelHoje;
-      const priceLabel = bloqueado
+      const priceLabel = (bloqueado && o.preco > 0)
         ? `<span class="grp-opt-price" style="color:var(--muted);text-decoration:line-through">+ R$ ${fmt(o.preco||0)}</span>`
         : (o.preco > 0
           ? `<span class="grp-opt-price">+ R$ ${fmt(o.preco)}</span>`
-          : `<span class="grp-opt-price free">Grátis</span>`);
+          : ''); // opção sem custo: não mostra preço ("Grátis" confundia o cliente)
       const indicator = g.tipo === 'checkbox'
         ? `<div class="grp-opt-indicator multi"></div>`
         : `<div class="grp-opt-indicator"></div>`;
