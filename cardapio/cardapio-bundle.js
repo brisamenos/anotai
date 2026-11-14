@@ -2884,7 +2884,7 @@ function renderMenu() {
   if (_segmento === 'acougue' && !searchQ && !activeCat && !_filterPreparo) {
     const destItems = normalItems.filter(_ehDestaque);
     if (destItems.length) {
-      html += `<div class="destaques-wrap"><div class="section-label">Destaques</div>`;
+      html += `<div class="destaques-wrap"><div class="section-label">Mais vendidos</div>`;
       html += `<div class="destaques-scroll">`;
       destItems.forEach(i => {
         const esg = i.status === 'esgotado';
@@ -2966,7 +2966,7 @@ function renderMenu() {
   if (_segmento !== 'acougue' && !searchQ && !activeCat) {
     const destItems = normalItems.filter(_ehDestaque);
     if (destItems.length) {
-      html += `<div class="destaques-wrap"><div class="section-label">Destaques</div><div class="destaques-scroll">`;
+      html += `<div class="destaques-wrap"><div class="section-label">Mais vendidos</div><div class="destaques-scroll">`;
       destItems.forEach(i => {
         const esg = i.status === 'esgotado';
         const destMedia = i.video_url
