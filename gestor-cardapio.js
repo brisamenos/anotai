@@ -928,9 +928,18 @@ function renderGestor(){
     const _nb = t => String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     const _q = _nb(window._gestorBusca).trim();
     let _achou = 0;
+    // Filtro "Mais vendidos": só os produtos marcados (de qualquer categoria)
+    // e as categorias marcadas inteiras, todas abertas, com o botão de tirar.
+    const _soMV = !!window._gestorSoMaisVendidos;
+    _mvAtualizarContagem();
     cl.innerHTML=categories.map((cat,idx)=>{
       let catItems=items.filter(i=>i.catKey===cat.name||i.cat===cat.name);
       let aberta = cat.open;
+      if (_soMV) {
+        if (!cat.promo) catItems = catItems.filter(i => i.destaque);
+        if (!cat.promo && !catItems.length) return '';
+        aberta = true;
+      }
       if (_q) {
         const catBate = _nb(cat.label).includes(_q);
         const filtrados = catItems.filter(i => _nb(i.name).includes(_q));
@@ -940,7 +949,7 @@ function renderGestor(){
       }
       _achou++;
       return `
-      ${cat.promo?'<div class="cat-promo-banner">promo</div>':''}
+      ${cat.promo && !_soMV ? '<div class="cat-promo-banner">Categoria inteira em Mais vendidos</div>' : ''}
       <div class="cat-row" draggable="true" data-cat-id="${cat.id}"
            ondragstart="catDragStart(event,${cat.id})"
            ondragover="catDragOver(event)"
@@ -958,6 +967,7 @@ function renderGestor(){
           </div>
         </div>
         ${aberta?`<div class="cat-items">
+          ${_soMV && cat.promo ? `<div class="mv-cat-aviso"><span>A categoria inteira está em Mais vendidos, então todos os produtos dela aparecem lá.</span><button type="button" class="mv-tirar" onclick="event.stopPropagation();tirarCategoriaMaisVendidos(${cat.id})">Tirar categoria</button></div>` : ''}
           ${catItems.map(item=>`
             <div class="cat-item-row" data-id="${item.id}" draggable="true" ondragstart="itemDragStart(event,${item.id})" ondragover="itemDragOver(event)" ondrop="itemDrop(event,${item.id})" ondragend="itemDragEnd(event)" onclick="openEditItem(+this.dataset.id)">
               <span class="cat-drag" style="cursor:grab;padding:0 6px 0 2px;opacity:.35;flex-shrink:0;font-size:16px;align-self:center" onmousedown="event.stopPropagation()" title="Arrastar para reordenar">⠿</span>
@@ -966,10 +976,11 @@ function renderGestor(){
                 : `<svg viewBox="0 0 24 24" fill="none" width="18" height="18" style="opacity:.35"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" stroke="currentColor" stroke-width="1.5"/><path d="M3 16l5-5 3 3 3-4 4 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" opacity=".5"/></svg>`
               }</div>
               <div class="cat-item-info" style="flex:1;min-width:0">
-                <div class="cat-item-name">${item.name}${item.promo?' <span class="ptag">promo</span>':''}${item.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">🍕</span>':''}${item.itemType==='kg'?' <span style="font-size:9px;background:rgba(34,197,94,.15);color:#16a34a;border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">KG</span>':''}</div>
+                <div class="cat-item-name">${item.name}${item.destaque?' <span class="ptag">mais vendido</span>':(item.promo?' <span class="ptag">promo</span>':'')}${item.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">🍕</span>':''}${item.itemType==='kg'?' <span style="font-size:9px;background:rgba(34,197,94,.15);color:#16a34a;border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">KG</span>':''}</div>
                 <div class="cat-item-price">R$ ${item.price.toFixed(2).replace('.',',')}${item.itemType==='kg'?'<span style="font-size:10px;color:var(--muted)">/kg</span>':''}<span class="cip-st"> · ${item.status==='active'?'<span style="color:var(--success)">Disponível</span>':item.status==='esgotado'?'<span style="color:var(--danger)">Esgotado</span>':'<span style="color:var(--accent3)">Pausado</span>'}</span>${_visTags(item.garcomOculto && !cat.garcomOculto, item.cardapioOculto && !cat.cardapioOculto, 'Este produto')}</div>
               </div>
               <div class="cat-item-acts" style="display:flex;gap:4px;flex-shrink:0;align-items:center">
+                ${_soMV && item.destaque ? `<button type="button" class="mv-tirar" data-id="${item.id}" onclick="event.stopPropagation();tirarMaisVendido(+this.dataset.id)" title="Tirar este produto de Mais vendidos">Tirar</button>` : ''}
                 <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();duplicateItem(+this.dataset.id)" title="Duplicar item" aria-label="Duplicar item"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 3.5v-.5a1 1 0 0 0-1-1H3.5a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1H4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span class="cia-lbl">Duplicar</span></button>
                 <button class="stbadge-mini ${scClass(item.status)}" data-id="${item.id}" onclick="event.stopPropagation();quickToggleStatus(+this.dataset.id,this)" title="Alterar disponibilidade">${_statusBtnHtml(item.status)}</button>
                 <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();openEditItem(+this.dataset.id)"><svg class="cia-ico" width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>Editar</button>
@@ -983,11 +994,92 @@ function renderGestor(){
         </div>`:''}
       </div>`;
     }).join('');
-    if (_q && !_achou) cl.innerHTML = '<div class="pf-empty"><strong>Nada encontrado</strong>Nenhuma categoria ou item combina com a busca.</div>';
+    if (_soMV) {
+      const aviso = `<div class="mv-faixa"><div><strong>Mostrando só os Mais vendidos</strong><span>Toque em Tirar para o produto sair da faixa Mais vendidos do cardápio e do carrossel do WhatsApp.</span></div><button type="button" class="btn bg" onclick="gestorFiltrarMaisVendidos(false)">Mostrar tudo</button></div>`;
+      cl.innerHTML = aviso + (_achou ? cl.innerHTML : '<div class="pf-empty"><strong>Nenhum produto em Mais vendidos</strong>Para colocar um produto aqui, abra o produto em Editar e ligue a opção Mais vendidos.</div>');
+    } else if (_q && !_achou) cl.innerHTML = '<div class="pf-empty"><strong>Nada encontrado</strong>Nenhuma categoria ou item combina com a busca.</div>';
   } catch(e) { console.error('renderGestor error:', e); }
 }
 
 function gestorBuscar(q){ window._gestorBusca = q || ''; renderGestor(); }
+
+// ── Mais vendidos (antigo "Destaque") ─────────────────────────────────
+function gestorFiltrarMaisVendidos(ligar) {
+  window._gestorSoMaisVendidos = typeof ligar === 'boolean' ? ligar : !window._gestorSoMaisVendidos;
+  const b = document.getElementById('btn-mais-vendidos');
+  if (b) b.classList.toggle('on', !!window._gestorSoMaisVendidos);
+  renderGestor();
+  try { document.getElementById('cat-list')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {}
+}
+// Estilo do filtro (vai aqui, e não no gestor.css, para não depender do
+// cache do arquivo de estilo e passar por cima do gestor-pro.css)
+function _mvCss() {
+  if (document.getElementById('mv-css')) return;
+  const st = document.createElement('style');
+  st.id = 'mv-css';
+  st.textContent = `
+#btn-mais-vendidos.on{background:var(--accent) !important;color:#fff !important;border-color:var(--accent) !important}
+#btn-mais-vendidos #mv-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent) !important;color:#fff !important;font-size:10.5px;font-weight:700;line-height:1;margin-left:2px}
+#btn-mais-vendidos.on #mv-count{background:#fff !important;color:var(--accent) !important}
+#cat-list .mv-faixa{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;margin-bottom:12px;border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;background:var(--s2)}
+#cat-list .mv-faixa strong{display:block;font-size:13px;margin-bottom:2px}
+#cat-list .mv-faixa span{display:block;font-size:11.5px;color:var(--muted);line-height:1.4}
+#cat-list .mv-faixa .btn{flex-shrink:0}
+#cat-list .mv-tirar{border:1px solid var(--border);background:var(--s1);color:var(--danger,#dc2626);font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:6px;cursor:pointer;font-family:inherit;line-height:1.4}
+#cat-list .mv-tirar:hover{border-color:var(--danger,#dc2626)}
+#cat-list .mv-cat-aviso{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;font-size:12px;color:var(--muted);background:var(--s2);border-bottom:1px solid var(--border)}
+#cat-list .mv-cat-aviso .mv-tirar{flex-shrink:0}
+#cat-list .cat-promo-banner{font-size:11px;font-weight:600;color:var(--accent);margin:0 0 4px 4px}
+@media (max-width:560px){#cat-list .mv-faixa{flex-direction:column;align-items:stretch}}
+/* Celular: botões do topo do gestor de cardápio 2 por fileira, sem o texto vazar */
+@media (max-width:560px){
+  #page-gestor .ph > div:last-child > .pf-search{flex:1 1 100% !important;width:100% !important}
+  #page-gestor .ph > div:last-child > .btn{flex:1 1 calc(50% - 4px) !important;min-width:0 !important;justify-content:center}
+}
+`;
+  document.head.appendChild(st);
+}
+function _mvAtualizarContagem() {
+  _mvCss();
+  const el = document.getElementById('mv-count');
+  if (!el) return;
+  const n = items.filter(i => i.destaque).length + categories.filter(c => c.promo).length;
+  el.textContent = n ? String(n) : '';
+  el.style.display = n ? '' : 'none';
+}
+async function tirarMaisVendido(id) {
+  const it = items.find(i => i.id === id);
+  if (!it) return;
+  const antes = { destaque: it.destaque, promo: it.promo };
+  it.destaque = false; it.promo = false;
+  renderGestor();
+  try {
+    const { error } = await sb.from('menu_items').update({ destaque: false, promo: false }).eq('id', id);
+    if (error) throw error;
+    sbToast('ok', `"${it.name}" saiu de Mais vendidos`);
+  } catch (e) {
+    Object.assign(it, antes);
+    renderGestor();
+    if (_isSessaoExpiradaError(e)) _avisarSessaoExpirada();
+    else sbToast('err', 'Não consegui tirar: ' + (e?.message || 'tente novamente'));
+  }
+}
+async function tirarCategoriaMaisVendidos(catId) {
+  const cat = categories.find(c => c.id === catId);
+  if (!cat) return;
+  cat.promo = false;
+  renderGestor();
+  try {
+    const { error } = await sb.from('categories').update({ promo: false }).eq('id', catId);
+    if (error) throw error;
+    sbToast('ok', `A categoria "${cat.label}" saiu de Mais vendidos`);
+  } catch (e) {
+    cat.promo = true;
+    renderGestor();
+    if (_isSessaoExpiradaError(e)) _avisarSessaoExpirada();
+    else sbToast('err', 'Não consegui tirar: ' + (e?.message || 'tente novamente'));
+  }
+}
 
 function toggleCat(id){
   const cat=categories.find(c=>c.id===id);
