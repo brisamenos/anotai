@@ -1906,6 +1906,7 @@ function criarFinanceAccess(row, sessionUserId) {
 
 // ── Envio automático do backup para o Telegram (cópia fora do volume) ──
 async function enviarBackupTelegram(forcar = false) {
+  let _peguei = false // só quem travou o envio destrava no fim
   try {
     const cfgRow = db.prepare("SELECT telegram_backup_config FROM store_config WHERE tenant_id='_global'").get()
     let cfg = {}
@@ -1914,10 +1915,23 @@ async function enviarBackupTelegram(forcar = false) {
 
     const intervalMs = Math.max(5, Number(cfg.interval_minutes) || 60) * 60 * 1000
     const agora = Date.now()
+    // Um envio por vez: o arquivo tem dezenas de MB e demora para subir. Antes,
+    // enquanto um envio ainda subia, o backup seguinte começava outro, e vários
+    // chegavam juntos no Telegram, fora de ordem.
+    if (enviarBackupTelegram._enviando) return { ok:false, motivo:'envio_em_andamento' }
+    // Quando foi o último envio fica gravado em disco, para um deploy/reinício
+    // não mandar um backup novo logo ao subir.
+    if (!enviarBackupTelegram._lastSend) enviarBackupTelegram._lastSend = _backupTelegramUltimoLido()
     if (!forcar && enviarBackupTelegram._lastSend && (agora - enviarBackupTelegram._lastSend) < intervalMs) {
       return { ok:false, motivo:'intervalo_nao_atingido' }
     }
+    // Depois de uma falha, espera 10 min antes de tentar de novo (não a cada backup)
+    if (!forcar && enviarBackupTelegram._lastFail && (agora - enviarBackupTelegram._lastFail) < 10 * 60 * 1000) {
+      return { ok:false, motivo:'aguardando_nova_tentativa' }
+    }
     if (!fs.existsSync(BACKUP_PATH)) return { ok:false, motivo:'backup_inexistente' }
+    enviarBackupTelegram._enviando = true
+    _peguei = true
 
     const rawBuf = fs.readFileSync(BACKUP_PATH)
     const buf    = zlib.gzipSync(rawBuf)
@@ -1942,25 +1956,43 @@ async function enviarBackupTelegram(forcar = false) {
     const contentType  = formResponse.headers.get('content-type')
     const bodyBuf       = Buffer.from(await formResponse.arrayBuffer())
 
+    const t0 = Date.now()
     const resp = await fetch(`https://api.telegram.org/bot${cfg.bot_token}/sendDocument`, {
       method: 'POST',
       body: bodyBuf,
-      headers: { 'Content-Type': contentType, 'Content-Length': String(bodyBuf.length) }
+      headers: { 'Content-Type': contentType, 'Content-Length': String(bodyBuf.length) },
+      // Um envio travado não pode segurar os próximos para sempre
+      signal: AbortSignal.timeout(15 * 60 * 1000)
     })
     const data = await resp.json().catch(() => null)
     if (!resp.ok || !data?.ok) {
+      enviarBackupTelegram._lastFail = Date.now()
       log('❌', 'Erro envio backup Telegram:', { status: resp.status, error: data?.description })
       return { ok:false, motivo: data?.description || `http_${resp.status}` }
     }
     enviarBackupTelegram._lastSend = agora
-    log('📤', 'Backup enviado ao Telegram com sucesso')
+    enviarBackupTelegram._lastFail = 0
+    _backupTelegramUltimoGravar(agora)
+    log('📤', `Backup enviado ao Telegram com sucesso (${Math.round((Date.now() - t0) / 1000)}s para subir)`)
     return { ok:true }
   } catch (e) {
-    log('❌', 'Erro envio backup Telegram:', { error: e.message })
+    enviarBackupTelegram._lastFail = Date.now()
+    log('❌', 'Erro envio backup Telegram:', { error: e.name === 'TimeoutError' ? 'demorou mais de 15 min para subir, cancelado' : e.message })
     return { ok:false, motivo: e.message }
+  } finally {
+    if (_peguei) enviarBackupTelegram._enviando = false
   }
 }
 enviarBackupTelegram._lastSend = 0
+enviarBackupTelegram._lastFail = 0
+enviarBackupTelegram._enviando = false
+// Horário do último envio ao Telegram, guardado ao lado do backup
+function _backupTelegramUltimoLido() {
+  try { return Number(fs.readFileSync(BACKUP_PATH + '.telegram-ultimo', 'utf8')) || 0 } catch (e) { return 0 }
+}
+function _backupTelegramUltimoGravar(ts) {
+  try { fs.writeFileSync(BACKUP_PATH + '.telegram-ultimo', String(ts)) } catch (e) {}
+}
 
 function fazerBackup(forcar = false) {
   if (!forcar && !_dirty) return

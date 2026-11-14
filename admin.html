@@ -5734,6 +5734,7 @@ async function testarTelegramBackup() {
     const r = await fetch('/api/admin-backup/telegram-test', { method: 'POST', headers: adminAuthHeader() });
     const data = await r.json();
     if (data.ok) { toast('ok', 'Backup enviado ao Telegram com sucesso!'); telegramBackupCarregar(); }
+    else if (data.motivo === 'envio_em_andamento') toast('ok', 'Já tem um backup subindo para o Telegram agora. Ele chega em alguns minutos.');
     else toast('err', 'Falha ao enviar: ' + (data.motivo || 'verifique bot_token/chat_id'));
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
