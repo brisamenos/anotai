@@ -19,7 +19,7 @@ try { sharp = require('sharp') } catch (e) { sharp = null }
 
 const LARG = 960
 const ALT = 600
-const VERSAO = 'v1' // trocar quando mudar o desenho, para refazer o cache
+const VERSAO = 'v2' // trocar quando mudar o desenho, para refazer o cache
 
 // Os desenhos e a regra de "que tipo de produto é" vêm do próprio cardápio
 // (cardapio/cardapio-utils.js), para os dois ficarem sempre iguais.
@@ -87,9 +87,47 @@ async function baixar(url) {
 
 function paraDataUrl(buf) { return `data:image/jpeg;base64,${buf.toString('base64')}` }
 
-// item: linha de menu_items. opts: { uploadsDir, cor, urlAbsoluta(url) }
+function escXml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+
+// Selo no canto da foto ("OFERTA -17%", "DESTAQUE"), na cor da loja.
+// O texto é desenhado pelo próprio sharp (mede a largura certinha); se a
+// máquina não tiver fonte ou der erro, a foto sai sem o selo.
+async function aplicarSelo(jpeg, selo, cor) {
+  try {
+    const clara = luminancia(cor) > 0.45
+    const tinta = clara ? '#1a1a1a' : '#ffffff'
+    const texto = await sharp({
+      text: {
+        text: `<span foreground="${tinta}" letter_spacing="1024"><b>${escXml(selo)}</b></span>`,
+        font: 'Liberation Sans, DejaVu Sans, Arial, sans-serif 42',
+        rgba: true,
+        dpi: 72
+      }
+    }).png().toBuffer({ resolveWithObject: true })
+    const tw = texto.info.width, th = texto.info.height
+    if (!tw || !th) return jpeg
+    const padX = 32, alt = Math.max(84, th + 34), larg = tw + padX * 2
+    const margem = 34
+    const pilula = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${larg + 8}" height="${alt + 10}">
+      <rect x="2" y="6" width="${larg}" height="${alt}" rx="${alt / 2}" fill="#000" fill-opacity="0.22"/>
+      <rect x="0" y="0" width="${larg}" height="${alt}" rx="${alt / 2}" fill="${cor}"/>
+    </svg>`)
+    return await sharp(jpeg)
+      .composite([
+        { input: pilula, left: margem, top: margem },
+        { input: texto.data, left: margem + padX, top: margem + Math.round((alt - th) / 2) }
+      ])
+      .jpeg({ quality: 80, mozjpeg: true })
+      .toBuffer()
+  } catch (e) {
+    return jpeg
+  }
+}
+
+// item: linha de menu_items. opts: { uploadsDir, cor, urlAbsoluta(url), selo }
+// selo (opcional): texto do selo no canto da foto, ex.: "OFERTA -17%".
 // Retorna a imagem do cartão (data URL ou URL pública) ou null se não deu.
-async function fotoCartao(item, { uploadsDir, cor, urlAbsoluta }) {
+async function fotoCartao(item, { uploadsDir, cor, urlAbsoluta, selo }) {
   const img = String(item.image_url || '').trim()
   const corLoja = corValida(cor)
 
@@ -113,6 +151,8 @@ async function fotoCartao(item, { uploadsDir, cor, urlAbsoluta }) {
     origem = { tipo: 'selo', valor: tipo }
     chave = `${VERSAO}|s|${tipo}|${corLoja}`
   }
+  const seloTxt = String(selo || '').trim().slice(0, 24)
+  if (seloTxt) chave += `|selo|${seloTxt}|${corLoja}`
   const nome = crypto.createHash('sha1').update(chave).digest('hex').slice(0, 20) + '.jpg'
   const destino = path.join(cacheDir, nome)
   try {
@@ -121,12 +161,15 @@ async function fotoCartao(item, { uploadsDir, cor, urlAbsoluta }) {
     if (origem.tipo === 'selo') entrada = Buffer.from(svgSelo(origem.valor, corLoja))
     else if (origem.tipo === 'arquivo') entrada = fs.readFileSync(origem.valor)
     else entrada = await baixar(origem.valor)
-    const saida = await sharp(entrada, { failOn: 'none', animated: false })
+    let saida = await sharp(entrada, { failOn: 'none', animated: false })
       .rotate()
       .resize(LARG, ALT, { fit: 'cover', position: 'centre' })
       .flatten({ background: '#ffffff' })
       .jpeg({ quality: 80, mozjpeg: true })
       .toBuffer()
+    // Na foto, o selo usa a cor da loja; no desenho (que já é da cor da
+    // loja) ele fica escuro, para destacar do fundo
+    if (seloTxt) saida = await aplicarSelo(saida, seloTxt, origem.tipo === 'selo' ? '#141414' : corLoja)
     try {
       fs.mkdirSync(cacheDir, { recursive: true })
       fs.writeFileSync(destino + '.tmp', saida)
@@ -136,7 +179,7 @@ async function fotoCartao(item, { uploadsDir, cor, urlAbsoluta }) {
   } catch (e) {
     // Foto quebrada ou fora do ar: tenta o selo no lugar, para o produto
     // não sumir do carrossel
-    if (origem.tipo !== 'selo') return fotoCartao({ ...item, image_url: '' }, { uploadsDir, cor, urlAbsoluta })
+    if (origem.tipo !== 'selo') return fotoCartao({ ...item, image_url: '' }, { uploadsDir, cor, urlAbsoluta, selo })
     return null
   }
 }

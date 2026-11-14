@@ -6203,6 +6203,76 @@ async function _vozEnviarCarrosselItens(tenantId, phone, inst, itens, catNome) {
   return enviou
 }
 
+// Destaques nas boas-vindas: depois do link do cardápio, quem manda "bom dia"
+// (ou a primeira mensagem do dia) recebe um carrossel com os produtos em
+// destaque da loja — marcados um a um ou de uma categoria marcada inteira
+// como destaque, igual à faixa "Destaques" do cardápio. Cada cartão tem
+// foto com selo ("OFERTA -17%" quando tem preço antigo maior, senão
+// "DESTAQUE"), nome, preço e o botão "Ver no cardápio", que abre o cardápio
+// já com o produto aberto (&produto=ID). Só para WuzAPI. No máximo uma vez a
+// cada 6 horas por cliente, para não repetir a cada "oi".
+const _destaquesEnviados = new Map()
+async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
+  if (process.env.WA_DESTAQUES_SAUDACAO === '0') return
+  if (typeof inst !== 'string' || !inst.startsWith(WUZAPI_SENTINEL) || !linkCardapio) return
+  const chave = `${tenantId}:${String(phone || '').replace(/\D/g, '')}`
+  const ultimo = _destaquesEnviados.get(chave)
+  if (ultimo && Date.now() - ultimo < 6 * 3600 * 1000) return
+  let itens = []
+  try {
+    const catsPromo = db.prepare('SELECT id, name FROM categories WHERE tenant_id=? AND COALESCE(promo,0)=1 AND COALESCE(ativo,1)<>0').all(tenantId)
+    const ids = catsPromo.map(c => c.id)
+    const nomes = catsPromo.map(c => c.name)
+    const marcas = (lista, campo) => lista.length ? ` OR ${campo} IN (${lista.map(() => '?').join(',')})` : ''
+    itens = db.prepare(`
+      SELECT * FROM menu_items
+      WHERE tenant_id=?
+        AND (COALESCE(destaque,0)=1${marcas(ids, 'category_id')}${marcas(nomes, 'cat_key')}${marcas(nomes, 'cat')})
+        AND (status IS NULL OR status NOT IN (${_VOZ_STATUS_INDISPONIVEL.map(() => '?').join(',')}))${_vozSqlVisivelCliente()}
+      ORDER BY COALESCE(destaque,0) DESC, COALESCE(sort_order, 999999), name
+      LIMIT 10
+    `).all(tenantId, ...ids, ...nomes, ...nomes, ..._VOZ_STATUS_INDISPONIVEL)
+  } catch (e) { log('⚠️', '[DESTAQUES] busca falhou:', e.message); return }
+  if (!itens.length) return
+  _destaquesEnviados.set(chave, Date.now())
+  if (_destaquesEnviados.size > 5000) _destaquesEnviados.delete(_destaquesEnviados.keys().next().value)
+
+  let cor = ''
+  try { cor = db.prepare('SELECT store_cor FROM store_config WHERE tenant_id=?').get(tenantId)?.store_cor || '' } catch {}
+  const urlAbsoluta = u => _vozUrlAbsoluta(tenantId, u)
+  const sep = linkCardapio.includes('?') ? '&' : '?'
+  let temOferta = false
+  const cards = []
+  for (const i of itens) {
+    const antigo = parseFloat(i.price_old), atual = parseFloat(i.price) || 0
+    const pct = !i.hide_price && antigo > atual && atual >= 0 ? Math.round((1 - atual / antigo) * 100) : 0
+    const selo = pct > 0 ? `OFERTA -${pct}%` : 'DESTAQUE'
+    if (pct > 0) temOferta = true
+    let foto = null
+    try { foto = await _waCardFoto.fotoCartao(i, { uploadsDir: UPLOADS_DIR, cor, urlAbsoluta, selo }) } catch {}
+    if (!foto) continue
+    const nome = String(i.name || '').replace(/[*_~]/g, '').trim()
+    const preco = i.hide_price ? '' : (pct > 0 ? `~R$ ${_fmtR$(antigo)}~  *R$ ${_fmtR$(atual)}*` : `R$ ${_fmtR$(atual)}`)
+    let corpo = `*${nome}*` + (preco ? `\n${preco}` : '')
+    const desc = String(i.description || '').replace(/\s+/g, ' ').trim()
+    const sobra = 160 - corpo.length - 1
+    if (desc && sobra > 20) corpo += `\n${desc.length > sobra ? desc.slice(0, sobra - 1).trimEnd() + '…' : desc}`
+    cards.push({
+      image: foto,
+      text: corpo.slice(0, 160),
+      buttons: [{ type: 'url', id: `destaque_${i.id}`, text: 'Ver no cardápio', url: `${linkCardapio}${sep}produto=${encodeURIComponent(i.id)}` }]
+    })
+  }
+  if (!cards.length) return
+  const intro = temOferta
+    ? `*Ofertas e destaques de hoje*\nDeslize para o lado e toque em *Ver no cardápio* para pedir.`
+    : `*Destaques de hoje*\nDeslize para o lado e toque em *Ver no cardápio* para pedir.`
+  await sleep(1200 + Math.floor(Math.random() * 800))
+  const ok = await sendWACarousel(phone, inst, { text: intro, cards })
+  if (ok) log('🤖', `[DESTAQUES] ${cards.length} cartões → ${phone} [${tenantId}]`)
+  else _destaquesEnviados.delete(chave)
+}
+
 // Lista os itens de uma categoria (ou, se for categoria de pizza, os sabores
 // disponíveis pra montar a pizza) — passo seguinte a escolher uma categoria.
 async function _vozListarItensCategoria(tenantId, phone, inst, draft, catId, opts = {}) {
@@ -8865,6 +8935,7 @@ async function handleIAWebhook(req, res) {
       // ════════════════════════════════════════════════════════════════
       const linkCardapio=linkCardapioTenant(tenantId)
       let _botaoPedirAqui = false
+      let _mandarDestaques = false // boas-vindas: carrossel de destaques depois do link
       const agora=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'})), diasSemana=['dom','seg','ter','qua','qui','sex','sab'], diaHoje=diasSemana[agora.getDay()], horaMin=agora.getHours()*60+agora.getMinutes()
       // ── Helpers para pedido ──
       const _offsetCfg = db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
@@ -9148,6 +9219,7 @@ async function handleIAWebhook(req, res) {
         // botão "Pedir por aqui" (abre as categorias na própria conversa).
         _botaoPedirAqui = !!_vozHint && (_isPrimeiraMsgDia || _isSoSaudacao) && _vozEhWuzapi(tenantId)
         if (_isPrimeiraMsgDia || _isSoSaudacao) {
+          _mandarDestaques = true
           resposta = _pickOne([
             `${_saudacaoHora}! 😊 Seja muito bem-vindo(a) ao ${nomeLojaFmt}!${aviso}\nDá uma olhadinha no nosso cardápio, tem coisa boa esperando por você: ${linkCardapio}`,
             `${_saudacaoHora}! 👋 Que bom te ver por aqui! Aqui é a ${nomeLojaFmt}.${aviso}\nConfira nosso cardápio e escolhe o que mais te agradar: ${linkCardapio}`,
@@ -9206,6 +9278,10 @@ async function handleIAWebhook(req, res) {
         await sendWALinkCardapio(phone, inst, tenantId, resposta, linkCardapio, _humanDelay,
           _botaoPedirAqui ? [{ id: '__novo', text: 'Pedir por aqui' }] : [])
         log('🤖', `IA → ${phone} (delay ${_humanDelay}ms): ${resposta.slice(0, 60).replace(/\n/g,' ')}`)
+        // Boas-vindas: logo abaixo do link, o carrossel com os destaques da loja
+        if (_mandarDestaques) {
+          try { await _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) } catch (e) { log('⚠️', '[DESTAQUES]', e.message) }
+        }
         convHist.push({ role: 'user', content: msgFull }, { role: 'assistant', content: resposta })
         if (convHist.length > 20) convHist.splice(0, convHist.length - 20)
         _msgBuffer.set(histKey, convHist)
