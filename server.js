@@ -6249,7 +6249,7 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
   const prontos = await Promise.all(itens.map(async i => {
     const antigo = parseFloat(i.price_old), atual = parseFloat(i.price) || 0
     const pct = !i.hide_price && antigo > atual && atual >= 0 ? Math.round((1 - atual / antigo) * 100) : 0
-    const selo = pct > 0 ? `OFERTA -${pct}%` : 'DESTAQUE'
+    const selo = pct > 0 ? `OFERTA -${pct}%` : 'MAIS VENDIDO'
     let foto = null
     try {
       foto = await Promise.race([
@@ -6281,8 +6281,8 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
   log('🔎', `[DESTAQUES] fotos prontas: ${cards.length} de ${itens.length} em ${((Date.now() - t0) / 1000).toFixed(1)}s, enviando para ${phone} [${tenantId}]`)
   if (!cards.length) { _destaquesEnviados.delete(chave); log('⚠️', `[DESTAQUES] não enviado: nenhuma foto de cartão ficou pronta (${itens.length} produtos) [${tenantId}]`); return }
   const intro = temOferta
-    ? `*Ofertas e destaques de hoje*\nDeslize para o lado e toque em *Ver no cardápio* para pedir.`
-    : `*Destaques de hoje*\nDeslize para o lado e toque em *Ver no cardápio* para pedir.`
+    ? `*Ofertas e mais vendidos*\nDeslize para o lado e toque em *Ver no cardápio* para pedir.`
+    : `*Mais vendidos*\nDeslize para o lado e toque em *Ver no cardápio* para pedir.`
   await sleep(1200 + Math.floor(Math.random() * 800))
   const ok = await sendWACarousel(phone, inst, { text: intro, cards })
   if (ok) log('🤖', `[DESTAQUES] ${cards.length} cartões → ${phone} [${tenantId}]`)
