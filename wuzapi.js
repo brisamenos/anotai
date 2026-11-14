@@ -194,6 +194,7 @@ async function sendCarousel(token, phone, { text, footer, cards }) {
   const data = await wzFetch(process.env.WUZAPI_CAROUSEL_PATH || '/chat/send/carousel', {
     method: 'POST',
     token,
+    timeoutMs: 90000, // a WuzAPI sobe cada foto para o WhatsApp antes de mandar: pode demorar
     body: {
       Phone: phone,
       Body: text || undefined,

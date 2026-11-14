@@ -6241,17 +6241,28 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
   let cor = ''
   try { cor = db.prepare('SELECT store_cor FROM store_config WHERE tenant_id=?').get(tenantId)?.store_cor || '' } catch {}
   const urlAbsoluta = u => _vozUrlAbsoluta(tenantId, u)
-  const sep = linkCardapio.includes('?') ? '&' : '?'
   let temOferta = false
-  const cards = []
-  for (const i of itens) {
+  // Prepara as fotos todas ao mesmo tempo (os downloads correm juntos), com
+  // limite de 25s: o que não ficar pronto a tempo fica de fora desta vez e
+  // termina de ser preparado por trás (fica guardado para o próximo cliente).
+  const t0 = Date.now()
+  const prontos = await Promise.all(itens.map(async i => {
     const antigo = parseFloat(i.price_old), atual = parseFloat(i.price) || 0
     const pct = !i.hide_price && antigo > atual && atual >= 0 ? Math.round((1 - atual / antigo) * 100) : 0
     const selo = pct > 0 ? `OFERTA -${pct}%` : 'DESTAQUE'
-    if (pct > 0) temOferta = true
     let foto = null
-    try { foto = await _waCardFoto.fotoCartao(i, { uploadsDir: UPLOADS_DIR, cor, urlAbsoluta, selo }) } catch (e) { log('⚠️', `[DESTAQUES] foto de "${i.name}" falhou: ${e.message}`) }
+    try {
+      foto = await Promise.race([
+        _waCardFoto.fotoCartao(i, { uploadsDir: UPLOADS_DIR, cor, urlAbsoluta, selo }),
+        new Promise(r => setTimeout(() => r(null), 25000))
+      ])
+    } catch (e) { log('⚠️', `[DESTAQUES] foto de "${i.name}" falhou: ${e.message}`) }
+    return { i, antigo, atual, pct, foto }
+  }))
+  const cards = []
+  for (const { i, antigo, atual, pct, foto } of prontos) {
     if (!foto) continue
+    if (pct > 0) temOferta = true
     const nome = String(i.name || '').replace(/[*_~]/g, '').trim()
     const preco = i.hide_price ? '' : (pct > 0 ? `~R$ ${_fmtR$(antigo)}~  *R$ ${_fmtR$(atual)}*` : `R$ ${_fmtR$(atual)}`)
     let corpo = `*${nome}*` + (preco ? `\n${preco}` : '')
@@ -6261,9 +6272,13 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
     cards.push({
       image: foto,
       text: corpo.slice(0, 160),
-      buttons: [{ type: 'url', id: `destaque_${i.id}`, text: 'Ver no cardápio', url: `${linkCardapio}${sep}produto=${encodeURIComponent(i.id)}` }]
+      // Botão de RESPOSTA (o mesmo tipo do carrossel do marketing, que chega
+      // em qualquer WhatsApp). Botão de link dentro de carrossel o WhatsApp
+      // descarta sem avisar. Ao tocar, _destaqueResponderToque manda o link.
+      buttons: [{ id: `destaque:${i.id}`, text: 'Ver no cardápio' }]
     })
   }
+  log('🔎', `[DESTAQUES] fotos prontas: ${cards.length} de ${itens.length} em ${((Date.now() - t0) / 1000).toFixed(1)}s, enviando para ${phone} [${tenantId}]`)
   if (!cards.length) { _destaquesEnviados.delete(chave); log('⚠️', `[DESTAQUES] não enviado: nenhuma foto de cartão ficou pronta (${itens.length} produtos) [${tenantId}]`); return }
   const intro = temOferta
     ? `*Ofertas e destaques de hoje*\nDeslize para o lado e toque em *Ver no cardápio* para pedir.`
@@ -6272,6 +6287,33 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
   const ok = await sendWACarousel(phone, inst, { text: intro, cards })
   if (ok) log('🤖', `[DESTAQUES] ${cards.length} cartões → ${phone} [${tenantId}]`)
   else { _destaquesEnviados.delete(chave); log('⚠️', `[DESTAQUES] a WuzAPI recusou o carrossel para ${phone} (veja a linha "sendCarousel falhou" acima) [${tenantId}]`) }
+}
+
+// Cliente tocou em "Ver no cardápio" num cartão de destaque: responde com o
+// botão de link que abre o cardápio já com aquele produto aberto. É o mesmo
+// tipo de mensagem do "Abrir cardápio" das boas-vindas.
+async function _destaqueResponderToque(tenantId, phone, inst, itemId) {
+  const item = _vozItemPorId(tenantId, itemId)
+  const base = linkCardapioTenant(tenantId)
+  const link = item ? `${base}${base.includes('?') ? '&' : '?'}produto=${encodeURIComponent(item.id)}` : base
+  const nome = item ? String(item.name || '').replace(/[*_~]/g, '').trim() : ''
+  const texto = item
+    ? `*${nome}*\nToque abaixo para abrir no cardápio e fazer seu pedido.`
+    : 'Esse produto não está mais disponível. Toque abaixo para ver o cardápio.'
+  if (typeof inst === 'string' && inst.startsWith(WUZAPI_SENTINEL)) {
+    try {
+      await _wuzDigitando(tenantId, phone, 900)
+      const r = await _tenantWa.sendButtons(tenantId, phone, {
+        text: texto,
+        buttons: [{ type: 'url', id: 'abrir_produto', text: item ? 'Abrir no cardápio' : 'Abrir cardápio', url: link }]
+      })
+      const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
+      if (id) _tenantWa.markBotSent(id)
+      log('🤖', `[DESTAQUES] toque em "${nome || itemId}" → link enviado para ${phone} [${tenantId}]`)
+      return
+    } catch (e) { log('⚠️', '[DESTAQUES] botão do link falhou, mandando o link em texto:', e.message) }
+  }
+  await sendWA(phone, `${texto.replace('Toque abaixo para abrir', 'Abra')}\n${link}`, inst)
 }
 
 // Lista os itens de uma categoria (ou, se for categoria de pizza, os sabores
@@ -8713,6 +8755,11 @@ async function handleIAWebhook(req, res) {
     if (!tenantId) { send(res,200,{ok:true}); return }
     const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,store_descricao,store_whatsapp,store_tempo_entrega,store_tempo_retirada,delivery_fee_config,horarios_config,store_open,order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
     if (!cfg) { send(res,200,{ok:true}); return }
+    // ── Toque em "Ver no cardápio" num cartão de destaque (boas-vindas) ──
+    if (msgChoiceId && /^destaque:\d+$/.test(msgChoiceId)) {
+      await _destaqueResponderToque(tenantId, phone, _waInstanceFor(tenantId, cfg), msgChoiceId.slice('destaque:'.length))
+      send(res, 200, { ok: true, destaque: true }); return
+    }
     // ── Pedido por voz: resposta a um rascunho pendente ──────────────
     // Tem prioridade sobre tudo (acompanhamento, robô determinístico) porque
     // é uma mini-conversa curta e já em andamento — uma resposta tipo "sim"
