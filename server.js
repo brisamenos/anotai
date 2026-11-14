@@ -4116,7 +4116,7 @@ async function sendWAButtons(phone, inst, opts) {
 let _waCarrosselOffAte = 0
 async function sendWACarousel(phone, inst, opts) {
   if (typeof inst !== 'string' || !inst.startsWith(WUZAPI_SENTINEL)) return false
-  if (Date.now() < _waCarrosselOffAte) return false
+  if (Date.now() < _waCarrosselOffAte) { log('ℹ️', '[VOZ] carrossel pausado: a WuzAPI respondeu que não tem o envio de carrossel (tenta de novo em até 30 min)'); return false }
   const tenantId = inst.slice(WUZAPI_SENTINEL.length)
   try {
     await _wuzDigitando(tenantId, phone)
@@ -6213,11 +6213,12 @@ async function _vozEnviarCarrosselItens(tenantId, phone, inst, itens, catNome) {
 // cada 6 horas por cliente, para não repetir a cada "oi".
 const _destaquesEnviados = new Map()
 async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
-  if (process.env.WA_DESTAQUES_SAUDACAO === '0') return
-  if (typeof inst !== 'string' || !inst.startsWith(WUZAPI_SENTINEL) || !linkCardapio) return
+  if (process.env.WA_DESTAQUES_SAUDACAO === '0') { log('ℹ️', `[DESTAQUES] desligado (WA_DESTAQUES_SAUDACAO=0) [${tenantId}]`); return }
+  if (typeof inst !== 'string' || !inst.startsWith(WUZAPI_SENTINEL)) { log('ℹ️', `[DESTAQUES] não enviado: loja não está na WuzAPI (carrossel só funciona nela) [${tenantId}]`); return }
+  if (!linkCardapio) { log('ℹ️', `[DESTAQUES] não enviado: loja sem link do cardápio [${tenantId}]`); return }
   const chave = `${tenantId}:${String(phone || '').replace(/\D/g, '')}`
   const ultimo = _destaquesEnviados.get(chave)
-  if (ultimo && Date.now() - ultimo < 6 * 3600 * 1000) return
+  if (ultimo && Date.now() - ultimo < 6 * 3600 * 1000) { log('ℹ️', `[DESTAQUES] não enviado: ${phone} já recebeu nas últimas 6h [${tenantId}]`); return }
   let itens = []
   try {
     const catsPromo = db.prepare('SELECT id, name FROM categories WHERE tenant_id=? AND COALESCE(promo,0)=1 AND COALESCE(ativo,1)<>0').all(tenantId)
@@ -6233,7 +6234,7 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
       LIMIT 10
     `).all(tenantId, ...ids, ...nomes, ...nomes, ..._VOZ_STATUS_INDISPONIVEL)
   } catch (e) { log('⚠️', '[DESTAQUES] busca falhou:', e.message); return }
-  if (!itens.length) return
+  if (!itens.length) { log('ℹ️', `[DESTAQUES] não enviado: a loja não tem produto marcado como destaque (nem categoria em destaque) [${tenantId}]`); return }
   _destaquesEnviados.set(chave, Date.now())
   if (_destaquesEnviados.size > 5000) _destaquesEnviados.delete(_destaquesEnviados.keys().next().value)
 
@@ -6249,7 +6250,7 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
     const selo = pct > 0 ? `OFERTA -${pct}%` : 'DESTAQUE'
     if (pct > 0) temOferta = true
     let foto = null
-    try { foto = await _waCardFoto.fotoCartao(i, { uploadsDir: UPLOADS_DIR, cor, urlAbsoluta, selo }) } catch {}
+    try { foto = await _waCardFoto.fotoCartao(i, { uploadsDir: UPLOADS_DIR, cor, urlAbsoluta, selo }) } catch (e) { log('⚠️', `[DESTAQUES] foto de "${i.name}" falhou: ${e.message}`) }
     if (!foto) continue
     const nome = String(i.name || '').replace(/[*_~]/g, '').trim()
     const preco = i.hide_price ? '' : (pct > 0 ? `~R$ ${_fmtR$(antigo)}~  *R$ ${_fmtR$(atual)}*` : `R$ ${_fmtR$(atual)}`)
@@ -6263,14 +6264,14 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
       buttons: [{ type: 'url', id: `destaque_${i.id}`, text: 'Ver no cardápio', url: `${linkCardapio}${sep}produto=${encodeURIComponent(i.id)}` }]
     })
   }
-  if (!cards.length) return
+  if (!cards.length) { _destaquesEnviados.delete(chave); log('⚠️', `[DESTAQUES] não enviado: nenhuma foto de cartão ficou pronta (${itens.length} produtos) [${tenantId}]`); return }
   const intro = temOferta
     ? `*Ofertas e destaques de hoje*\nDeslize para o lado e toque em *Ver no cardápio* para pedir.`
     : `*Destaques de hoje*\nDeslize para o lado e toque em *Ver no cardápio* para pedir.`
   await sleep(1200 + Math.floor(Math.random() * 800))
   const ok = await sendWACarousel(phone, inst, { text: intro, cards })
   if (ok) log('🤖', `[DESTAQUES] ${cards.length} cartões → ${phone} [${tenantId}]`)
-  else _destaquesEnviados.delete(chave)
+  else { _destaquesEnviados.delete(chave); log('⚠️', `[DESTAQUES] a WuzAPI recusou o carrossel para ${phone} (veja a linha "sendCarousel falhou" acima) [${tenantId}]`) }
 }
 
 // Lista os itens de uma categoria (ou, se for categoria de pizza, os sabores
@@ -9280,6 +9281,7 @@ async function handleIAWebhook(req, res) {
         log('🤖', `IA → ${phone} (delay ${_humanDelay}ms): ${resposta.slice(0, 60).replace(/\n/g,' ')}`)
         // Boas-vindas: logo abaixo do link, o carrossel com os destaques da loja
         if (_mandarDestaques) {
+          log('🔎', `[DESTAQUES] boas-vindas enviadas, preparando carrossel para ${phone} [${tenantId}]`)
           try { await _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) } catch (e) { log('⚠️', '[DESTAQUES]', e.message) }
         }
         convHist.push({ role: 'user', content: msgFull }, { role: 'assistant', content: resposta })
