@@ -11374,6 +11374,23 @@ async function init() {
       '<div class="empty-state"><div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M16 4L2 28h28L16 4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M16 14v6M16 23v1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><div class="empty-state-text">Erro ao carregar o cardápio.</div></div>';
   }
   hideSplash();
+  _abrirProdutoDoLink();
+}
+
+// Link com &produto=ID (o botão "Ver no cardápio" dos destaques mandados
+// pelo WhatsApp): abre o produto direto, pronto para escolher e adicionar.
+// Depois tira o parâmetro do endereço, para não reabrir ao recarregar.
+function _abrirProdutoDoLink() {
+  try {
+    const u = new URL(location.href);
+    const id = u.searchParams.get('produto');
+    if (!id) return;
+    u.searchParams.delete('produto');
+    try { history.replaceState(history.state, '', u.pathname + (u.search || '') + u.hash); } catch (e) {}
+    const item = (allItems || []).find(x => String(x.id) === String(id));
+    if (!item || typeof openItemModal !== 'function') return;
+    setTimeout(() => { try { openItemModal(item.id); } catch (e) {} }, 450);
+  } catch (e) {}
 }
 
 function hideSplash() {
