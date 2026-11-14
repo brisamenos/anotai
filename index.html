@@ -2908,21 +2908,21 @@ body:not([data-segmento="acougue"]) .im-obs{ border-radius:var(--raio,10px); fon
 /* Grupos de complementos: cabeçalho cinza + linhas com divisória */
 body:not([data-segmento="acougue"]) .grp-section{ margin:20px -16px 0; }
 body:not([data-segmento="acougue"]) .grp-section-title{
-  background:var(--s2); color:var(--text); font-size:15px; font-weight:700;
-  text-transform:none; letter-spacing:0; padding:14px 16px; margin:0; gap:10px;
+  background:var(--s2); color:var(--text); font-size:14px; font-weight:700;
+  text-transform:none; letter-spacing:0; padding:11px 16px; margin:0; gap:10px;
 }
 body:not([data-segmento="acougue"]) .grp-required-badge{
-  background:var(--text); color:var(--bg); border:none; font-size:11px; font-weight:700;
-  letter-spacing:.2px; text-transform:none; padding:4px 8px; border-radius:6px; flex-shrink:0;
+  background:var(--text); color:var(--bg); border:none; font-size:10.5px; font-weight:700;
+  letter-spacing:.2px; text-transform:none; padding:3px 7px; border-radius:5px; flex-shrink:0;
 }
 body:not([data-segmento="acougue"]) .grp-optional-badge{
-  background:transparent; border:none; color:var(--muted); font-size:12px; font-weight:500;
+  background:transparent; border:none; color:var(--muted); font-size:11.5px; font-weight:500;
   text-transform:none; letter-spacing:0; padding:0; flex-shrink:0;
 }
 body:not([data-segmento="acougue"]) .grp-opts{ gap:0; }
 body:not([data-segmento="acougue"]) .grp-opt-item{
-  display:grid; grid-template-columns:1fr auto; column-gap:14px; row-gap:2px; align-items:center;
-  background:transparent; border:none; border-bottom:1px solid var(--border); border-radius:0; padding:13px 16px;
+  display:grid; grid-template-columns:1fr auto; column-gap:14px; row-gap:1px; align-items:center; align-content:center;
+  background:transparent; border:none; border-bottom:1px solid var(--border); border-radius:0; padding:10px 16px; min-height:46px;
 }
 body:not([data-segmento="acougue"]) .grp-opt-item:active{ transform:none; background:var(--s2); }
 body:not([data-segmento="acougue"]) .grp-opt-item.on{ background:transparent; }
@@ -2930,9 +2930,17 @@ body:not([data-segmento="acougue"]) .grp-opt-left{ display:contents; }
 body:not([data-segmento="acougue"]) .grp-opt-left > .grp-opt-indicator{ grid-column:2; grid-row:1 / span 2; }
 body:not([data-segmento="acougue"]) .grp-opt-left > .grp-opt-name{ grid-column:1; grid-row:1; }
 body:not([data-segmento="acougue"]) .grp-opt-item > div:last-child{ grid-column:1; grid-row:2; justify-self:start; }
-body:not([data-segmento="acougue"]) .grp-opt-name{ font-size:14.5px; font-weight:500; }
-body:not([data-segmento="acougue"]) .grp-opt-price{ font-size:13.5px; font-weight:500; color:var(--muted); }
-body:not([data-segmento="acougue"]) .grp-opt-indicator{ width:22px; height:22px; border:2px solid var(--border2); }
+/* Sem preço e sem etiqueta: a caixinha fica na mesma linha do nome (alinhados) */
+body:not([data-segmento="acougue"]) .grp-opt-item:not(:has(.grp-opt-price, .grp-esg-badge)) .grp-opt-left > .grp-opt-indicator{ grid-row:1; }
+body:not([data-segmento="acougue"]) .grp-opt-name{ font-size:13.5px; font-weight:400; line-height:1.3; }
+body:not([data-segmento="acougue"]) .grp-opt-name small{ font-size:12px; }
+body:not([data-segmento="acougue"]) .grp-opt-price{ font-size:12.5px; font-weight:400; color:var(--muted); }
+body:not([data-segmento="acougue"]) .grp-opt-indicator{ width:20px; height:20px; border:2px solid var(--border2); }
+/* "Esgotado"/"Indisponível hoje": etiqueta pequena e discreta (vem com estilo no JS) */
+body:not([data-segmento="acougue"]) .grp-esg-badge{
+  font-size:10px !important; padding:1px 6px !important; border-radius:4px !important;
+  letter-spacing:.02em !important; text-transform:none !important; font-weight:500 !important;
+}
 body:not([data-segmento="acougue"]) .grp-opt-item.on .grp-opt-indicator{ border-color:var(--accent); background:var(--accent); box-shadow:inset 0 0 0 3px var(--s1); }
 body:not([data-segmento="acougue"]) .grp-opt-item.on .grp-opt-indicator.multi{ box-shadow:none; }
 
