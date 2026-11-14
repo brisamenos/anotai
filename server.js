@@ -6213,18 +6213,18 @@ async function _vozEnviarCarrosselItens(tenantId, phone, inst, itens, catNome) {
 // cada 6 horas por cliente, para não repetir a cada "oi".
 const _destaquesEnviados = new Map()
 async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
-  if (process.env.WA_DESTAQUES_SAUDACAO === '0') { log('ℹ️', `[DESTAQUES] desligado (WA_DESTAQUES_SAUDACAO=0) [${tenantId}]`); return }
+  if (process.env.WA_DESTAQUES_SAUDACAO === '0') { log('ℹ️', `[DESTAQUES] desligado (WA_DESTAQUES_SAUDACAO=0) [${tenantId}]`); return false }
   // A loja pode desligar em Robô > Agente IA > "Mandar os Mais vendidos nas boas-vindas"
   try {
     const c = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tenantId)
     const ia = c?.ia_config ? JSON.parse(c.ia_config) : {}
-    if (ia.destaques_saudacao === false) { log('ℹ️', `[DESTAQUES] desligado pela loja no gestor [${tenantId}]`); return }
+    if (ia.destaques_saudacao === false) { log('ℹ️', `[DESTAQUES] desligado pela loja no gestor [${tenantId}]`); return false }
   } catch (e) {}
-  if (typeof inst !== 'string' || !inst.startsWith(WUZAPI_SENTINEL)) { log('ℹ️', `[DESTAQUES] não enviado: loja não está na WuzAPI (carrossel só funciona nela) [${tenantId}]`); return }
-  if (!linkCardapio) { log('ℹ️', `[DESTAQUES] não enviado: loja sem link do cardápio [${tenantId}]`); return }
+  if (typeof inst !== 'string' || !inst.startsWith(WUZAPI_SENTINEL)) { log('ℹ️', `[DESTAQUES] não enviado: loja não está na WuzAPI (carrossel só funciona nela) [${tenantId}]`); return false }
+  if (!linkCardapio) { log('ℹ️', `[DESTAQUES] não enviado: loja sem link do cardápio [${tenantId}]`); return false }
   const chave = `${tenantId}:${String(phone || '').replace(/\D/g, '')}`
   const ultimo = _destaquesEnviados.get(chave)
-  if (ultimo && Date.now() - ultimo < 6 * 3600 * 1000) { log('ℹ️', `[DESTAQUES] não enviado: ${phone} já recebeu nas últimas 6h [${tenantId}]`); return }
+  if (ultimo && Date.now() - ultimo < 6 * 3600 * 1000) { log('ℹ️', `[DESTAQUES] não enviado: ${phone} já recebeu nas últimas 6h [${tenantId}]`); return false }
   let itens = []
   try {
     const catsPromo = db.prepare('SELECT id, name FROM categories WHERE tenant_id=? AND COALESCE(promo,0)=1 AND COALESCE(ativo,1)<>0').all(tenantId)
@@ -6239,8 +6239,8 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
       ORDER BY COALESCE(destaque,0) DESC, COALESCE(sort_order, 999999), name
       LIMIT 10
     `).all(tenantId, ...ids, ...nomes, ...nomes, ..._VOZ_STATUS_INDISPONIVEL)
-  } catch (e) { log('⚠️', '[DESTAQUES] busca falhou:', e.message); return }
-  if (!itens.length) { log('ℹ️', `[DESTAQUES] não enviado: a loja não tem produto marcado como destaque (nem categoria em destaque) [${tenantId}]`); return }
+  } catch (e) { log('⚠️', '[DESTAQUES] busca falhou:', e.message); return false }
+  if (!itens.length) { log('ℹ️', `[DESTAQUES] não enviado: a loja não tem produto marcado como destaque (nem categoria em destaque) [${tenantId}]`); return false }
   _destaquesEnviados.set(chave, Date.now())
   if (_destaquesEnviados.size > 5000) _destaquesEnviados.delete(_destaquesEnviados.keys().next().value)
 
@@ -6281,21 +6281,21 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
       // Botão de RESPOSTA (o mesmo tipo do carrossel do marketing, que chega
       // em qualquer WhatsApp). Botão de link dentro de carrossel o WhatsApp
       // descarta sem avisar. Ao tocar, _destaqueResponderToque manda o link.
-      buttons: [
-        { id: `destaque:${i.id}`, text: 'Ver este item' },
-        { id: 'destaque:cardapio', text: 'Cardápio completo' }
-      ]
+      // Um botão só por cartão. (Os ids nunca podem se repetir no carrossel:
+      // o WhatsApp recusa tudo com "duplicate reply id".)
+      buttons: [{ id: `destaque:${i.id}`, text: 'Quero este' }]
     })
   }
   log('🔎', `[DESTAQUES] fotos prontas: ${cards.length} de ${itens.length} em ${((Date.now() - t0) / 1000).toFixed(1)}s, enviando para ${phone} [${tenantId}]`)
-  if (!cards.length) { _destaquesEnviados.delete(chave); log('⚠️', `[DESTAQUES] não enviado: nenhuma foto de cartão ficou pronta (${itens.length} produtos) [${tenantId}]`); return }
+  if (!cards.length) { _destaquesEnviados.delete(chave); log('⚠️', `[DESTAQUES] não enviado: nenhuma foto de cartão ficou pronta (${itens.length} produtos) [${tenantId}]`); return false }
   const intro = temOferta
-    ? `*Ofertas e mais vendidos*\nAlguns dos nossos preferidos. O cardápio completo tem muito mais: toque em *Cardápio completo* em qualquer cartão.`
-    : `*Mais vendidos*\nAlguns dos nossos preferidos. O cardápio completo tem muito mais: toque em *Cardápio completo* em qualquer cartão.`
+    ? `🔥 *Ofertas e mais vendidos da casa*\nOs preferidos dos nossos clientes. Toque em *Quero este* no que te deu vontade 😋`
+    : `🔥 *Os mais vendidos da casa*\nOs preferidos dos nossos clientes. Toque em *Quero este* no que te deu vontade 😋`
   await sleep(1200 + Math.floor(Math.random() * 800))
   const ok = await sendWACarousel(phone, inst, { text: intro, cards })
   if (ok) log('🤖', `[DESTAQUES] ${cards.length} cartões → ${phone} [${tenantId}]`)
   else { _destaquesEnviados.delete(chave); log('⚠️', `[DESTAQUES] a WuzAPI recusou o carrossel para ${phone} (veja a linha "sendCarousel falhou" acima) [${tenantId}]`) }
+  return !!ok
 }
 
 // Cliente tocou em "Ver no cardápio" num cartão de destaque: responde com o
@@ -6307,7 +6307,7 @@ async function _destaqueResponderToque(tenantId, phone, inst, itemId) {
   const link = item ? `${base}${base.includes('?') ? '&' : '?'}produto=${encodeURIComponent(item.id)}` : base
   const nome = item ? String(item.name || '').replace(/[*_~]/g, '').trim() : ''
   const texto = item
-    ? `*${nome}*\nToque abaixo para abrir no cardápio e fazer seu pedido.`
+    ? `Ótima escolha! 😋\n*${nome}*\nToque em *Pedir agora* para abrir no cardápio.`
     : itemId === 'cardapio'
       ? 'Aqui está o nosso *cardápio completo*, com todos os produtos. Toque abaixo para abrir.'
       : 'Esse produto não está mais disponível. Toque abaixo para ver o cardápio completo.'
@@ -6316,7 +6316,7 @@ async function _destaqueResponderToque(tenantId, phone, inst, itemId) {
       await _wuzDigitando(tenantId, phone, 900)
       const r = await _tenantWa.sendButtons(tenantId, phone, {
         text: texto,
-        buttons: [{ type: 'url', id: 'abrir_produto', text: item ? 'Abrir no cardápio' : 'Cardápio completo', url: link }]
+        buttons: [{ type: 'url', id: 'abrir_produto', text: item ? 'Pedir agora' : 'Cardápio completo', url: link }]
       })
       const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
       if (id) _tenantWa.markBotSent(id)
@@ -6324,7 +6324,7 @@ async function _destaqueResponderToque(tenantId, phone, inst, itemId) {
       return
     } catch (e) { log('⚠️', '[DESTAQUES] botão do link falhou, mandando o link em texto:', e.message) }
   }
-  await sendWA(phone, `${texto.replace('Toque abaixo para abrir', 'Abra')}\n${link}`, inst)
+  await sendWA(phone, `${texto.replace('Toque em *Pedir agora* para abrir no cardápio.', 'Abra no cardápio:').replace('Toque abaixo para abrir.', 'Abra aqui:')}\n${link}`, inst)
 }
 
 // Lista os itens de uma categoria (ou, se for categoria de pizza, os sabores
@@ -8767,8 +8767,9 @@ async function handleIAWebhook(req, res) {
     const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,store_descricao,store_whatsapp,store_tempo_entrega,store_tempo_retirada,delivery_fee_config,horarios_config,store_open,order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
     if (!cfg) { send(res,200,{ok:true}); return }
     // ── Toque em "Ver no cardápio" num cartão de destaque (boas-vindas) ──
-    if (msgChoiceId && /^destaque:(\d+|cardapio)$/.test(msgChoiceId)) {
-      await _destaqueResponderToque(tenantId, phone, _waInstanceFor(tenantId, cfg), msgChoiceId.slice('destaque:'.length))
+    if (msgChoiceId && /^destaque:(\d+|cardapio(:\d+)?)$/.test(msgChoiceId)) {
+      const _alvo = msgChoiceId.slice('destaque:'.length)
+      await _destaqueResponderToque(tenantId, phone, _waInstanceFor(tenantId, cfg), _alvo.startsWith('cardapio') ? 'cardapio' : _alvo)
       send(res, 200, { ok: true, destaque: true }); return
     }
     // ── Pedido por voz: resposta a um rascunho pendente ──────────────
@@ -9334,14 +9335,19 @@ async function handleIAWebhook(req, res) {
         const _porChar     = 35 + Math.floor(Math.random() * 15)      // 35-50ms
         const _humanDelay  = Math.min(6000, _baseLeitura + resposta.length * _porChar)
 
-        await sendWALinkCardapio(phone, inst, tenantId, resposta, linkCardapio, _humanDelay,
-          _botaoPedirAqui ? [{ id: '__novo', text: 'Pedir por aqui' }] : [])
-        log('🤖', `IA → ${phone} (delay ${_humanDelay}ms): ${resposta.slice(0, 60).replace(/\n/g,' ')}`)
-        // Boas-vindas: logo abaixo do link, o carrossel com os destaques da loja
+        // Boas-vindas: PRIMEIRO o carrossel com os Mais vendidos e DEPOIS a
+        // mensagem com o link do cardápio completo — assim a última mensagem
+        // que o cliente vê é a do link (não parece que só existem aqueles itens).
+        let _carrosselFoi = false
         if (_mandarDestaques) {
-          log('🔎', `[DESTAQUES] boas-vindas enviadas, preparando carrossel para ${phone} [${tenantId}]`)
-          try { await _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) } catch (e) { log('⚠️', '[DESTAQUES]', e.message) }
+          log('🔎', `[DESTAQUES] boas-vindas, preparando carrossel para ${phone} [${tenantId}]`)
+          try { _carrosselFoi = await _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) } catch (e) { log('⚠️', '[DESTAQUES]', e.message) }
         }
+        // Se o carrossel já foi, o "digitando..." do link é curto (o cliente já esperou)
+        const _delayLink = _carrosselFoi ? 1500 + Math.floor(Math.random() * 800) : _humanDelay
+        await sendWALinkCardapio(phone, inst, tenantId, resposta, linkCardapio, _delayLink,
+          _botaoPedirAqui ? [{ id: '__novo', text: 'Pedir por aqui' }] : [])
+        log('🤖', `IA → ${phone} (delay ${_delayLink}ms): ${resposta.slice(0, 60).replace(/\n/g,' ')}`)
         convHist.push({ role: 'user', content: msgFull }, { role: 'assistant', content: resposta })
         if (convHist.length > 20) convHist.splice(0, convHist.length - 20)
         _msgBuffer.set(histKey, convHist)
