@@ -4157,7 +4157,7 @@ async function sendWALinkCardapio(phone, inst, tenantId, texto, link, delayMs, e
       const r = await _tenantWa.sendButtons(tenantId, phone, {
         text: corpo || 'Confira nosso cardápio',
         image: imagem,
-        buttons: [{ type: 'url', id: 'abrir_cardapio', text: 'Abrir cardápio', url: link }, ...extras]
+        buttons: [{ type: 'url', id: 'abrir_cardapio', text: 'Cardápio completo', url: link }, ...extras]
       })
       const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
       if (id) _tenantWa.markBotSent(id)
@@ -6214,6 +6214,12 @@ async function _vozEnviarCarrosselItens(tenantId, phone, inst, itens, catNome) {
 const _destaquesEnviados = new Map()
 async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
   if (process.env.WA_DESTAQUES_SAUDACAO === '0') { log('ℹ️', `[DESTAQUES] desligado (WA_DESTAQUES_SAUDACAO=0) [${tenantId}]`); return }
+  // A loja pode desligar em Robô > Agente IA > "Mandar os Mais vendidos nas boas-vindas"
+  try {
+    const c = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tenantId)
+    const ia = c?.ia_config ? JSON.parse(c.ia_config) : {}
+    if (ia.destaques_saudacao === false) { log('ℹ️', `[DESTAQUES] desligado pela loja no gestor [${tenantId}]`); return }
+  } catch (e) {}
   if (typeof inst !== 'string' || !inst.startsWith(WUZAPI_SENTINEL)) { log('ℹ️', `[DESTAQUES] não enviado: loja não está na WuzAPI (carrossel só funciona nela) [${tenantId}]`); return }
   if (!linkCardapio) { log('ℹ️', `[DESTAQUES] não enviado: loja sem link do cardápio [${tenantId}]`); return }
   const chave = `${tenantId}:${String(phone || '').replace(/\D/g, '')}`
@@ -6275,14 +6281,17 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
       // Botão de RESPOSTA (o mesmo tipo do carrossel do marketing, que chega
       // em qualquer WhatsApp). Botão de link dentro de carrossel o WhatsApp
       // descarta sem avisar. Ao tocar, _destaqueResponderToque manda o link.
-      buttons: [{ id: `destaque:${i.id}`, text: 'Ver no cardápio' }]
+      buttons: [
+        { id: `destaque:${i.id}`, text: 'Ver este item' },
+        { id: 'destaque:cardapio', text: 'Cardápio completo' }
+      ]
     })
   }
   log('🔎', `[DESTAQUES] fotos prontas: ${cards.length} de ${itens.length} em ${((Date.now() - t0) / 1000).toFixed(1)}s, enviando para ${phone} [${tenantId}]`)
   if (!cards.length) { _destaquesEnviados.delete(chave); log('⚠️', `[DESTAQUES] não enviado: nenhuma foto de cartão ficou pronta (${itens.length} produtos) [${tenantId}]`); return }
   const intro = temOferta
-    ? `*Ofertas e mais vendidos*\nDeslize para o lado e toque em *Ver no cardápio* para pedir.`
-    : `*Mais vendidos*\nDeslize para o lado e toque em *Ver no cardápio* para pedir.`
+    ? `*Ofertas e mais vendidos*\nAlguns dos nossos preferidos. O cardápio completo tem muito mais: toque em *Cardápio completo* em qualquer cartão.`
+    : `*Mais vendidos*\nAlguns dos nossos preferidos. O cardápio completo tem muito mais: toque em *Cardápio completo* em qualquer cartão.`
   await sleep(1200 + Math.floor(Math.random() * 800))
   const ok = await sendWACarousel(phone, inst, { text: intro, cards })
   if (ok) log('🤖', `[DESTAQUES] ${cards.length} cartões → ${phone} [${tenantId}]`)
@@ -6293,23 +6302,25 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
 // botão de link que abre o cardápio já com aquele produto aberto. É o mesmo
 // tipo de mensagem do "Abrir cardápio" das boas-vindas.
 async function _destaqueResponderToque(tenantId, phone, inst, itemId) {
-  const item = _vozItemPorId(tenantId, itemId)
+  const item = itemId === 'cardapio' ? null : _vozItemPorId(tenantId, itemId)
   const base = linkCardapioTenant(tenantId)
   const link = item ? `${base}${base.includes('?') ? '&' : '?'}produto=${encodeURIComponent(item.id)}` : base
   const nome = item ? String(item.name || '').replace(/[*_~]/g, '').trim() : ''
   const texto = item
     ? `*${nome}*\nToque abaixo para abrir no cardápio e fazer seu pedido.`
-    : 'Esse produto não está mais disponível. Toque abaixo para ver o cardápio.'
+    : itemId === 'cardapio'
+      ? 'Aqui está o nosso *cardápio completo*, com todos os produtos. Toque abaixo para abrir.'
+      : 'Esse produto não está mais disponível. Toque abaixo para ver o cardápio completo.'
   if (typeof inst === 'string' && inst.startsWith(WUZAPI_SENTINEL)) {
     try {
       await _wuzDigitando(tenantId, phone, 900)
       const r = await _tenantWa.sendButtons(tenantId, phone, {
         text: texto,
-        buttons: [{ type: 'url', id: 'abrir_produto', text: item ? 'Abrir no cardápio' : 'Abrir cardápio', url: link }]
+        buttons: [{ type: 'url', id: 'abrir_produto', text: item ? 'Abrir no cardápio' : 'Cardápio completo', url: link }]
       })
       const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
       if (id) _tenantWa.markBotSent(id)
-      log('🤖', `[DESTAQUES] toque em "${nome || itemId}" → link enviado para ${phone} [${tenantId}]`)
+      log('🤖', `[DESTAQUES] toque em "${nome || (itemId === 'cardapio' ? 'Cardápio completo' : itemId)}" → link enviado para ${phone} [${tenantId}]`)
       return
     } catch (e) { log('⚠️', '[DESTAQUES] botão do link falhou, mandando o link em texto:', e.message) }
   }
@@ -8756,7 +8767,7 @@ async function handleIAWebhook(req, res) {
     const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,store_descricao,store_whatsapp,store_tempo_entrega,store_tempo_retirada,delivery_fee_config,horarios_config,store_open,order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
     if (!cfg) { send(res,200,{ok:true}); return }
     // ── Toque em "Ver no cardápio" num cartão de destaque (boas-vindas) ──
-    if (msgChoiceId && /^destaque:\d+$/.test(msgChoiceId)) {
+    if (msgChoiceId && /^destaque:(\d+|cardapio)$/.test(msgChoiceId)) {
       await _destaqueResponderToque(tenantId, phone, _waInstanceFor(tenantId, cfg), msgChoiceId.slice('destaque:'.length))
       send(res, 200, { ok: true, destaque: true }); return
     }

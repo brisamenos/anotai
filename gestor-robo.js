@@ -793,6 +793,8 @@ async function iaCarregarConfig() {
     });
     const pw = document.getElementById('ia-pedido-whatsapp');
     if (pw) { ia.pedido_whatsapp !== false ? pw.classList.add('on') : pw.classList.remove('on'); }
+    const dz = document.getElementById('ia-destaques-saudacao');
+    if (dz) { ia.destaques_saudacao !== false ? dz.classList.add('on') : dz.classList.remove('on'); }
     iaPedidoWhatsappLiberado();
     if (ia.horario_txt) { const el = document.getElementById('ia-horario-txt'); if(el) el.value = ia.horario_txt; }
     if (ia.entrega_txt) { const el = document.getElementById('ia-entrega-txt'); if(el) el.value = ia.entrega_txt; }
@@ -822,6 +824,29 @@ async function iaPedidoWhatsappAlternar(el) {
     sbToast('err', 'Não foi possível salvar agora. Tente de novo.');
   } finally { _iaPedidoSalvando = false; }
 }
+// ── Mais vendidos nas boas-vindas ───────────────────────
+// Liga/desliga na hora o carrossel de Mais vendidos que vai depois do link
+// do cardápio. Ligado por padrão (ia_config.destaques_saudacao !== false).
+let _iaDestaquesSalvando = false;
+async function iaDestaquesAlternar(el) {
+  if (!el || _iaDestaquesSalvando) return;
+  const ligar = !el.classList.contains('on');
+  _iaDestaquesSalvando = true;
+  el.classList.toggle('on', ligar);
+  try {
+    const { data, error } = await sb.from('store_config').select('ia_config').single();
+    if (error || !data) throw new Error(error?.message || 'sem resposta');
+    const ia = data.ia_config ? JSON.parse(data.ia_config) : {};
+    ia.destaques_saudacao = ligar;
+    const r = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, ia_config: JSON.stringify(ia) });
+    if (r.error) throw r.error;
+    sbToast('ok', ligar ? 'Os Mais vendidos vão junto nas boas-vindas' : 'Pronto: nas boas-vindas vai só o link do cardápio');
+  } catch (e) {
+    el.classList.toggle('on', !ligar);
+    sbToast('err', 'Não foi possível salvar agora. Tente de novo.');
+  } finally { _iaDestaquesSalvando = false; }
+}
+
 // A chave só aparece para quem tem o pedido pelo WhatsApp: no plano (liberado
 // pelo admin), comprado pelo upgrade ou no período de teste. Para os demais
 // fica escondida (o cartão de upgrade da própria aba já oferece o recurso).
@@ -870,6 +895,7 @@ async function iaSalvarConfig() {
     resp_entrega: document.getElementById('ia-resp-entrega')?.classList.contains('on'),
     resp_promo:   document.getElementById('ia-resp-promo')?.classList.contains('on'),
     pedido_whatsapp: document.getElementById('ia-pedido-whatsapp') ? document.getElementById('ia-pedido-whatsapp').classList.contains('on') : iaAtual.pedido_whatsapp,
+    destaques_saudacao: document.getElementById('ia-destaques-saudacao') ? document.getElementById('ia-destaques-saudacao').classList.contains('on') : iaAtual.destaques_saudacao,
     horario_txt:  document.getElementById('ia-horario-txt')?.value || '',
     entrega_txt:  document.getElementById('ia-entrega-txt')?.value || '',
   };
