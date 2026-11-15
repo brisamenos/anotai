@@ -10490,7 +10490,7 @@ const server = http.createServer(async (req,res) => {
     aplicarBaixaEstoquePedido,
     chatNormalizePhone, chatPhoneMatches, chatStatusLabel, chatOrderPublic, chatThreadPublic, chatMessagePublic,
     chatEnsureThreadFromOrder, chatEnsureThreadFromLead, chatAddMessageFromOrder, chatAddMessageToThread,
-    deliveryPausaAtiva, linkCardapioTenant,
+    deliveryPausaAtiva, linkCardapioTenant, isLojaAbertaServer,
     emit }
   try {
     if (await handleRoutes(req, res, _routeCtx)) return

@@ -5093,14 +5093,23 @@ module.exports = async function handleRoutes(req, res, ctx) {
         hi = parseInt(m[2] || m[1]) || lo + 15
       }
 
-      // Conta backlog: delivery considera entrega; retirada considera balcão/retirada
-      const backlog = tipoTempo === 'retirada'
+      // Conta backlog: delivery considera entrega; retirada considera balcão/retirada.
+      // Só entram pedidos das últimas 3 horas e que não estão agendados para
+      // mais tarde: pedido antigo esquecido sem finalizar, ou agendado para
+      // amanhã, não é fila da cozinha agora (antes contava tudo, sem data, e
+      // a loja aparecia com "alta demanda" até fechada).
+      const _recente = " AND julianday(created_at) >= julianday('now','-3 hours') AND (scheduled_for IS NULL OR scheduled_for = '' OR julianday(scheduled_for) <= julianday('now','+30 minutes'))"
+      let backlog = tipoTempo === 'retirada'
         ? (db.prepare(
-            "SELECT COUNT(*) as n FROM orders WHERE tenant_id=? AND status IN ('analise','producao','pronto') AND (addr LIKE 'Retirada%' OR addr LIKE 'Balcão%' OR addr LIKE 'Balcao%')"
+            "SELECT COUNT(*) as n FROM orders WHERE tenant_id=? AND status IN ('analise','producao','pronto') AND (addr LIKE 'Retirada%' OR addr LIKE 'Balcão%' OR addr LIKE 'Balcao%')" + _recente
           ).get(tid)?.n || 0)
         : (db.prepare(
-            "SELECT COUNT(*) as n FROM orders WHERE tenant_id=? AND status IN ('analise','producao','pronto') AND addr IS NOT NULL AND addr NOT LIKE 'Mesa%' AND addr NOT LIKE 'Retirada%' AND addr NOT LIKE 'Balcão%' AND addr NOT LIKE 'Balcao%'"
+            "SELECT COUNT(*) as n FROM orders WHERE tenant_id=? AND status IN ('analise','producao','pronto') AND addr IS NOT NULL AND addr NOT LIKE 'Mesa%' AND addr NOT LIKE 'Retirada%' AND addr NOT LIKE 'Balcão%' AND addr NOT LIKE 'Balcao%'" + _recente
           ).get(tid)?.n || 0)
+      // Loja fechada: não tem fila agora — mostra só o tempo normal da loja
+      try {
+        if (typeof ctx.isLojaAbertaServer === 'function' && !ctx.isLojaAbertaServer(tid).aberto) backlog = 0
+      } catch (e) {}
 
       // Heurística: cada 3 pedidos de backlog adiciona +5 min
       // Limita a +30 min de overhead pra não assustar
