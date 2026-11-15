@@ -2882,7 +2882,6 @@ function renderMenu() {
   const _catsPromo = new Set(allCats.filter(c => c.promo).map(c => c.name));
   const _ehDestaque = (i) => i.destaque || _catsPromo.has(i.cat_key) || _catsPromo.has(i.cat);
   if (_segmento === 'acougue' && !searchQ && !activeCat && !_filterPreparo) {
-    html += _promocoesHtml(normalItems);
     const destItems = normalItems.filter(_ehDestaque);
     if (destItems.length) {
       html += `<div class="destaques-wrap"><div class="section-label">Mais vendidos</div>`;
@@ -2908,6 +2907,8 @@ function renderMenu() {
       });
       html += `</div></div>`;
     }
+    // Promoções logo abaixo de Mais vendidos
+    html += _promocoesHtml(normalItems);
   }
 
   // ── Banner de filtro de preparo ativo ──
@@ -2966,7 +2967,6 @@ function renderMenu() {
   // Renderiza grupos normais
   // ── Destaques para restaurante (posição original, entre filtro e grupos) ──
   if (_segmento !== 'acougue' && !searchQ && !activeCat) {
-    html += _promocoesHtml(normalItems);
     const destItems = normalItems.filter(_ehDestaque);
     if (destItems.length) {
       html += `<div class="destaques-wrap"><div class="section-label">Mais vendidos</div><div class="destaques-scroll">`;
@@ -2979,6 +2979,8 @@ function renderMenu() {
       });
       html += `</div></div>`;
     }
+    // Promoções logo abaixo de Mais vendidos
+    html += _promocoesHtml(normalItems);
   }
   // Agrupa itens por categoria, respeitando a ordem de allCats (sort_order do banco)
   const grouped = new Map();
@@ -3318,14 +3320,9 @@ function _promocoesHtml(lista) {
   const fimDe = (i) => (_ofertaAtiva(i) ? (i.oferta_ate ? Date.parse(i.oferta_ate) : 9e15) : Infinity);
   const pct = (i) => { const a = Number(i.price_old), b = Number(i.price); return a > 0 ? (1 - b / a) : 0; };
   promo.sort((x, y) => (fimDe(x) - fimDe(y)) || (pct(y) - pct(x)));
-  let h = `<div class="destaques-wrap promocoes-wrap"><div class="section-label">Promoções</div><div class="destaques-scroll">`;
-  promo.slice(0, 20).forEach(i => {
-    const media = i.video_url
-      ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
-      : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : _placeholderProduto(i));
-    h += `<div class="dest-card" onclick="openItemModal(${i.id})"><div class="dest-img${(i.image_url||i.video_url)?' has-photo':''}">${media}${_descontoPct(i)?`<span class="dest-promo-badge">${_descontoPct(i)}</span>`:''}</div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span></div>${_ofertaRelogioHtml(i, 'oferta-relogio-sm')}</div></div>`;
-  });
-  return h + `</div></div>`;
+  // Mesmo formato das categorias: em lista, ou em cartões se a loja usa o modo carrossel
+  const gridClass = (_segmento === 'acougue' || _catsCarrossel) ? 'item-grid carousel' : 'item-grid';
+  return `<div class="section promocoes-wrap"><div class="section-label-row"><div class="section-label">Promoções</div></div><div class="${gridClass}">${promo.slice(0, 20).map(itemCard).join('')}</div></div>`;
 }
 
 function _descontoPct(i) {
