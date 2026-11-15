@@ -11734,24 +11734,26 @@ function applyBrandingLive(cfg) {
       const el = document.getElementById('hero-tempo');
       if (el) {
         el.textContent = d.tempo_estimado;
-        if (d.alta_demanda) el.title = '⚠ Alta demanda agora';
+        if (d.alta_demanda) el.title = 'Muitos pedidos agora';
       }
       const trustEl = document.getElementById('trust-tempo');
       if (trustEl) trustEl.textContent = d.tempo_estimado;
       const badge = document.getElementById('badge-tempo');
       if (badge) badge.textContent = d.tempo_estimado;
-      // Banner discreto de alta demanda
+      // Aviso discreto de muitos pedidos: logo abaixo do "Aberto/Fechado"
+      // (antes ficava colado na capa, atrás do logo da loja)
+      let warn = document.getElementById('alta-demanda-warn');
       if (d.alta_demanda) {
-        let warn = document.getElementById('alta-demanda-warn');
         if (!warn) {
           warn = document.createElement('div');
           warn.id = 'alta-demanda-warn';
-          warn.style.cssText = 'background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#92400e;padding:6px 12px;font-size:11.5px;text-align:center;font-weight:600;border-radius:8px;margin:8px 12px';
-          warn.textContent = `⚠ Alta demanda — tempo de entrega: ${d.tempo_estimado}`;
-          const target = document.getElementById('hero-banner') || document.body;
-          target.parentElement?.insertBefore(warn, target.nextSibling);
+          warn.style.cssText = 'background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#92400e;padding:8px 12px;font-size:12px;line-height:1.4;font-weight:600;border-radius:10px;margin:10px 0 0';
+          const status = document.getElementById('hero-status-btn');
+          if (status && status.parentElement) status.parentElement.insertBefore(warn, status.nextSibling);
+          else return;
         }
-      }
+        warn.textContent = `Muitos pedidos agora: a entrega está levando ${d.tempo_estimado}.`;
+      } else if (warn) warn.remove();
     })
     .catch(()=>{});
 }
