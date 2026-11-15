@@ -1420,6 +1420,118 @@ garantirColuna('menu_items', 'fiscal_pis_situacao', "TEXT")
 garantirColuna('menu_items', 'fiscal_cofins_situacao', "TEXT")
 garantirColuna('menu_items', 'video_url', "TEXT")
 
+// ── Ofertas programadas ────────────────────────────────────────────────
+// A loja agenda, no gestor, "produto X por R$ Y de tal hora até tal hora".
+// As ofertas ficam em store_config.ofertas_programadas (lista em JSON). Um
+// relógio aqui no servidor troca o preço do produto DE VERDADE no início e
+// devolve o preço original no fim — assim a oferta vale igual no cardápio,
+// no robô do WhatsApp, no garçom e no totem, e o servidor aceita o preço
+// no pedido. O que foi trocado fica anotado no próprio produto (oferta_*),
+// para saber o que devolver mesmo depois de reiniciar o servidor.
+garantirColuna('store_config', 'ofertas_programadas', "TEXT DEFAULT '[]'")
+garantirColuna('menu_items', 'oferta_id', "TEXT")
+garantirColuna('menu_items', 'oferta_ate', "TEXT")
+garantirColuna('menu_items', 'oferta_preco', "REAL")
+garantirColuna('menu_items', 'oferta_preco_original', "REAL")
+garantirColuna('menu_items', 'oferta_price_old_original', "REAL")
+
+function _ofertasDaLoja(tid) {
+  try {
+    const r = db.prepare('SELECT ofertas_programadas FROM store_config WHERE tenant_id=?').get(tid)
+    const v = r?.ofertas_programadas
+    const lista = Array.isArray(v) ? v : JSON.parse(v || '[]')
+    return Array.isArray(lista) ? lista : []
+  } catch (e) { return [] }
+}
+// Oferta valendo agora? (ligada, com produto e preço, dentro do horário)
+function _ofertaVigente(o, agora) {
+  if (!o || o.ativo === false || !o.item_id || !(parseFloat(o.preco) > 0)) return false
+  const ini = o.inicio ? Date.parse(o.inicio) : 0
+  const fim = o.fim ? Date.parse(o.fim) : Infinity
+  return (isNaN(ini) ? 0 : ini) <= agora && agora < (isNaN(fim) ? Infinity : fim)
+}
+function _ofertaEmitir(tid, id) {
+  try {
+    const rec = db.prepare('SELECT * FROM menu_items WHERE id=? AND tenant_id=?').get(id, tid)
+    if (rec) emit(tid, 'menu_items', rec, 'UPDATE')
+  } catch (e) {}
+}
+// Devolve o produto ao preço de antes. Se a loja mexeu no preço durante a
+// oferta (no gestor), respeita o que ela colocou e só tira a marca de oferta.
+function _ofertaDevolver(it) {
+  const mesmoPreco = it.oferta_preco != null && Math.abs((parseFloat(it.price) || 0) - parseFloat(it.oferta_preco)) < 0.005
+  const preco = mesmoPreco && it.oferta_preco_original != null ? it.oferta_preco_original : it.price
+  const mesmoAntigo = it.oferta_preco_original != null && Math.abs((parseFloat(it.price_old) || 0) - parseFloat(it.oferta_preco_original)) < 0.005
+  const antigo = mesmoPreco && mesmoAntigo ? it.oferta_price_old_original : it.price_old
+  db.prepare(`UPDATE menu_items SET price=?, price_old=?, oferta_id=NULL, oferta_ate=NULL, oferta_preco=NULL,
+              oferta_preco_original=NULL, oferta_price_old_original=NULL WHERE id=? AND tenant_id=?`)
+    .run(preco, antigo ?? null, it.id, it.tenant_id)
+  log('🏷️', `[OFERTA] encerrada: "${it.name}" voltou para R$ ${(parseFloat(preco) || 0).toFixed(2)} [${it.tenant_id}]`)
+  _ofertaEmitir(it.tenant_id, it.id)
+}
+function _ofertaAplicar(it, o) {
+  const preco = Math.round(parseFloat(o.preco) * 100) / 100
+  const original = parseFloat(it.price) || 0
+  // Preço "de" riscado: o preço normal (se a oferta for mais barata)
+  const antigo = original > preco ? original : (it.price_old ?? null)
+  db.prepare(`UPDATE menu_items SET price=?, price_old=?, oferta_id=?, oferta_ate=?, oferta_preco=?,
+              oferta_preco_original=?, oferta_price_old_original=? WHERE id=? AND tenant_id=?`)
+    .run(preco, antigo, String(o.id), o.fim || null, preco, original, it.price_old ?? null, it.id, it.tenant_id)
+  log('🏷️', `[OFERTA] começou: "${it.name}" de R$ ${original.toFixed(2)} por R$ ${preco.toFixed(2)}${o.fim ? ' até ' + new Date(o.fim).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : ''} [${it.tenant_id}]`)
+  _ofertaEmitir(it.tenant_id, it.id)
+}
+function _ofertasProcessar(tidSo) {
+  const agora = Date.now()
+  let lojas
+  try {
+    lojas = tidSo ? [tidSo] : db.prepare(`
+      SELECT tenant_id FROM store_config WHERE tenant_id<>'_global' AND ofertas_programadas IS NOT NULL AND ofertas_programadas NOT IN ('', '[]')
+      UNION SELECT DISTINCT tenant_id FROM menu_items WHERE oferta_id IS NOT NULL`).all().map(r => r.tenant_id)
+  } catch (e) { return }
+  let mudou = false
+  for (const tid of lojas) {
+    try {
+      // Ofertas valendo agora, uma por produto (se tiver duas, vale a que começou por último)
+      const vigentes = new Map()
+      for (const o of _ofertasDaLoja(tid)) {
+        if (!_ofertaVigente(o, agora)) continue
+        const k = String(o.item_id)
+        const atual = vigentes.get(k)
+        if (!atual || (Date.parse(o.inicio || 0) || 0) >= (Date.parse(atual.inicio || 0) || 0)) vigentes.set(k, o)
+      }
+      // 1) Produtos em oferta que não deviam mais estar (acabou, pausou, apagou ou trocou)
+      for (const it of db.prepare('SELECT * FROM menu_items WHERE tenant_id=? AND oferta_id IS NOT NULL').all(tid)) {
+        const o = vigentes.get(String(it.id))
+        if (o && String(o.id) === String(it.oferta_id)) {
+          // Mesma oferta: acompanha se a loja mudou o preço ou o fim dela
+          const novoPreco = Math.round(parseFloat(o.preco) * 100) / 100
+          const fimAtual = o.fim || null
+          if (Math.abs((parseFloat(it.oferta_preco) || 0) - novoPreco) >= 0.005 || (it.oferta_ate || null) !== fimAtual) {
+            const mexeuPreco = Math.abs((parseFloat(it.price) || 0) - (parseFloat(it.oferta_preco) || 0)) < 0.005
+            db.prepare('UPDATE menu_items SET price=?, oferta_preco=?, oferta_ate=? WHERE id=? AND tenant_id=?')
+              .run(mexeuPreco ? novoPreco : it.price, novoPreco, fimAtual, it.id, tid)
+            _ofertaEmitir(tid, it.id); mudou = true
+          }
+          continue
+        }
+        _ofertaDevolver(it); mudou = true
+      }
+      // 2) Ofertas que começaram agora
+      for (const [itemId, o] of vigentes) {
+        const it = db.prepare('SELECT * FROM menu_items WHERE id=? AND tenant_id=?').get(itemId, tid)
+        if (!it || it.oferta_id) continue
+        _ofertaAplicar(it, o); mudou = true
+      }
+    } catch (e) { log('⚠️', `[OFERTA] falha na loja ${tid}:`, e.message) }
+  }
+  if (mudou) { try { marcarDirty() } catch (e) {} }
+}
+// A loja salvou as ofertas no gestor: confere na hora (não espera os 15s)
+function _ofertasLogoDepois(tid) { setTimeout(() => { try { _ofertasProcessar(tid) } catch (e) {} }, 300) }
+// Confere as ofertas a cada 15s (e logo depois que a loja salva)
+setTimeout(() => _ofertasProcessar(), 15 * 1000)
+setInterval(() => _ofertasProcessar(), 15 * 1000)
+
 function garantirSchemaFiscal() {
   const execSafe = (sql) => {
     try { db.exec(sql) } catch(e) { log('⚠️', 'Schema fiscal guard:', e.message) }
@@ -2695,9 +2807,9 @@ agendarResetDiarioPedidos()
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca','voz_ativo','ia_teste_ate'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','pedido_minimo_retirada','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento','tablet_splash_bg_url','promo_automatica','agendamento_config'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','pedido_minimo_retirada','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento','tablet_splash_bg_url','promo_automatica','agendamento_config','ofertas_programadas'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','image_url','sort_order','ativo','garcom_oculto','cardapio_oculto'],
-  menu_items:   ['id','tenant_id','name','description','price','price_old','price_mesa','category_id','cat','cat_key','emoji','image_url','video_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','hide_price','garcom_oculto','cardapio_oculto','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at'],
+  menu_items:   ['id','tenant_id','name','description','price','price_old','price_mesa','category_id','cat','cat_key','emoji','image_url','video_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','hide_price','garcom_oculto','cardapio_oculto','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at','oferta_id','oferta_ate','oferta_preco','oferta_preco_original','oferta_price_old_original'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','taxa_servico','clientes_json','pagamentos_json','nome','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
@@ -2759,7 +2871,7 @@ const JSON_FIELDS = {
   orders:       new Set(['items']),
   mesas:        new Set(['clientes_json','pagamentos_json']),
   menu_items:   new Set(['days','ingredients','custom_groups']),
-  store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega','stamp_config','promo_automatica','agendamento_config']),
+  store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega','stamp_config','promo_automatica','agendamento_config','ofertas_programadas']),
   admin_audit_log: new Set(['detalhes']),
   admin_alerts: new Set(['target_tenants']),
 }
@@ -3504,6 +3616,7 @@ async function handleREST(req, res, table, params, body) {
         const setClause = keys.filter(k=>k!=='tenant_id').map(k=>`"${k}"=excluded."${k}"`).join(', ')
         db.prepare(`INSERT INTO store_config (${keys.map(k=>`"${k}"`).join(',')}) VALUES (${keys.map(()=>'?').join(',')}) ON CONFLICT(tenant_id) DO UPDATE SET ${setClause}`).run(...keys.map(k=>sanitize(payload[k])))
         const row = db.prepare('SELECT * FROM store_config WHERE tenant_id=?').get(scTid)
+        if (Object.prototype.hasOwnProperty.call(payload, 'ofertas_programadas')) _ofertasLogoDepois(scTid)
         marcarDirty(); return send(res, 200, parseRow(table, row))
       }
       const keys = Object.keys(payload).filter(k=>cols.includes(k))
@@ -3750,6 +3863,7 @@ async function handleREST(req, res, table, params, body) {
         const setClause = upsertKeys.filter(k=>k!=='tenant_id').map(k=>`"${k}"=excluded."${k}"`).join(', ')
         db.prepare(`INSERT INTO store_config (${upsertKeys.map(k=>`"${k}"`).join(',')}) VALUES (${upsertKeys.map(()=>'?').join(',')}) ON CONFLICT(tenant_id) DO UPDATE SET ${setClause}`).run(...upsertKeys.map(k=>sanitize(payload[k]??(k==='tenant_id'?pTid:null))))
         const row = db.prepare('SELECT * FROM store_config WHERE tenant_id=?').get(pTid)
+        if (Object.prototype.hasOwnProperty.call(payload, 'ofertas_programadas')) _ofertasLogoDepois(pTid)
         const parsed = parseRow(table, row); emit(pTid, table, parsed, 'UPDATE'); marcarDirty(); return send(res, 200, parsed)
       }
       // Coleta IDs antes do UPDATE para poder re-SELECT depois (o WHERE original pode não casar após o UPDATE)

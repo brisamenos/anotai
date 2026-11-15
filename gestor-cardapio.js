@@ -1129,109 +1129,507 @@ function _populateCatPrinterSelect(selectId, catKey) {
   sel.innerHTML = _catPrinterOptionsHtml(current);
 }
 
-// ── Banner(s) promocional(is) (tipo "Kit Churrasco") — modal do Gestor de Produtos ──
-// Até 5 banners, com rotação automática no cardápio (implementado em
-// cardapio-core.js / _applyPromoBanner). Cada banner tem seus próprios
-// campos — não é mais um banner único fixo.
-const PROMO_BANNER_MAX = 5;
+// ══════════════════════════════════════════════════════════════════════
+//  BANNERS E OFERTAS
+//  Banners: ficam salvos (até 15), dá para editar, duplicar, pausar e
+//  agendar (começa em tal hora, dura 1h/2h/1 dia...). O cardápio mostra só
+//  os que estão ligados e dentro do horário (no máximo 5 girando) — ver
+//  _applyPromoBanner em cardapio-core.js.
+//  Ofertas programadas: "produto X por R$ Y, de tal hora até tal hora".
+//  Ficam em store_config.ofertas_programadas; o SERVIDOR troca o preço no
+//  início e devolve no fim (ver _ofertasProcessar em server.js), e o
+//  cardápio mostra o selo com o relógio.
+//  Toda ação (salvar, duplicar, pausar, excluir) já grava na hora.
+// ══════════════════════════════════════════════════════════════════════
+const PROMO_BANNER_MAX = 15;
 let _promoBanners = [];
+let _promoBannerAtivo = false;
+let _ofertas = [];
+let _boItens = [];          // produtos (com o preço original, se já estiverem em oferta)
+let _boAba = 'banners';
+let _boEdit = null;          // { tipo:'banner'|'oferta', idx, dados }
+let _boTick = null;
 
-async function openPromoBannerModal() {
-  openModal('modal-promo-banner');
-  try {
-    const { data, error } = await sb.from('store_config').select('promo_banner_ativo,promo_banners').single();
-    if (error) { sbToast('err', 'Erro ao carregar banners: ' + error.message); return; }
-    const d = data || {};
-    const _chk = document.getElementById('cp-promo-ativo'); if (_chk) _chk.checked = !!d.promo_banner_ativo;
-    try {
-      const raw = d.promo_banners;
-      _promoBanners = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
-    } catch(e) { _promoBanners = []; }
-    if (!Array.isArray(_promoBanners)) _promoBanners = [];
-    renderPromoBannersList();
-  } catch (e) {
-    sbToast('err', 'Erro ao carregar banners: ' + (e.message || ''));
-  }
+const _BO_DURACOES = [
+  { k: '1h',  l: '1 hora',          ms: 3600e3 },
+  { k: '2h',  l: '2 horas',         ms: 2 * 3600e3 },
+  { k: '6h',  l: '6 horas',         ms: 6 * 3600e3 },
+  { k: 'dia', l: 'Até o fim do dia' },
+  { k: '24h', l: '24 horas',        ms: 24 * 3600e3 },
+  { k: '7d',  l: '7 dias',          ms: 7 * 24 * 3600e3 },
+  { k: 'sem', l: 'Sem hora para acabar' },
+  { k: 'custom', l: 'Escolher data' },
+];
+const _boUid = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const _boEsc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const _boMoeda = (v) => 'R$ ' + (parseFloat(v) || 0).toFixed(2).replace('.', ',');
+
+// ISO -> valor do <input type="datetime-local"> no fuso do aparelho
+function _boDtLocal(iso) {
+  if (!iso) return '';
+  const d = new Date(iso); if (isNaN(d)) return '';
+  const z = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`;
+}
+function _boDtTexto(iso) {
+  const d = new Date(iso); if (isNaN(d)) return '';
+  const hoje = new Date(); const amanha = new Date(Date.now() + 864e5);
+  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === hoje.toDateString()) return 'hoje ' + hora;
+  if (d.toDateString() === amanha.toDateString()) return 'amanhã ' + hora;
+  return d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', '') + ' ' + hora;
+}
+function _boFalta(iso) {
+  const ms = Date.parse(iso) - Date.now();
+  if (!(ms > 0)) return '';
+  const min = Math.ceil(ms / 60000), h = Math.floor(min / 60);
+  if (h >= 48) return 'até ' + _boDtTexto(iso);
+  if (h >= 1) return 'termina em ' + h + 'h' + (min % 60 ? ' ' + (min % 60) + 'min' : '');
+  return 'termina em ' + min + 'min';
+}
+// Situação de um banner/oferta agora: no ar, agendado, encerrado ou pausado
+function _boSituacao(o) {
+  const agora = Date.now();
+  if (o.ativo === false) return { cls: 'pausado', txt: 'Pausado' };
+  if (o.inicio && Date.parse(o.inicio) > agora) return { cls: 'agendado', txt: 'Começa ' + _boDtTexto(o.inicio) };
+  if (o.fim && Date.parse(o.fim) <= agora) return { cls: 'encerrado', txt: 'Encerrado ' + _boDtTexto(o.fim) };
+  return { cls: 'noar', txt: 'No ar' + (o.fim ? ' · ' + _boFalta(o.fim) : '') };
+}
+function _boFimDe(inicioIso, durK, fimCustom) {
+  const ini = inicioIso ? new Date(inicioIso) : new Date();
+  const d = _BO_DURACOES.find(x => x.k === durK);
+  if (!d || durK === 'sem') return '';
+  if (durK === 'custom') { const f = fimCustom ? new Date(fimCustom) : null; return f && !isNaN(f) ? f.toISOString() : ''; }
+  if (durK === 'dia') { const f = new Date(ini); f.setHours(23, 59, 0, 0); return f.toISOString(); }
+  return new Date(ini.getTime() + d.ms).toISOString();
 }
 
-function renderPromoBannersList() {
-  const list = document.getElementById('promo-banners-list');
-  const addBtn = document.getElementById('promo-banner-add-btn');
-  if (!list) return;
-  list.innerHTML = _promoBanners.map((b, i) => `
-    <div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Banner ${i + 1}</span>
-        <button type="button" class="btn bg" style="padding:4px 10px;font-size:10.5px;color:var(--danger)" onclick="removePromoBanner(${i})">Remover</button>
+// ── Abrir / carregar ──
+async function openPromoBannerModal() {
+  _boCss();
+  openModal('modal-promo-banner');
+  _boEdit = null;
+  const box = document.getElementById('bo-conteudo');
+  if (box) box.innerHTML = '<div class="bo-vazio">Carregando...</div>';
+  try {
+    const [cfgR, itR] = await Promise.all([
+      sb.from('store_config').select('promo_banner_ativo,promo_banners,ofertas_programadas').single(),
+      sb.from('menu_items').select('id,name,price,price_old,image_url,status,hide_price,oferta_id,oferta_preco_original').order('name'),
+    ]);
+    if (cfgR.error) throw cfgR.error;
+    const d = cfgR.data || {};
+    _promoBannerAtivo = !!d.promo_banner_ativo && d.promo_banner_ativo !== '0';
+    try { const raw = d.promo_banners; _promoBanners = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []); } catch (e) { _promoBanners = []; }
+    if (!Array.isArray(_promoBanners)) _promoBanners = [];
+    _promoBanners.forEach(b => { if (!b.id) b.id = _boUid('b'); });
+    try { const raw = d.ofertas_programadas; _ofertas = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []); } catch (e) { _ofertas = []; }
+    if (!Array.isArray(_ofertas)) _ofertas = [];
+    _boItens = (itR.data || []).map(x => ({
+      id: Number(x.id), name: x.name, image_url: x.image_url, status: x.status, hide_price: !!x.hide_price,
+      // preço normal do produto (se ele já está em oferta agora, o preço de antes)
+      precoNormal: x.oferta_id && x.oferta_preco_original != null ? parseFloat(x.oferta_preco_original) : (parseFloat(x.price) || 0),
+    }));
+    boRender();
+    clearInterval(_boTick);
+    // Enquanto a janela está aberta, atualiza "No ar · termina em..." a cada 30s
+    _boTick = setInterval(() => {
+      const m = document.getElementById('modal-promo-banner');
+      if (!m || getComputedStyle(m).display === 'none') { clearInterval(_boTick); return; }
+      if (!_boEdit) boRender();
+    }, 30000);
+  } catch (e) {
+    if (box) box.innerHTML = `<div class="bo-vazio">Não consegui carregar: ${_boEsc(e.message || 'tente de novo')}</div>`;
+  }
+}
+function boTrocarAba(aba) {
+  _boAba = aba; _boEdit = null;
+  document.querySelectorAll('#modal-promo-banner .bo-aba').forEach(b => b.classList.toggle('on', b.dataset.aba === aba));
+  boRender();
+}
+function boRender() {
+  const box = document.getElementById('bo-conteudo');
+  if (!box) return;
+  if (_boEdit) { box.innerHTML = _boEdit.tipo === 'banner' ? _boFormBanner() : _boFormOferta(); _boPosRender(); return; }
+  box.innerHTML = _boAba === 'banners' ? _boListaBanners() : _boListaOfertas();
+}
+function _boChip(o) { const s = _boSituacao(o); return `<span class="bo-chip ${s.cls}">${_boEsc(s.txt)}</span>`; }
+function _boAcoes(tipo, i, o) {
+  return `<div class="bo-acoes">
+    <button type="button" onclick="boEditar('${tipo}',${i})">Editar</button>
+    <button type="button" onclick="boDuplicar('${tipo}',${i})">Duplicar</button>
+    <button type="button" onclick="boPausar('${tipo}',${i})">${o.ativo === false ? 'Ativar' : 'Pausar'}</button>
+    <button type="button" class="bo-excluir" onclick="boExcluir(this,'${tipo}',${i})">Excluir</button>
+  </div>`;
+}
+
+// ── Lista de banners ──
+function _boListaBanners() {
+  const noAr = _promoBanners.filter(b => _boSituacao(b).cls === 'noar').length;
+  const linhas = _promoBanners.map((b, i) => `
+    <div class="bo-linha">
+      <div class="bo-thumb" style="${b.image_url ? `background-image:url('${_boEsc(b.image_url)}')` : ''}">${b.image_url ? '' : '<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3" width="13" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 10l3.5-3 3 2.5 2.5-2 4 3.5" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>'}</div>
+      <div class="bo-info">
+        <div class="bo-titulo">${_boEsc(b.titulo || 'Sem título')}${b.destaque ? ' <b>' + _boEsc(b.destaque) + '</b>' : ''}</div>
+        ${_boChip(b)}
       </div>
-      <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
-        <div id="pb-preview-${i}" style="width:56px;height:56px;border-radius:8px;background:${b.image_url ? `url('${b.image_url}') center/cover` : 'var(--surface2)'};border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;${b.image_url ? '' : 'opacity:.4'}">${b.image_url ? '' : '🖼️'}</div>
-        <button type="button" class="btn bg" style="font-size:11px;padding:7px 14px" onclick="document.getElementById('pb-input-${i}').click()">Escolher foto</button>
-        <input type="file" id="pb-input-${i}" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none" onchange="uploadPromoBannerImg(this,${i})">
+      ${_boAcoes('banner', i, b)}
+    </div>`).join('');
+  return `
+    <label class="bo-mestre">
+      <input type="checkbox" ${_promoBannerAtivo ? 'checked' : ''} onchange="boMestre(this.checked)">
+      <span><strong>Mostrar banners no cardápio</strong><small>Desligado, nenhum banner aparece, nem os agendados.</small></span>
+    </label>
+    ${linhas || '<div class="bo-vazio">Nenhum banner salvo ainda.</div>'}
+    ${noAr > 5 ? '<div class="bo-aviso">Tem mais de 5 banners no ar ao mesmo tempo: o cardápio mostra só os 5 primeiros.</div>' : ''}
+    ${_promoBanners.length < PROMO_BANNER_MAX ? '<button type="button" class="btn bp bo-novo" onclick="boNovo(\'banner\')">+ Novo banner</button>' : `<div class="bo-aviso">Limite de ${PROMO_BANNER_MAX} banners salvos. Exclua um para criar outro.</div>`}`;
+}
+// ── Lista de ofertas ──
+function _boListaOfertas() {
+  const linhas = _ofertas.map((o, i) => {
+    const it = _boItens.find(x => x.id === Number(o.item_id));
+    const normal = it ? it.precoNormal : 0;
+    const pct = normal > 0 && o.preco < normal ? Math.round((1 - o.preco / normal) * 100) : 0;
+    return `
+    <div class="bo-linha">
+      <div class="bo-thumb" style="${it?.image_url ? `background-image:url('${_boEsc(it.image_url)}')` : ''}">${it?.image_url ? '' : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="7.5" cy="7.5" r="1.5" fill="currentColor"/></svg>'}</div>
+      <div class="bo-info">
+        <div class="bo-titulo">${_boEsc(it ? it.name : 'Produto apagado')}</div>
+        <div class="bo-preco">${normal ? `<s>${_boMoeda(normal)}</s> ` : ''}<b>${_boMoeda(o.preco)}</b>${pct ? ` <span>-${pct}%</span>` : ''}</div>
+        ${_boChip(o)}
       </div>
-      <input class="form-input" style="margin-bottom:6px" placeholder="Título — ex: Kit" value="${(b.titulo || '').replace(/"/g, '&quot;')}" oninput="_promoBanners[${i}].titulo=this.value">
-      <input class="form-input" style="margin-bottom:6px" placeholder="Palavra em destaque — ex: Churrasco" value="${(b.destaque || '').replace(/"/g, '&quot;')}" oninput="_promoBanners[${i}].destaque=this.value">
-      <input class="form-input" style="margin-bottom:6px" placeholder="Subtítulo" value="${(b.subtitulo || '').replace(/"/g, '&quot;')}" oninput="_promoBanners[${i}].subtitulo=this.value">
-      <input class="form-input" style="margin-bottom:6px" placeholder="Texto do botão — ex: Comprar agora" value="${(b.cta_texto || '').replace(/"/g, '&quot;')}" oninput="_promoBanners[${i}].cta_texto=this.value">
-      <input class="form-input" style="margin-bottom:6px" placeholder="Selo (opcional) — ex: EXCLUSIVO CORTES" value="${(b.selo || '').replace(/"/g, '&quot;')}" oninput="_promoBanners[${i}].selo=this.value">
-      <div class="sw" style="width:100%"><select class="form-input" style="width:100%" onchange="_promoBanners[${i}].categoria=this.value">
-        <option value="">Ao tocar, não abre categoria</option>
-        ${(categories || []).map(c => `<option value="${c.name}" ${b.categoria === c.name ? 'selected' : ''}>${c.label || c.name}</option>`).join('')}
+      ${_boAcoes('oferta', i, o)}
+    </div>`;
+  }).join('');
+  return `
+    <div class="bo-dica">Escolha o produto, o preço e o horário. No começo da oferta o preço muda sozinho no cardápio, no WhatsApp e no garçom, com um selo de relógio mostrando quanto falta. No fim, volta ao preço normal.</div>
+    ${linhas || '<div class="bo-vazio">Nenhuma oferta programada ainda.</div>'}
+    <button type="button" class="btn bp bo-novo" onclick="boNovo('oferta')">+ Nova oferta</button>`;
+}
+
+// ── Formulários ──
+function _boCamposAgenda(d) {
+  const agendar = !!d._agendar;
+  return `
+    <div class="bo-campo">
+      <label class="bo-rotulo">Quando começa</label>
+      <div class="bo-seg">
+        <button type="button" class="${agendar ? '' : 'on'}" onclick="boSetAgendar(false)">Agora</button>
+        <button type="button" class="${agendar ? 'on' : ''}" onclick="boSetAgendar(true)">Agendar</button>
+      </div>
+      ${agendar ? `<input type="datetime-local" class="form-input" id="bo-inicio" value="${_boDtLocal(d.inicio)}" onchange="boCampo('inicio', this.value ? new Date(this.value).toISOString() : '')">` : ''}
+    </div>
+    <div class="bo-campo">
+      <label class="bo-rotulo">Quanto tempo fica no ar</label>
+      <div class="bo-chips">${_BO_DURACOES.map(x => `<button type="button" class="${d._dur === x.k ? 'on' : ''}" onclick="boSetDuracao('${x.k}')">${x.l}</button>`).join('')}</div>
+      ${d._dur === 'custom' ? `<input type="datetime-local" class="form-input" id="bo-fim" value="${_boDtLocal(d.fim)}" onchange="boCampo('fim', this.value ? new Date(this.value).toISOString() : '')">` : ''}
+      <div class="bo-resumo" id="bo-resumo">${_boResumoAgenda(d)}</div>
+    </div>`;
+}
+function _boResumoAgenda(d) {
+  const ini = d._agendar && d.inicio ? d.inicio : null;
+  const fim = _boFimDe(ini || new Date().toISOString(), d._dur, d.fim);
+  const comeco = ini ? 'Começa ' + _boDtTexto(ini) : 'Começa assim que salvar';
+  return comeco + (fim ? ' e termina ' + _boDtTexto(fim) + '.' : ', sem hora para acabar.');
+}
+function _boFormBanner() {
+  const b = _boEdit.dados;
+  const cats = (categories || []).map(c => `<option value="cat:${_boEsc(c.name)}" ${!b.produto_id && b.categoria === c.name ? 'selected' : ''}>Categoria: ${_boEsc(c.label || c.name)}</option>`).join('');
+  const prods = _boItens.map(it => `<option value="prod:${it.id}" ${Number(b.produto_id) === it.id ? 'selected' : ''}>Produto: ${_boEsc(it.name)}</option>`).join('');
+  return `
+    <button type="button" class="bo-voltar" onclick="boCancelar()">Voltar para a lista</button>
+    <h3 class="bo-h3">${_boEdit.idx < 0 ? 'Novo banner' : 'Editar banner'}</h3>
+    <div class="bo-foto">
+      <div class="bo-foto-prev" style="${b.image_url ? `background-image:url('${_boEsc(b.image_url)}')` : ''}">${b.image_url ? '' : 'Sem foto'}</div>
+      <div>
+        <button type="button" class="btn bg" onclick="document.getElementById('bo-foto-in').click()">${b.image_url ? 'Trocar foto' : 'Escolher foto'}</button>
+        <input type="file" id="bo-foto-in" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none" onchange="boFotoBanner(this)">
+        <small>Foto deitada fica melhor (ex.: 1200 x 600).</small>
+      </div>
+    </div>
+    <div class="bo-campo"><label class="bo-rotulo">Título</label><input class="form-input" maxlength="40" placeholder="Ex.: Kit" value="${_boEsc(b.titulo)}" oninput="boCampo('titulo', this.value)"></div>
+    <div class="bo-campo"><label class="bo-rotulo">Palavra em destaque (opcional)</label><input class="form-input" maxlength="30" placeholder="Ex.: Churrasco" value="${_boEsc(b.destaque)}" oninput="boCampo('destaque', this.value)"></div>
+    <div class="bo-campo"><label class="bo-rotulo">Subtítulo (opcional)</label><input class="form-input" maxlength="80" placeholder="Ex.: Só hoje, com 20% de desconto" value="${_boEsc(b.subtitulo)}" oninput="boCampo('subtitulo', this.value)"></div>
+    <div class="bo-2col">
+      <div class="bo-campo"><label class="bo-rotulo">Texto do botão</label><input class="form-input" maxlength="24" placeholder="Comprar agora" value="${_boEsc(b.cta_texto)}" oninput="boCampo('cta_texto', this.value)"></div>
+      <div class="bo-campo"><label class="bo-rotulo">Selo (opcional)</label><input class="form-input" maxlength="24" placeholder="Ex.: Só hoje" value="${_boEsc(b.selo)}" oninput="boCampo('selo', this.value)"></div>
+    </div>
+    <div class="bo-campo"><label class="bo-rotulo">Ao tocar no banner</label>
+      <div class="sw" style="width:100%"><select class="form-input" style="width:100%" onchange="boDestinoBanner(this.value)">
+        <option value="">Não abre nada</option>${cats}${prods}
       </select></div>
     </div>
-  `).join('') || `<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">Nenhum banner ainda. Clique em "+ Adicionar banner" abaixo.</div>`;
-  if (addBtn) addBtn.style.display = _promoBanners.length >= PROMO_BANNER_MAX ? 'none' : '';
+    ${_boCamposAgenda(b)}
+    <div class="bo-botoes">
+      <button type="button" class="btn bg" onclick="boCancelar()">Cancelar</button>
+      <button type="button" class="btn bp" onclick="boSalvarEdicao()">Salvar banner</button>
+    </div>`;
 }
-
-function addPromoBanner() {
-  if (_promoBanners.length >= PROMO_BANNER_MAX) { sbToast('err', `Máximo de ${PROMO_BANNER_MAX} banners.`); return; }
-  _promoBanners.push({ titulo: '', destaque: '', subtitulo: '', cta_texto: '', image_url: '', selo: '', categoria: '' });
-  renderPromoBannersList();
+function _boFormOferta() {
+  const o = _boEdit.dados;
+  const it = _boItens.find(x => x.id === Number(o.item_id));
+  const normal = it ? it.precoNormal : 0;
+  const pct = normal > 0 && o.preco > 0 && o.preco < normal ? Math.round((1 - o.preco / normal) * 100) : '';
+  return `
+    <button type="button" class="bo-voltar" onclick="boCancelar()">Voltar para a lista</button>
+    <h3 class="bo-h3">${_boEdit.idx < 0 ? 'Nova oferta' : 'Editar oferta'}</h3>
+    <div class="bo-campo">
+      <label class="bo-rotulo">Produto</label>
+      ${it ? `<div class="bo-prod-escolhido"><div class="bo-thumb" style="${it.image_url ? `background-image:url('${_boEsc(it.image_url)}')` : ''}"></div><div><b>${_boEsc(it.name)}</b><small>Preço normal: ${_boMoeda(normal)}</small></div><button type="button" class="btn bg" onclick="boCampo('item_id', null, true)">Trocar</button></div>`
+        : `<input class="form-input" id="bo-busca-prod" placeholder="Busque o produto pelo nome" oninput="boBuscarProduto(this.value)" autocomplete="off"><div class="bo-prod-lista" id="bo-prod-lista">${_boListaProdutos('')}</div>`}
+    </div>
+    ${it ? `
+    <div class="bo-2col">
+      <div class="bo-campo"><label class="bo-rotulo">Preço da oferta (R$)</label><input class="form-input" id="bo-preco" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Ex.: 13,90" value="${o.preco || ''}" oninput="boPrecoOferta(this.value)"></div>
+      <div class="bo-campo"><label class="bo-rotulo">ou desconto (%)</label><input class="form-input" id="bo-pct" type="number" inputmode="numeric" step="1" min="1" max="95" placeholder="Ex.: 20" value="${pct}" oninput="boPctOferta(this.value)"></div>
+    </div>
+    <div class="bo-resumo" id="bo-preco-resumo">${_boResumoPreco(o, normal)}</div>
+    ${_boCamposAgenda(o)}` : ''}
+    <div class="bo-botoes">
+      <button type="button" class="btn bg" onclick="boCancelar()">Cancelar</button>
+      <button type="button" class="btn bp" onclick="boSalvarEdicao()" ${it ? '' : 'disabled'}>Salvar oferta</button>
+    </div>`;
 }
-
-function removePromoBanner(i) {
-  _promoBanners.splice(i, 1);
-  renderPromoBannersList();
+function _boResumoPreco(o, normal) {
+  if (!(o.preco > 0)) return 'Digite o preço da oferta ou a porcentagem de desconto.';
+  if (normal > 0 && o.preco >= normal) return 'O preço da oferta precisa ser menor que o preço normal (' + _boMoeda(normal) + ').';
+  return 'No cardápio vai aparecer <s>' + _boMoeda(normal) + '</s> <b>' + _boMoeda(o.preco) + '</b>' + (normal > 0 ? ' (-' + Math.round((1 - o.preco / normal) * 100) + '%)' : '') + ', com o relógio de oferta.';
 }
+function _boListaProdutos(q) {
+  const n = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const qq = n(q).trim();
+  const lista = _boItens.filter(it => !it.hide_price && (!qq || n(it.name).includes(qq))).slice(0, 30);
+  if (!lista.length) return '<div class="bo-vazio">Nenhum produto encontrado.</div>';
+  return lista.map(it => `<button type="button" onclick="boEscolherProduto(${it.id})"><span>${_boEsc(it.name)}</span><small>${_boMoeda(it.precoNormal)}</small></button>`).join('');
+}
+function boBuscarProduto(q) { const l = document.getElementById('bo-prod-lista'); if (l) l.innerHTML = _boListaProdutos(q); }
+function boEscolherProduto(id) { _boEdit.dados.item_id = id; boRender(); setTimeout(() => document.getElementById('bo-preco')?.focus(), 50); }
+function boPrecoOferta(v) {
+  const o = _boEdit.dados; o.preco = Math.round((parseFloat(String(v).replace(',', '.')) || 0) * 100) / 100;
+  const it = _boItens.find(x => x.id === Number(o.item_id)); const normal = it ? it.precoNormal : 0;
+  const p = document.getElementById('bo-pct'); if (p) p.value = normal > 0 && o.preco > 0 && o.preco < normal ? Math.round((1 - o.preco / normal) * 100) : '';
+  const r = document.getElementById('bo-preco-resumo'); if (r) r.innerHTML = _boResumoPreco(o, normal);
+}
+function boPctOferta(v) {
+  const o = _boEdit.dados; const pct = parseFloat(v) || 0;
+  const it = _boItens.find(x => x.id === Number(o.item_id)); const normal = it ? it.precoNormal : 0;
+  o.preco = pct > 0 && pct < 100 ? Math.round(normal * (1 - pct / 100) * 100) / 100 : 0;
+  const p = document.getElementById('bo-preco'); if (p) p.value = o.preco || '';
+  const r = document.getElementById('bo-preco-resumo'); if (r) r.innerHTML = _boResumoPreco(o, normal);
+}
+function _boPosRender() { /* nada por enquanto */ }
 
-async function uploadPromoBannerImg(input, i) {
-  const file = input.files[0];
-  if (!file) return;
-  if (file.size > 2 * 1024 * 1024) { sbToast('err', 'Imagem muito grande. Use uma imagem de até 2MB.'); input.value = ''; return; }
-  try {
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
-      reader.readAsDataURL(file);
-    });
-    if (_promoBanners[i]) _promoBanners[i].image_url = dataUrl;
-    renderPromoBannersList();
-  } catch (e) {
-    sbToast('err', 'Erro ao ler imagem: ' + (e.message || ''));
-  } finally {
-    input.value = '';
+// ── Edição ──
+function boNovo(tipo) {
+  const base = { id: _boUid(tipo === 'banner' ? 'b' : 'o'), ativo: true, inicio: '', fim: '', _agendar: false, _dur: tipo === 'banner' ? 'sem' : '2h' };
+  const dados = tipo === 'banner'
+    ? { ...base, titulo: '', destaque: '', subtitulo: '', cta_texto: '', image_url: '', selo: '', categoria: '', produto_id: null }
+    : { ...base, item_id: null, preco: 0 };
+  _boEdit = { tipo, idx: -1, dados };
+  boRender();
+}
+function boEditar(tipo, i) {
+  const src = tipo === 'banner' ? _promoBanners[i] : _ofertas[i];
+  if (!src) return;
+  const dados = JSON.parse(JSON.stringify(src));
+  dados._agendar = !!(src.inicio && Date.parse(src.inicio) > Date.now());
+  dados._dur = src.fim ? 'custom' : 'sem';
+  _boEdit = { tipo, idx: i, dados };
+  boRender();
+}
+function boCancelar() { _boEdit = null; boRender(); }
+function boCampo(k, v, rerender) {
+  if (!_boEdit) return;
+  _boEdit.dados[k] = v;
+  if (rerender) boRender();
+  else { const r = document.getElementById('bo-resumo'); if (r) r.textContent = _boResumoAgenda(_boEdit.dados); }
+}
+function boSetAgendar(sim) {
+  const d = _boEdit.dados; d._agendar = sim;
+  if (sim && !(d.inicio && Date.parse(d.inicio) > Date.now())) {
+    const t = new Date(Date.now() + 864e5); t.setHours(11, 0, 0, 0); d.inicio = t.toISOString(); // sugestão: amanhã 11h
   }
+  boRender();
 }
-
-async function salvarPromoBanner() {
+function boSetDuracao(k) {
+  const d = _boEdit.dados; d._dur = k;
+  if (k === 'custom' && !d.fim) d.fim = _boFimDe(d._agendar ? d.inicio : null, '24h');
+  boRender();
+}
+function boDestinoBanner(v) {
+  const b = _boEdit.dados;
+  b.categoria = v.startsWith('cat:') ? v.slice(4) : '';
+  b.produto_id = v.startsWith('prod:') ? Number(v.slice(5)) : null;
+}
+async function boFotoBanner(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (file.size > 8 * 1024 * 1024) { sbToast('err', 'Foto muito grande. Use uma de até 8MB.'); return; }
   sbLoading(true);
   try {
-    const validos = _promoBanners.filter(b => b.titulo && b.titulo.trim());
-    const payload = {
-      tenant_id: _sessao?.tenant_id,
-      promo_banner_ativo: document.getElementById('cp-promo-ativo')?.checked ? 1 : 0,
-      promo_banners: JSON.stringify(validos),
-    };
+    const ext = ({ 'image/png': 'png', 'image/webp': 'webp' })[file.type] || 'jpg';
+    const caminho = `banners/${_sessao?.tenant_id || 'loja'}-${Date.now()}.${ext}`;
+    const bucket = sb.storage.from('menu-images');
+    const { data, error } = await bucket.upload(caminho, file, { upsert: true });
+    if (error) throw new Error(error.message || 'falha no envio');
+    const url = data?.publicUrl || data?.url || bucket.getPublicUrl(caminho).data.publicUrl;
+    if (!url) throw new Error('sem endereço da foto');
+    _boEdit.dados.image_url = url;
+    boRender();
+  } catch (e) {
+    sbToast('err', 'Não consegui enviar a foto: ' + (e.message || 'tente de novo'));
+  } finally { sbLoading(false); }
+}
+async function boSalvarEdicao() {
+  const { tipo, idx, dados } = _boEdit;
+  const d = { ...dados };
+  // Horário: "Agora" = começa no momento em que salvou. Editando algo que já
+  // está no ar sem mexer na duração (data escolhida ou sem fim), mantém o começo.
+  const jaNoAr = idx >= 0 && d.inicio && Date.parse(d.inicio) <= Date.now();
+  const inicio = d._agendar && d.inicio ? d.inicio : (jaNoAr && (d._dur === 'custom' || d._dur === 'sem') ? d.inicio : new Date().toISOString());
+  if (d._agendar && !(Date.parse(d.inicio) > 0)) { sbToast('err', 'Escolha a data e a hora em que começa.'); return; }
+  const fim = _boFimDe(inicio, d._dur, d.fim);
+  if (fim && Date.parse(fim) <= Date.parse(inicio)) { sbToast('err', 'A hora de terminar precisa ser depois do começo.'); return; }
+  d.inicio = inicio; d.fim = fim;
+  delete d._agendar; delete d._dur;
+  if (tipo === 'banner') {
+    if (!String(d.titulo || '').trim()) { sbToast('err', 'Coloque um título no banner.'); return; }
+    if (idx < 0) _promoBanners.unshift(d); else _promoBanners[idx] = d;
+    _boEdit = null;
+    await _boGravar('banners', idx < 0 ? 'Banner criado' : 'Banner salvo');
+  } else {
+    const it = _boItens.find(x => x.id === Number(d.item_id));
+    if (!it) { sbToast('err', 'Escolha o produto.'); return; }
+    if (!(d.preco > 0)) { sbToast('err', 'Coloque o preço da oferta.'); return; }
+    if (d.preco >= it.precoNormal) { sbToast('err', 'O preço da oferta precisa ser menor que ' + _boMoeda(it.precoNormal) + '.'); return; }
+    // Outra oferta do mesmo produto no mesmo horário?
+    const choca = _ofertas.some((o, j) => j !== idx && o.ativo !== false && Number(o.item_id) === it.id
+      && (Date.parse(o.inicio || 0) || 0) < (fim ? Date.parse(fim) : Infinity) && (o.fim ? Date.parse(o.fim) : Infinity) > Date.parse(inicio));
+    if (choca) { sbToast('err', 'Esse produto já tem outra oferta nesse horário. Pause ou mude a outra primeiro.'); return; }
+    d.item_id = it.id;
+    if (idx < 0) _ofertas.unshift(d); else _ofertas[idx] = d;
+    _boEdit = null;
+    await _boGravar('ofertas', idx < 0 ? 'Oferta programada' : 'Oferta salva');
+  }
+}
+function boDuplicar(tipo, i) {
+  const lista = tipo === 'banner' ? _promoBanners : _ofertas;
+  if (tipo === 'banner' && lista.length >= PROMO_BANNER_MAX) { sbToast('err', `Limite de ${PROMO_BANNER_MAX} banners salvos.`); return; }
+  const copia = JSON.parse(JSON.stringify(lista[i]));
+  copia.id = _boUid(tipo === 'banner' ? 'b' : 'o');
+  // A cópia nasce pausada e já abre para ajustar (data, preço, texto...)
+  copia.ativo = false;
+  if (tipo === 'banner') copia.titulo = copia.titulo || '';
+  lista.splice(i + 1, 0, copia);
+  _boGravar(tipo === 'banner' ? 'banners' : 'ofertas', 'Cópia criada (pausada)').then(() => {
+    boEditar(tipo, i + 1);
+    _boEdit.dados.ativo = true; // ao salvar a edição, a cópia já entra ligada
+  });
+}
+function boPausar(tipo, i) {
+  const lista = tipo === 'banner' ? _promoBanners : _ofertas;
+  const o = lista[i]; if (!o) return;
+  o.ativo = o.ativo === false;
+  _boGravar(tipo === 'banner' ? 'banners' : 'ofertas', o.ativo ? 'Ativado' : 'Pausado');
+}
+function boExcluir(btn, tipo, i) {
+  // Dois toques para excluir (sem janela de confirmação, que não funciona no app de computador)
+  if (!btn.dataset.armado) {
+    btn.dataset.armado = '1'; btn.textContent = 'Toque de novo';
+    setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armado; btn.textContent = 'Excluir'; } }, 3000);
+    return;
+  }
+  const lista = tipo === 'banner' ? _promoBanners : _ofertas;
+  lista.splice(i, 1);
+  _boGravar(tipo === 'banner' ? 'banners' : 'ofertas', 'Excluído');
+}
+async function boMestre(ligado) {
+  _promoBannerAtivo = !!ligado;
+  await _boGravar('banners', ligado ? 'Banners ligados no cardápio' : 'Banners desligados no cardápio');
+}
+async function _boGravar(oque, msg) {
+  try {
+    const payload = { tenant_id: _sessao?.tenant_id };
+    if (oque === 'banners') {
+      payload.promo_banner_ativo = _promoBannerAtivo ? 1 : 0;
+      payload.promo_banners = JSON.stringify(_promoBanners.map(b => { const c = { ...b }; delete c._agendar; delete c._dur; return c; }));
+    } else {
+      payload.ofertas_programadas = _ofertas.map(o => ({ id: o.id, item_id: Number(o.item_id), preco: o.preco, inicio: o.inicio || '', fim: o.fim || '', ativo: o.ativo !== false }));
+    }
     const { error } = await sb.from('store_config').upsert(payload);
     if (error) throw error;
-    sbToast('ok', 'Banners salvos!');
-    closeModal('modal-promo-banner');
+    if (msg) sbToast('ok', msg);
   } catch (e) {
-    sbToast('err', 'Erro ao salvar banner: ' + (e.message || 'tente novamente'));
-  } finally {
-    sbLoading(false);
+    sbToast('err', 'Não consegui salvar: ' + (e.message || 'tente de novo'));
   }
+  boRender();
+}
+
+function _boCss() {
+  if (document.getElementById('bo-css')) return;
+  const st = document.createElement('style'); st.id = 'bo-css';
+  st.textContent = `
+#modal-promo-banner .bo-modal{width:520px;max-width:calc(100vw - 24px);max-height:90vh;overflow-y:auto}
+#modal-promo-banner h2{margin-bottom:12px}
+#modal-promo-banner .bo-abas{display:flex;gap:4px;padding:4px;background:var(--s2);border-radius:10px;margin-bottom:14px}
+#modal-promo-banner .bo-aba{flex:1;border:0;background:transparent;color:var(--muted);font:600 13px/1 inherit;padding:10px 8px;border-radius:7px;cursor:pointer;font-family:inherit}
+#modal-promo-banner .bo-aba.on{background:var(--s1);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+#modal-promo-banner .bo-mestre{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;background:var(--s2);border:1px solid var(--border);border-radius:10px;margin-bottom:12px;cursor:pointer}
+#modal-promo-banner .bo-mestre input{width:17px;height:17px;margin-top:1px;accent-color:var(--accent)}
+#modal-promo-banner .bo-mestre strong{display:block;font-size:13px}
+#modal-promo-banner .bo-mestre small,.bo-dica{display:block;font-size:11.5px;color:var(--muted);line-height:1.45}
+#modal-promo-banner .bo-dica{padding:10px 12px;background:var(--s2);border-radius:10px;margin-bottom:12px}
+#modal-promo-banner .bo-linha{display:grid;grid-template-columns:52px 1fr;gap:10px 12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)}
+#modal-promo-banner .bo-thumb{width:52px;height:52px;border-radius:9px;background:var(--s2) center/cover no-repeat;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+#modal-promo-banner .bo-info{min-width:0}
+#modal-promo-banner .bo-titulo{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#modal-promo-banner .bo-titulo b{color:var(--accent)}
+#modal-promo-banner .bo-preco{font-size:12.5px;margin:2px 0}
+#modal-promo-banner .bo-preco s{color:var(--muted)}
+#modal-promo-banner .bo-preco span{color:#15803d !important;font-weight:700}
+#modal-promo-banner .bo-chip{display:inline-block;margin-top:4px;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--s2);color:var(--muted)}
+#modal-promo-banner .bo-chip.noar{background:color-mix(in srgb,#16a34a 14%,transparent);color:#15803d !important}
+#modal-promo-banner .bo-chip.agendado{background:color-mix(in srgb,#2563eb 13%,transparent);color:#1d4ed8 !important}
+#modal-promo-banner .bo-chip.encerrado{color:var(--muted) !important}
+#modal-promo-banner .bo-chip.pausado{background:color-mix(in srgb,#f59e0b 16%,transparent);color:#b45309 !important}
+#modal-promo-banner .bo-acoes{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap}
+#modal-promo-banner .bo-acoes button{border:1px solid var(--border);background:var(--s1);color:var(--text);font:600 11.5px/1 inherit;font-family:inherit;padding:7px 11px;border-radius:7px;cursor:pointer}
+#modal-promo-banner .bo-acoes .bo-excluir{color:var(--danger,#dc2626) !important}
+#modal-promo-banner .bo-acoes .bo-excluir[data-armado]{background:var(--danger,#dc2626) !important;color:#fff !important;border-color:transparent !important}
+#modal-promo-banner .bo-vazio{font-size:12.5px;color:var(--muted);text-align:center;padding:18px 8px}
+#modal-promo-banner .bo-aviso{font-size:11.5px;color:#b45309;background:color-mix(in srgb,#f59e0b 12%,transparent);padding:9px 11px;border-radius:9px;margin-top:10px}
+#modal-promo-banner .bo-novo{width:100%;justify-content:center;margin-top:14px}
+#modal-promo-banner .bo-voltar{border:0 !important;background:none !important;color:var(--accent) !important;font-size:12.5px !important;font-weight:700 !important;padding:0 !important;margin-bottom:8px;cursor:pointer}
+#modal-promo-banner .bo-voltar::before{content:'‹ ';font-size:15px}
+#modal-promo-banner .bo-h3{font-size:15px;margin:0 0 12px}
+#modal-promo-banner .bo-campo{margin-bottom:12px;min-width:0}
+#modal-promo-banner .bo-rotulo{display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:6px}
+#modal-promo-banner .bo-2col{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#modal-promo-banner .bo-foto{display:flex;gap:12px;align-items:center;margin-bottom:14px}
+#modal-promo-banner .bo-foto-prev{width:120px;height:62px;border-radius:9px;background:var(--s2) center/cover no-repeat;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted);flex-shrink:0}
+#modal-promo-banner .bo-foto small{display:block;font-size:11px;color:var(--muted);margin-top:5px}
+#modal-promo-banner .bo-seg{display:inline-flex;gap:4px;padding:3px;background:var(--s2);border-radius:9px;margin-bottom:8px}
+#modal-promo-banner .bo-seg button{border:0;background:transparent;color:var(--muted);font:600 12.5px/1 inherit;font-family:inherit;padding:8px 16px;border-radius:7px;cursor:pointer}
+#modal-promo-banner .bo-seg button.on{background:var(--s1);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+#modal-promo-banner .bo-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+#modal-promo-banner .bo-chips button{border:1px solid var(--border);background:var(--s1);color:var(--text);font:500 12px/1 inherit;font-family:inherit;padding:8px 11px;border-radius:999px;cursor:pointer}
+#modal-promo-banner .bo-chips button.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+#modal-promo-banner .bo-resumo{font-size:12px;color:var(--text);background:var(--s2);border-radius:9px;padding:9px 11px;line-height:1.45;margin-bottom:12px}
+#modal-promo-banner .bo-resumo s{color:var(--muted)}
+#modal-promo-banner .bo-prod-lista{max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:9px;margin-top:6px}
+#modal-promo-banner .bo-prod-lista button{display:flex;justify-content:space-between;gap:10px;width:100%;border:0;border-bottom:1px solid var(--border);background:var(--s1);color:var(--text);font:500 13px/1.3 inherit;font-family:inherit;padding:10px 12px;cursor:pointer;text-align:left}
+#modal-promo-banner .bo-prod-lista button:last-child{border-bottom:0}
+#modal-promo-banner .bo-prod-lista small{color:var(--muted);white-space:nowrap}
+#modal-promo-banner .bo-prod-escolhido{display:flex;align-items:center;gap:10px;padding:9px;border:1px solid var(--border);border-radius:10px}
+#modal-promo-banner .bo-prod-escolhido .bo-thumb{width:42px;height:42px}
+#modal-promo-banner .bo-prod-escolhido > div:nth-child(2){flex:1;min-width:0}
+#modal-promo-banner .bo-prod-escolhido b{display:block;font-size:13px}
+#modal-promo-banner .bo-prod-escolhido small{font-size:11.5px;color:var(--muted)}
+#modal-promo-banner .bo-botoes{display:flex;gap:8px;margin-top:6px}
+#modal-promo-banner .bo-botoes .btn{flex:1;justify-content:center}
+@media (max-width:560px){#modal-promo-banner .bo-2col{grid-template-columns:1fr}}
+`;
+  document.head.appendChild(st);
 }
 
 function prepareAddCategoryModal() {
