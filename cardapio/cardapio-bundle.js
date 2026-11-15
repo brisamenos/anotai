@@ -2901,6 +2901,7 @@ function renderMenu() {
               ${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}
               <span class="dest-price">R$ ${fmt(i.price)}</span>`}
             </div>
+            ${_ofertaRelogioHtml(i, 'oferta-relogio-sm')}
           </div>
         </div>`;
       });
@@ -2972,7 +2973,7 @@ function renderMenu() {
         const destMedia = i.video_url
           ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
           : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : _placeholderProduto(i));
-        html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img${(i.image_url||i.video_url)?' has-photo':''}">${destMedia}${(!i.hide_price && _descontoPct(i))?`<span class="dest-promo-badge">${_descontoPct(i)}</span>`:''}</div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.hide_price?`<span class="dest-price" style="color:var(--muted)">Ver opções</span>`:`${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span>`}</div></div></div>`;
+        html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img${(i.image_url||i.video_url)?' has-photo':''}">${destMedia}${(!i.hide_price && _descontoPct(i))?`<span class="dest-promo-badge">${_descontoPct(i)}</span>`:''}</div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.hide_price?`<span class="dest-price" style="color:var(--muted)">Ver opções</span>`:`${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span>`}</div>${_ofertaRelogioHtml(i, 'oferta-relogio-sm')}</div></div>`;
       });
       html += `</div></div>`;
     }
@@ -3254,6 +3255,51 @@ function renderFavoritosPage() {
 }
 
 // Desconto em % quando há preço antigo maior que o atual ("-17%")
+// ── Oferta programada (relâmpago) ───────────────────────────────────────
+// O servidor troca o preço no início e devolve no fim; aqui só mostramos o
+// selo com o relógio e quanto falta. oferta_ate vazio = sem hora para acabar.
+const _OF_RELOGIO_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="13" r="8" stroke="currentColor" stroke-width="2.2"/><path d="M12 9v4l2.5 2M9.5 2.5h5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+function _ofertaAtiva(i) {
+  if (!i || !i.oferta_id || i.hide_price) return false;
+  if (!i.oferta_ate) return true;
+  const t = Date.parse(i.oferta_ate);
+  return isNaN(t) || t > Date.now();
+}
+function _ofertaFaltaTxt(ate) {
+  if (!ate) return 'Oferta por tempo limitado';
+  const ms = Date.parse(ate) - Date.now();
+  if (isNaN(ms)) return 'Oferta por tempo limitado';
+  if (ms <= 0) return 'Oferta encerrada';
+  const min = Math.floor(ms / 60000), h = Math.floor(min / 60), d = Math.floor(h / 24);
+  if (d >= 2) return 'Oferta até ' + new Date(ate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  if (h >= 1) return 'Termina em ' + h + 'h' + (min % 60 ? ' ' + String(min % 60).padStart(2, '0') + 'min' : '');
+  if (min >= 1) return 'Termina em ' + min + 'min ' + String(Math.floor(ms / 1000) % 60).padStart(2, '0') + 's';
+  return 'Termina em ' + Math.max(1, Math.floor(ms / 1000)) + 's';
+}
+function _ofertaRelogioHtml(i, extraCls) {
+  if (!_ofertaAtiva(i)) return '';
+  return `<div class="oferta-relogio${extraCls ? ' ' + extraCls : ''}" data-ate="${i.oferta_ate || ''}">${_OF_RELOGIO_SVG}<span>${_ofertaFaltaTxt(i.oferta_ate)}</span></div>`;
+}
+// Atualiza a contagem de todos os selos na tela, 1x por segundo. Quando uma
+// oferta acaba com a página aberta, o servidor já devolve o preço e avisa o
+// cardápio; de reforço, recarrega o cardápio uns segundos depois.
+let _ofertaRecarregarTimer = null;
+setInterval(() => {
+  const els = document.querySelectorAll('.oferta-relogio[data-ate]:not([data-ate=""])');
+  els.forEach(el => {
+    const ate = el.getAttribute('data-ate');
+    const txt = _ofertaFaltaTxt(ate);
+    const span = el.querySelector('span');
+    if (span && span.textContent !== txt) span.textContent = txt;
+    if (Date.parse(ate) <= Date.now() && !el.classList.contains('fim')) {
+      el.classList.add('fim');
+      if (!_ofertaRecarregarTimer && typeof reloadMenu === 'function') {
+        _ofertaRecarregarTimer = setTimeout(() => { _ofertaRecarregarTimer = null; try { reloadMenu(); } catch (e) {} }, 18000);
+      }
+    }
+  });
+}, 1000);
+
 function _descontoPct(i) {
   const a = Number(i && i.price_old), b = Number(i && i.price);
   if (!(a > 0) || !(b >= 0) || b >= a) return '';
@@ -3296,6 +3342,7 @@ function itemCard(i) {
         <button class="item-add-btn" ${esg?'disabled':''} onclick="event.stopPropagation();openItemModal(${i.id})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
       </div>
       ${porcaoBadge}
+      ${_ofertaRelogioHtml(i)}
     </div>
     <div class="item-img${(i.image_url||i.video_url) ? ' has-photo' : ' sem-foto'}">
       ${i.video_url
@@ -3386,6 +3433,15 @@ function openItemModal(id) {
   const old = document.getElementById('im-price-old');
   if (!i.hide_price && i.price_old) { old.textContent = 'R$ ' + fmt(i.price_old); old.style.display = ''; }
   else old.style.display = 'none';
+  // Oferta relâmpago: selo com o relógio e quanto falta, logo abaixo do preço
+  let ofEl = document.getElementById('im-oferta-relogio');
+  if (!ofEl) {
+    ofEl = document.createElement('div');
+    ofEl.id = 'im-oferta-relogio';
+    const row = document.querySelector('#item-modal-bg .im-price-row') || document.getElementById('im-price').parentNode.parentNode;
+    row.parentNode.insertBefore(ofEl, row.nextSibling);
+  }
+  ofEl.innerHTML = (typeof _ofertaRelogioHtml === 'function') ? _ofertaRelogioHtml(i, 'oferta-relogio-modal') : '';
 
   // Porção de referência no modal
   let porcaoEl = document.getElementById('im-porcao-ref');
@@ -10495,6 +10551,20 @@ function applyBranding(b, nome) {
 // Suporta até 5 banners em rotação automática a cada 4s (mesmo espírito do
 // carrossel de fotos do topo — dots + troca automática).
 let _promoBannerTimer = null;
+let _promoBannerCfgAtual = null;
+let _promoBannerAssinatura = '';
+// A cada 30s, confere se algum banner agendado começou ou terminou
+setInterval(() => {
+  if (!_promoBannerCfgAtual) return;
+  let lista = [];
+  try { const raw = _promoBannerCfgAtual.promo_banners; lista = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []); } catch (e) {}
+  const agora = Date.now();
+  const assin = lista.filter(b => b && b.titulo && b.ativo !== false
+    && !(b.inicio && Date.parse(b.inicio) > agora) && !(b.fim && Date.parse(b.fim) <= agora)).slice(0, 5)
+    .map(b => b.id || b.titulo).join('|');
+  if (assin !== _promoBannerAssinatura) _applyPromoBanner(_promoBannerCfgAtual);
+}, 30000);
+
 function _applyPromoBanner(cfg) {
   const wrap = document.getElementById('promo-banner');
   if (!wrap) return;
@@ -10517,7 +10587,22 @@ function _applyPromoBanner(cfg) {
       categoria: cfg.promo_banner_categoria,
     }];
   }
-  lista = lista.filter(b => b && b.titulo).slice(0, 5);
+  // Banners salvos podem estar pausados ou agendados: só entram os que estão
+  // ligados e dentro do horário (início/fim) agora. No máximo 5 girando.
+  const _agora = Date.now();
+  const _noHorario = (b) => {
+    if (b.ativo === false) return false;
+    const ini = b.inicio ? Date.parse(b.inicio) : NaN;
+    const fim = b.fim ? Date.parse(b.fim) : NaN;
+    if (!isNaN(ini) && ini > _agora) return false;
+    if (!isNaN(fim) && fim <= _agora) return false;
+    return true;
+  };
+  lista = lista.filter(b => b && b.titulo && _noHorario(b)).slice(0, 5);
+  // Guarda para reconferir de tempos em tempos (banner que começa/termina
+  // com a página aberta aparece/some sem precisar recarregar)
+  _promoBannerCfgAtual = cfg;
+  _promoBannerAssinatura = lista.map(b => b.id || b.titulo).join('|');
 
   const ativo = cfg?.promo_banner_ativo && lista.length;
   if (!ativo) { wrap.classList.remove('show'); wrap.innerHTML = ''; return; }
@@ -10530,13 +10615,15 @@ function _applyPromoBanner(cfg) {
     const ctaTexto  = _esc(b.cta_texto || 'Comprar agora');
     const selo      = _esc(b.selo);
     const categoria = b.categoria || '';
+    const produtoId = Number(b.produto_id) || 0;
+    const acao = produtoId ? `openItemModal(${produtoId})` : (categoria ? `verMaisCat('${categoria.replace(/'/g,"\\'")}')` : '');
     const bg = b.image_url ? `background-image:url('${b.image_url}')` : '';
     return `<div class="promo-banner-slide${i===0?' active':''}" style="${bg}" data-i="${i}">
       <div class="promo-banner-overlay"></div>
       <div class="promo-banner-content">
         <div class="promo-banner-title">${titulo}${destaque ? ` <span class="promo-banner-destaque">${destaque}</span>` : ''}</div>
         ${subtitulo ? `<div class="promo-banner-sub">${subtitulo}</div>` : ''}
-        <button type="button" class="promo-banner-btn" onclick="${categoria ? `verMaisCat('${categoria.replace(/'/g,"\\'")}')` : ''}">${ctaTexto}</button>
+        <button type="button" class="promo-banner-btn" onclick="${acao}">${ctaTexto}</button>
       </div>
       ${selo ? `<div class="promo-banner-selo">${selo}</div>` : ''}
     </div>`;

@@ -395,6 +395,20 @@ function applyBranding(b, nome) {
 // Suporta até 5 banners em rotação automática a cada 4s (mesmo espírito do
 // carrossel de fotos do topo — dots + troca automática).
 let _promoBannerTimer = null;
+let _promoBannerCfgAtual = null;
+let _promoBannerAssinatura = '';
+// A cada 30s, confere se algum banner agendado começou ou terminou
+setInterval(() => {
+  if (!_promoBannerCfgAtual) return;
+  let lista = [];
+  try { const raw = _promoBannerCfgAtual.promo_banners; lista = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []); } catch (e) {}
+  const agora = Date.now();
+  const assin = lista.filter(b => b && b.titulo && b.ativo !== false
+    && !(b.inicio && Date.parse(b.inicio) > agora) && !(b.fim && Date.parse(b.fim) <= agora)).slice(0, 5)
+    .map(b => b.id || b.titulo).join('|');
+  if (assin !== _promoBannerAssinatura) _applyPromoBanner(_promoBannerCfgAtual);
+}, 30000);
+
 function _applyPromoBanner(cfg) {
   const wrap = document.getElementById('promo-banner');
   if (!wrap) return;
@@ -417,7 +431,22 @@ function _applyPromoBanner(cfg) {
       categoria: cfg.promo_banner_categoria,
     }];
   }
-  lista = lista.filter(b => b && b.titulo).slice(0, 5);
+  // Banners salvos podem estar pausados ou agendados: só entram os que estão
+  // ligados e dentro do horário (início/fim) agora. No máximo 5 girando.
+  const _agora = Date.now();
+  const _noHorario = (b) => {
+    if (b.ativo === false) return false;
+    const ini = b.inicio ? Date.parse(b.inicio) : NaN;
+    const fim = b.fim ? Date.parse(b.fim) : NaN;
+    if (!isNaN(ini) && ini > _agora) return false;
+    if (!isNaN(fim) && fim <= _agora) return false;
+    return true;
+  };
+  lista = lista.filter(b => b && b.titulo && _noHorario(b)).slice(0, 5);
+  // Guarda para reconferir de tempos em tempos (banner que começa/termina
+  // com a página aberta aparece/some sem precisar recarregar)
+  _promoBannerCfgAtual = cfg;
+  _promoBannerAssinatura = lista.map(b => b.id || b.titulo).join('|');
 
   const ativo = cfg?.promo_banner_ativo && lista.length;
   if (!ativo) { wrap.classList.remove('show'); wrap.innerHTML = ''; return; }
@@ -430,13 +459,15 @@ function _applyPromoBanner(cfg) {
     const ctaTexto  = _esc(b.cta_texto || 'Comprar agora');
     const selo      = _esc(b.selo);
     const categoria = b.categoria || '';
+    const produtoId = Number(b.produto_id) || 0;
+    const acao = produtoId ? `openItemModal(${produtoId})` : (categoria ? `verMaisCat('${categoria.replace(/'/g,"\\'")}')` : '');
     const bg = b.image_url ? `background-image:url('${b.image_url}')` : '';
     return `<div class="promo-banner-slide${i===0?' active':''}" style="${bg}" data-i="${i}">
       <div class="promo-banner-overlay"></div>
       <div class="promo-banner-content">
         <div class="promo-banner-title">${titulo}${destaque ? ` <span class="promo-banner-destaque">${destaque}</span>` : ''}</div>
         ${subtitulo ? `<div class="promo-banner-sub">${subtitulo}</div>` : ''}
-        <button type="button" class="promo-banner-btn" onclick="${categoria ? `verMaisCat('${categoria.replace(/'/g,"\\'")}')` : ''}">${ctaTexto}</button>
+        <button type="button" class="promo-banner-btn" onclick="${acao}">${ctaTexto}</button>
       </div>
       ${selo ? `<div class="promo-banner-selo">${selo}</div>` : ''}
     </div>`;

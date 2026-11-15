@@ -59,6 +59,15 @@ function openItemModal(id) {
   const old = document.getElementById('im-price-old');
   if (!i.hide_price && i.price_old) { old.textContent = 'R$ ' + fmt(i.price_old); old.style.display = ''; }
   else old.style.display = 'none';
+  // Oferta relâmpago: selo com o relógio e quanto falta, logo abaixo do preço
+  let ofEl = document.getElementById('im-oferta-relogio');
+  if (!ofEl) {
+    ofEl = document.createElement('div');
+    ofEl.id = 'im-oferta-relogio';
+    const row = document.querySelector('#item-modal-bg .im-price-row') || document.getElementById('im-price').parentNode.parentNode;
+    row.parentNode.insertBefore(ofEl, row.nextSibling);
+  }
+  ofEl.innerHTML = (typeof _ofertaRelogioHtml === 'function') ? _ofertaRelogioHtml(i, 'oferta-relogio-modal') : '';
 
   // Porção de referência no modal
   let porcaoEl = document.getElementById('im-porcao-ref');
