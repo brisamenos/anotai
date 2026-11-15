@@ -319,6 +319,7 @@ function renderMenu() {
   const _catsPromo = new Set(allCats.filter(c => c.promo).map(c => c.name));
   const _ehDestaque = (i) => i.destaque || _catsPromo.has(i.cat_key) || _catsPromo.has(i.cat);
   if (_segmento === 'acougue' && !searchQ && !activeCat && !_filterPreparo) {
+    html += _promocoesHtml(normalItems);
     const destItems = normalItems.filter(_ehDestaque);
     if (destItems.length) {
       html += `<div class="destaques-wrap"><div class="section-label">Mais vendidos</div>`;
@@ -402,6 +403,7 @@ function renderMenu() {
   // Renderiza grupos normais
   // ── Destaques para restaurante (posição original, entre filtro e grupos) ──
   if (_segmento !== 'acougue' && !searchQ && !activeCat) {
+    html += _promocoesHtml(normalItems);
     const destItems = normalItems.filter(_ehDestaque);
     if (destItems.length) {
       html += `<div class="destaques-wrap"><div class="section-label">Mais vendidos</div><div class="destaques-scroll">`;
@@ -736,6 +738,32 @@ setInterval(() => {
     }
   });
 }, 1000);
+
+// ── Faixa "Promoções" (acima de Mais vendidos) ─────────────────────────
+// Entra quem está em oferta programada agora OU tem preço "de" maior que o
+// atual. O produto continua também na categoria dele. Ordem: primeiro as
+// ofertas que acabam mais cedo, depois os maiores descontos.
+function _ehPromocao(i) {
+  if (!i || i.hide_price || i.status === 'esgotado') return false;
+  if (_ofertaAtiva(i)) return true;
+  const a = Number(i.price_old), b = Number(i.price);
+  return a > 0 && b >= 0 && b < a;
+}
+function _promocoesHtml(lista) {
+  const promo = lista.filter(_ehPromocao);
+  if (!promo.length) return '';
+  const fimDe = (i) => (_ofertaAtiva(i) ? (i.oferta_ate ? Date.parse(i.oferta_ate) : 9e15) : Infinity);
+  const pct = (i) => { const a = Number(i.price_old), b = Number(i.price); return a > 0 ? (1 - b / a) : 0; };
+  promo.sort((x, y) => (fimDe(x) - fimDe(y)) || (pct(y) - pct(x)));
+  let h = `<div class="destaques-wrap promocoes-wrap"><div class="section-label">Promoções</div><div class="destaques-scroll">`;
+  promo.slice(0, 20).forEach(i => {
+    const media = i.video_url
+      ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
+      : (i.image_url ? `<img src="${_fotoMini(i.image_url, 480)}" alt="${i.name}" loading="lazy" decoding="async">` : _placeholderProduto(i));
+    h += `<div class="dest-card" onclick="openItemModal(${i.id})"><div class="dest-img${(i.image_url||i.video_url)?' has-photo':''}">${media}${_descontoPct(i)?`<span class="dest-promo-badge">${_descontoPct(i)}</span>`:''}</div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span></div>${_ofertaRelogioHtml(i, 'oferta-relogio-sm')}</div></div>`;
+  });
+  return h + `</div></div>`;
+}
 
 function _descontoPct(i) {
   const a = Number(i && i.price_old), b = Number(i && i.price);
