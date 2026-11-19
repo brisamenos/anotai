@@ -3957,6 +3957,79 @@ function handleTenantInfo(params) {
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // 10 MB
 const ALLOWED_EXT = new Set(['.jpg','.jpeg','.png','.webp','.gif','.bmp','.mp4','.webm'])
 
+// ── Fotos HEIC (padrão do iPhone) ────────────────────────────────────────
+// O iPhone abre HEIC, mas Android/Chrome/computador não: a foto subia com
+// nome .jpg, por dentro era HEIC, e no cardápio ficava quebrada. Agora toda
+// foto HEIC que chega vira JPG antes de salvar, e as que já tinham subido são
+// consertadas ao iniciar (ver _consertarFotosHeic).
+const _MARCAS_HEIC = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1', 'msf1'])
+function _ehHeic(buf) {
+  if (!buf || buf.length < 12) return false
+  if (buf.toString('latin1', 4, 8) !== 'ftyp') return false
+  const marca = buf.toString('latin1', 8, 12).toLowerCase()
+  if (marca === 'avif' || marca === 'avis') return false // AVIF os navegadores abrem
+  if (_MARCAS_HEIC.has(marca)) return true
+  // marcas compatíveis listadas depois (ex.: "mif1 ... heic")
+  return /heic|heix|hevc/.test(buf.toString('latin1', 16, Math.min(buf.length, 48)).toLowerCase())
+}
+async function _heicParaJpeg(buf) {
+  if (!_ehHeic(buf)) return buf
+  let conv
+  try { conv = require('heic-convert') } catch (e) { throw new Error('Foto em formato HEIC do iPhone: envie em JPG (no iPhone, Ajustes > Câmera > Formatos > "Mais compatível").') }
+  try {
+    const saida = await conv({ buffer: buf, format: 'JPEG', quality: 0.86 })
+    return Buffer.from(saida)
+  } catch (e) {
+    // Tem foto "HEIC" que na verdade é AVIF: o navegador abre, então guarda como veio
+    if (buf.toString('latin1', 8, 12).toLowerCase() === 'mif1') return buf
+    throw new Error('Não consegui converter esta foto do iPhone. Envie em JPG ou tire um print da foto.')
+  }
+}
+// Conserta as fotos HEIC que subiram antes desta correção (uma vez por
+// foto: depois de convertida ela vira JPG e não entra mais aqui)
+async function _consertarFotosHeic() {
+  let arquivos = []
+  try { arquivos = fs.readdirSync(UPLOADS_DIR).filter(f => /\.(jpe?g|png|webp|gif|bmp)$/i.test(f)) } catch (e) { return }
+  let ok = 0, falha = 0
+  for (const f of arquivos) {
+    const caminho = path.join(UPLOADS_DIR, f)
+    try {
+      const fd = fs.openSync(caminho, 'r'); const cab = Buffer.alloc(48)
+      fs.readSync(fd, cab, 0, 48, 0); fs.closeSync(fd)
+      if (!_ehHeic(cab)) continue
+      const jpeg = await _heicParaJpeg(fs.readFileSync(caminho))
+      if (_ehHeic(jpeg)) { falha++; continue }
+      // Grava a versão boa com NOME NOVO e troca nos produtos/categorias/loja:
+      // o celular de quem já abriu o cardápio guardou a foto quebrada por 30
+      // dias; com outro nome ele baixa de novo. O arquivo antigo também vira
+      // JPG, para qualquer outro lugar que ainda aponte para ele.
+      const novo = f.replace(/\.[^.]+$/, '') + '-ok.jpg'
+      fs.writeFileSync(path.join(UPLOADS_DIR, novo), jpeg)
+      fs.writeFileSync(caminho + '.tmp', jpeg); fs.renameSync(caminho + '.tmp', caminho)
+      _trocarReferenciaFoto('/' + f, '/' + novo)
+      ok++
+      await new Promise(r => setImmediate(r)) // não trava o servidor
+    } catch (e) { falha++ }
+  }
+  if (ok || falha) log('🖼️', `Fotos HEIC do iPhone convertidas para JPG: ${ok}${falha ? ` (não deu em ${falha})` : ''}`)
+}
+function _trocarReferenciaFoto(velho, novo) {
+  const campos = [
+    ['menu_items', 'image_url'], ['categories', 'image_url'],
+    ['store_config', 'store_logo_url'], ['store_config', 'store_banner_url'], ['store_config', 'store_banners'],
+    ['store_config', 'promo_banners'], ['store_config', 'promo_banner_image_url'], ['store_config', 'tablet_splash_bg_url'],
+  ]
+  // só troca quando é exatamente esse arquivo (termina no nome, ou seguido de aspas/?)
+  for (const [t, c] of campos) {
+    try {
+      db.prepare(`UPDATE ${t} SET ${c}=REPLACE(${c}, ?, ?) WHERE ${c} LIKE ? OR ${c} LIKE ? OR ${c} LIKE ?`)
+        .run(velho, novo, '%' + velho, '%' + velho + '"%', '%' + velho + '?%')
+    } catch (e) {}
+  }
+  try { marcarDirty() } catch (e) {}
+}
+setTimeout(() => { _consertarFotosHeic().catch(() => {}) }, 25 * 1000)
+
 function handleUpload(req, res) {
   return new Promise(resolve => {
     const chunks = []
@@ -3973,7 +4046,7 @@ function handleUpload(req, res) {
       }
       chunks.push(c)
     })
-    req.on('end', () => {
+    req.on('end', async () => {
       if (abortado) return
       try {
         const buffer   = Buffer.concat(chunks)
@@ -3996,7 +4069,7 @@ function handleUpload(req, res) {
           // Valida tamanho do base64 decodificado
           const decoded = Buffer.from(body.data,'base64')
           if (decoded.length > MAX_UPLOAD_BYTES) { resolve(send(res, 413, { error: 'Arquivo muito grande (máx 10MB)' })); return }
-          fs.writeFileSync(path.join(UPLOADS_DIR, fname), decoded)
+          fs.writeFileSync(path.join(UPLOADS_DIR, fname), await _heicParaJpeg(decoded))
         } else {
           const raw   = buffer.toString('binary')
           const parts = raw.split('--'+boundary).filter(p=>p.includes('filename='))
@@ -4009,8 +4082,8 @@ function handleUpload(req, res) {
               fname=`${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
             }
             if (!_ensureAllowedExt(fname)) { resolve(send(res, 400, { error: 'Extensão não permitida' })); return }
-            fs.writeFileSync(path.join(UPLOADS_DIR, fname), Buffer.from(bodyParts.join('\r\n\r\n').replace(/\r\n$/,''),'binary'))
-          } else { fs.writeFileSync(path.join(UPLOADS_DIR, fname), buffer) }
+            fs.writeFileSync(path.join(UPLOADS_DIR, fname), await _heicParaJpeg(Buffer.from(bodyParts.join('\r\n\r\n').replace(/\r\n$/,''),'binary')))
+          } else { fs.writeFileSync(path.join(UPLOADS_DIR, fname), await _heicParaJpeg(buffer)) }
         }
         log('📸', `Upload: ${fname}`)
         const url = `/uploads/${fname}`
