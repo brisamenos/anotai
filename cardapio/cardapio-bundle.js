@@ -304,7 +304,7 @@ const _PH_REGRAS = [
   ['acai',    /\b(acai|cupuacu|tigela)\b/],
   ['bebida',  /\b(refri|refrigerante|suco|agua|bebida|coca|guarana|fanta|sprite|pepsi|drink|refresco|lata|soda|cha|limonada|vitamina|energetico|h2oh?)\b/],
   ['doce',    /\b(sorvete|doce|sobremesa|bolo|torta|pudim|brigadeiro|milk ?shake|shake|picole|mousse|brownie|churros|petit|sundae|casquinha|trufa|cookie)\b/],
-  ['pizza',   /\b(pizza|calzone|esfirra|esfiha|broto)\b/],
+  ['pizza',   /\b(pizza|pizzas|calzone|esfirra|esfiha|broto|brotinho|brotinhos)\b/],
   ['burger',  /((^|[\s,(])x-[a-z]|^x [a-z]|\b(hamburg\w*|burg(er)?|smash|lanche|sanduiche|cheese|bauru|misto|hot ?dog|cachorro)\b)/],
   ['sushi',   /\b(sushi|temaki|sashimi|uramaki|hot ?roll|niguiri|japon\w*|poke|yakisoba)\b/],
   ['massa',   /\b(macarr\w*|massa|lasanha|espaguete|talharim|nhoque|penne|parafuso|fettuccine)\b/],
@@ -316,6 +316,9 @@ const _PH_REGRAS = [
 ];
 function _phNorm(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 function _iconeProdutoTipo(item) {
+  // Produto marcado como pizza no gestor é sempre pizza ("Calabresa" sozinho
+  // cairia em porção)
+  if (item && (item.item_type === 'pizza' || item.itemType === 'pizza')) return 'pizza';
   const nome = _phNorm(item && item.name);
   const cat  = _phNorm(item && (item.cat || item.cat_key));
   const desc = _phNorm(item && item.description);
