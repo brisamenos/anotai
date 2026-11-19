@@ -57,7 +57,8 @@ function openItemModal(id) {
     document.getElementById('im-price').textContent = (hasPizzaSizesAtOpen ? 'A partir de R$ ' : 'R$ ') + fmt(openPrice) + (i.item_type === 'kg' ? '/kg' : '');
   }
   const old = document.getElementById('im-price-old');
-  if (!i.hide_price && i.price_old) { old.textContent = 'R$ ' + fmt(i.price_old); old.style.display = ''; }
+  // Riscado só quando é desconto de verdade (preço zero = valor nas opções)
+  if (!i.hide_price && Number(i.price) > 0 && Number(i.price_old) > Number(i.price)) { old.textContent = 'R$ ' + fmt(i.price_old); old.style.display = ''; }
   else old.style.display = 'none';
   // Oferta relâmpago: selo com o relógio e quanto falta, logo abaixo do preço
   let ofEl = document.getElementById('im-oferta-relogio');
