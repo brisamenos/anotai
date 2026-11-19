@@ -1213,7 +1213,7 @@ async function openPromoBannerModal() {
   if (box) box.innerHTML = '<div class="bo-vazio">Carregando...</div>';
   try {
     const [cfgR, itR] = await Promise.all([
-      sb.from('store_config').select('promo_banner_ativo,promo_banners,ofertas_programadas').single(),
+      sb.from('store_config').select('promo_banner_ativo,promo_banners,ofertas_programadas,promo_banner_titulo,promo_banner_destaque,promo_banner_subtitulo,promo_banner_cta_texto,promo_banner_image_url,promo_banner_selo,promo_banner_categoria').single(),
       sb.from('menu_items').select('id,name,price,price_old,image_url,status,hide_price,oferta_id,oferta_preco_original').order('name'),
     ]);
     if (cfgR.error) throw cfgR.error;
@@ -1221,6 +1221,17 @@ async function openPromoBannerModal() {
     _promoBannerAtivo = !!d.promo_banner_ativo && d.promo_banner_ativo !== '0';
     try { const raw = d.promo_banners; _promoBanners = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []); } catch (e) { _promoBanners = []; }
     if (!Array.isArray(_promoBanners)) _promoBanners = [];
+    // Banner criado na versão antiga (um só, nos campos promo_banner_*): o
+    // cardápio continua mostrando ele, então ele entra na lista para dar
+    // para editar. Na primeira gravação passa para o formato novo.
+    if (!_promoBanners.length && d.promo_banner_titulo) {
+      _promoBanners = [{
+        titulo: d.promo_banner_titulo || '', destaque: d.promo_banner_destaque || '',
+        subtitulo: d.promo_banner_subtitulo || '', cta_texto: d.promo_banner_cta_texto || '',
+        image_url: d.promo_banner_image_url || '', selo: d.promo_banner_selo || '',
+        categoria: d.promo_banner_categoria || '', produto_id: null, ativo: true, inicio: '', fim: '',
+      }];
+    }
     _promoBanners.forEach(b => { if (!b.id) b.id = _boUid('b'); });
     try { const raw = d.ofertas_programadas; _ofertas = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []); } catch (e) { _ofertas = []; }
     if (!Array.isArray(_ofertas)) _ofertas = [];
@@ -1553,6 +1564,9 @@ async function _boGravar(oque, msg) {
     if (oque === 'banners') {
       payload.promo_banner_ativo = _promoBannerAtivo ? 1 : 0;
       payload.promo_banners = JSON.stringify(_promoBanners.map(b => { const c = { ...b }; delete c._agendar; delete c._dur; return c; }));
+      // Limpa o banner do formato antigo: agora tudo fica na lista nova (senão
+      // um banner excluído daqui voltaria a aparecer no cardápio pelos campos antigos)
+      payload.promo_banner_titulo = '';
     } else {
       payload.ofertas_programadas = _ofertas.map(o => ({ id: o.id, item_id: Number(o.item_id), preco: o.preco, inicio: o.inicio || '', fim: o.fim || '', ativo: o.ativo !== false }));
     }
