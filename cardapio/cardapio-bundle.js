@@ -269,9 +269,28 @@ function _fotoMini(url, w) {
 }
 
 // Rede de segurança: se uma foto reduzida (?w=) falhar, carrega a original.
+// Se a original também falhar (ex.: foto em formato que o aparelho não abre),
+// mostra o desenho do produto no lugar, em vez do nome do produto em letras
+// enormes (o "alt" da imagem quebrada).
 document.addEventListener('error', function (e) {
   const t = e.target;
-  if (t && t.tagName === 'IMG' && !t.dataset.o && /[?&]w=\d+$/.test(t.src)) { t.dataset.o = '1'; t.src = t.src.replace(/[?&]w=\d+$/, ''); }
+  if (!t || t.tagName !== 'IMG') return;
+  if (!t.dataset.o && /[?&]w=\d+$/.test(t.src)) { t.dataset.o = '1'; t.src = t.src.replace(/[?&]w=\d+$/, ''); return; }
+  if (t.dataset.ph) return;
+  t.dataset.ph = '1';
+  try {
+    const card = t.closest('[onclick*="openItemModal("]');
+    const m = card && /openItemModal\((\d+)\)/.exec(card.getAttribute('onclick') || '');
+    const item = m && typeof allItems !== 'undefined' ? allItems.find(x => String(x.id) === m[1]) : null;
+    const caixa = t.parentElement;
+    if (item && caixa && typeof _placeholderProduto === 'function') {
+      caixa.classList.remove('has-photo'); caixa.classList.add('sem-foto');
+      t.insertAdjacentHTML('afterend', _placeholderProduto(item));
+      t.remove();
+    } else {
+      t.style.visibility = 'hidden';
+    }
+  } catch (_) { t.style.visibility = 'hidden'; }
 }, true);
 
 // ══════════════════════════════════════════
