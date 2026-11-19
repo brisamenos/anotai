@@ -6319,7 +6319,7 @@ async function _vozEnviarCarrosselItens(tenantId, phone, inst, itens, catNome) {
     let preco = ''
     if (!i.hide_price) {
       const antigo = parseFloat(i.price_old)
-      preco = antigo > (parseFloat(i.price) || 0) ? `~R$ ${_fmtR$(antigo)}~  R$ ${_fmtR$(i.price)}` : `R$ ${_fmtR$(i.price)}`
+      preco = (parseFloat(i.price) || 0) > 0 && antigo > (parseFloat(i.price) || 0) ? `~R$ ${_fmtR$(antigo)}~  R$ ${_fmtR$(i.price)}` : `R$ ${_fmtR$(i.price)}`
     }
     let corpo = `*${nome}*` + (preco ? `\n${preco}` : '')
     const desc = String(i.description || '').replace(/\s+/g, ' ').trim()
@@ -6400,7 +6400,7 @@ async function _enviarDestaquesSaudacao(tenantId, phone, inst, linkCardapio) {
   const t0 = Date.now()
   const prontos = await Promise.all(itens.map(async i => {
     const antigo = parseFloat(i.price_old), atual = parseFloat(i.price) || 0
-    const pct = !i.hide_price && antigo > atual && atual >= 0 ? Math.round((1 - atual / antigo) * 100) : 0
+    const pct = !i.hide_price && antigo > atual && atual > 0 ? Math.round((1 - atual / antigo) * 100) : 0
     const selo = pct > 0 ? `OFERTA -${pct}%` : 'MAIS VENDIDO'
     let foto = null
     try {

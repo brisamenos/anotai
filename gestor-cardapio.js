@@ -1312,7 +1312,7 @@ function _boListaOfertas() {
     </div>`;
   }).join('');
   return `
-    <div class="bo-dica">Escolha o produto, o preço e o horário. No começo da oferta o preço muda sozinho no cardápio, no WhatsApp e no garçom, com um selo de relógio mostrando quanto falta. No fim, volta ao preço normal.</div>
+    <div class="bo-dica">Só os produtos daqui aparecem na faixa <strong>Promoções</strong> do cardápio. Escolha o produto, o preço e o horário: no começo da oferta o preço muda sozinho no cardápio, no WhatsApp e no garçom, com um selo de relógio mostrando quanto falta, e no fim volta ao preço normal. Para uma promoção sem data para acabar, escolha "Sem hora para acabar".</div>
     ${linhas || '<div class="bo-vazio">Nenhuma oferta programada ainda.</div>'}
     <button type="button" class="btn bp bo-novo" onclick="boNovo('oferta')">+ Nova oferta</button>`;
 }
