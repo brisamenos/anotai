@@ -36,6 +36,7 @@ function _tvCss() {
   .tv-tela-info{flex:1;min-width:0}
   .tv-tela-nome{font-weight:700;font-size:13.5px}
   .tv-tela-det{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tv-tela-det.tv-erro{white-space:normal}
   .tv-acoes{display:flex;gap:6px;flex-wrap:wrap}
   .tv-posicao{height:32px;padding:0 8px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:12px;max-width:100%}
   .tv-btn-x{height:32px;padding:0 10px;border-radius:7px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:var(--danger);cursor:pointer;font:inherit;font-size:12px;font-weight:700;white-space:nowrap}
@@ -312,19 +313,23 @@ function _tvDesenharTelas() {
   if (!el) return;
   const telas = _tv.estado.telas || [];
   const linkTv = location.origin + '/tv';
+  const limite = _tv.estado.limite_telas || 0;
+  const noLimite = limite && telas.length >= limite;
+  if (noLimite) _tv.adicionando = false;
+  const txtLimite = limite ? `Seu plano permite ${limite} TV${limite > 1 ? 's' : ''}` : '';
   el.innerHTML = `
     <div class="tv-card-head">
-      <div><div class="tv-card-title">Suas TVs</div><div class="tv-card-sub">${telas.length ? `${telas.filter(t => t.online).length} de ${telas.length} ligada(s) agora` : 'Nenhuma TV ligada ainda'}</div></div>
-      ${_tv.adicionando ? '' : '<button class="btn bp" onclick="tvMostrarAdicionar(true)">Adicionar TV</button>'}
+      <div><div class="tv-card-title">Suas TVs${limite ? ` (${Math.min(telas.length, limite)} de ${limite})` : ''}</div><div class="tv-card-sub">${telas.length ? `${telas.filter(t => t.online && !t.bloqueada).length} ligada(s) agora` : 'Nenhuma TV ligada ainda'}${txtLimite ? '. ' + txtLimite + '.' : ''}</div></div>
+      ${_tv.adicionando ? '' : noLimite ? '<span class="tv-card-sub" style="max-width:240px;text-align:right">Limite de TVs atingido. Para ligar mais, fale com o suporte.</span>' : '<button class="btn bp" onclick="tvMostrarAdicionar(true)">Adicionar TV</button>'}
     </div>
     <div class="tv-card-body">
       ${telas.map(t => {
         const confirma = _tv.removerTelaPendente === t.id;
         return `<div class="tv-tela">
-          <span class="tv-ponto ${t.online ? 'on' : ''}"></span>
+          <span class="tv-ponto ${t.online && !t.bloqueada ? 'on' : ''}"></span>
           <div class="tv-tela-info">
             <div class="tv-tela-nome">${_tvEsc(t.nome)}</div>
-            <div class="tv-tela-det">${t.online ? (t.tocando ? 'Ligada, passando: ' + _tvEsc(t.tocando) : 'Ligada') : 'Desligada, último contato ' + _tvQuando(t.ultimo_contato)}${t.plataforma === 'android' ? ' (app Android)' : ' (navegador)'}</div>
+            <div class="tv-tela-det ${t.bloqueada ? 'tv-erro' : ''}">${t.bloqueada ? 'Parada: passou do limite de TVs do seu plano. Remova outra TV ou fale com o suporte.' : (t.online ? (t.tocando ? 'Ligada, passando: ' + _tvEsc(t.tocando) : 'Ligada') : 'Desligada, último contato ' + _tvQuando(t.ultimo_contato)) + (t.plataforma === 'android' ? ' (app Android)' : ' (navegador)')}</div>
           </div>
           <div class="tv-acoes">
             <select class="tv-posicao" onchange="tvPosicaoTela(${t.id},this.value)" title="Como a TV está pendurada">

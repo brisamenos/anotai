@@ -62,7 +62,7 @@ import java.util.concurrent.Executors;
  */
 public class MainActivity extends Activity {
 
-    public static final String VERSAO = "1.1.2";
+    public static final String VERSAO = "1.1.3";
     public static final String SERVIDOR_PADRAO = "https://estimafood.evocrm.sbs";
 
     static class Video {
@@ -90,6 +90,7 @@ public class MainActivity extends Activity {
     private String versaoLista = "";
     private boolean ativo = true;
     private String nomeLoja = "";
+    private String avisoTv = ""; // ex.: TV passou do limite do plano da loja
     private int indice = -1;
     private Video tocando = null;
     private int cicloPareamento = 0;
@@ -498,6 +499,7 @@ public class MainActivity extends Activity {
         JSONObject loja = d.optJSONObject("loja");
         nomeLoja = loja != null ? loja.optString("nome") : "";
         ativo = d.optBoolean("ativo", true);
+        avisoTv = d.optString("aviso", "");
         String nova = d.optString("versao");
         if (nova.equals(versaoLista)) return;
         versaoLista = nova;
@@ -515,6 +517,7 @@ public class MainActivity extends Activity {
             JSONObject loja = d.optJSONObject("loja");
             nomeLoja = loja != null ? loja.optString("nome") : "";
             ativo = d.optBoolean("ativo", true);
+        avisoTv = d.optString("aviso", "");
             List<Video> l = new ArrayList<>();
             for (Video v : lerVideos(d)) if (arquivoLocal(v).exists()) l.add(v);
             lista = l;
@@ -538,7 +541,8 @@ public class MainActivity extends Activity {
 
     private void aoMudarLista() {
         if (!ativo) {
-            espera("TV Indoor desativada", "A TV Indoor não está ativa para " + (nomeLoja.isEmpty() ? "esta loja" : nomeLoja) + ". Fale com o suporte.");
+            if (!avisoTv.isEmpty()) espera("Limite de TVs", avisoTv);
+            else espera("TV Indoor desativada", "A TV Indoor não está ativa para " + (nomeLoja.isEmpty() ? "esta loja" : nomeLoja) + ". Fale com o suporte.");
             return;
         }
         // O vídeo de agora continua na lista? Deixa terminar. Senão, troca já.

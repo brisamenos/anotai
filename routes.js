@@ -8622,6 +8622,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         premium: ia.preco_premium !== undefined ? parseFloat(ia.preco_premium) : 99.90,
         addon_voz: ia.preco_addon_voz !== undefined ? parseFloat(ia.preco_addon_voz) : 89.90,
         addon_tv: ia.preco_addon_tv !== undefined ? parseFloat(ia.preco_addon_tv) : 19.90,
+        tv_limite_padrao: parseInt(ia.tv_limite_padrao, 10) > 0 ? parseInt(ia.tv_limite_padrao, 10) : 1,
         whatsapp_robo: ia.whatsapp_robo || ''
       })
     } catch(e) { send(res, 200, { essencial: 79.99, premium: 99.90, addon_voz: 89.90, addon_tv: 19.90, whatsapp_robo: '' }) }
@@ -8632,7 +8633,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'POST' && upath === '/api/admin/planos/precos') {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
     const body = await readBody(req)
-    const { preco_essencial, preco_premium, preco_addon_voz, preco_addon_tv, whatsapp_robo } = body
+    const { preco_essencial, preco_premium, preco_addon_voz, preco_addon_tv, tv_limite_padrao, whatsapp_robo } = body
     try {
       const cfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const ia = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
@@ -8640,6 +8641,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (preco_premium !== undefined) ia.preco_premium = parseFloat(preco_premium)
       if (preco_addon_voz !== undefined) ia.preco_addon_voz = parseFloat(preco_addon_voz)
       if (preco_addon_tv !== undefined) ia.preco_addon_tv = parseFloat(preco_addon_tv)
+      if (tv_limite_padrao !== undefined) ia.tv_limite_padrao = Math.min(50, Math.max(1, parseInt(tv_limite_padrao, 10) || 1))
       if (whatsapp_robo !== undefined) ia.whatsapp_robo = String(whatsapp_robo).replace(/\D/g, '').slice(0, 15)
       db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES ('_global',?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(JSON.stringify(ia))
       marcarDirty()

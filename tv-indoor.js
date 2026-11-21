@@ -3,6 +3,9 @@
 // Como funciona:
 //  - A loja tem o adicional ligado pelo admin (tenants.tv_ativo), ou está
 //    ligada a um anunciante ativo da rede VisseTV (outdoor.js), que já inclui.
+//  - Quantas TVs a loja pode ligar: tenants.tv_limite (o admin define na ficha
+//    do cliente) ou, em branco, o padrão geral (Planos, tv_limite_padrao).
+//    TV além do limite não passa nada e mostra um aviso.
 //  - No gestor, ela sobe até 10 vídeos. O upload vai em partes (aguenta vídeo
 //    grande e internet ruim) e o servidor comprime para Full HD (ffmpeg).
 //  - A TV (app Android ou a página /tv) mostra um código de 6 números. O
@@ -79,6 +82,8 @@ function criarTabelas(db) {
     criado_em INTEGER
   )`)
   try { db.prepare('ALTER TABLE tenants ADD COLUMN tv_ativo INTEGER DEFAULT 0').run() } catch (e) { /* já existe */ }
+  // Limite de TVs da loja (vazio = padrão geral)
+  try { db.prepare('ALTER TABLE tenants ADD COLUMN tv_limite INTEGER').run() } catch (e) { /* já existe */ }
   // Posição da TV: 0 = deitada (normal); 90 ou 270 = TV em pé (a imagem gira)
   try { db.prepare('ALTER TABLE tv_telas ADD COLUMN rotacao INTEGER DEFAULT 0').run() } catch (e) { /* já existe */ }
   // TV do Outdoor: pertence a um ponto (tenant_id fica 'od:<ponto>')
@@ -123,6 +128,26 @@ function tvLiberada(db, tid) {
   if (t && t.tv_ativo) return true
   // Loja ligada a um anunciante da rede VisseTV: a TV Indoor vem junto
   try { return !!(_outdoor && _outdoor.lojaVinculada && _outdoor.lojaVinculada(tid)) } catch (e) { return false }
+}
+
+// ── Limite de TVs por loja ──────────────────────────────────────────────
+const LIMITE_PADRAO = 1
+function limitePadrao(db) {
+  try {
+    const cfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const n = parseInt(JSON.parse(cfg?.ia_config || '{}').tv_limite_padrao, 10)
+    return n > 0 ? n : LIMITE_PADRAO
+  } catch (e) { return LIMITE_PADRAO }
+}
+function limiteTelas(db, tid) {
+  let n = 0
+  try { n = parseInt((db.prepare('SELECT tv_limite FROM tenants WHERE id=?').get(tid) || {}).tv_limite, 10) } catch (e) {}
+  return n > 0 ? n : limitePadrao(db)
+}
+// As primeiras TVs ligadas (por ordem de cadastro) ficam dentro do limite
+function telasLiberadas(db, tid) {
+  const lim = limiteTelas(db, tid)
+  return new Set(db.prepare('SELECT id FROM tv_telas WHERE tenant_id=? ORDER BY id LIMIT ?').all(tid, lim).map(t => t.id))
 }
 
 // ── Compressão (uma de cada vez, para não travar o servidor) ─────────────
@@ -262,8 +287,11 @@ function telaDoToken(req, db, params) {
 }
 
 function resumoTelas(db, tid) {
+  // TVs de ponto da VisseTV (tenant 'od:...') não têm limite
+  const liberadas = String(tid).startsWith('od:') ? null : telasLiberadas(db, tid)
   return db.prepare('SELECT id, nome, plataforma, app_versao, tocando, ultimo_contato, rotacao, created_at FROM tv_telas WHERE tenant_id=? ORDER BY id').all(tid)
-    .map(t => ({ ...t, online: !!t.ultimo_contato && (Date.now() - Date.parse(t.ultimo_contato) < ONLINE_MS) }))
+    .map(t => ({ ...t, online: !!t.ultimo_contato && (Date.now() - Date.parse(t.ultimo_contato) < ONLINE_MS),
+      bloqueada: liberadas ? !liberadas.has(t.id) : false }))
 }
 
 // ── Peças reaproveitadas pelo Outdoor (outdoor.js) ───────────────────────
@@ -383,7 +411,15 @@ async function handle(req, res, ctx) {
     const versaoApp = String(req.headers['x-tv-versao'] || '').slice(0, 20)
     db.prepare('UPDATE tv_telas SET ultimo_contato=?, tocando=?, app_versao=COALESCE(NULLIF(?,\'\'), app_versao) WHERE id=?')
       .run(agoraISO(), tocando || null, versaoApp, tela.id)
-    const pl = (tela.ponto_id && _outdoor) ? _outdoor.playlistDoPonto(tela.ponto_id) : playlistDa(db, tela.tenant_id)
+    let pl
+    if (tela.ponto_id && _outdoor) pl = _outdoor.playlistDoPonto(tela.ponto_id)
+    else if (!telasLiberadas(db, tela.tenant_id).has(tela.id)) {
+      // TV além do limite do plano da loja: não passa nada
+      const loja = db.prepare('SELECT nome FROM tenants WHERE id=?').get(tela.tenant_id) || {}
+      const lim = limiteTelas(db, tela.tenant_id)
+      pl = { versao: 'limite-' + lim, ativo: false, bloqueada: true, loja: { nome: loja.nome || '' }, videos: [],
+        aviso: `Esta TV passou do limite do plano (${lim} TV${lim > 1 ? 's' : ''}). Fale com o suporte para liberar mais TVs.` }
+    } else pl = playlistDa(db, tela.tenant_id)
     send(res, 200, { ...pl, tela: { id: tela.id, nome: tela.nome || '', rotacao: tela.rotacao || 0 } })
     return true
   }
@@ -411,7 +447,7 @@ async function handle(req, res, ctx) {
         .map(v => { const pr = progressoDe('tv_videos', v.id); return { ...v, progresso: pr.progresso, na_fila: v.status === 'processando' && pr.na_fila } })
       let rede = false
       try { rede = !!(_outdoor && _outdoor.lojaVinculada && _outdoor.lojaVinculada(tid)) } catch (e) {}
-      send(res, 200, { ativo: liberada, rede, max: MAX_VIDEOS, comprime: temFfmpeg, videos, telas: resumoTelas(db, tid) })
+      send(res, 200, { ativo: liberada, rede, max: MAX_VIDEOS, comprime: temFfmpeg, videos, telas: resumoTelas(db, tid), limite_telas: limiteTelas(db, tid) })
       return true
     }
 
@@ -420,6 +456,10 @@ async function handle(req, res, ctx) {
     // Ligar uma TV pelo código que aparece na tela dela
     if (req.method === 'POST' && upath === '/api/tv/gestor/telas') {
       if (!ctx.checkRateLimit('tv-vincular:' + tid, 15, 10 * 60 * 1000)) { send(res, 429, { error: 'Muitas tentativas. Aguarde alguns minutos.' }); return true }
+      const lim = limiteTelas(db, tid)
+      if (db.prepare('SELECT COUNT(*) n FROM tv_telas WHERE tenant_id=?').get(tid).n >= lim) {
+        send(res, 403, { error: `Seu plano permite até ${lim} TV${lim > 1 ? 's' : ''}. Para ligar mais, fale com o suporte.` }); return true
+      }
       const body = await readBody(req).catch(() => ({}))
       const r = vincularTela(body?.codigo, { tenant_id: tid, nome: body?.nome })
       if (r.erro) { send(res, r.status, { error: r.erro }); return true }
@@ -511,7 +551,7 @@ async function handle(req, res, ctx) {
     const tid = String(params.get('tenant_id') || '')
     const telas = tid ? resumoTelas(db, tid) : []
     const videos = tid ? db.prepare(`SELECT COUNT(*) n FROM tv_videos WHERE tenant_id=? AND status='pronto'`).get(tid).n : 0
-    send(res, 200, { telas: telas.length, ligadas: telas.filter(t => t.online).length, videos })
+    send(res, 200, { telas: telas.length, ligadas: telas.filter(t => t.online).length, videos, limite: tid ? limiteTelas(db, tid) : 0, limite_padrao: limitePadrao(db) })
     return true
   }
 

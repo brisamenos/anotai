@@ -80,6 +80,7 @@
   var lista = [];          // vídeos que a loja mandou
   var versao = '';
   var ativo = true;
+  var avisoTv = '';
   var nomeLoja = '';
   var indice = -1;
   var tocando = null;      // vídeo atual
@@ -152,6 +153,7 @@
         nomeLoja = (d.loja && d.loja.nome) || '';
         girar((d.tela && d.tela.rotacao) || 0);
         ativo = !!d.ativo;
+        avisoTv = d.aviso || '';
         if (d.versao !== versao) { versao = d.versao; lista = d.videos || []; aoMudarLista(); }
         timerLista = setTimeout(buscarLista, 15000);
       })
@@ -185,7 +187,7 @@
   }
 
   function aoMudarLista() {
-    if (!ativo) { espera('TV Indoor desativada', 'A TV Indoor não está ativa para ' + (nomeLoja || 'esta loja') + '. Fale com o suporte.'); return; }
+    if (!ativo) { espera(avisoTv ? 'Limite de TVs' : 'TV Indoor desativada', avisoTv || ('A TV Indoor não está ativa para ' + (nomeLoja || 'esta loja') + '. Fale com o suporte.')); return; }
     // Se o vídeo atual saiu da lista, troca na hora; senão espera ele acabar
     if (tocando && lista.some(function (v) { return v.id === tocando.id && v.url === tocando.url; })) return;
     indice = -1;
