@@ -6,7 +6,10 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.media.MediaPlayer;
@@ -20,14 +23,16 @@ import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.Surface;
+import android.view.TextureView;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.VideoView;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -49,7 +54,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * EstimaFood TV: passa na TV da loja os vídeos que o gestor sobe no painel
+ * VisseTV: passa na TV da loja os vídeos que sobem pelo painel
  * (TV Indoor). Mostra um código para ligar a TV à loja, guarda os vídeos no
  * aparelho (continua passando sem internet) e confere a lista a cada 15s.
  *
@@ -57,7 +62,7 @@ import java.util.concurrent.Executors;
  */
 public class MainActivity extends Activity {
 
-    public static final String VERSAO = "1.0.0";
+    public static final String VERSAO = "1.1.1";
     public static final String SERVIDOR_PADRAO = "https://estimafood.evocrm.sbs";
 
     static class Video {
@@ -69,7 +74,14 @@ public class MainActivity extends Activity {
     private final ExecutorService baixador = Executors.newSingleThreadExecutor();
 
     private SharedPreferences prefs;
-    private VideoView video;
+    private FrameLayout raiz, palco;   // palco: tudo que gira quando a TV está em pé
+    private TextureView textura;
+    private Surface superficie;
+    private MediaPlayer mp;
+    private Video pendente;            // vídeo esperando a tela de vídeo ficar pronta
+    private int giro = 0;              // 0 = TV deitada; 90 ou 270 = TV em pé
+    private int vidW = 0, vidH = 0;
+    private boolean preparado = false;
     private LinearLayout telaParear, telaEspera;
     private TextView txtCodigo, txtCodigoRodape, txtServidor, txtEsperaTitulo, txtEsperaTexto;
     private Button btnPermissao;
@@ -100,13 +112,13 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         esconderBarras();
-        if (tocando != null && !video.isPlaying()) video.start();
+        try { if (mp != null && preparado && tocando != null && !mp.isPlaying()) mp.start(); } catch (Exception e) { }
     }
 
     @Override
     protected void onDestroy() {
         principal.removeCallbacksAndMessages(null);
-        try { video.stopPlayback(); } catch (Exception e) { }
+        liberarPlayer();
         rede.shutdownNow();
         baixador.shutdownNow();
         super.onDestroy();
@@ -170,43 +182,70 @@ public class MainActivity extends Activity {
         b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         final GradientDrawable fundo = new GradientDrawable();
         fundo.setCornerRadius(dp(10));
-        fundo.setColor(Color.parseColor("#1F2A37"));
-        fundo.setStroke(dp(2), Color.parseColor("#1397E8"));
+        fundo.setColor(Color.parseColor("#231335"));
+        fundo.setStroke(dp(2), Color.parseColor("#FF2E63"));
         b.setBackground(fundo);
         b.setPadding(dp(18), dp(10), dp(18), dp(10));
         b.setFocusable(true);
         b.setOnClickListener(acao);
         b.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override public void onFocusChange(View v, boolean foco) {
-                fundo.setColor(Color.parseColor(foco ? "#1397E8" : "#1F2A37"));
+                fundo.setColor(Color.parseColor(foco ? "#FF2E63" : "#231335"));
             }
         });
         return b;
     }
 
+    // Logo VisseTV (assets/logo.png); se não carregar, escreve o nome
+    private View logoMarca(int larguraDp) {
+        try {
+            InputStream in = getAssets().open("logo.png");
+            Bitmap bm = BitmapFactory.decodeStream(in);
+            in.close();
+            ImageView iv = new ImageView(this);
+            iv.setImageBitmap(bm);
+            iv.setAdjustViewBounds(true);
+            iv.setLayoutParams(new LinearLayout.LayoutParams(dp(larguraDp), LinearLayout.LayoutParams.WRAP_CONTENT));
+            return iv;
+        } catch (Exception e) {
+            TextView t = texto(20, Color.parseColor("#FF2E63"), true);
+            t.setText("VisseTV");
+            return t;
+        }
+    }
+
     private GradientDrawable fundoAzul() {
         return new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-            new int[]{Color.parseColor("#0D2A44"), Color.parseColor("#05080D")});
+            new int[]{Color.parseColor("#2C1240"), Color.parseColor("#0B0612")});
     }
 
     private void montarTelas() {
-        FrameLayout raiz = new FrameLayout(this);
+        raiz = new FrameLayout(this);
         raiz.setBackgroundColor(Color.BLACK);
-
-        video = new VideoView(this);
-        video.setVisibility(View.GONE);
-        raiz.addView(video, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
-        video.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-            @Override public void onPrepared(MediaPlayer mp) { mp.setLooping(false); video.start(); }
-        });
-        video.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-            @Override public void onCompletion(MediaPlayer mp) { tocar(); }
-        });
-        video.setOnErrorListener(new MediaPlayer.OnErrorListener() {
-            @Override public boolean onError(MediaPlayer mp, int what, int extra) {
-                principal.postDelayed(new Runnable() { @Override public void run() { tocar(); } }, 1500);
-                return true; // sem a janela de erro do Android
+        palco = new FrameLayout(this);
+        palco.setBackgroundColor(Color.BLACK);
+        raiz.addView(palco, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+        raiz.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override public void onLayoutChange(View v, int l, int t, int r, int b, int ol, int ot, int or, int ob) {
+                if (r - l != or - ol || b - t != ob - ot) principal.post(new Runnable() { @Override public void run() { ajustarPalco(); } });
             }
+        });
+
+        textura = new TextureView(this);
+        textura.setVisibility(View.GONE);
+        palco.addView(textura, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+        textura.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+            @Override public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
+                superficie = new Surface(st);
+                if (pendente != null) { Video v = pendente; pendente = null; abrirVideo(v); }
+            }
+            @Override public void onSurfaceTextureSizeChanged(SurfaceTexture st, int w, int h) { }
+            @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture st) {
+                liberarPlayer();
+                if (superficie != null) { superficie.release(); superficie = null; }
+                return true;
+            }
+            @Override public void onSurfaceTextureUpdated(SurfaceTexture st) { }
         });
 
         // Tela do código de pareamento
@@ -215,19 +254,18 @@ public class MainActivity extends Activity {
         telaParear.setGravity(Gravity.CENTER);
         telaParear.setBackground(fundoAzul());
         telaParear.setPadding(dp(40), dp(24), dp(40), dp(24));
-        TextView marca = texto(18, Color.parseColor("#1397E8"), true); marca.setText("EstimaFood TV");
-        telaParear.addView(marca);
+        telaParear.addView(logoMarca(200));
         TextView titulo = texto(30, Color.WHITE, true); titulo.setText("Ligue esta TV à sua loja"); titulo.setPadding(0, dp(6), 0, dp(10));
         telaParear.addView(titulo);
-        TextView instr = texto(16, Color.parseColor("#C9D6E3"), false);
-        instr.setText("No painel do gestor, entre em TV Indoor, toque em Adicionar TV e digite o código:");
+        TextView instr = texto(16, Color.parseColor("#E3DBEC"), false);
+        instr.setText("No seu painel, toque em Adicionar TV (ou Ligar TV) e digite o código:");
         telaParear.addView(instr);
         txtCodigo = texto(84, Color.WHITE, true);
         txtCodigo.setText("------");
         if (Build.VERSION.SDK_INT >= 21) txtCodigo.setLetterSpacing(0.12f);
         txtCodigo.setPadding(0, dp(8), 0, dp(4));
         telaParear.addView(txtCodigo);
-        txtCodigoRodape = texto(13, Color.parseColor("#8A9BB0"), false);
+        txtCodigoRodape = texto(13, Color.parseColor("#B3A6C2"), false);
         txtCodigoRodape.setText("Gerando código...");
         telaParear.addView(txtCodigoRodape);
         LinearLayout linha = new LinearLayout(this);
@@ -243,10 +281,10 @@ public class MainActivity extends Activity {
             @Override public void onClick(View v) { perguntarServidor(); }
         }));
         telaParear.addView(linha);
-        txtServidor = texto(12, Color.parseColor("#5B6B7E"), false);
+        txtServidor = texto(12, Color.parseColor("#7B6C8C"), false);
         txtServidor.setPadding(0, dp(10), 0, 0);
         telaParear.addView(txtServidor);
-        raiz.addView(telaParear, new FrameLayout.LayoutParams(-1, -1));
+        palco.addView(telaParear, new FrameLayout.LayoutParams(-1, -1));
 
         // Tela de espera (carregando, sem vídeo, desativada)
         telaEspera = new LinearLayout(this);
@@ -255,28 +293,29 @@ public class MainActivity extends Activity {
         telaEspera.setBackground(fundoAzul());
         telaEspera.setPadding(dp(48), dp(24), dp(48), dp(24));
         telaEspera.setVisibility(View.GONE);
-        TextView marca2 = texto(18, Color.parseColor("#1397E8"), true); marca2.setText("EstimaFood TV");
-        telaEspera.addView(marca2);
+        telaEspera.addView(logoMarca(240));
         txtEsperaTitulo = texto(32, Color.WHITE, true); txtEsperaTitulo.setPadding(0, dp(8), 0, dp(8));
-        txtEsperaTexto = texto(17, Color.parseColor("#8A9BB0"), false);
+        txtEsperaTexto = texto(17, Color.parseColor("#B3A6C2"), false);
         telaEspera.addView(txtEsperaTitulo);
         telaEspera.addView(txtEsperaTexto);
-        raiz.addView(telaEspera, new FrameLayout.LayoutParams(-1, -1));
+        palco.addView(telaEspera, new FrameLayout.LayoutParams(-1, -1));
 
         setContentView(raiz);
+        giro = prefs.getInt("giro", 0);
     }
 
     private void mostrar(String qual) {
         telaParear.setVisibility("parear".equals(qual) ? View.VISIBLE : View.GONE);
         telaEspera.setVisibility("espera".equals(qual) ? View.VISIBLE : View.GONE);
-        video.setVisibility("video".equals(qual) ? View.VISIBLE : View.GONE);
+        textura.setVisibility("video".equals(qual) ? View.VISIBLE : View.GONE);
     }
 
     private void espera(String titulo, String msg) {
         txtEsperaTitulo.setText(titulo);
         txtEsperaTexto.setText(msg);
         mostrar("espera");
-        try { video.stopPlayback(); } catch (Exception e) { }
+        liberarPlayer();
+        pendente = null;
         tocando = null;
     }
 
@@ -323,7 +362,8 @@ public class MainActivity extends Activity {
         cicloLista++; // para a busca da lista que estava rodando
         principal.removeCallbacksAndMessages(null);
         // Para tudo que estava passando (a TV foi desligada da loja)
-        try { video.stopPlayback(); } catch (Exception e) { }
+        liberarPlayer();
+        pendente = null;
         tocando = null;
         lista = new ArrayList<>();
         versaoLista = "";
@@ -438,7 +478,14 @@ public class MainActivity extends Activity {
                 }
                 boolean ok = false;
                 if (r.codigo == 200) {
-                    try { aplicarLista(new JSONObject(r.corpo)); ok = true; } catch (Exception e) { }
+                    try {
+                        JSONObject d = new JSONObject(r.corpo);
+                        JSONObject tela = d.optJSONObject("tela");
+                        int g = tela != null ? tela.optInt("rotacao", 0) : 0;
+                        if (g != giro) aplicarGiro(g);
+                        aplicarLista(d);
+                        ok = true;
+                    } catch (Exception e) { }
                 }
                 // Sem internet e nada passando: usa a última lista guardada
                 if (!ok && tocando == null && lista.isEmpty()) carregarListaGuardada();
@@ -531,7 +578,7 @@ public class MainActivity extends Activity {
         if (token().isEmpty()) return;
         Video v = proximo();
         if (v == null) {
-            espera(nomeLoja.isEmpty() ? "EstimaFood TV" : nomeLoja,
+            espera(nomeLoja.isEmpty() ? "VisseTV" : nomeLoja,
                 lista.isEmpty() ? "Nenhum vídeo ainda. Suba os vídeos no painel do gestor, em TV Indoor."
                                 : "Nenhum vídeo marcado para este horário.");
             principal.postDelayed(new Runnable() { @Override public void run() {
@@ -540,10 +587,90 @@ public class MainActivity extends Activity {
             return;
         }
         tocando = v;
-        File local = arquivoLocal(v);
         mostrar("video");
-        if (local.exists()) video.setVideoPath(local.getAbsolutePath());
-        else video.setVideoURI(Uri.parse(servidor() + v.url));
+        if (superficie == null) { pendente = v; return; } // a tela do vídeo ainda está nascendo
+        abrirVideo(v);
+    }
+
+    // ───────────────────────── Player (MediaPlayer + TextureView, que deixa girar) ─────────────────────────
+    private void abrirVideo(Video v) {
+        liberarPlayer();
+        preparado = false;
+        final MediaPlayer m = new MediaPlayer();
+        mp = m;
+        try {
+            m.setSurface(superficie);
+            m.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                @Override public void onPrepared(MediaPlayer p) { if (p == mp) { preparado = true; p.start(); contarExibicao(); } }
+            });
+            m.setOnVideoSizeChangedListener(new MediaPlayer.OnVideoSizeChangedListener() {
+                @Override public void onVideoSizeChanged(MediaPlayer p, int w, int h) {
+                    if (p != mp || w <= 0 || h <= 0) return;
+                    vidW = w; vidH = h; ajustarVideo();
+                }
+            });
+            m.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                @Override public void onCompletion(MediaPlayer p) { if (p == mp) tocar(); }
+            });
+            m.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                @Override public boolean onError(MediaPlayer p, int what, int extra) {
+                    if (p == mp) {
+                        liberarPlayer();
+                        principal.postDelayed(new Runnable() { @Override public void run() { tocar(); } }, 1500);
+                    }
+                    return true;
+                }
+            });
+            File local = arquivoLocal(v);
+            if (local.exists()) m.setDataSource(local.getAbsolutePath());
+            else m.setDataSource(this, Uri.parse(servidor() + v.url));
+            m.prepareAsync();
+        } catch (Exception e) {
+            liberarPlayer();
+            principal.postDelayed(new Runnable() { @Override public void run() { tocar(); } }, 1500);
+        }
+    }
+
+    // Anúncio do Outdoor (id negativo): avisa o sistema que passou (relatório de exibições)
+    private void contarExibicao() {
+        final Video v = tocando;
+        if (v == null || v.id >= 0) return;
+        final String srv = servidor(), tok = token();
+        rede.execute(new Runnable() { @Override public void run() {
+            http("POST", srv + "/api/tv/exibiu", "{\"id\":" + v.id + "}", new String[][]{{"Authorization", "Tv " + tok}});
+        }});
+    }
+
+    private void liberarPlayer() {
+        MediaPlayer m = mp;
+        mp = null;
+        if (m != null) { try { m.reset(); } catch (Exception e) { } try { m.release(); } catch (Exception e) { } }
+    }
+
+    private void aplicarGiro(int g) {
+        giro = (g == 90 || g == 270) ? g : 0;
+        prefs.edit().putInt("giro", giro).apply();
+        ajustarPalco();
+    }
+
+    // TV em pé: o palco fica com largura e altura trocadas e gira no centro
+    private void ajustarPalco() {
+        int w = raiz.getWidth(), h = raiz.getHeight();
+        if (w == 0 || h == 0) return;
+        boolean emPe = giro == 90 || giro == 270;
+        palco.setLayoutParams(new FrameLayout.LayoutParams(emPe ? h : w, emPe ? w : h, Gravity.CENTER));
+        palco.setRotation(giro);
+        ajustarVideo();
+    }
+
+    // Vídeo inteiro na tela, sem esticar (sobra preta nas laterais se precisar)
+    private void ajustarVideo() {
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) palco.getLayoutParams();
+        int pw = lp.width > 0 ? lp.width : raiz.getWidth();
+        int ph = lp.height > 0 ? lp.height : raiz.getHeight();
+        if (pw <= 0 || ph <= 0 || vidW <= 0 || vidH <= 0) return;
+        float esc = Math.min(pw / (float) vidW, ph / (float) vidH);
+        textura.setLayoutParams(new FrameLayout.LayoutParams(Math.round(vidW * esc), Math.round(vidH * esc), Gravity.CENTER));
     }
 
     // ───────────────────────── Vídeos guardados no aparelho ─────────────────────────

@@ -12,8 +12,9 @@ android {
         applicationId = "com.estimafood.tv"
         minSdk = 21
         targetSdk = 34
-        versionCode = numeroVersao
-        versionName = "1.0.$numeroVersao"
+        // Começa em 100 para ficar sempre acima das versões montadas à mão (até a 4)
+        versionCode = 100 + numeroVersao
+        versionName = "1.1.$numeroVersao"
     }
 
     signingConfigs {
