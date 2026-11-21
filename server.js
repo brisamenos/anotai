@@ -9939,7 +9939,8 @@ async function _handleOgImage(req, res, upath) {
 // O que a rota de arquivos estáticos (no fim do servidor) se recusa a entregar.
 // Uploads não passam por ela: saem por /uploads/, direto da pasta de uploads.
 const _ESTATICO_BLOQUEADO = new RegExp([
-  '(^|/)(data|\\.dev-data|node_modules|\\.git)(/|$)',
+  '(^|/)(data|\\.dev-data|node_modules|\\.git|\\.github|app-tv-android)(/|$)',
+  '\\.(jks|keystore|kts|gradle)$',
   '\\.(db|db-wal|db-shm|sqlite|sqlite3|sql|log|env|bak)$',
   '^/?(server|routes|site-admin|marketing-flows|suporte-vendas-bot|tenant-wa|wuzapi|order-message|phone-utils|limpar-links-externos|limpar-movimentos-cancelados|tv-indoor|fotos-externas|wa-card-foto)\\.js$',
   '^/?(package|package-lock|site-padrao)\\.json$',
