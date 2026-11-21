@@ -62,7 +62,7 @@ import java.util.concurrent.Executors;
  */
 public class MainActivity extends Activity {
 
-    public static final String VERSAO = "1.1.1";
+    public static final String VERSAO = "1.1.2";
     public static final String SERVIDOR_PADRAO = "https://estimafood.evocrm.sbs";
 
     static class Video {
@@ -600,8 +600,9 @@ public class MainActivity extends Activity {
         mp = m;
         try {
             m.setSurface(superficie);
+            m.setVolume(0f, 0f); // Os vídeos passam sem som na TV
             m.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-                @Override public void onPrepared(MediaPlayer p) { if (p == mp) { preparado = true; p.start(); contarExibicao(); } }
+                @Override public void onPrepared(MediaPlayer p) { if (p == mp) { preparado = true; p.setVolume(0f, 0f); p.start(); contarExibicao(); } }
             });
             m.setOnVideoSizeChangedListener(new MediaPlayer.OnVideoSizeChangedListener() {
                 @Override public void onVideoSizeChanged(MediaPlayer p, int w, int h) {

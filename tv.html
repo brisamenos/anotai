@@ -32,7 +32,6 @@
   #espera{align-items:center;justify-content:center;flex-direction:column;text-align:center;gap:1.4vw;padding:6vw}
   #espera .grande{font-size:clamp(28px,3.4vw,64px);font-weight:800}
   #espera .pequeno{font-size:clamp(16px,1.5vw,28px);color:var(--apagado);max-width:60ch;line-height:1.4}
-  #aviso-som{position:fixed;left:50%;bottom:4vh;transform:translateX(-50%);background:rgba(0,0,0,.72);color:#fff;padding:1vh 2vw;border-radius:99px;font-size:clamp(13px,1.2vw,22px);display:none;z-index:5}
   @media (max-aspect-ratio:1/1){.parear-grade{grid-template-columns:1fr}}
   /* TV em pé: o palco (vídeos e avisos) gira; o tamanho troca largura por altura */
   #palco{position:fixed;inset:0}
@@ -71,7 +70,6 @@
 </section>
 </div>
 
-<div id="aviso-som">Aperte OK no controle para ligar o som</div>
 
 <script>
 (function () {
@@ -87,7 +85,6 @@
   var tocando = null;      // vídeo atual
   var va = document.getElementById('va'), vb = document.getElementById('vb');
   var atual = va, proxima = vb;
-  var somLigado = false;
   var timerLista = null, timerParear = null;
 
   function mostrar(id) {
@@ -205,14 +202,14 @@
     mostrar('');
     tocando = v;
     var el = proxima;
-    el.muted = !somLigado;
+    el.muted = true; // os vídeos passam sem som
     el.src = v.url;
     el.onended = function () { tocar(); };
     el.onerror = function () { setTimeout(tocar, 1500); };
     // Anúncio do Outdoor (id negativo): conta a exibição
     if (v.id < 0) { try { fetch('/api/tv/exibiu', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Tv ' + token }, body: JSON.stringify({ id: v.id }) }).catch(function () {}); } catch (e) {} }
     var p = el.play();
-    if (p && p.catch) p.catch(function () { el.muted = true; el.play().catch(function () { setTimeout(tocar, 2000); }); });
+    if (p && p.catch) p.catch(function () { el.play().catch(function () { setTimeout(tocar, 2000); }); });
     el.classList.add('ativo');
     atual.classList.remove('ativo');
     var velha = atual;
@@ -220,19 +217,13 @@
     atual = el; proxima = velha;
   }
 
-  // ── Som e tela cheia (só depois de um toque/tecla, regra dos navegadores) ──
+  // ── Tela cheia (só depois de um toque/tecla, regra dos navegadores) ──
   function interagiu() {
-    if (!somLigado) {
-      somLigado = true;
-      atual.muted = false;
-      document.getElementById('aviso-som').style.display = 'none';
-    }
     var de = document.documentElement;
     if (!document.fullscreenElement && de.requestFullscreen) de.requestFullscreen().catch(function () {});
   }
   document.addEventListener('keydown', interagiu);
   document.addEventListener('click', interagiu);
-  setTimeout(function () { if (!somLigado) { var a = document.getElementById('aviso-som'); a.style.display = 'block'; setTimeout(function () { a.style.display = 'none'; }, 10000); } }, 4000);
 
   // Tela sempre acesa
   function manterAcesa() { try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(function () {}); } catch (e) {} }

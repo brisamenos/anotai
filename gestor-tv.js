@@ -269,7 +269,7 @@ function _tvDesenharVideos() {
   el.innerHTML = `
     <div class="tv-card-head">
       <div><div class="tv-card-title">Vídeos (${Math.min(usados, e.max)} de ${e.max})</div>
-      <div class="tv-card-sub">Passam em sequência, sem parar, na ordem abaixo.${e.comprime ? ' Pode subir vídeo de qualquer tamanho: o sistema deixa em Full HD e mais leve.' : ''}</div></div>
+      <div class="tv-card-sub">Passam em sequência, sem parar, na ordem abaixo, e sem som: a mensagem precisa estar escrita na tela.${e.comprime ? ' Pode subir vídeo de qualquer tamanho: o sistema deixa em Full HD e mais leve.' : ''}</div></div>
       <label class="btn bp" style="${cheio ? 'opacity:.5;pointer-events:none' : ''}">
         <input type="file" accept="video/*" multiple style="display:none" onchange="tvEscolherVideos(this)">Subir vídeo
       </label>

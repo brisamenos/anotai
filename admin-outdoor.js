@@ -212,7 +212,7 @@
     const a = O.dados.anunciantes.find(x => x.id === aid);
     O.aberto = aid;
     modal(`<h2>Vídeos de ${esc(a ? a.nome : '')}</h2>
-      <div style="font-size:12.5px;color:var(--muted);margin:-10px 0 14px;line-height:1.5">Passam na TV do próprio anunciante (se ele tiver) e nos pontos marcados no cadastro dele. Para trocar um anúncio, use "Substituir": o vídeo antigo fica no ar até o novo ficar pronto e depois é apagado de vez.</div>
+      <div style="font-size:12.5px;color:var(--muted);margin:-10px 0 14px;line-height:1.5">Passam na TV do próprio anunciante (se ele tiver) e nos pontos marcados no cadastro dele, sempre sem som (o áudio é removido). Para trocar um anúncio, use "Substituir": o vídeo antigo fica no ar até o novo ficar pronto e depois é apagado de vez.</div>
       <div id="od-v-lista">Carregando...</div>
       <div style="display:flex;justify-content:space-between;gap:8px;margin-top:16px;flex-wrap:wrap">
         <label class="btn bp" id="od-v-subir"><input type="file" accept="video/*" multiple style="display:none" onchange="OUTDOORUI.escolher(${aid},this)">Subir vídeo</label>

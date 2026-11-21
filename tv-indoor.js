@@ -178,10 +178,9 @@ async function proximo() {
     if (temFfmpeg) {
       _progresso.set(chave, 0)
       await rodar('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-i', origem,
-        '-map', '0:v:0', '-map', '0:a:0?',
+        '-map', '0:v:0', '-an', // os vídeos passam sem som na TV: o áudio é removido (arquivo menor)
         '-vf', "scale='if(gte(iw,ih),min(1920,iw),min(1080,iw))':'if(gte(iw,ih),min(1080,ih),min(1920,ih))':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30,format=yuv420p",
         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-profile:v', 'high', '-level', '4.1',
-        '-c:a', 'aac', '-b:a', '128k', '-ac', '2',
         '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', saida + '.tmp.mp4'],
         txt => {
           const m = /out_time_(?:ms|us)=(\d+)/.exec(txt)
