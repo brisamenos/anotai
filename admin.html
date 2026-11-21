@@ -758,6 +758,112 @@ td{padding:12px 16px;color:#dce6f7}
   .sb-user{justify-content:center;gap:0;padding:10px}
   .sidebar:hover .sb-user,.sidebar:focus-within .sb-user{justify-content:flex-start;gap:9px;padding:10px 12px}
 }
+
+/* ══════════════════════════════════════════════════════════════
+   TEMAS: ajustes finais (escuro e claro) — vem por último de propósito
+   ══════════════════════════════════════════════════════════════ */
+.sb-senha{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:none;border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text-2);font:600 12px 'Inter',sans-serif;cursor:pointer;margin-bottom:8px;transition:background .15s,color .15s,border-color .15s}
+.sb-senha:hover{color:var(--text);border-color:var(--border-hover);background:rgba(148,163,184,.08)}
+.sb-senha .ui-ico{width:15px;height:15px;flex-shrink:0}
+#btn-theme-toggle{min-width:34px;padding:0 9px}
+#btn-theme-toggle .ui-ico{width:15px;height:15px}
+.topbar-tools .btn.bsm{min-height:34px}
+@media (min-width:901px){
+  .sb-senha span{white-space:nowrap;overflow:hidden;max-width:0;opacity:0;transition:opacity .16s ease}
+  .sidebar:hover .sb-senha span,.sidebar:focus-within .sb-senha span{max-width:200px;opacity:1}
+  .sb-senha{gap:0;border-color:transparent}
+  .sidebar:hover .sb-senha,.sidebar:focus-within .sb-senha{gap:8px;border-color:var(--border)}
+}
+
+/* Modais no formato antigo (cabeçalho/corpo/rodapé): mesmo visual dos outros */
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.modal-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:800;letter-spacing:-.2px;color:var(--text)}
+.modal-close{width:30px;height:30px;flex-shrink:0;border-radius:8px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;transition:all .15s}
+.modal-close:hover{color:var(--danger);border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.08)}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.form-input,.fg input,.fg select,.fg textarea{
+  width:100%;background:rgba(15,23,38,.9);border:1px solid rgba(148,163,184,.16);border-radius:9px;padding:9px 12px;
+  color:var(--text);font:13px 'Inter',sans-serif;outline:none;transition:border-color .18s,box-shadow .18s}
+.form-input:focus,.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:rgba(91,139,255,.58);box-shadow:0 0 0 3px rgba(91,139,255,.12)}
+.modal-foot .btn:not(.bg2):not(.bd):not(.bp){background:linear-gradient(135deg,#5b8bff,#2563eb);color:#fff;box-shadow:0 8px 20px rgba(37,99,235,.22)}
+.fg label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px}
+body.theme-light .form-input,body.theme-light .fg input,body.theme-light .fg select,body.theme-light .fg textarea{background:#ffffff;border-color:rgba(15,23,42,.16)}
+
+/* ── Tema claro ── */
+body.theme-light{
+  --bg:#f3f5f9;--s1:#ffffff;--s2:#f6f8fb;--s3:#eaeef4;
+  --surface:#ffffff;--surface-2:#f6f8fb;
+  --border:rgba(15,23,42,.10);--border-hover:rgba(15,23,42,.20);
+  --accent:#2563eb;--accent-2:#7c3aed;--accent-dim:rgba(37,99,235,.08);
+  --success:#15803d;--orange:#c2410c;--danger:#dc2626;--purple:#7c3aed;
+  --text:#0f172a;--text-2:#334155;--muted:#64748b;
+  color-scheme:light;
+}
+body.theme-light{background:radial-gradient(1100px 560px at 14% -8%,rgba(37,99,235,.06),transparent 55%),var(--bg)}
+body.theme-light .sidebar{background:#ffffff;border-right:1px solid var(--border);box-shadow:8px 0 24px rgba(15,23,42,.04)}
+body.theme-light .sidebar:hover,body.theme-light .sidebar:focus-within{box-shadow:18px 0 44px rgba(15,23,42,.12)}
+body.theme-light .sb-logo{border-bottom-color:var(--border)}
+body.theme-light .sb-logo-name{color:var(--text)}
+body.theme-light .sb-sec,body.theme-light .sidebar:hover .sb-sec,body.theme-light .sidebar:focus-within .sb-sec{color:#64748b}
+body.theme-light .sb-sec{border-top-color:var(--border)}
+body.theme-light .sb-item{color:#475569}
+body.theme-light .sb-item .sb-icon{background:#f1f5f9;border-color:rgba(15,23,42,.06);color:#475569}
+body.theme-light .sb-item:hover{background:#f1f5f9;color:#0f172a}
+body.theme-light .sb-item.on{color:#1d4ed8;background:linear-gradient(135deg,rgba(37,99,235,.12),rgba(37,99,235,.04));box-shadow:inset 3px 0 0 #2563eb}
+body.theme-light .sb-item.on .sb-icon{background:rgba(37,99,235,.12);border-color:rgba(37,99,235,.18);color:#1d4ed8}
+body.theme-light .sb-foot{border-top-color:var(--border)}
+body.theme-light .sb-user:hover{background:#f1f5f9}
+body.theme-light .sb-user-role{color:#64748b}
+body.theme-light .sb-av,body.theme-light .sb-logo-icon{color:#fff}
+body.theme-light .topbar{background:rgba(255,255,255,.86);border-bottom:1px solid var(--border)}
+body.theme-light .stat-card,body.theme-light .card,body.theme-light .tw,body.theme-light .modal{
+  background:#ffffff;border-color:rgba(15,23,42,.09);
+  box-shadow:0 1px 2px rgba(15,23,42,.05),0 10px 28px rgba(15,23,42,.05);
+}
+body.theme-light .stat-card:hover,body.theme-light .card:hover{border-color:rgba(15,23,42,.16);box-shadow:0 2px 4px rgba(15,23,42,.06),0 16px 36px rgba(15,23,42,.08)}
+body.theme-light .stat-card::after{opacity:.06}
+body.theme-light .stat-card-label,body.theme-light .stat-card-sub,body.theme-light .card-sub,body.theme-light .sec-head-sub{color:#64748b}
+body.theme-light .stat-card-val,body.theme-light .card-title,body.theme-light .sec-head-title,body.theme-light .topbar-title{color:#0f172a}
+body.theme-light .sec-head{border-bottom-color:var(--border)}
+body.theme-light .tmeta{background:#f8fafc;border-bottom-color:var(--border)}
+body.theme-light thead th{background:#f1f5f9;color:#64748b}
+body.theme-light tbody tr{background:#ffffff}
+body.theme-light tbody tr:hover{background:#f8fafc}
+body.theme-light td{color:#1e293b}
+body.theme-light .tw table th:last-child,body.theme-light .tw table td:last-child,
+body.theme-light #sec-clientes .tw th:last-child,body.theme-light #sec-clientes .tw td:last-child{
+  background:linear-gradient(90deg,rgba(255,255,255,.75),#ffffff 20%);box-shadow:-10px 0 16px rgba(15,23,42,.05)}
+body.theme-light .tw table thead th:last-child,body.theme-light #sec-clientes .tw thead th:last-child{background:linear-gradient(90deg,rgba(241,245,249,.75),#f1f5f9 20%)}
+body.theme-light .client-sub,body.theme-light .manager-email{color:#64748b}
+body.theme-light .manager-name{color:#334155}
+body.theme-light .bg-green{background:rgba(22,163,74,.1);border-color:rgba(22,163,74,.2);color:#15803d}
+body.theme-light .bg-red{background:rgba(220,38,38,.08);border-color:rgba(220,38,38,.18);color:#b91c1c}
+body.theme-light .bg-blue{background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.18);color:#1d4ed8}
+body.theme-light .bg-orange{background:rgba(234,88,12,.08);border-color:rgba(234,88,12,.2);color:#c2410c}
+body.theme-light .bg-purple{background:rgba(124,58,237,.08);border-color:rgba(124,58,237,.18);color:#6d28d9}
+body.theme-light .bg-gray{background:rgba(100,116,139,.1);border-color:rgba(100,116,139,.18);color:#475569}
+body.theme-light .bg2{background:#ffffff;border-color:rgba(15,23,42,.14);color:#334155}
+body.theme-light .bg2:hover{background:#f1f5f9;border-color:rgba(15,23,42,.22);color:#0f172a}
+body.theme-light .bd{background:rgba(220,38,38,.06);border-color:rgba(220,38,38,.2);color:#b91c1c}
+body.theme-light .bd:hover{background:rgba(220,38,38,.12)}
+body.theme-light .bp{box-shadow:0 6px 16px rgba(37,99,235,.2)}
+body.theme-light .minput,body.theme-light .f-input,body.theme-light .sbox{background:#ffffff;border-color:rgba(15,23,42,.16);color:#0f172a}
+body.theme-light .minput:focus,body.theme-light .f-input:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.14);background:#ffffff}
+body.theme-light .minput:disabled{background:#f1f5f9}
+body.theme-light .admin-global-search{background:#ffffff;border-color:rgba(15,23,42,.14)}
+body.theme-light .admin-global-search input::placeholder{color:#94a3b8}
+body.theme-light .admin-status-pill{background:rgba(22,163,74,.08);border-color:rgba(22,163,74,.2);color:#15803d}
+body.theme-light .modal-bg{background:rgba(15,23,42,.42)}
+body.theme-light .modal{box-shadow:0 30px 80px rgba(15,23,42,.22)}
+body.theme-light .ti{box-shadow:0 10px 28px rgba(15,23,42,.14)}
+body.theme-light .empty-state,body.theme-light .empty-state .es-msg{color:#64748b}
+body.theme-light .empty-state .es-icon{background:#f1f5f9}
+body.theme-light .err{color:#b91c1c}
+body.theme-light .tutorial-video-link{color:#1d4ed8}
+body.theme-light .ind-tab.on{background:rgba(37,99,235,.06)}
+body.theme-light .sb-senha:hover{background:#f1f5f9}
+body.theme-light code{background:rgba(15,23,42,.06)!important;color:#0f172a}
+body.theme-light ::-webkit-scrollbar-thumb{background:#cbd5e1}
 </style>
 <script src="/api-client.js"></script>
 <script src="/admin-marketing.js"></script>
@@ -815,7 +921,7 @@ td{padding:12px 16px;color:#dce6f7}
         <span class="sb-icon"></span> Planos &amp; Leads
       </button>
       <button class="sb-item" id="nav-comunicados" onclick="navTo('comunicados')">
-        <span class="sb-icon">!</span> Comunicados
+        <span class="sb-icon"></span> Comunicados
       </button>
       <button class="sb-item" id="nav-marketing" onclick="navTo('marketing')">
         <span class="sb-icon"></span> Marketing
@@ -847,7 +953,7 @@ td{padding:12px 16px;color:#dce6f7}
         <span class="sb-icon"></span> Faturamento
       </button>
       <button class="sb-item" id="nav-fiscal-uso" onclick="navTo('fiscal-uso')">
-        <span class="sb-icon">NFe</span> Uso NFC-e
+        <span class="sb-icon"></span> Uso NFC-e
       </button>
       <button class="sb-item" id="nav-indicacoes" onclick="navTo('indicacoes')">
         <span class="sb-icon"></span> Indicações
@@ -868,8 +974,8 @@ td{padding:12px 16px;color:#dce6f7}
       </button>
     </nav>
     <div class="sb-foot">
-      <button type="button" onclick="abrirModalTrocarSenha()" style="width:100%;display:flex;align-items:center;gap:6px;justify-content:center;background:none;border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--muted);font-size:11.5px;cursor:pointer;margin-bottom:8px">
-        Trocar minha senha
+      <button type="button" class="sb-senha" onclick="abrirModalTrocarSenha()" title="Trocar minha senha">
+        <svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="5.5" cy="10.5" r="3"/><path d="M7.6 8.4L13.5 2.5M11.2 4.8l1.6 1.6M9.8 6.2l1.2 1.2"/></svg><span>Trocar minha senha</span>
       </button>
       <div class="sb-user" onclick="doLogout()">
         <div class="sb-av" id="adm-av">A</div>
@@ -885,29 +991,16 @@ td{padding:12px 16px;color:#dce6f7}
 
   <!-- ── Trocar minha senha (superadmin) ── -->
   <div class="modal-bg" id="m-trocar-senha">
-    <div class="modal" style="width:400px">
-      <div class="modal-head">
-        <div class="modal-title">Trocar minha senha</div>
-        <button class="modal-close" onclick="fecharModal('m-trocar-senha')">×</button>
-      </div>
-      <div class="modal-body" style="display:flex;flex-direction:column;gap:11px">
-        <div class="fg">
-          <label>Senha atual</label>
-          <input type="password" id="ts-senha-atual" autocomplete="current-password">
-        </div>
-        <div class="fg">
-          <label>Nova senha</label>
-          <input type="password" id="ts-senha-nova" autocomplete="new-password">
-        </div>
-        <div class="fg">
-          <label>Confirmar nova senha</label>
-          <input type="password" id="ts-senha-confirma" autocomplete="new-password">
-        </div>
-        <div id="ts-err" style="display:none;color:var(--red,#ef4444);font-size:12.5px"></div>
-      </div>
-      <div class="modal-foot">
+    <div class="modal" style="width:420px">
+      <button class="modal-x" onclick="fecharModal('m-trocar-senha')" aria-label="Fechar"><svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+      <h2>Trocar minha senha</h2>
+      <div class="mrow"><label class="mlabel" for="ts-senha-atual">Senha atual</label><input class="minput" type="password" id="ts-senha-atual" autocomplete="current-password"></div>
+      <div class="mrow"><label class="mlabel" for="ts-senha-nova">Nova senha</label><input class="minput" type="password" id="ts-senha-nova" autocomplete="new-password"></div>
+      <div class="mrow"><label class="mlabel" for="ts-senha-confirma">Confirmar nova senha</label><input class="minput" type="password" id="ts-senha-confirma" autocomplete="new-password" onkeydown="if(event.key==='Enter')salvarTrocaSenha()"></div>
+      <div id="ts-err" style="display:none;color:var(--danger);font-size:12.5px;margin-bottom:10px"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px">
         <button class="btn bg2" onclick="fecharModal('m-trocar-senha')">Cancelar</button>
-        <button class="btn" id="ts-btn-salvar" onclick="salvarTrocaSenha()">Salvar nova senha</button>
+        <button class="btn bp" id="ts-btn-salvar" onclick="salvarTrocaSenha()">Salvar nova senha</button>
       </div>
     </div>
   </div>
@@ -929,7 +1022,7 @@ td{padding:12px 16px;color:#dce6f7}
         </div>
         <div class="admin-status-pill">Sistema online</div>
         <button class="btn bg2 bsm" onclick="toggleAdminTheme()" id="btn-theme-toggle" title="Alternar tema claro/escuro">
-          <span id="theme-toggle-icon">🌙</span>
+          <span id="theme-toggle-icon"></span>
         </button>
         <button class="btn bg2 bsm" onclick="loadAll()">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 1 1 3 5.5M2.5 2.5v3h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1477,7 +1570,7 @@ td{padding:12px 16px;color:#dce6f7}
 
           <div style="margin-top:14px;display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px solid rgba(37,99,235,.2);border-radius:12px;background:rgba(37,99,235,.03)">
             <div style="flex:1">
-              <div style="font-size:13px;font-weight:700">🤖 WhatsApp do robô de cobrança</div>
+              <div style="font-size:13px;font-weight:700">WhatsApp do robô de cobrança</div>
               <div style="font-size:11.5px;color:var(--muted)">Número que aparece no botão "Falar no WhatsApp" dos avisos automáticos de fatura vencendo. Deixe em branco pra não mostrar botão.</div>
             </div>
             <input class="minput" id="adm-whatsapp-robo" type="text" placeholder="Ex: 85991234567" oninput="this.value=this.value.replace(/\D/g,'').slice(0,15)" style="width:150px">
@@ -1708,7 +1801,7 @@ td{padding:12px 16px;color:#dce6f7}
               </label>
               <div id="import-file-name" style="font-size:12px;color:var(--muted)">Nenhum arquivo selecionado</div>
             </div>
-            <button class="btn bp" id="btn-importar" onclick="importarBackup()" style="display:none;width:100%;justify-content:center">⬆️ Restaurar backup</button>
+            <button class="btn bp" id="btn-importar" onclick="importarBackup()" style="display:none;width:100%;justify-content:center">Restaurar backup</button>
             <div id="import-status" style="margin-top:12px;font-size:12.5px"></div>
           </div>
         </div>
@@ -1759,7 +1852,7 @@ td{padding:12px 16px;color:#dce6f7}
         <div class="card" style="margin-bottom:20px">
           <div class="card-head">
             <div>
-              <div class="card-title">📲 WhatsApp de Suporte e Vendas <span style="font-size:11px;padding:2px 8px;border-radius:99px;background:rgba(37,211,102,.15);color:#25d366;margin-left:6px">WuzAPI</span></div>
+              <div class="card-title">WhatsApp de Suporte e Vendas <span style="font-size:11px;padding:2px 8px;border-radius:99px;background:rgba(37,211,102,.15);color:#25d366;margin-left:6px">WuzAPI</span></div>
               <div class="card-sub">Robô com menu em lista e botões: 🚀 Vendas · 🛠️ Suporte · 💳 Financeiro. Também envia os lembretes de mensalidade e as confirmações de pagamento.</div>
             </div>
           </div>
@@ -2887,7 +2980,10 @@ const ADMIN_ICONS = {
   coin:'<circle cx="8" cy="8" r="5.8"/><path d="M8 4.7V11.3M6.2 6.3C6.2 5.3 7 4.7 8 4.7S9.8 5.3 9.8 6.1C9.8 7.9 6.2 7.1 6.2 8.9C6.2 9.7 7 10.3 8 10.3S9.8 9.9 9.8 8.9"/>',
   arrowup:'<path d="M8 12.5V3.5M4.2 7.3L8 3.5L11.8 7.3"/>',
   arrowdown:'<path d="M8 3.5V12.5M4.2 8.7L8 12.5L11.8 8.7"/>',
-  smartphone:'<rect x="4.5" y="1.5" width="7" height="13" rx="1.4"/><path d="M7 12.2h2"/>'
+  smartphone:'<rect x="4.5" y="1.5" width="7" height="13" rx="1.4"/><path d="M7 12.2h2"/>',
+  pulse:'<path d="M1.5 8.5h3l1.7-4 3.2 8 1.8-4h3.3"/>',
+  receipt:'<path d="M3.5 1.8h9v12.4l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1z"/><path d="M5.8 5h4.4M5.8 7.5h4.4M5.8 10h2.6"/>',
+  gift:'<rect x="2.3" y="6" width="11.4" height="3" rx=".8"/><path d="M3.3 9v4.7h9.4V9M8 6v7.7M8 6C6.4 6 4.6 5.6 4.6 4.1 4.6 3 5.7 2.4 6.6 3 7.4 3.6 8 6 8 6zm0 0c1.6 0 3.4-.4 3.4-1.9 0-1.1-1.1-1.7-2-1.1C8.6 3.6 8 6 8 6z"/>'
 };
 
 function adminIcon(name, cls = 'ui-ico') {
@@ -2903,19 +2999,24 @@ function setAdminIcon(el, name, label) {
   }
 }
 
+// Ícone do botão de tema: mostra o tema para onde vai trocar
+function _iconeTemaAdmin() {
+  const claro = document.body.classList.contains('theme-light');
+  const icon = document.getElementById('theme-toggle-icon');
+  if (icon) icon.innerHTML = claro
+    ? '<svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8z"/></svg>'
+    : '<svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.8"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>';
+  const b = document.getElementById('btn-theme-toggle');
+  if (b) b.title = claro ? 'Usar tema escuro' : 'Usar tema claro';
+}
 function toggleAdminTheme() {
   const isLight = document.body.classList.toggle('theme-light');
   localStorage.setItem('adminTheme', isLight ? 'light' : 'dark');
-  const icon = document.getElementById('theme-toggle-icon');
-  if (icon) icon.textContent = isLight ? '☀️' : '🌙';
+  _iconeTemaAdmin();
 }
 function _aplicarTemaAdminSalvo() {
-  const salvo = localStorage.getItem('adminTheme');
-  if (salvo === 'light') {
-    document.body.classList.add('theme-light');
-    const icon = document.getElementById('theme-toggle-icon');
-    if (icon) icon.textContent = '☀️';
-  }
+  if (localStorage.getItem('adminTheme') === 'light') document.body.classList.add('theme-light');
+  _iconeTemaAdmin();
 }
 _aplicarTemaAdminSalvo();
 
@@ -3298,6 +3399,8 @@ function adminGlobalSearch(value) {
 function polishAdminUI(root = document) {
   const navIcons = {
     'nav-dash':'dashboard',
+    'nav-operacao':'pulse',
+    'nav-fiscal-uso':'receipt',
     'nav-clientes':'clients',
     'nav-planos':'card',
     'nav-comunicados':'mail',
@@ -3305,11 +3408,11 @@ function polishAdminUI(root = document) {
     'nav-saques':'wallet',
     'nav-pix-geral':'coin',
     'nav-faturamento':'invoice',
-    'nav-indicacoes':'target',
+    'nav-indicacoes':'gift',
     'nav-ia':'brain',
     'nav-backup':'backup',
     'nav-auditoria':'audit',
-    'nav-icones':'card'
+    'nav-icones':'box'
   };
   Object.entries(navIcons).forEach(([id, icon]) => {
     const slot = document.querySelector(`#${id} .sb-icon`);
@@ -3911,7 +4014,7 @@ function calcularFinanceiro() {
 
 // ── Badges de plano ────────────────────────────────────
 const planoBadge = { basico:'bg-gray', pro:'bg-blue', premium:'bg-purple', fiscal:'bg-green' };
-const planoLabel = { basico:'Básico', pro:'Pro', premium:'⭐ Premium', fiscal:'Fiscal NFC-e' };
+const planoLabel = { basico:'Básico', pro:'Pro', premium:'Premium', fiscal:'Fiscal NFC-e' };
 
 // ── DASHBOARD ──────────────────────────────────────────
 function renderDash() {
@@ -4155,7 +4258,7 @@ function renderClientes() {
       </td>
       <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span>${(window.SITEUI && SITEUI.emTeste.has(c.id)) ? ' <span class="badge bg-orange">Teste grátis</span>' : ''}${(c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<div style="font-size:11px;color:var(--success);font-weight:700;margin-top:3px">R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês${c.valor_mensalidade_expira_em ? ` <span style="color:var(--warning,#b45309);font-weight:600">(até ${adminFormatDate(c.valor_mensalidade_expira_em)})</span>` : ''}</div>` : ''}</td>
       <td><span class="badge ${(c.segmento||'restaurante')==='acougue'?'bg-orange':'bg-blue'}">${(c.segmento||'restaurante')==='acougue'?'Açougue':'Restaurante'}</span></td>
-      <td style="font-size:12.5px;color:${expOk?(expSoon?'var(--orange)':'var(--text-2)'):'var(--danger)'}">${c.expires_at ? adminFormatDate(c.expires_at) : '—'}${expSoon?' ⚠️':''}</td>
+      <td style="font-size:12.5px;color:${expOk?(expSoon?'var(--orange)':'var(--text-2)'):'var(--danger)'}">${c.expires_at ? adminFormatDate(c.expires_at) : '—'}${expSoon?' <span class="badge bg-orange" style="margin-left:4px">vence logo</span>':''}</td>
       <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">● ${c.ativo?'Ativo':'Inativo'}</span></td>
       <td>
         <div class="client-actions">
@@ -5003,7 +5106,7 @@ function renderFaturamento() {
       <td>
         <div style="display:flex;gap:4px">
           ${f.link_pagamento ? `<a class="btn bg2 bsm btn-icon" title="Abrir link" href="${f.link_pagamento}" target="_blank">${adminIcon('link')}</a>` : ''}
-          ${f._st === 'vencido' || f._st === 'pendente' ? `<button class="btn bp bsm btn-icon" title="Reenviar via WhatsApp" onclick="reenviarCobranca('${f.id}')">📲</button>` : ''}
+          ${f._st === 'vencido' || f._st === 'pendente' ? `<button class="btn bp bsm btn-icon" title="Reenviar via WhatsApp" onclick="reenviarCobranca('${f.id}')"><svg class="ui-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M14 2L7 9M14 2l-4.5 12L7 9 2 6.5z"/></svg></button>` : ''}
           ${f._st === 'pendente' ? `<button class="btn bd bsm btn-icon" title="Cancelar" onclick="cancelarCobranca('${f.id}')">✕</button>` : ''}
         </div>
       </td>
@@ -5978,9 +6081,9 @@ function _svBadge(st, extra) {
   const el = document.getElementById('sv-status-badge');
   if (!el) return;
   const map = {
-    connected:   ['var(--success)', '🟢 Conectado'],
-    connecting:  ['var(--orange)',  '🟡 Aguardando leitura do QR Code'],
-    disconnected:['var(--danger)',  '🔴 Desconectado']
+    connected:   ['var(--success)', 'Conectado'],
+    connecting:  ['var(--orange)',  'Aguardando leitura do QR Code'],
+    disconnected:['var(--danger)',  'Desconectado']
   };
   const [cor, txt] = map[st] || ['var(--muted)', String(st || '—')];
   el.innerHTML = `<span style="color:${cor};font-weight:600">${txt}</span>${extra ? ` <span style="color:var(--muted)">· ${extra}</span>` : ''}`;
