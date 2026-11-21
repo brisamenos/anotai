@@ -614,7 +614,11 @@ async function _doSubmitOrder(addr, troco) {
                  : (selectedPay === 'credito' || selectedPay === 'debito') ? 'entrega'
                  : 'entrega',
       troco: troco || null,
-      customer_id: customerId
+      customer_id: customerId,
+      // Ponto da entrega marcado no mapa (taxa por distância): o servidor
+      // refaz a conta da taxa com ele e recusa endereço fora da área
+      ...((deliveryType === 'delivery' && typeof _geoPonto !== 'undefined' && _geoPonto)
+        ? { entrega_lat: +_geoPonto.lat.toFixed(6), entrega_lng: +_geoPonto.lng.toFixed(6) } : {})
     }).select().single();
 
     if (error) throw error;

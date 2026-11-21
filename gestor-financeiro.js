@@ -269,15 +269,8 @@ async function renderTaxaPage() {
     const { data } = await sb.from('store_config').select('delivery_fee_config,store_lat,store_lng').single();
     _taxaConfig = (data && data.delivery_fee_config) ? data.delivery_fee_config : { tipo: 'fixo', valor: 5, faixas: [] };
     _taxaConfigLoaded = true;
-    // Atualiza aviso de localização
-    const locStatus = document.getElementById('taxa-loc-status');
-    if (locStatus) {
-      const hasLoc = data?.store_lat && data?.store_lng;
-      locStatus.textContent = hasLoc
-        ? `Localização da loja configurada (${parseFloat(data.store_lat).toFixed(4)}, ${parseFloat(data.store_lng).toFixed(4)}).`
-        : 'Localização ainda não configurada: os clientes verão as faixas, mas sem cálculo automático.';
-      locStatus.style.color = hasLoc ? '#16a34a' : '#b45309';
-    }
+    // Mapa: pino da loja e áreas desenhadas (também atualiza o aviso de localização)
+    try { amCarregarDados(_taxaConfig, data?.store_lat, data?.store_lng); } catch (e) { console.warn('[mapa entrega]', e); }
   } catch(e) {
     // CRÍTICO: não deixa _taxaConfigLoaded como true aqui. Se a config real
     // não carregou, a tela vai mostrar o fallback "fixo, R$5", mas o botão
@@ -334,6 +327,7 @@ function onTaxaTipoChange() {
   document.getElementById('taxa-fixo-block').style.display   = tipo === 'fixo'       ? '' : 'none';
   document.getElementById('taxa-km-block').style.display     = tipo === 'por_km'     ? '' : 'none';
   document.getElementById('taxa-bairro-block').style.display = tipo === 'por_bairro' ? '' : 'none';
+  try { amMostrar(tipo === 'por_km'); } catch (e) {}
   // Update label borders
   document.getElementById('taxa-label-fixo').style.borderColor   = tipo === 'fixo'       ? 'var(--accent)' : 'var(--border)';
   document.getElementById('taxa-label-km').style.borderColor     = tipo === 'por_km'     ? 'var(--accent)' : 'var(--border)';
@@ -491,6 +485,7 @@ function updateTaxaPreview() {
     </div>`;
   } else if (tipo === 'por_km') {
     const faixas = getTaxaFaixasFromDOM();
+    try { amRedesenhar(); } catch (e) {}
     if (!faixas.length) { el.innerHTML = '<span style="color:var(--muted)">Adicione pelo menos uma faixa acima.</span>'; return; }
     el.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">O cliente verá um seletor como este:</div>
       <div style="background:var(--surface2);border-radius:10px;overflow:hidden">
@@ -523,7 +518,15 @@ async function saveTaxaConfig() {
     return;
   }
   const tipo = document.querySelector('input[name="taxa-tipo"]:checked').value;
-  const config = { tipo };
+  // Áreas desenhadas no mapa: ficam guardadas mesmo trocando o tipo de
+  // cobrança (só valem no "Por distância"), para ninguém perder o desenho.
+  const _areasMapa = amAreasParaSalvar();
+  if (!_areasMapa.ok) { sbToast('err', _areasMapa.erro); return; }
+  if (tipo === 'por_km' && !_am.loja) { sbToast('err', 'Coloque o pino da loja no mapa antes de salvar: sem ele não dá para medir a distância.'); return; }
+  // Começa do que já estava gravado, para não apagar outras opções que moram
+  // aqui dentro (ex.: pausa de delivery)
+  const config = { ...(_taxaConfig && typeof _taxaConfig === 'object' ? _taxaConfig : {}), tipo };
+  config.areas = _areasMapa.areas;
   if (tipo === 'fixo') {
     config.valor  = parseFloat(document.getElementById('taxa-fixo-val').value) || 0;
     config.faixas = [];
@@ -540,8 +543,12 @@ async function saveTaxaConfig() {
   // Bairros bloqueados — vale para qualquer tipo
   config.bairros_bloqueados = getTaxaBairrosBloqueadosFromDOM();
   try {
-    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, delivery_fee_config: config });
+    const _reg = { tenant_id: _sessao?.tenant_id, delivery_fee_config: config };
+    if (_am.lojaMudou && _am.loja) { _reg.store_lat = +_am.loja.lat.toFixed(6); _reg.store_lng = +_am.loja.lng.toFixed(6); }
+    const { error } = await sb.from('store_config').upsert(_reg);
+    if (error) throw error;
     _taxaConfig = config;
+    if (_reg.store_lat) { _am.lojaMudou = false; _amStatusLoja(); }
     sbToast('ok', 'Taxa de entrega salva!');
   } catch(e) {
     sbToast('err', 'Erro ao salvar taxa');
@@ -2043,3 +2050,441 @@ setInterval(() => {
   if (typeof waStatusRefresh === 'function') waStatusRefresh();
   else if (EVO.instance) evoCheckStatus();
 }, 30000);
+
+// ══════════════════════════════════════════════════════════════════════
+// MAPA DA ÁREA DE ENTREGA (modo "Por distância")
+// Pino da loja arrastável, um círculo por faixa de km e áreas desenhadas
+// à mão (com taxa própria ou "não entrego"). A conta da taxa é a mesma do
+// cardápio e do servidor (area-entrega.js).
+// ══════════════════════════════════════════════════════════════════════
+const AM_CORES_FAIXA = ['#16a34a', '#65a30d', '#ca8a04', '#ea580c', '#dc2626', '#9333ea', '#0891b2', '#be185d'];
+const AM_COR_AREA = '#2563eb';
+const AM_COR_BLOQUEIO = '#dc2626';
+const _am = {
+  L: null, mapa: null, carregando: null,
+  loja: null, lojaMudou: false, pinLoja: null,
+  camFaixas: null, camAreas: null, camEdicao: null,
+  areas: [], desenho: null, editando: null, excluirPendente: null,
+  enquadrado: false
+};
+
+function _amCss() {
+  if (document.getElementById('am-css')) return;
+  const st = document.createElement('style');
+  st.id = 'am-css';
+  st.textContent = `
+  .am-busca{display:flex;gap:8px;margin-bottom:8px}
+  .am-busca .form-input{margin-bottom:0;flex:1;min-width:0}
+  .am-busca-res{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:8px;background:var(--surface)}
+  .am-busca-res button{display:block;width:100%;text-align:left;padding:9px 12px;border:0;border-bottom:1px solid var(--border);background:none;color:var(--text);font:inherit;font-size:12.5px;cursor:pointer}
+  .am-busca-res button:last-child{border-bottom:0}
+  .am-busca-res button:hover{background:var(--surface2)}
+  .am-desenho-barra{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;margin-bottom:8px;border-radius:10px;background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.35);font-size:12.5px;font-weight:600}
+  .am-desenho-btns{display:flex;gap:6px;flex-wrap:wrap}
+  .am-mapa-wrap{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+  #am-mapa{height:380px;width:100%;background:var(--surface2)}
+  .am-desenhando #am-mapa{cursor:crosshair}
+  .am-mapa-msg{position:absolute;left:10px;right:10px;top:10px;z-index:500;padding:9px 12px;border-radius:9px;background:rgba(17,24,39,.86);color:#fff;font-size:12.5px;font-weight:600;pointer-events:none;text-align:center}
+  .am-mapa-msg:empty{display:none}
+  .am-centralizar{position:absolute;right:10px;bottom:22px;z-index:500;padding:7px 12px;border-radius:8px;border:1px solid rgba(0,0,0,.15);background:#fff;color:#111;font:inherit;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+  .am-legenda{display:flex;flex-wrap:wrap;gap:6px 14px;margin:10px 0 14px;font-size:12px;color:var(--muted)}
+  .am-legenda span{display:inline-flex;align-items:center;gap:6px}
+  .am-legenda i{width:12px;height:12px;border-radius:50%;display:inline-block;border:2px solid currentColor;background:color-mix(in srgb,currentColor 25%,transparent)}
+  .am-areas-head{margin-bottom:6px}
+  .am-areas-lista{display:flex;flex-direction:column;gap:8px}
+  .am-area{display:grid;grid-template-columns:14px minmax(0,1.3fr) minmax(0,1fr) 96px auto auto;gap:8px;align-items:center;padding:8px;border:1px solid var(--border);border-radius:10px}
+  .am-area.am-foco{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
+  .am-area .form-input{margin-bottom:0;height:36px;font-size:13px}
+  .am-area-cor{width:14px;height:14px;border-radius:4px}
+  .am-area-taxa{display:flex;align-items:center;gap:4px}
+  .am-area-taxa span{font-size:12px;color:var(--muted);font-weight:700}
+  .am-area-vazio{font-size:12.5px;color:var(--muted);padding:10px 12px;border:1px dashed var(--border);border-radius:10px}
+  .am-btn-x{height:32px;padding:0 10px;border-radius:7px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);color:var(--danger);cursor:pointer;font:inherit;font-size:12px;font-weight:700;white-space:nowrap}
+  .am-pin-loja{background:none;border:0}
+  .am-pin-loja div{width:38px;height:38px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#111827;border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
+  .am-pin-loja svg{transform:rotate(45deg)}
+  .am-vertice{background:#fff;border:3px solid ${AM_COR_AREA};border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+  .am-rotulo{background:#fff;border:0;border-radius:7px;padding:3px 8px;font-weight:700;font-size:11.5px;color:#111;box-shadow:0 1px 6px rgba(0,0,0,.25)}
+  .am-rotulo:before{display:none}
+  @media(max-width:640px){
+    #am-mapa{height:320px}
+    .am-area{grid-template-columns:14px minmax(0,1fr) minmax(0,1fr)}
+    .am-area .am-area-taxa{grid-column:2}
+    .am-area .am-area-acoes{grid-column:2 / 4;display:flex;gap:6px;justify-content:flex-end}
+  }
+  @media(min-width:641px){ .am-area .am-area-acoes{display:contents} }
+  `;
+  document.head.appendChild(st);
+}
+
+function _amFmt(v) { return (parseFloat(v) || 0).toFixed(2).replace('.', ','); }
+function _amEsc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function _amMsg(t) { const el = document.getElementById('am-mapa-msg'); if (el) el.textContent = t || ''; }
+
+// Chamado por renderTaxaPage depois de ler a config do servidor
+function amCarregarDados(cfg, lat, lng) {
+  const la = parseFloat(lat), ln = parseFloat(lng);
+  _am.loja = (isFinite(la) && isFinite(ln) && !(la === 0 && ln === 0)) ? { lat: la, lng: ln } : null;
+  _am.lojaMudou = false;
+  _am.areas = (Array.isArray(cfg?.areas) ? cfg.areas : []).map((a, i) => ({
+    id: a.id || ('a' + Date.now() + i),
+    nome: a.nome || '',
+    tipo: a.tipo === 'bloqueio' ? 'bloqueio' : 'taxa',
+    taxa: a.taxa ?? '',
+    pontos: (a.pontos || []).map(p => [parseFloat(p[0]), parseFloat(p[1])])
+  }));
+  _am.desenho = null; _am.editando = null; _am.excluirPendente = null; _am.enquadrado = false;
+  if (_am.mapa) { _amPinLoja(); amRedesenhar(); amCentralizar(); }
+  _amRenderLista();
+}
+
+function amMostrar(visivel) {
+  const bloco = document.getElementById('taxa-mapa-block');
+  if (!bloco) return;
+  bloco.style.display = visivel ? '' : 'none';
+  if (!visivel) return;
+  _amCss();
+  _amGarantirMapa().then(() => {
+    if (!_am.mapa) return;
+    setTimeout(() => {
+      _am.mapa.invalidateSize();
+      if (!_am.enquadrado) amCentralizar();
+    }, 60);
+  });
+}
+
+function _amGarantirMapa() {
+  if (_am.mapa) return Promise.resolve();
+  if (_am.carregando) return _am.carregando;
+  if (!window.AreaEntrega) { _amMsg('Não foi possível abrir o mapa. Recarregue a página.'); return Promise.resolve(); }
+  _amMsg('Carregando o mapa...');
+  _am.carregando = AreaEntrega.carregarLeaflet().then(L => {
+    _am.L = L;
+    const el = document.getElementById('am-mapa');
+    if (!el) return;
+    _am.mapa = L.map(el, { zoomControl: true, attributionControl: true, tap: true, zoomSnap: 0.5 });
+    AreaEntrega.camadaMapa(L).addTo(_am.mapa);
+    _am.camFaixas = L.layerGroup().addTo(_am.mapa);
+    _am.camAreas = L.layerGroup().addTo(_am.mapa);
+    _am.camEdicao = L.layerGroup().addTo(_am.mapa);
+    if (_am.loja) _am.mapa.setView([_am.loja.lat, _am.loja.lng], 13);
+    else _am.mapa.setView([-14.2, -51.9], 4);
+    _am.mapa.on('click', _amCliqueMapa);
+    _am.mapa.on('zoomend', () => amRedesenhar());
+    _amPinLoja();
+    amRedesenhar();
+  }).catch(e => {
+    _amMsg('Não foi possível carregar o mapa. Confira a internet e abra esta aba de novo.');
+  }).finally(() => { _am.carregando = null; });
+  return _am.carregando;
+}
+
+function _amIconeLoja() {
+  return _am.L.divIcon({
+    className: 'am-pin-loja', iconSize: [38, 38], iconAnchor: [19, 46],
+    html: '<div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v7h14v-7"/></svg></div>'
+  });
+}
+
+function _amPinLoja() {
+  if (!_am.mapa) return;
+  if (_am.pinLoja) { _am.mapa.removeLayer(_am.pinLoja); _am.pinLoja = null; }
+  if (!_am.loja) {
+    _amMsg(_am.desenho ? '' : 'Toque no mapa onde fica a loja para colocar o pino. Use a busca acima para achar a cidade.');
+    _amStatusLoja();
+    return;
+  }
+  _amMsg('');
+  _am.pinLoja = _am.L.marker([_am.loja.lat, _am.loja.lng], { draggable: true, icon: _amIconeLoja(), zIndexOffset: 1000, title: 'Loja: arraste até a porta' }).addTo(_am.mapa);
+  _am.pinLoja.bindTooltip('Sua loja (arraste para ajustar)', { direction: 'top', offset: [0, -44] });
+  _am.pinLoja.on('dragend', ev => {
+    const p = ev.target.getLatLng();
+    _am.loja = { lat: p.lat, lng: p.lng };
+    _am.lojaMudou = true;
+    amRedesenhar();
+    _amStatusLoja();
+  });
+  _amStatusLoja();
+}
+
+function _amStatusLoja() {
+  const st = document.getElementById('taxa-loc-status');
+  if (!st) return;
+  if (!_am.loja) {
+    st.textContent = 'O pino da loja ainda não foi colocado no mapa: sem ele não dá para medir a distância.';
+    st.style.color = '#b45309';
+  } else if (_am.lojaMudou) {
+    st.textContent = 'Pino da loja mudou de lugar. Clique em Salvar para valer no cardápio.';
+    st.style.color = '#b45309';
+  } else {
+    st.textContent = 'Pino da loja marcado no mapa.';
+    st.style.color = '#16a34a';
+  }
+}
+
+function _amCliqueMapa(ev) {
+  if (_am.desenho) {
+    _am.desenho.pontos.push([ev.latlng.lat, ev.latlng.lng]);
+    _amDesenhoAtualizar();
+    return;
+  }
+  if (!_am.loja) {
+    _am.loja = { lat: ev.latlng.lat, lng: ev.latlng.lng };
+    _am.lojaMudou = true;
+    _amPinLoja();
+    amRedesenhar();
+    if (_am.mapa.getZoom() < 13) _am.mapa.setView(ev.latlng, 14);
+  }
+}
+
+// Ponto ao norte do centro, a "km" de distância (para o rótulo do círculo)
+function _amNorte(lat, lng, km) { return [lat + km / 111.32, lng]; }
+
+function amRedesenhar() {
+  if (!_am.mapa) return;
+  const L = _am.L;
+  _am.camFaixas.clearLayers();
+  const faixas = (typeof getTaxaFaixasFromDOM === 'function') ? getTaxaFaixasFromDOM() : [];
+  if (_am.loja) {
+    // Rótulos: só os que cabem sem encavalar (com o mapa afastado, os
+    // círculos ficam juntos e os rótulos cobririam o pino)
+    const c0 = _am.mapa.latLngToContainerPoint([_am.loja.lat, _am.loja.lng]);
+    const c1 = _am.mapa.latLngToContainerPoint(_amNorte(_am.loja.lat, _am.loja.lng, 1));
+    const pxKm = Math.abs(c0.y - c1.y);
+    const comRotulo = new Set();
+    let ultimo = 0;
+    faixas.forEach((f, i) => { const r = f.ate_km * pxKm; if (r >= 44 && r - ultimo >= 30) { comRotulo.add(i); ultimo = r; } });
+    // Maior primeiro, para os menores ficarem por cima e clicáveis
+    faixas.map((f, i) => ({ f, i })).reverse().forEach(({ f, i }) => {
+      const cor = AM_CORES_FAIXA[i % AM_CORES_FAIXA.length];
+      L.circle([_am.loja.lat, _am.loja.lng], {
+        radius: f.ate_km * 1000, color: cor, weight: 2, opacity: .9,
+        fillColor: cor, fillOpacity: .07, interactive: false
+      }).addTo(_am.camFaixas);
+      if (!comRotulo.has(i)) return;
+      L.tooltip({ permanent: true, direction: 'center', className: 'am-rotulo', interactive: false })
+        .setLatLng(_amNorte(_am.loja.lat, _am.loja.lng, f.ate_km))
+        .setContent(`até ${String(f.ate_km).replace('.', ',')} km: R$ ${_amFmt(f.taxa)}`)
+        .addTo(_am.camFaixas);
+    });
+  }
+  _am.camAreas.clearLayers();
+  _am.areas.forEach(a => {
+    if (!a.pontos || a.pontos.length < 3) return;
+    const bloq = a.tipo === 'bloqueio';
+    const cor = bloq ? AM_COR_BLOQUEIO : AM_COR_AREA;
+    const pol = L.polygon(a.pontos, {
+      color: cor, weight: 2.5, fillColor: cor, fillOpacity: bloq ? .22 : .16,
+      dashArray: bloq ? '6 6' : null, interactive: !_am.desenho
+    }).addTo(_am.camAreas);
+    const rot = bloq ? `${a.nome || 'Área'}: não entrego` : `${a.nome || 'Área'}: R$ ${_amFmt(a.taxa)}`;
+    pol.bindTooltip(_amEsc(rot), { sticky: true });
+    pol.on('click', () => { if (!_am.desenho) _amFocarArea(a.id); });
+  });
+  _amLegenda(faixas);
+}
+
+function _amLegenda(faixas) {
+  const el = document.getElementById('am-legenda');
+  if (!el) return;
+  const itens = faixas.map((f, i) => `<span style="color:${AM_CORES_FAIXA[i % AM_CORES_FAIXA.length]}"><i></i><b style="color:var(--text)">até ${String(f.ate_km).replace('.', ',')} km</b> R$ ${_amFmt(f.taxa)}</span>`);
+  if (_am.areas.some(a => a.tipo !== 'bloqueio')) itens.push(`<span style="color:${AM_COR_AREA}"><i style="border-radius:3px"></i><b style="color:var(--text)">Área com taxa própria</b></span>`);
+  if (_am.areas.some(a => a.tipo === 'bloqueio')) itens.push(`<span style="color:${AM_COR_BLOQUEIO}"><i style="border-radius:3px;border-style:dashed"></i><b style="color:var(--text)">Não entrego</b></span>`);
+  el.innerHTML = itens.join('') || '<span>Adicione as faixas de km acima para ver os círculos.</span>';
+}
+
+function amCentralizar() {
+  if (!_am.mapa) return;
+  const L = _am.L;
+  const caixa = L.latLngBounds([]);
+  if (_am.loja) {
+    caixa.extend([_am.loja.lat, _am.loja.lng]);
+    const faixas = (typeof getTaxaFaixasFromDOM === 'function') ? getTaxaFaixasFromDOM() : [];
+    const maior = faixas.length ? faixas[faixas.length - 1].ate_km : 2;
+    caixa.extend(L.latLng(_am.loja.lat, _am.loja.lng).toBounds(maior * 2000));
+  }
+  _am.areas.forEach(a => (a.pontos || []).forEach(p => caixa.extend(p)));
+  if (caixa.isValid()) { _am.mapa.fitBounds(caixa, { padding: [24, 24], maxZoom: 16 }); _am.enquadrado = true; }
+}
+
+// ── Busca de endereço ──
+async function amBuscar() {
+  const txt = document.getElementById('am-busca-txt')?.value || '';
+  const box = document.getElementById('am-busca-res');
+  if (!box) return;
+  if (txt.trim().length < 3) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  box.innerHTML = '<button disabled>Procurando...</button>';
+  try {
+    await _amGarantirMapa();
+    const lista = await AreaEntrega.buscarEndereco(txt, _am.loja);
+    if (!lista.length) { box.innerHTML = '<button disabled>Nada encontrado. Tente com o nome da cidade junto.</button>'; return; }
+    window._amBuscaLista = lista;
+    box.innerHTML = lista.map((r, i) => `<button onclick="amIrPara(${i})">${_amEsc(r.nome)}</button>`).join('');
+  } catch (e) {
+    box.innerHTML = '<button disabled>A busca não respondeu. Tente de novo em instantes.</button>';
+  }
+}
+function amIrPara(i) {
+  const r = (window._amBuscaLista || [])[i];
+  const box = document.getElementById('am-busca-res');
+  if (box) box.style.display = 'none';
+  if (!r || !_am.mapa) return;
+  _am.mapa.setView([r.lat, r.lng], 16);
+  if (!_am.loja) _amMsg('Toque no mapa exatamente onde fica a loja para colocar o pino.');
+}
+
+// ── Desenho de área ──
+function amDesenharArea() {
+  _amGarantirMapa().then(() => {
+    if (!_am.mapa) return;
+    amPararEdicao();
+    _am.desenho = { pontos: [], linha: null, marcas: _am.L.layerGroup().addTo(_am.mapa) };
+    document.getElementById('am-desenho-barra').style.display = '';
+    document.getElementById('am-btn-desenhar').style.display = 'none';
+    document.getElementById('taxa-mapa-block').classList.add('am-desenhando');
+    _amMsg('');
+    amRedesenhar();
+    _amDesenhoAtualizar();
+  });
+}
+function _amDesenhoAtualizar() {
+  const d = _am.desenho;
+  if (!d) return;
+  const L = _am.L;
+  d.marcas.clearLayers();
+  if (d.linha) { _am.mapa.removeLayer(d.linha); d.linha = null; }
+  if (d.pontos.length >= 2) {
+    d.linha = (d.pontos.length >= 3 ? L.polygon(d.pontos, { color: AM_COR_AREA, weight: 2.5, fillOpacity: .12, dashArray: '4 6', interactive: false })
+      : L.polyline(d.pontos, { color: AM_COR_AREA, weight: 2.5, dashArray: '4 6', interactive: false })).addTo(_am.mapa);
+  }
+  d.pontos.forEach(p => L.circleMarker(p, { radius: 6, color: AM_COR_AREA, weight: 3, fillColor: '#fff', fillOpacity: 1, interactive: false }).addTo(d.marcas));
+  const n = d.pontos.length;
+  const txt = document.getElementById('am-desenho-txt');
+  if (txt) txt.textContent = n === 0 ? 'Toque no mapa para marcar os cantos da área.'
+    : n < 3 ? `${n} ${n === 1 ? 'ponto marcado' : 'pontos marcados'}. Marque pelo menos 3.`
+    : `${n} pontos marcados. Continue ou toque em Concluir área.`;
+  const btn = document.getElementById('am-btn-concluir');
+  if (btn) btn.disabled = n < 3;
+}
+function amDesfazerPonto() { if (_am.desenho) { _am.desenho.pontos.pop(); _amDesenhoAtualizar(); } }
+function _amFecharDesenho() {
+  const d = _am.desenho;
+  if (d) { if (d.linha) _am.mapa.removeLayer(d.linha); _am.mapa.removeLayer(d.marcas); }
+  _am.desenho = null;
+  document.getElementById('am-desenho-barra').style.display = 'none';
+  document.getElementById('am-btn-desenhar').style.display = '';
+  document.getElementById('taxa-mapa-block').classList.remove('am-desenhando');
+  if (!_am.loja) _amPinLoja();
+}
+function amCancelarDesenho() { _amFecharDesenho(); amRedesenhar(); }
+function amConcluirDesenho() {
+  const d = _am.desenho;
+  if (!d || d.pontos.length < 3) return;
+  const nova = { id: 'a' + Date.now(), nome: 'Área ' + (_am.areas.length + 1), tipo: 'taxa', taxa: '', pontos: d.pontos.slice() };
+  _am.areas.push(nova);
+  _amFecharDesenho();
+  amRedesenhar();
+  _amRenderLista();
+  _amFocarArea(nova.id, true);
+}
+
+// ── Editar formato (arrastar os cantos) ──
+function amEditarFormato(id) {
+  if (_am.editando === id) { amPararEdicao(); return; }
+  _amGarantirMapa().then(() => {
+    if (!_am.mapa) return;
+    amPararEdicao();
+    const a = _am.areas.find(x => x.id === id);
+    if (!a) return;
+    _am.editando = id;
+    const L = _am.L;
+    const icone = L.divIcon({ className: 'am-vertice', iconSize: [16, 16], iconAnchor: [8, 8] });
+    a.pontos.forEach((p, i) => {
+      const m = L.marker(p, { draggable: true, icon: icone, zIndexOffset: 900 }).addTo(_am.camEdicao);
+      m.on('drag', ev => { const q = ev.target.getLatLng(); a.pontos[i] = [q.lat, q.lng]; amRedesenhar(); });
+    });
+    _am.mapa.fitBounds(L.latLngBounds(a.pontos), { padding: [30, 30], maxZoom: 17 });
+    _amRenderLista();
+  });
+}
+function amPararEdicao() {
+  if (_am.camEdicao) _am.camEdicao.clearLayers();
+  if (_am.editando) { _am.editando = null; _amRenderLista(); }
+}
+
+// ── Lista de áreas ──
+function _amRenderLista() {
+  const el = document.getElementById('am-areas-lista');
+  if (!el) return;
+  if (!_am.areas.length) {
+    el.innerHTML = '<div class="am-area-vazio">Nenhuma área desenhada. Use "Desenhar área" para cobrar um valor diferente num bairro ou condomínio, ou para marcar um lugar onde não entrega.</div>';
+    return;
+  }
+  el.innerHTML = _am.areas.map(a => {
+    const bloq = a.tipo === 'bloqueio';
+    const editando = _am.editando === a.id;
+    const confirma = _am.excluirPendente === a.id;
+    return `<div class="am-area" id="am-area-${a.id}">
+      <span class="am-area-cor" style="background:${bloq ? AM_COR_BLOQUEIO : AM_COR_AREA}"></span>
+      <input class="form-input" value="${_amEsc(a.nome)}" placeholder="Nome da área" oninput="amCampo('${a.id}','nome',this.value)">
+      <select class="form-input" onchange="amCampo('${a.id}','tipo',this.value)">
+        <option value="taxa" ${bloq ? '' : 'selected'}>Cobrar taxa</option>
+        <option value="bloqueio" ${bloq ? 'selected' : ''}>Não entrego</option>
+      </select>
+      <span class="am-area-taxa" style="${bloq ? 'visibility:hidden' : ''}"><span>R$</span><input class="form-input" type="number" min="0" step="0.50" placeholder="0,00" value="${_amEsc(a.taxa)}" oninput="amCampo('${a.id}','taxa',this.value)"></span>
+      <span class="am-area-acoes">
+        <button class="btn ${editando ? 'bp' : 'bg'} pf-sm" onclick="amEditarFormato('${a.id}')">${editando ? 'Pronto' : 'Editar formato'}</button>
+        <button class="am-btn-x" onclick="amExcluirArea('${a.id}')">${confirma ? 'Confirmar' : 'Excluir'}</button>
+      </span>
+    </div>`;
+  }).join('');
+}
+function amCampo(id, campo, valor) {
+  const a = _am.areas.find(x => x.id === id);
+  if (!a) return;
+  a[campo] = valor;
+  amRedesenhar();
+  if (campo === 'tipo') _amRenderLista();
+}
+function amExcluirArea(id) {
+  if (_am.excluirPendente !== id) {
+    _am.excluirPendente = id;
+    _amRenderLista();
+    setTimeout(() => { if (_am.excluirPendente === id) { _am.excluirPendente = null; _amRenderLista(); } }, 4000);
+    return;
+  }
+  if (_am.editando === id) amPararEdicao();
+  _am.areas = _am.areas.filter(x => x.id !== id);
+  _am.excluirPendente = null;
+  amRedesenhar();
+  _amRenderLista();
+}
+function _amFocarArea(id, focarNome) {
+  const row = document.getElementById('am-area-' + id);
+  if (!row) return;
+  document.querySelectorAll('.am-area.am-foco').forEach(r => r.classList.remove('am-foco'));
+  row.classList.add('am-foco');
+  row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (focarNome) { const inp = row.querySelector('input'); if (inp) { inp.focus(); inp.select(); } }
+  setTimeout(() => row.classList.remove('am-foco'), 2500);
+}
+
+// Para o saveTaxaConfig: devolve { ok, areas } ou { ok:false, erro }
+function amAreasParaSalvar() {
+  if (_am.desenho) return { ok: false, erro: 'Conclua ou cancele a área que está desenhando antes de salvar.' };
+  const areas = [];
+  for (const a of _am.areas) {
+    if (!a.pontos || a.pontos.length < 3) continue;
+    const nome = String(a.nome || '').trim() || 'Área';
+    const item = { id: a.id, nome, tipo: a.tipo === 'bloqueio' ? 'bloqueio' : 'taxa',
+      pontos: a.pontos.map(p => [+(+p[0]).toFixed(6), +(+p[1]).toFixed(6)]) };
+    if (item.tipo === 'taxa') {
+      const t = parseFloat(a.taxa);
+      if (!isFinite(t) || t < 0) return { ok: false, erro: `Informe a taxa da área "${nome}" (pode ser 0 para entrega grátis).` };
+      item.taxa = t;
+    }
+    areas.push(item);
+  }
+  return { ok: true, areas };
+}

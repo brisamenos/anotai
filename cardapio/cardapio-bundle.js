@@ -1595,6 +1595,8 @@ function getTaxa() {
     if (!(minOrderFrete > 0 && cartSubtotal() < minOrderFrete)) return 0;
   }
   if (feeConfig.tipo === 'por_km') {
+    // Ponto confirmado no mapa/GPS: taxa da área desenhada ou da faixa
+    if (_geoCalc && _geoCalc.ok) return parseFloat(_geoCalc.taxa) || 0;
     const faixas = feeConfig.faixas || [];
     return parseFloat(faixas[Math.min(selectedFaixa, faixas.length-1)]?.taxa) || 0;
   }
@@ -1675,18 +1677,18 @@ function validarDelivery() {
   // por_km: exige GPS confirmado e dentro da maior faixa
   if (feeConfig?.tipo === 'por_km') {
     const faixas = Array.isArray(feeConfig.faixas) ? feeConfig.faixas : [];
-    if (!faixas.length) {
+    const _temArea = window.AreaEntrega ? AreaEntrega.temAreaConfigurada(feeConfig) : faixas.length > 0;
+    if (!_temArea) {
       // ANTES: lista vazia caía direto no "return {ok:true}" final e
       // liberava o pedido com taxa R$0 — mesma falha do caso por_bairro.
       return { ok: false, motivo: 'A área de entrega ainda não foi configurada pela loja. Entre em contato para confirmar se atendemos seu endereço.' };
     }
-    // GPS ainda não respondeu ou foi negado — bloqueia até confirmar localização
-    if (typeof _geoDistKm !== 'number' || _geoDistKm <= 0) {
-      return { ok: false, motivo: '📍 Precisamos confirmar sua localização. Permita o acesso ao GPS e aguarde.' };
+    // Ponto da entrega ainda não confirmado (GPS ou pino no mapa)
+    if (!_geoPonto || !_geoCalc) {
+      return { ok: false, motivo: 'Precisamos saber onde a entrega chega. Permita o GPS ou marque o ponto no mapa.' };
     }
-    const maiorFaixa = parseFloat(faixas[faixas.length - 1]?.ate_km || 0);
-    if (_geoDistKm > maiorFaixa + 0.001) {
-      return { ok: false, motivo: `🚫 Você está a ${_geoDistKm.toFixed(1).replace('.', ',')} km — fora da área de entrega (até ${maiorFaixa} km).` };
+    if (!_geoCalc.ok) {
+      return { ok: false, motivo: _geoCalc.motivo || 'Esse endereço está fora da área de entrega.' };
     }
   }
   return { ok: true };
@@ -1780,7 +1782,36 @@ function applyTiposEntrega() {
 }
 
 // ── Bloco de geo do cliente (delivery por km) ─────────
-let _geoDistKm = null; // distância calculada pelo GPS
+// O cliente confirma ONDE a entrega chega num mapinha: o pino começa no GPS
+// e pode ser arrastado até a porta. A taxa sai desse ponto, com a mesma
+// conta do gestor e do servidor (area-entrega.js): área desenhada pela loja
+// primeiro, depois a faixa de km. Sem GPS, ele mesmo coloca o pino.
+let _geoDistKm = null; // distância até a loja, do ponto confirmado
+let _geoPonto  = null; // { lat, lng } onde a entrega chega
+let _geoCalc   = null; // resultado de AreaEntrega.calcular
+const _geoMapa = { L: null, mapa: null, pin: null, loja: null, carregando: null };
+
+function _geoCss() {
+  if (document.getElementById('geo-mapa-css')) return;
+  const st = document.createElement('style');
+  st.id = 'geo-mapa-css';
+  st.textContent = `
+  #geo-mapa-wrap{margin-top:8px}
+  #geo-mapa{height:200px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#eee;position:relative;z-index:0}
+  .geo-mapa-dica{font-size:11.5px;color:var(--muted);margin-top:6px;text-align:center;line-height:1.35}
+  .geo-busca{display:flex;gap:6px;margin-top:8px}
+  .geo-busca .form-input{margin:0!important;flex:1;min-width:0;height:38px;font-size:13px}
+  .geo-busca button{flex:none;height:38px;padding:0 12px;border-radius:9px;border:1.5px solid rgba(var(--accent-rgb,249,115,22),.35);background:rgba(var(--accent-rgb,249,115,22),.08);color:var(--accent);font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+  .geo-busca-res{margin-top:6px;border:1px solid var(--border);border-radius:9px;overflow:hidden}
+  .geo-busca-res button{display:block;width:100%;text-align:left;padding:8px 10px;border:0;border-bottom:1px solid var(--border);background:var(--s,var(--bg));color:inherit;font:inherit;font-size:12px;cursor:pointer}
+  .geo-busca-res button:last-child{border-bottom:0}
+  .geo-pin-cli{background:none;border:0}
+  .geo-pin-cli div{position:relative;width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--accent,#f97316);border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.35)}
+  .geo-pin-cli div:after{content:'';position:absolute;left:50%;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:#fff}
+  .geo-pin-loja{background:#111827;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 5px rgba(0,0,0,.35)}
+  `;
+  document.head.appendChild(st);
+}
 
 function renderGeoBlock() {
   const wrap = document.getElementById('geo-block');
@@ -1788,48 +1819,157 @@ function renderGeoBlock() {
   const show = deliveryType === 'delivery' && feeConfig?.tipo === 'por_km' && _storeLat && _storeLng;
   wrap.style.display = show ? '' : 'none';
   // Pede GPS automaticamente ao entrar em delivery + por_km
-  if (show && _geoDistKm === null) {
+  if (show && _geoPonto === null && !_geoMapa._pediuGps) {
+    _geoMapa._pediuGps = true;
     _autoGetGeo();
   }
+  if (show && _geoMapa.mapa) setTimeout(() => { try { _geoMapa.mapa.invalidateSize(); } catch (e) {} }, 80);
+}
+
+// Calcula a taxa para o ponto (área desenhada, senão faixa de km)
+function _geoCalcular(lat, lng) {
+  const loja = { lat: _storeLat, lng: _storeLng };
+  if (window.AreaEntrega) return AreaEntrega.calcular(feeConfig || {}, loja, { lat, lng });
+  // Sem o arquivo do mapa (cache antigo): só as faixas, como antes
+  const faixas = (feeConfig?.faixas || []).slice().sort((a, b) => a.ate_km - b.ate_km);
+  const dist = calcDist(_storeLat, _storeLng, lat, lng);
+  const i = faixas.findIndex(f => dist <= parseFloat(f.ate_km) + 0.001);
+  if (i >= 0) return { ok: true, taxa: parseFloat(faixas[i].taxa) || 0, distKm: dist, origem: 'faixa', faixa: faixas[i], faixaIdx: i };
+  const maxKm = parseFloat(faixas[faixas.length - 1]?.ate_km || 0);
+  return { ok: false, fora: true, distKm: dist, maxKm, motivo: `Esse endereço está a ${dist.toFixed(1).replace('.', ',')} km da loja, fora da área de entrega (até ${maxKm} km).` };
+}
+
+// Marca o ponto da entrega e recalcula a taxa
+function _geoAplicarPonto(lat, lng) {
+  _geoPonto = { lat, lng };
+  _geoCalc = _geoCalcular(lat, lng);
+  _geoDistKm = (typeof _geoCalc.distKm === 'number') ? _geoCalc.distKm : calcDist(_storeLat, _storeLng, lat, lng);
+  if (_geoCalc.ok && _geoCalc.origem === 'faixa') {
+    const faixas = feeConfig?.faixas || [];
+    const idx = faixas.findIndex(f => parseFloat(f.ate_km) === parseFloat(_geoCalc.faixa.ate_km));
+    if (idx >= 0) selectedFaixa = idx;
+  }
+  _geoMostrarResultado();
+  _geoMostrarMapa(true);
+  if (typeof renderTotals === 'function') renderTotals();
+}
+
+function _geoMostrarResultado() {
+  const res = document.getElementById('geo-result');
+  if (!res) return;
+  const c = _geoCalc;
+  if (!c) return;
+  const distStr = typeof c.distKm === 'number' ? `${c.distKm.toFixed(1).replace('.', ',')} km` : '';
+  if (!c.ok) {
+    res.innerHTML = `<span style="color:var(--red)">${c.motivo || 'Fora da área de entrega.'} Se o pino não está no lugar certo, arraste até a sua porta.</span>`;
+  } else if (c.origem === 'area') {
+    res.innerHTML = `<span style="color:var(--green)">Entrega em <strong>${c.area}</strong>${distStr ? ` (${distStr})` : ''}. Taxa: <strong>R$ ${fmt(c.taxa)}</strong></span>`;
+  } else {
+    res.innerHTML = `<span style="color:var(--green)">Você está a <strong>${distStr}</strong>. Taxa: <strong>R$ ${fmt(c.taxa)}</strong></span>`;
+  }
+}
+
+function _geoMostrarMapa(comPonto) {
+  const wrap = document.getElementById('geo-mapa-wrap');
+  if (!wrap || !window.AreaEntrega) return;
+  _geoCss();
+  wrap.style.display = '';
+  const dica = document.getElementById('geo-mapa-dica');
+  if (dica) dica.textContent = comPonto
+    ? 'O pino não está na sua porta? Arraste até lá ou toque no lugar certo do mapa.'
+    : 'Arraste o pino até a sua porta (ou toque no lugar certo do mapa). Se preferir, procure a rua abaixo.';
+  const pronto = () => {
+    const L = _geoMapa.L, m = _geoMapa.mapa;
+    if (!m) return;
+    m.invalidateSize();
+    const alvo = _geoPonto ? [_geoPonto.lat, _geoPonto.lng] : [_storeLat, _storeLng];
+    if (!_geoMapa.pin) {
+      _geoMapa.pin = L.marker(alvo, {
+        draggable: true, zIndexOffset: 1000,
+        icon: L.divIcon({ className: 'geo-pin-cli', html: '<div></div>', iconSize: [30, 30], iconAnchor: [15, 36] })
+      }).addTo(m);
+      _geoMapa.pin.on('dragend', ev => { const p = ev.target.getLatLng(); _geoAplicarPonto(p.lat, p.lng); });
+    } else {
+      _geoMapa.pin.setLatLng(alvo);
+    }
+    m.setView(alvo, Math.max(m.getZoom() || 0, 16));
+  };
+  if (_geoMapa.mapa) { pronto(); return; }
+  if (_geoMapa.carregando) { _geoMapa.carregando.then(pronto); return; }
+  _geoMapa.carregando = AreaEntrega.carregarLeaflet().then(L => {
+    _geoMapa.L = L;
+    const el = document.getElementById('geo-mapa');
+    if (!el || _geoMapa.mapa) return;
+    _geoMapa.mapa = L.map(el, { zoomControl: false, attributionControl: true, tap: true }).setView([_storeLat, _storeLng], 15);
+    AreaEntrega.camadaMapa(L).addTo(_geoMapa.mapa);
+    L.control.zoom({ position: 'bottomleft' }).addTo(_geoMapa.mapa);
+    _geoMapa.loja = L.marker([_storeLat, _storeLng], { interactive: false, keyboard: false,
+      icon: L.divIcon({ className: 'geo-pin-loja', iconSize: [14, 14], iconAnchor: [7, 7] }) }).addTo(_geoMapa.mapa);
+    _geoMapa.mapa.on('click', ev => { if (_geoMapa.pin) _geoMapa.pin.setLatLng(ev.latlng); _geoAplicarPonto(ev.latlng.lat, ev.latlng.lng); });
+    pronto();
+  }).catch(() => {
+    // Mapa não carregou (internet fraca): segue só com o GPS, como antes
+    wrap.style.display = 'none';
+  }).finally(() => { _geoMapa.carregando = null; });
+}
+
+// Busca a rua digitada no mapa (Nominatim), perto da loja
+async function geoBuscarEndereco() {
+  const box = document.getElementById('geo-busca-res');
+  const inp = document.getElementById('geo-busca-txt');
+  if (!box || !inp || !window.AreaEntrega) return;
+  let q = inp.value.trim();
+  if (!q) {
+    // Sem texto: monta com o endereço que o cliente já digitou
+    q = [document.getElementById('f-rua')?.value, document.getElementById('f-num')?.value, document.getElementById('f-bairro')?.value]
+      .map(x => (x || '').trim()).filter(Boolean).join(', ');
+    inp.value = q;
+  }
+  if (q.length < 3) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  box.innerHTML = '<button disabled>Procurando...</button>';
+  try {
+    const lista = await AreaEntrega.buscarEndereco(q, { lat: _storeLat, lng: _storeLng });
+    if (!lista.length) { box.innerHTML = '<button disabled>Não achamos esse endereço. Arraste o pino no mapa até a sua porta.</button>'; return; }
+    window._geoBuscaLista = lista;
+    box.innerHTML = lista.map((r, i) => `<button onclick="geoEscolherBusca(${i})">${String(r.nome).replace(/</g, '&lt;')}</button>`).join('');
+  } catch (e) {
+    box.innerHTML = '<button disabled>A busca não respondeu. Arraste o pino no mapa até a sua porta.</button>';
+  }
+}
+function geoEscolherBusca(i) {
+  const r = (window._geoBuscaLista || [])[i];
+  const box = document.getElementById('geo-busca-res');
+  if (box) box.style.display = 'none';
+  if (!r) return;
+  _geoAplicarPonto(r.lat, r.lng);
+  const dica = document.getElementById('geo-mapa-dica');
+  if (dica) dica.textContent = 'Confira se o pino ficou na sua porta. Se não, arraste até lá.';
 }
 
 function _autoGetGeo() {
   const res = document.getElementById('geo-result');
   if (!navigator.geolocation) {
-    if (res) res.innerHTML = '<span style="color:var(--red)">⚠️ GPS não disponível neste dispositivo. Não é possível confirmar a área de entrega.</span>';
+    if (res) res.innerHTML = '<span style="color:var(--red)">GPS não disponível neste aparelho. Marque no mapa onde a entrega deve chegar.</span>';
+    _geoMostrarMapa(false);
     return;
   }
-  if (res) res.innerHTML = '<span style="color:var(--accent)">📡 Obtendo sua localização... aguarde para finalizar o pedido.</span>';
+  if (res) res.innerHTML = '<span style="color:var(--accent)">Obtendo sua localização... aguarde para finalizar o pedido.</span>';
   navigator.geolocation.getCurrentPosition(
-    pos => {
-      const dist = calcDist(_storeLat, _storeLng, pos.coords.latitude, pos.coords.longitude);
-      _geoDistKm = dist;
-      const faixas = feeConfig?.faixas || [];
-      const maiorFaixa = parseFloat(faixas[faixas.length - 1]?.ate_km || 0);
-      const distStr = dist.toFixed(1).replace('.', ',');
-      // Fora da área: avisa claramente e não permite prosseguir
-      if (!faixas.length || dist > maiorFaixa + 0.001) {
-        if (res) res.innerHTML = `<span style="color:var(--red)">🚫 Você está a <strong>${distStr} km</strong> — fora da área de entrega (máx. ${maiorFaixa} km). Não é possível finalizar o pedido.</span>`;
-        renderTotals();
-        return;
-      }
-      const idx = faixas.findIndex(f => f.ate_km >= dist);
-      if (idx >= 0) selectedFaixa = idx;
-      const faixaSel = faixas[selectedFaixa];
-      if (res) res.innerHTML = `<span style="color:var(--green)">📍 Você está a <strong>${distStr} km</strong> — Taxa: <strong>R$ ${fmt(faixaSel.taxa)}</strong></span>`;
-      renderTotals();
-    },
+    pos => { _geoAplicarPonto(pos.coords.latitude, pos.coords.longitude); },
     err => {
-      // GPS negado/falhou — bloqueia pedido, não permite seleção manual
-      if (res) res.innerHTML = '<span style="color:var(--red)">⚠️ Localização negada. Permita o acesso ao GPS para finalizar o pedido por km.</span>';
-      _geoDistKm = null;
+      // GPS negado/falhou: o cliente marca o ponto no mapa
+      if (!_geoPonto) {
+        if (res) res.innerHTML = '<span style="color:var(--red)">Não conseguimos sua localização. Marque no mapa onde a entrega deve chegar.</span>';
+        _geoDistKm = null;
+        _geoMostrarMapa(false);
+      }
     },
     { enableHighAccuracy: true, timeout: 10000 }
   );
 }
 
 function clientGetGeo() {
-  _geoDistKm = null;
   _autoGetGeo();
 }
 
@@ -2075,7 +2215,8 @@ function renderTotals() {
   let taxaLabel = 'Taxa de entrega';
   if (deliveryType === 'delivery' && feeConfig?.tipo === 'por_km') {
     const f = (feeConfig.faixas||[])[selectedFaixa];
-    if (f) taxaLabel = `Entrega até ${f.ate_km} km`;
+    if (_geoCalc && _geoCalc.ok && _geoCalc.origem === 'area') taxaLabel = `Entrega (${_geoCalc.area})`;
+    else if (f) taxaLabel = `Entrega até ${f.ate_km} km`;
   } else if (deliveryType === 'delivery' && feeConfig?.tipo === 'por_bairro') {
     const digitadoRaw = (document.getElementById('f-bairro')?.value || '').trim();
     const match = _matchBairro(digitadoRaw, feeConfig.bairros || []);
@@ -2464,12 +2605,8 @@ async function usarMinhaLocalizacao() {
       // 1. Calcula distância pra loja (se loja tem GPS configurado)
       if (typeof _storeLat === 'number' && typeof _storeLng === 'number' && _storeLat && _storeLng) {
         _geoDistKm = calcDist(_storeLat, _storeLng, lat, lng);
-        // Se taxa por_km, ajusta selectedFaixa
-        if (feeConfig?.tipo === 'por_km' && Array.isArray(feeConfig.faixas)) {
-          let idx = feeConfig.faixas.findIndex(f => f.ate_km >= _geoDistKm);
-          if (idx === -1) idx = feeConfig.faixas.length - 1;
-          if (idx >= 0) selectedFaixa = idx;
-        }
+        // Taxa por km: o GPS vira o ponto da entrega (taxa e mapa juntos)
+        if (feeConfig?.tipo === 'por_km') _geoAplicarPonto(lat, lng);
       }
 
       // 2. Reverse geocoding via Nominatim (OSM) — preenche os campos
@@ -5524,7 +5661,11 @@ async function _doSubmitOrder(addr, troco) {
                  : (selectedPay === 'credito' || selectedPay === 'debito') ? 'entrega'
                  : 'entrega',
       troco: troco || null,
-      customer_id: customerId
+      customer_id: customerId,
+      // Ponto da entrega marcado no mapa (taxa por distância): o servidor
+      // refaz a conta da taxa com ele e recusa endereço fora da área
+      ...((deliveryType === 'delivery' && typeof _geoPonto !== 'undefined' && _geoPonto)
+        ? { entrega_lat: +_geoPonto.lat.toFixed(6), entrega_lng: +_geoPonto.lng.toFixed(6) } : {})
     }).select().single();
 
     if (error) throw error;

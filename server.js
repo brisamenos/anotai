@@ -16,6 +16,7 @@ const { buildOrderTrackingMessage } = require('./order-message')
 const phoneUtils = require('./phone-utils')
 const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (como sempre foi) ou WuzAPI (alternativa leve)
 const _waCardFoto = require('./wa-card-foto') // foto dos cartões do carrossel no pedido pelo WhatsApp
+const _areaEntrega = require('./area-entrega') // conta da taxa por distância (mesma do cardápio e do gestor)
 
 const PORT        = process.env.PORT           || 3001
 const EVO_URL     = (process.env.EVOLUTION_URL || 'https://projeto-evolution-api.xtknqq.easypanel.host').replace(/\/+$/,'')
@@ -1392,6 +1393,9 @@ const HAS_ORDERS_UPDATED_AT = garantirColuna(
 
 garantirColuna('orders', 'client_request_id', "TEXT")
 garantirColuna('orders', 'session_ref', "TEXT")
+// Ponto da entrega marcado no mapa pelo cliente (taxa por distância)
+garantirColuna('orders', 'entrega_lat', "REAL")
+garantirColuna('orders', 'entrega_lng', "REAL")
 try {
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_client_request ON orders(tenant_id, client_request_id) WHERE client_request_id IS NOT NULL")
 } catch(e) {
@@ -2813,7 +2817,7 @@ const TABLE_COLS = {
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','taxa_servico','clientes_json','pagamentos_json','nome','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','session_ref','garcom_id','garcom_nome','customer_id','client_request_id','order_num','wa_track','scheduled_for','canal','created_at'],
+  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','session_ref','garcom_id','garcom_nome','customer_id','client_request_id','order_num','wa_track','scheduled_for','canal','entrega_lat','entrega_lng','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','fornecedor_id','updated_at'],
   estoque_receitas: ['id','tenant_id','item_id','estoque_id','qty','unit','ativo','created_at','updated_at'],
@@ -3544,9 +3548,29 @@ async function handleREST(req, res, table, params, body) {
             // mas se a loja nem tem faixas cadastradas é config incompleta —
             // isso não deve virar entrega grátis por acidente no cardápio público.
             else if (cfg.tipo === 'por_km') {
-              const faixasCfg = Array.isArray(cfg.faixas) ? cfg.faixas : []
-              if (!faixasCfg.length && _origemPublica) {
+              if (!_areaEntrega.temAreaConfigurada(cfg) && _origemPublica) {
                 return send(res, 422, { error: 'A área de entrega ainda não foi configurada pela loja para cobrança por distância.' })
+              }
+              // Com o ponto do mapa, refaz a conta da taxa aqui (mesmo arquivo
+              // do cardápio): fora da área ou região bloqueada é recusado, e
+              // taxa menor que a certa é corrigida. Taxa 0 fica como veio
+              // (cupom/cartão fidelidade de frete grátis zeram no cardápio).
+              const _pLat = parseFloat(payload.entrega_lat), _pLng = parseFloat(payload.entrega_lng)
+              if (_areaEntrega.pontoValido(_pLat, _pLng)) {
+                const _loja = db.prepare('SELECT store_lat, store_lng FROM store_config WHERE tenant_id=?').get(tenantId) || {}
+                const _calc = _areaEntrega.calcular(cfg, { lat: _loja.store_lat, lng: _loja.store_lng }, { lat: _pLat, lng: _pLng })
+                if (!_calc.ok && !_calc.semLoja) {
+                  if (_origemPublica) return send(res, 422, { error: _calc.motivo || 'Endereço fora da área de entrega.' })
+                } else if (_calc.ok) {
+                  const _enviada = parseFloat(payload.taxa) || 0
+                  if (_enviada > 0 && _enviada + 0.005 < _calc.taxa) payload.taxa = _calc.taxa
+                }
+              } else {
+                delete payload.entrega_lat; delete payload.entrega_lng
+                if (_origemPublica && Array.isArray(cfg.areas) && cfg.areas.some(a => a && a.tipo === 'bloqueio')) {
+                  // Loja marcou lugares onde não entrega: sem o ponto não dá para conferir
+                  return send(res, 422, { error: 'Marque no mapa onde a entrega deve chegar para confirmar a área de entrega.' })
+                }
               }
             }
           } catch(e) { log('⚠️', 'validação de delivery falhou:', e.message) }
