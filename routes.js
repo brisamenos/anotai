@@ -1429,18 +1429,21 @@ function _diasEntreDatas(a, b) {
 }
 
 function _valorRenovacaoTenant(db, t) {
-  let precoEss = 79.99, precoPre = 99.90, precoFiscal = 159.90, precoAddonVoz = 89.90
+  let precoEss = 79.99, precoPre = 99.90, precoFiscal = 159.90, precoAddonVoz = 89.90, precoAddonTv = 19.90
   try {
     const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
     const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
     if (g.preco_essencial !== undefined) precoEss = parseFloat(g.preco_essencial)
     if (g.preco_premium   !== undefined) precoPre = parseFloat(g.preco_premium)
     if (g.preco_addon_voz !== undefined) precoAddonVoz = parseFloat(g.preco_addon_voz)
+    if (g.preco_addon_tv !== undefined) precoAddonTv = parseFloat(g.preco_addon_tv)
   } catch {}
   const plano = (t.plano === 'premium') ? 'premium' : (t.plano === 'fiscal' ? 'fiscal' : 'essencial')
   let valor = (plano === 'premium') ? precoPre : (plano === 'fiscal' ? precoFiscal : precoEss)
   if (plano !== 'fiscal' && t.valor_mensalidade !== null && t.valor_mensalidade !== undefined) valor = parseFloat(t.valor_mensalidade)
   if (t.voz_ativo) valor += precoAddonVoz
+  // Add-on TV indoor (vídeos da loja na TV do estabelecimento)
+  if (t.tv_ativo) valor += precoAddonTv
   if (plano === 'fiscal') {
     try {
       const fiscal = _adminFiscalCobrancaAtual(db, t.id, { mes: _adminFiscalMesAtual(), plano_valor: precoFiscal })
@@ -1624,13 +1627,14 @@ function _iniciarAutoCobrancaJob(ctx) {
       _expirarPromocoesVencidas(db, log)
 
       // Lê preços globais
-      let precoEss = 79.99, precoPre = 99.90, precoFiscal = 159.90, precoAddonVoz = 89.90
+      let precoEss = 79.99, precoPre = 99.90, precoFiscal = 159.90, precoAddonVoz = 89.90, precoAddonTv = 19.90
       try {
         const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
         const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
         if (g.preco_essencial !== undefined) precoEss = parseFloat(g.preco_essencial)
         if (g.preco_premium   !== undefined) precoPre = parseFloat(g.preco_premium)
         if (g.preco_addon_voz !== undefined) precoAddonVoz = parseFloat(g.preco_addon_voz)
+        if (g.preco_addon_tv !== undefined) precoAddonTv = parseFloat(g.preco_addon_tv)
       } catch {}
 
       // Token MP — SEMPRE GLOBAL (cobrança SaaS da plataforma)
@@ -1686,6 +1690,8 @@ function _iniciarAutoCobrancaJob(ctx) {
           // Add-on de pedido por voz (WhatsApp) — soma ao valor do plano quando
           // ativado pelo admin pra este tenant, independente do plano/promoção.
           if (t.voz_ativo) valor += precoAddonVoz
+          // Add-on TV indoor (vídeos da loja na TV do estabelecimento)
+          if (t.tv_ativo) valor += precoAddonTv
           let obsFatura = 'Gerada automaticamente (2 dias antes do vencimento)'
           if (plano === 'fiscal') {
             const fiscal = _adminFiscalCobrancaAtual(db, t.id, {
@@ -8615,9 +8621,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
         essencial: ia.preco_essencial !== undefined ? parseFloat(ia.preco_essencial) : 79.99,
         premium: ia.preco_premium !== undefined ? parseFloat(ia.preco_premium) : 99.90,
         addon_voz: ia.preco_addon_voz !== undefined ? parseFloat(ia.preco_addon_voz) : 89.90,
+        addon_tv: ia.preco_addon_tv !== undefined ? parseFloat(ia.preco_addon_tv) : 19.90,
         whatsapp_robo: ia.whatsapp_robo || ''
       })
-    } catch(e) { send(res, 200, { essencial: 79.99, premium: 99.90, addon_voz: 89.90, whatsapp_robo: '' }) }
+    } catch(e) { send(res, 200, { essencial: 79.99, premium: 99.90, addon_voz: 89.90, addon_tv: 19.90, whatsapp_robo: '' }) }
     return true
   }
 
@@ -8625,18 +8632,19 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'POST' && upath === '/api/admin/planos/precos') {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
     const body = await readBody(req)
-    const { preco_essencial, preco_premium, preco_addon_voz, whatsapp_robo } = body
+    const { preco_essencial, preco_premium, preco_addon_voz, preco_addon_tv, whatsapp_robo } = body
     try {
       const cfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const ia = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
       if (preco_essencial !== undefined) ia.preco_essencial = parseFloat(preco_essencial)
       if (preco_premium !== undefined) ia.preco_premium = parseFloat(preco_premium)
       if (preco_addon_voz !== undefined) ia.preco_addon_voz = parseFloat(preco_addon_voz)
+      if (preco_addon_tv !== undefined) ia.preco_addon_tv = parseFloat(preco_addon_tv)
       if (whatsapp_robo !== undefined) ia.whatsapp_robo = String(whatsapp_robo).replace(/\D/g, '').slice(0, 15)
       db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES ('_global',?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(JSON.stringify(ia))
       marcarDirty()
       log('⚙️', `Precos planos atualizados: Essencial=R$${ia.preco_essencial} Premium=R$${ia.preco_premium} AddonVoz=R$${ia.preco_addon_voz}`)
-      send(res, 200, { ok: true, preco_essencial: ia.preco_essencial, preco_premium: ia.preco_premium, preco_addon_voz: ia.preco_addon_voz, whatsapp_robo: ia.whatsapp_robo })
+      send(res, 200, { ok: true, preco_essencial: ia.preco_essencial, preco_premium: ia.preco_premium, preco_addon_voz: ia.preco_addon_voz, preco_addon_tv: ia.preco_addon_tv, whatsapp_robo: ia.whatsapp_robo })
     } catch(e) { send(res, 500, { error: e.message }) }
     return true
   }
@@ -10461,13 +10469,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!ids.length) { send(res, 400, { error: 'tenant_ids obrigatório (array)' }); return true }
     _expirarPromocoesVencidas(db, log)
     // Lê preços dos planos
-    let precoEss = 79.99, precoPre = 99.90, precoFiscal = 159.90, precoAddonVoz = 89.90
+    let precoEss = 79.99, precoPre = 99.90, precoFiscal = 159.90, precoAddonVoz = 89.90, precoAddonTv = 19.90
     try {
       const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
       if (g.preco_essencial !== undefined) precoEss = parseFloat(g.preco_essencial)
       if (g.preco_premium   !== undefined) precoPre = parseFloat(g.preco_premium)
       if (g.preco_addon_voz !== undefined) precoAddonVoz = parseFloat(g.preco_addon_voz)
+      if (g.preco_addon_tv !== undefined) precoAddonTv = parseFloat(g.preco_addon_tv)
     } catch {}
 
     let enviadas = 0, falhas = 0
@@ -10484,6 +10493,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
         }
         // Add-on de pedido por voz (WhatsApp) — soma ao valor quando ativado pelo admin
         if (tenant.voz_ativo) valor += precoAddonVoz
+        // Add-on TV indoor (vídeos da loja na TV do estabelecimento)
+        if (tenant.tv_ativo) valor += precoAddonTv
         let obsFiscal = null
         if (plano === 'fiscal') {
           const fiscal = _adminFiscalCobrancaAtual(db, tenant.id, {

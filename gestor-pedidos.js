@@ -181,6 +181,8 @@ function nav(id) {
   if (id === 'satisfacao') renderSatisfacao();
   if (id === 'clientes') cliCarregar();
   if (id === 'impressao') renderImpressao();
+  if (typeof tvPararAtualizacao === 'function') tvPararAtualizacao();
+  if (id === 'tv' && typeof tvRender === 'function') tvRender();
   if (id === 'caixa') _renderCaixaTela();
   if (id === 'configuracoes') _renderConfiguracoes();
   if (id === 'saques') { carregarCarteira(); conectarSaquesSSE(); carregarConfigPixGestor(); }

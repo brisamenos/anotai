@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EstimaFood TV</title>
+<meta name="robots" content="noindex">
+<style>
+  :root{--azul:#1397e8;--azul-escuro:#0b5c96;--fundo:#05080d;--texto:#f1f5f9;--apagado:#8a9bb0}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#000;color:var(--texto);font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;overflow:hidden}
+  body.sem-cursor{cursor:none}
+  video{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;opacity:0;transition:opacity .35s}
+  video.ativo{opacity:1}
+  .tela{position:fixed;inset:0;display:none;background:radial-gradient(120% 90% at 20% 10%,#0d2a44 0%,var(--fundo) 60%)}
+  .tela.on{display:flex}
+  #parear{align-items:center;justify-content:center;padding:5vw}
+  .parear-grade{display:grid;grid-template-columns:1.1fr 1fr;gap:6vw;align-items:center;max-width:1500px;width:100%}
+  .marca{font-weight:800;font-size:clamp(16px,1.6vw,30px);color:var(--azul);letter-spacing:.02em}
+  .parear-titulo{font-size:clamp(28px,3.6vw,68px);font-weight:800;line-height:1.08;margin:1.2vw 0 2vw}
+  .passos{list-style:none;display:flex;flex-direction:column;gap:1.4vw;font-size:clamp(16px,1.6vw,30px);color:#c9d6e3;line-height:1.35}
+  .passos li{display:flex;gap:1vw;align-items:flex-start}
+  .passos b{color:var(--texto)}
+  .passos span.n{flex:none;width:2.2em;height:2.2em;border-radius:50%;background:rgba(19,151,232,.16);color:var(--azul);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:.8em}
+  .codigo-caixa{background:rgba(255,255,255,.04);border:2px solid rgba(19,151,232,.45);border-radius:2vw;padding:3vw 2vw;text-align:center}
+  .codigo-rotulo{font-size:clamp(14px,1.3vw,24px);color:var(--apagado);font-weight:600}
+  .codigo{font-size:clamp(56px,8.5vw,170px);font-weight:800;letter-spacing:.08em;margin:1vw 0;font-variant-numeric:tabular-nums;color:#fff}
+  .codigo-rodape{font-size:clamp(12px,1.05vw,20px);color:var(--apagado)}
+  #espera{align-items:center;justify-content:center;flex-direction:column;text-align:center;gap:1.4vw;padding:6vw}
+  #espera .grande{font-size:clamp(28px,3.4vw,64px);font-weight:800}
+  #espera .pequeno{font-size:clamp(16px,1.5vw,28px);color:var(--apagado);max-width:60ch;line-height:1.4}
+  #aviso-som{position:fixed;left:50%;bottom:4vh;transform:translateX(-50%);background:rgba(0,0,0,.72);color:#fff;padding:1vh 2vw;border-radius:99px;font-size:clamp(13px,1.2vw,22px);display:none;z-index:5}
+  @media (max-aspect-ratio:1/1){.parear-grade{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<video id="va" playsinline muted preload="auto"></video>
+<video id="vb" playsinline muted preload="auto"></video>
+
+<section class="tela" id="parear">
+  <div class="parear-grade">
+    <div>
+      <div class="marca">EstimaFood TV</div>
+      <h1 class="parear-titulo">Ligue esta TV à sua loja</h1>
+      <ol class="passos">
+        <li><span class="n">1</span><span>No celular ou computador, abra o <b>painel do gestor</b>.</span></li>
+        <li><span class="n">2</span><span>Entre em <b>TV Indoor</b> e toque em <b>Adicionar TV</b>.</span></li>
+        <li><span class="n">3</span><span>Digite o código ao lado. Pronto: os vídeos começam sozinhos.</span></li>
+      </ol>
+    </div>
+    <div class="codigo-caixa">
+      <div class="codigo-rotulo">Código desta TV</div>
+      <div class="codigo" id="codigo">------</div>
+      <div class="codigo-rodape" id="codigo-rodape">Gerando código...</div>
+    </div>
+  </div>
+</section>
+
+<section class="tela" id="espera">
+  <div class="marca">EstimaFood TV</div>
+  <div class="grande" id="espera-titulo">Carregando...</div>
+  <div class="pequeno" id="espera-texto"></div>
+</section>
+
+<div id="aviso-som">Aperte OK no controle para ligar o som</div>
+
+<script>
+(function () {
+  'use strict';
+  var CHAVE = 'estimafood_tv_token';
+  var token = '';
+  try { token = localStorage.getItem(CHAVE) || ''; } catch (e) {}
+  var lista = [];          // vídeos que a loja mandou
+  var versao = '';
+  var ativo = true;
+  var nomeLoja = '';
+  var indice = -1;
+  var tocando = null;      // vídeo atual
+  var va = document.getElementById('va'), vb = document.getElementById('vb');
+  var atual = va, proxima = vb;
+  var somLigado = false;
+  var timerLista = null, timerParear = null;
+
+  function mostrar(id) {
+    ['parear', 'espera'].forEach(function (t) { document.getElementById(t).classList.toggle('on', t === id); });
+  }
+  function espera(titulo, texto) {
+    document.getElementById('espera-titulo').textContent = titulo;
+    document.getElementById('espera-texto').textContent = texto || '';
+    mostrar('espera');
+    va.classList.remove('ativo'); vb.classList.remove('ativo');
+    try { va.pause(); vb.pause(); } catch (e) {}
+    tocando = null;
+  }
+
+  // ── Pareamento ──
+  function parear() {
+    clearTimeout(timerParear); clearTimeout(timerLista);
+    // Para tudo que estava passando (a TV foi desligada da loja)
+    lista = []; versao = ''; tocando = null; indice = -1;
+    [va, vb].forEach(function (v) { v.onended = null; v.onerror = null; v.classList.remove('ativo'); try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {} });
+    mostrar('parear');
+    document.getElementById('codigo').textContent = '------';
+    document.getElementById('codigo-rodape').textContent = 'Gerando código...';
+    fetch('/api/tv/parear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plataforma: 'web' }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.codigo) throw new Error('sem código');
+        document.getElementById('codigo').textContent = d.codigo;
+        document.getElementById('codigo-rodape').textContent = 'O código troca sozinho a cada 30 minutos.';
+        esperarCodigo(d.codigo, d.segredo, Date.now());
+      })
+      .catch(function () {
+        document.getElementById('codigo-rodape').textContent = 'Sem internet. Tentando de novo...';
+        timerParear = setTimeout(parear, 10000);
+      });
+  }
+  function esperarCodigo(codigo, segredo, inicio) {
+    timerParear = setTimeout(function () {
+      if (Date.now() - inicio > 29 * 60 * 1000) { parear(); return; }
+      fetch('/api/tv/parear/status?codigo=' + codigo + '&segredo=' + segredo)
+        .then(function (r) { if (r.status === 404) { parear(); return null; } return r.json(); })
+        .then(function (d) {
+          if (!d) return;
+          if (d.pronto && d.token) {
+            token = d.token;
+            try { localStorage.setItem(CHAVE, token); } catch (e) {}
+            espera('TV ligada!', 'Buscando os vídeos da loja...');
+            buscarLista();
+          } else esperarCodigo(codigo, segredo, inicio);
+        })
+        .catch(function () { esperarCodigo(codigo, segredo, inicio); });
+    }, 3000);
+  }
+
+  // ── Lista de vídeos (a cada 15s) ──
+  function buscarLista() {
+    clearTimeout(timerLista);
+    fetch('/api/tv/playlist', { headers: { 'Authorization': 'Tv ' + token, 'x-tv-tocando': tocando ? encodeURIComponent(tocando.titulo || '').slice(0, 100) : '', 'x-tv-versao': 'web-1' } })
+      .then(function (r) {
+        if (r.status === 401) { token = ''; try { localStorage.removeItem(CHAVE); } catch (e) {} parear(); return null; }
+        return r.json();
+      })
+      .then(function (d) {
+        if (!d) return;
+        nomeLoja = (d.loja && d.loja.nome) || '';
+        ativo = !!d.ativo;
+        if (d.versao !== versao) { versao = d.versao; lista = d.videos || []; aoMudarLista(); }
+        timerLista = setTimeout(buscarLista, 15000);
+      })
+      .catch(function () { timerLista = setTimeout(buscarLista, 15000); });
+  }
+
+  function minutos(hhmm) { var p = String(hhmm || '').split(':'); return p.length === 2 ? (+p[0]) * 60 + (+p[1]) : null; }
+  function podePassar(v) {
+    var ini = minutos(v.hora_ini), fim = minutos(v.hora_fim);
+    if (ini === null && fim === null) return true;
+    var d = new Date(), agora = d.getHours() * 60 + d.getMinutes();
+    if (ini === null) ini = 0;
+    if (fim === null) fim = 24 * 60;
+    return ini <= fim ? (agora >= ini && agora < fim) : (agora >= ini || agora < fim);
+  }
+  function proximoVideo() {
+    if (!lista.length) return null;
+    for (var i = 1; i <= lista.length; i++) {
+      var j = (indice + i) % lista.length;
+      if (podePassar(lista[j])) { indice = j; return lista[j]; }
+    }
+    return null;
+  }
+
+  function aoMudarLista() {
+    if (!ativo) { espera('TV Indoor desativada', 'A TV Indoor não está ativa para ' + (nomeLoja || 'esta loja') + '. Fale com o suporte.'); return; }
+    // Se o vídeo atual saiu da lista, troca na hora; senão espera ele acabar
+    if (tocando && lista.some(function (v) { return v.id === tocando.id && v.url === tocando.url; })) return;
+    indice = -1;
+    tocar();
+  }
+
+  function tocar() {
+    var v = proximoVideo();
+    if (!v) {
+      espera(nomeLoja || 'EstimaFood TV', lista.length ? 'Nenhum vídeo marcado para este horário.' : 'Nenhum vídeo ainda. Suba os vídeos no painel do gestor, em TV Indoor.');
+      setTimeout(function () { if (!tocando && ativo) tocar(); }, 30000);
+      return;
+    }
+    mostrar('');
+    tocando = v;
+    var el = proxima;
+    el.muted = !somLigado;
+    el.src = v.url;
+    el.onended = function () { tocar(); };
+    el.onerror = function () { setTimeout(tocar, 1500); };
+    var p = el.play();
+    if (p && p.catch) p.catch(function () { el.muted = true; el.play().catch(function () { setTimeout(tocar, 2000); }); });
+    el.classList.add('ativo');
+    atual.classList.remove('ativo');
+    var velha = atual;
+    setTimeout(function () { try { velha.pause(); velha.removeAttribute('src'); velha.load(); } catch (e) {} }, 400);
+    atual = el; proxima = velha;
+  }
+
+  // ── Som e tela cheia (só depois de um toque/tecla, regra dos navegadores) ──
+  function interagiu() {
+    if (!somLigado) {
+      somLigado = true;
+      atual.muted = false;
+      document.getElementById('aviso-som').style.display = 'none';
+    }
+    var de = document.documentElement;
+    if (!document.fullscreenElement && de.requestFullscreen) de.requestFullscreen().catch(function () {});
+  }
+  document.addEventListener('keydown', interagiu);
+  document.addEventListener('click', interagiu);
+  setTimeout(function () { if (!somLigado) { var a = document.getElementById('aviso-som'); a.style.display = 'block'; setTimeout(function () { a.style.display = 'none'; }, 10000); } }, 4000);
+
+  // Tela sempre acesa
+  function manterAcesa() { try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(function () {}); } catch (e) {} }
+  manterAcesa();
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) manterAcesa(); });
+
+  // Esconde o cursor parado
+  var tCursor; document.addEventListener('mousemove', function () { document.body.classList.remove('sem-cursor'); clearTimeout(tCursor); tCursor = setTimeout(function () { document.body.classList.add('sem-cursor'); }, 3000); });
+  document.body.classList.add('sem-cursor');
+
+  if (token) { espera('Carregando...', ''); buscarLista(); } else parear();
+})();
+</script>
+</body>
+</html>

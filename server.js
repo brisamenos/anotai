@@ -16,7 +16,8 @@ const { buildOrderTrackingMessage } = require('./order-message')
 const phoneUtils = require('./phone-utils')
 const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (como sempre foi) ou WuzAPI (alternativa leve)
 const _waCardFoto = require('./wa-card-foto') // foto dos cartões do carrossel no pedido pelo WhatsApp
-const _areaEntrega = require('./area-entrega') // conta da taxa por distância (mesma do cardápio e do gestor)
+const _areaEntrega = require('./area-entrega')
+const tvIndoor = require('./tv-indoor') // TV indoor: vídeos da loja na TV do estabelecimento // conta da taxa por distância (mesma do cardápio e do gestor)
 
 const PORT        = process.env.PORT           || 3001
 const EVO_URL     = (process.env.EVOLUTION_URL || 'https://projeto-evolution-api.xtknqq.easypanel.host').replace(/\/+$/,'')
@@ -1777,7 +1778,7 @@ const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_
   'entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens','order_status_history',
   'chat_threads','chat_messages','order_chat_threads','order_chat_messages','order_chat_drafts',
   'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts','admin_audit_log','plano_assinaturas',
-  'fiscal_config','fiscal_nfce','contas_pagar','faturas','fornecedores']
+  'fiscal_config','fiscal_nfce','contas_pagar','faturas','fornecedores','tv_videos','tv_telas']
   // wa_messages, radio_messages excluídas — mídia/áudio pode estourar JSON.stringify
   // sessions (admin/indicador/entregador), print_jobs, ia_pausa, addons_esgotados —
   // dados transitórios/operacionais, não fazem sentido restaurar
@@ -2809,7 +2810,7 @@ try {
 agendarResetDiarioPedidos()
 
 const TABLE_COLS = {
-  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca','voz_ativo','ia_teste_ate'],
+  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca','voz_ativo','tv_ativo','ia_teste_ate'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','pedido_minimo_retirada','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria','promo_banners','mostrar_indicacao_preparo','permitir_agendamento','tablet_splash_bg_url','promo_automatica','agendamento_config','ofertas_programadas'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','image_url','sort_order','ativo','garcom_oculto','cardapio_oculto'],
@@ -9940,7 +9941,7 @@ async function _handleOgImage(req, res, upath) {
 const _ESTATICO_BLOQUEADO = new RegExp([
   '(^|/)(data|\\.dev-data|node_modules|\\.git)(/|$)',
   '\\.(db|db-wal|db-shm|sqlite|sqlite3|sql|log|env|bak)$',
-  '^/?(server|routes|site-admin|marketing-flows|suporte-vendas-bot|tenant-wa|wuzapi|order-message|phone-utils|limpar-links-externos|limpar-movimentos-cancelados)\\.js$',
+  '^/?(server|routes|site-admin|marketing-flows|suporte-vendas-bot|tenant-wa|wuzapi|order-message|phone-utils|limpar-links-externos|limpar-movimentos-cancelados|tv-indoor|fotos-externas|wa-card-foto)\\.js$',
   '^/?(package|package-lock|site-padrao)\\.json$',
   '^/?(Dockerfile|nixpacks\\.toml)$'
 ].join('|'), 'i')
@@ -10590,6 +10591,7 @@ const server = http.createServer(async (req,res) => {
     deliveryPausaAtiva, linkCardapioTenant, isLojaAbertaServer,
     emit }
   try {
+    if (upath.startsWith('/api/tv/') && await tvIndoor.handle(req, res, _routeCtx)) return
     if (await handleRoutes(req, res, _routeCtx)) return
   } catch(e) {
     log('❌', `handleRoutes exception [${req.method} ${upath}]:`, e.message)
@@ -10781,6 +10783,25 @@ const server = http.createServer(async (req,res) => {
     if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
   }
 
+  // ── TV indoor: player para TV com navegador (sem o app Android) ──
+  if(req.method==='GET'&&(upath==='/tv'||upath==='/tv/')){
+    const fpath=path.join(__dirname,'tv.html')
+    if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
+  }
+  // App Android da TV indoor: coloque o estimafood-tv.apk na pasta de uploads
+  // (ou na pasta do projeto) e a TV baixa por este endereço curto
+  if(req.method==='GET'&&(upath==='/app-tv'||upath==='/app-tv.apk')){
+    const fpath=[path.join(UPLOADS_DIR,'estimafood-tv.apk'),path.join(__dirname,'estimafood-tv.apk')].find(f=>fs.existsSync(f))
+    if(fpath){
+      res.setHeader('Content-Type','application/vnd.android.package-archive')
+      res.setHeader('Content-Disposition','attachment; filename="estimafood-tv.apk"')
+      res.setHeader('Content-Length',fs.statSync(fpath).size)
+      res.setHeader('Cache-Control','no-cache')
+      res.writeHead(200);fs.createReadStream(fpath).pipe(res);return
+    }
+    res.writeHead(404,{'Content-Type':'text/plain; charset=utf-8'});res.end('O app da TV ainda não foi colocado no servidor.');return
+  }
+
   if(req.method==='GET'&&(upath==='/admin'||upath==='/admin/')){
     const fpath=path.join(__dirname,'admin.html')
     if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
@@ -10874,6 +10895,7 @@ const server = http.createServer(async (req,res) => {
   send(res,404,{ok:false,error:`Rota não encontrada: ${req.method} ${upath}`})
 })
 
+try { tvIndoor.init({ db, log, UPLOADS_DIR }) } catch (e) { log('⚠️', '[TV] não iniciou: ' + e.message) }
 server.listen(PORT,()=>{
   log('🚀',`Servidor rodando na porta ${PORT}`)
   log('🏢',`Multi-tenant · SQLite`)

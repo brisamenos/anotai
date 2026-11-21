@@ -273,6 +273,10 @@ function temaToggleRapido() {
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 2.5C8 2.5 5 5 5 8s3 5.5 3 5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="5.5" cy="5.5" r="1.2" fill="currentColor"/><circle cx="10.5" cy="5.5" r="1.2" fill="#f59e0b"/><circle cx="5.5" cy="10.5" r="1.2" fill="#22c55e"/><circle cx="10.5" cy="10.5" r="1.2" fill="#ec4899"/></svg>
     Tema e cores
   </button>
+  <button class="si" id="sn-tv" onclick="nav('tv')">
+    <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M6.8 5v3.5L9.8 6.75 6.8 5z" fill="currentColor"/><path d="M5 14h6M8 11v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    TV Indoor
+  </button>
   </div>
 
   <div class="shead" style="margin-top:4px" onclick="toggleSideGroup('sg-ferramentas')" id="sh-ferramentas">Clientes &amp; marketing <span class="shead-arrow"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
@@ -3569,6 +3573,13 @@ Use no seu próximo pedido.</textarea>
 </div>
 
 <!-- IMPRESSÃO -->
+<div class="page" id="page-tv">
+  <div class="gz-page-head">
+    <div><div class="gz-page-title">TV Indoor</div><div class="gz-page-sub">Os vídeos da sua loja passando na TV do estabelecimento</div></div>
+  </div>
+  <div id="tv-root"></div>
+</div>
+
 <div class="page" id="page-impressao">
   <div class="gz-page-head">
     <div><div class="gz-page-title">Impressão</div><div class="gz-page-sub">Configure impressoras e modelos de impressão</div></div>
@@ -7237,6 +7248,7 @@ Use no seu próximo pedido.</textarea>
     'gestor-relatorios.js',
     'gestor-caixa.js',
     'area-entrega.js',
+    'gestor-tv.js',
     'gestor-financeiro.js',
     'gestor-fiscal.js',
     'gestor-temas.js',
@@ -7427,6 +7439,9 @@ Use no seu próximo pedido.</textarea>
       </button>
       <button onclick="nav('tema');mClose()" class="m-mi">
         <svg width="19" height="19" viewBox="0 0 16 16" fill="none"><circle cx="5" cy="5" r="2" fill="var(--accent)"/><circle cx="11" cy="5" r="2" fill="var(--accent3)"/><circle cx="5" cy="11" r="2" fill="var(--success)"/><circle cx="11" cy="11" r="2" fill="var(--purple)"/></svg><span>Temas & Cores</span>
+      </button>
+      <button onclick="nav('tv');mClose()" class="m-mi">
+        <svg width="19" height="19" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M6.8 5v3.5L9.8 6.75 6.8 5z" fill="currentColor"/><path d="M5 14h6M8 11v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span>TV Indoor</span>
       </button>
     </div>
   </div>
