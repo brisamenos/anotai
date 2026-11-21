@@ -19,6 +19,15 @@
     return h < 48 ? `há ${h} h` : `há ${Math.round(h / 24)} dias`;
   };
 
+  const dataBR = iso => iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '-';
+  const PILL_SIT = { em_dia: 'ok', aberta: 'azul', atrasado: 'esp', pausado: 'atr', desligada: 'off', loja: 'ok' };
+  function pillFatura(f) {
+    if (f.status === 'pago') return `<span class="od-pill ok">Paga${f.metodo === 'manual' ? ' (por fora)' : ''}</span>`;
+    if (f.status === 'cancelado') return '<span class="od-pill off">Cancelada</span>';
+    const hoje = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+    return f.vence_em < hoje ? '<span class="od-pill atr">Atrasada</span>' : '<span class="od-pill esp">Em aberto</span>';
+  }
+
   async function api(caminho, opts = {}) {
     const h = { ...(typeof adminAuthHeader === 'function' ? adminAuthHeader() : {}) };
     if (opts.body !== undefined) h['Content-Type'] = 'application/json';
@@ -72,6 +81,18 @@
     #od-modal .od-checks input{width:16px;height:16px}
     #od-modal .od-mvid{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px}
     #od-modal .od-mvid img{width:72px;height:40px;object-fit:cover;border-radius:6px;background:#000}
+    #sec-outdoor .od-pill.atr{background:rgba(239,68,68,.12);color:var(--danger)}
+    #sec-outdoor .od-pill.azul{background:rgba(59,130,246,.12);color:var(--accent)}
+    #od-modal .od-pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:800}
+    #od-modal .od-pill.ok{background:rgba(34,197,94,.14);color:#22c55e}
+    #od-modal .od-pill.off{background:rgba(148,163,184,.14);color:var(--muted)}
+    #od-modal .od-pill.esp{background:rgba(245,158,11,.15);color:#f59e0b}
+    #od-modal .od-pill.atr{background:rgba(239,68,68,.12);color:var(--danger)}
+    #od-modal .od-fat{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:12.5px;flex-wrap:wrap}
+    #od-modal .od-fat:last-child{border-bottom:0}
+    #od-modal .od-nova{border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px;background:var(--s2)}
+    #od-modal .od-nova .mrow2{grid-template-columns:1fr 1fr}
+    #sec-outdoor .od-fat-acoes,#od-modal .od-fat-acoes{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
     #sec-outdoor .od-pend{border:1px solid rgba(245,158,11,.45);background:rgba(245,158,11,.06)}
     #sec-outdoor .od-pend-item{padding:14px 0;border-top:1px solid var(--border)}
     #sec-outdoor .od-pend-item:first-of-type{border-top:0}
@@ -87,7 +108,10 @@
 
   async function carregar() {
     O.carregando = true;
-    try { O.dados = await api('/api/outdoor/admin/resumo'); }
+    try {
+      O.dados = await api('/api/outdoor/admin/resumo');
+      if (O.aba === 'cobrancas') O.faturas = (await api('/api/outdoor/admin/faturas')).faturas;
+    }
     catch (e) { O.dados = null; O.erro = e.message; }
     O.carregando = false;
     render();
@@ -156,9 +180,11 @@
     const abas = `<div class="od-abas">
       <button class="${O.aba === 'anunciantes' ? 'on' : ''}" onclick="OUTDOORUI.aba('anunciantes')">Anunciantes</button>
       <button class="${O.aba === 'pontos' ? 'on' : ''}" onclick="OUTDOORUI.aba('pontos')">Pontos e TVs</button>
+      <button class="${O.aba === 'cobrancas' ? 'on' : ''}" onclick="OUTDOORUI.aba('cobrancas')">Cobranças${d.cobranca && d.cobranca.atrasadas ? `<b>${d.cobranca.atrasadas}</b>` : ''}</button>
     </div>`;
     let corpo = '';
     if (O.aba === 'anunciantes') corpo = renderAnunciantes(d);
+    else if (O.aba === 'cobrancas') corpo = renderCobrancas(d);
     else corpo = renderPontos(d);
     sec.innerHTML = topo + renderPendentes(d) + stats + abas + corpo;
   }
@@ -167,7 +193,7 @@
     if (!d.anunciantes.length) return '<div class="card"><div class="od-vazio">Nenhum anunciante ainda. Toque em "Novo anunciante" para cadastrar o primeiro.</div></div>';
     const nomePonto = Object.fromEntries(d.pontos.map(p => [p.id, p.nome]));
     return `<div class="card"><div class="od-rolar"><table class="od-tab">
-      <thead><tr><th>Anunciante</th><th>Valor</th><th>Onde aparece</th><th>Vídeos</th><th>Exibições (30 dias)</th><th>Situação</th><th></th></tr></thead>
+      <thead><tr><th>Anunciante</th><th>Valor</th><th>Onde aparece</th><th>Vídeos</th><th>Exibições (30 dias)</th><th>Situação</th><th>Cobrança</th><th></th></tr></thead>
       <tbody>${d.anunciantes.map(a => `<tr>
         <td><div style="font-weight:800">${esc(a.nome)}</div><div style="font-size:11.5px;color:var(--muted)">${[a.email, a.telefone].filter(Boolean).map(esc).join(', ')}</div>${a.loja_nome ? `<div style="font-size:11.5px;margin-top:2px"><span class="od-pill ok">EstimaFood</span> ${esc(a.loja_nome)}</div>` : ''}${a.aguardando ? `<div style="font-size:11.5px;margin-top:2px"><span class="od-pill esp">${a.aguardando} troca(s) para aprovar</span></div>` : ''}</td>
         <td><div style="font-weight:700">${brl(a.valor_mensal)}</div><div style="font-size:11.5px;color:var(--muted)">vence dia ${a.dia_vencimento || '-'}</div></td>
@@ -175,8 +201,84 @@
         <td style="font-size:12px">${a.na_rede} no ar<br><span style="color:var(--muted)">${a.videos} no total</span></td>
         <td style="font-weight:700">${(a.exibicoes_30d || 0).toLocaleString('pt-BR')}</td>
         <td>${a.ativo ? '<span class="od-pill ok">Ativo</span>' : '<span class="od-pill off">Pausado</span>'}</td>
-        <td style="white-space:nowrap"><button class="btn bp bsm" onclick="OUTDOORUI.videos(${a.id})">Vídeos</button> <button class="btn bg2 bsm" onclick="OUTDOORUI.editarAnunciante(${a.id})">Editar</button> <button class="btn bg2 bsm" onclick="OUTDOORUI.entrar(${a.id})" title="Abre o painel do anunciante">Abrir painel</button></td>
+        <td style="font-size:12px">${a.situacao ? `<span class="od-pill ${PILL_SIT[a.situacao.codigo] || 'off'}">${esc(a.situacao.texto)}</span>${a.situacao.vence_em && a.situacao.codigo !== 'desligada' ? `<div style="color:var(--muted);margin-top:3px">${a.situacao.codigo === 'em_dia' ? 'próximo' : 'vence'} ${dataBR(a.situacao.vence_em)}</div>` : ''}` : ''}</td>
+        <td style="white-space:nowrap"><button class="btn bp bsm" onclick="OUTDOORUI.videos(${a.id})">Vídeos</button> <button class="btn bg2 bsm" onclick="OUTDOORUI.cobranca(${a.id})">Cobrança</button> <button class="btn bg2 bsm" onclick="OUTDOORUI.editarAnunciante(${a.id})">Editar</button> <button class="btn bg2 bsm" onclick="OUTDOORUI.entrar(${a.id})" title="Abre o painel do anunciante">Abrir painel</button></td>
       </tr>`).join('')}</tbody></table></div></div>`;
+  }
+
+  function renderCobrancas(d) {
+    const c = d.cobranca || {};
+    const cards = `<div class="stats-grid" style="margin:0 0 14px">
+      <div class="stat-card" style="--ca:var(--success)"><div class="stat-card-label">Recebido no mês</div><div class="stat-card-val">${brl(c.recebido)}</div><div class="stat-card-sub">${c.recebidas || 0} fatura(s) paga(s)</div></div>
+      <div class="stat-card" style="--ca:var(--accent)"><div class="stat-card-label">A receber</div><div class="stat-card-val">${brl(c.a_receber)}</div><div class="stat-card-sub">${c.abertas || 0} fatura(s) em aberto</div></div>
+      <div class="stat-card" style="--ca:#f59e0b"><div class="stat-card-label">Atrasado</div><div class="stat-card-val">${brl(c.atrasado)}</div><div class="stat-card-sub">${c.atrasadas || 0} fatura(s) vencida(s)</div></div>
+      <div class="stat-card" style="--ca:var(--danger)"><div class="stat-card-label">Pausados</div><div class="stat-card-val">${c.pausados || 0}</div><div class="stat-card-sub">anúncios fora do ar por falta de pagamento</div></div>
+    </div>`;
+    const regra = `<div class="od-sub" style="margin:0 0 12px">A fatura sai 2 dias antes do vencimento, com Pix, pelo WhatsApp de cobranças. No dia do vencimento vai um lembrete. Passados ${d.tolerancia || 2} dias sem pagamento, os anúncios saem do ar e voltam sozinhos quando o pagamento cai. Quem está ligado a uma loja do EstimaFood paga junto com a mensalidade dela.</div>`;
+    const lista = O.faturas;
+    let tabela;
+    if (!lista) { tabela = '<div class="od-vazio">Carregando...</div>'; carregarFaturas(); }
+    else if (!lista.length) tabela = '<div class="od-vazio">Nenhuma fatura ainda. Elas aparecem aqui quando chegar perto do vencimento de cada anunciante, ou quando você usar "Cobrar agora".</div>';
+    else tabela = `<div class="od-rolar"><table class="od-tab"><thead><tr><th>Anunciante</th><th>Valor</th><th>Vencimento</th><th>Situação</th><th>WhatsApp</th><th></th></tr></thead><tbody>
+      ${lista.map(f => `<tr>
+        <td style="font-weight:700">${esc(f.anunciante_nome)}</td>
+        <td style="font-weight:700">${brl(f.valor)}</td>
+        <td>${dataBR(f.vence_em)}${f.pago_em && f.status === 'pago' ? `<div style="font-size:11.5px;color:var(--muted)">paga em ${dataBR(f.pago_em)}</div>` : ''}</td>
+        <td>${pillFatura(f)}${f.obs && /Pix não gerado/.test(f.obs) ? `<div style="font-size:11.5px;color:var(--danger);margin-top:3px">${esc(f.obs)}</div>` : ''}</td>
+        <td style="font-size:12px">${f.status !== 'pendente' ? '' : f.wa_enviado_em ? 'Enviada' : `<span style="color:var(--danger)">${esc(f.wa_erro || 'Ainda não enviada')}</span>`}</td>
+        <td>${acoesFatura(f)}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+    return `<div class="card">${regra}${cards}${tabela}</div>`;
+  }
+  function acoesFatura(f) {
+    if (f.status === 'pago') return '';
+    const confirma = O.excluir === 'f' + f.id;
+    if (f.status === 'cancelado') return `<div class="od-fat-acoes"><button class="btn bg2 bsm" onclick="OUTDOORUI.faturaAcao(${f.id},'pago')">Marcar como paga</button></div>`;
+    return `<div class="od-fat-acoes">
+      ${f.link ? `<a class="btn bg2 bsm" href="${esc(f.link)}" target="_blank" rel="noopener" style="text-decoration:none">Ver Pix</a>` : ''}
+      <button class="btn bg2 bsm" onclick="OUTDOORUI.faturaAcao(${f.id},'reenviar')">Reenviar</button>
+      <button class="btn bg2 bsm" onclick="OUTDOORUI.faturaAcao(${f.id},'pago')">Marcar como paga</button>
+      <button class="btn bd bsm" onclick="OUTDOORUI.faturaAcao(${f.id},'cancelar')">${confirma ? 'Confirmar' : 'Cancelar'}</button>
+    </div>`;
+  }
+  async function carregarFaturas() {
+    if (O.carregandoFat) return;
+    O.carregandoFat = true;
+    try { O.faturas = (await api('/api/outdoor/admin/faturas')).faturas; }
+    catch (e) { O.faturas = []; aviso('err', e.message); }
+    O.carregandoFat = false;
+    if (O.aba === 'cobrancas') render();
+  }
+
+  // ── Cobrança de um anunciante ──
+  async function modalCobranca(aid) {
+    const a = O.dados.anunciantes.find(x => x.id === aid);
+    if (!a) return;
+    O.aberto = 'cob' + aid;
+    let d = { faturas: [], proximo: null };
+    try { d = await api('/api/outdoor/admin/faturas?anunciante_id=' + aid); } catch (e) { aviso('err', e.message); }
+    const sit = a.situacao || {};
+    const ligado = !!a.tenant_id;
+    const nova = ligado ? `<div class="od-nova" style="font-size:12.5px;line-height:1.55">Este anunciante está ligado à loja <b>${esc(a.loja_nome || '')}</b> do EstimaFood. O valor de ${brl(a.valor_mensal)} entra somado na mensalidade da loja${sit.vence_em ? `, que vence em ${dataBR(sit.vence_em)}` : ''}. Se a loja passar ${O.dados.tolerancia || 2} dias do vencimento sem pagar, os anúncios saem do ar.</div>`
+      : a.cobranca_ativa ? `<div class="od-nova">
+        <div style="font-weight:800;margin-bottom:10px">Cobrar agora</div>
+        <div class="mrow2"><div class="mrow"><label class="mlabel">Valor (R$)</label><input class="minput" id="od-c-valor" type="number" step="0.01" min="0" value="${esc((+a.valor_mensal || 0).toFixed(2))}"></div>
+        <div class="mrow"><label class="mlabel">Vencimento</label><input class="minput" id="od-c-venc" type="date" value="${esc(d.proximo || '')}"></div></div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;margin-bottom:10px"><input type="checkbox" id="od-c-pago" style="width:16px;height:16px"> Já foi pago por fora (dinheiro, transferência). Só registra, não manda Pix.</label>
+        <button class="btn bp" id="od-c-btn" onclick="OUTDOORUI.cobrar(${aid})">Gerar e mandar no WhatsApp</button>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:8px">O Pix vai para o WhatsApp ${a.telefone ? esc(a.telefone) : '(cadastre o WhatsApp do anunciante)'}. Se já existir fatura nesse vencimento, a rotina automática não gera outra.</div>
+      </div>` : `<div class="od-nova" style="font-size:12.5px">A cobrança automática deste anunciante está desligada. Para voltar a cobrar, ligue em "Editar".</div>`;
+    const lista = d.faturas.length ? d.faturas.map(f => `<div class="od-fat">
+        <div style="min-width:120px"><b>${brl(f.valor)}</b><div style="color:var(--muted)">vence ${dataBR(f.vence_em)}</div></div>
+        <div>${pillFatura(f)}${f.status === 'pendente' ? `<div style="font-size:11.5px;color:${f.wa_enviado_em ? 'var(--muted)' : 'var(--danger)'};margin-top:3px">${f.wa_enviado_em ? 'WhatsApp enviado' : esc(f.wa_erro || 'WhatsApp ainda não enviado')}</div>` : ''}</div>
+        ${acoesFatura(f)}
+      </div>`).join('') : '<div style="font-size:12.5px;color:var(--muted)">Nenhuma fatura ainda.</div>';
+    modal(`<h2>Cobrança de ${esc(a.nome)}</h2>
+      <div style="margin:-8px 0 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="od-pill ${PILL_SIT[sit.codigo] || 'off'}">${esc(sit.texto || '')}</span>${!ligado && a.cobranca_ativa && sit.codigo === 'em_dia' && sit.vence_em ? `<span style="font-size:12.5px;color:var(--muted)">Próxima fatura: vencimento em ${dataBR(sit.vence_em)}</span>` : ''}</div>
+      ${nova}
+      <div class="modal-sec-title">Faturas</div>
+      <div id="od-c-lista">${lista}</div>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn bg2" onclick="OUTDOORUI.fechar()">Fechar</button></div>`);
   }
 
   function renderPontos(d) {
@@ -228,7 +330,7 @@
   function formAnunciante(a) {
     const d = O.dados;
     const novo = !a;
-    a = a || { nome: '', responsavel: '', telefone: '', email: '', valor_mensal: '', dia_vencimento: 10, observacoes: '', pontos: [], ativo: 1 };
+    a = a || { nome: '', responsavel: '', telefone: '', email: '', valor_mensal: '', dia_vencimento: 10, observacoes: '', pontos: [], ativo: 1, cobranca_ativa: 1 };
     const proprios = d.pontos.filter(p => a.id && p.anunciante_id === a.id);
     const outros = d.pontos.filter(p => !(a.id && p.anunciante_id === a.id));
     return `<h2>${novo ? 'Novo anunciante' : 'Editar anunciante'}</h2>
@@ -241,6 +343,7 @@
         <div id="od-a-loja-info" style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5;${a.tenant_id ? '' : 'display:none'}">A loja ganha a TV Indoor completa no gestor dela, sem cobrar o adicional (o preço é o negociado aqui). O anúncio passa também nas TVs da loja. Ela não apaga nem troca o anúncio: só pede a troca, e você aprova aqui.</div></div>
       <div class="mrow2"><div class="mrow"><label class="mlabel" id="od-a-email-rot">E-mail (login do painel)${a.tenant_id ? ', opcional' : ''}</label><input class="minput" id="od-a-email" type="email" value="${esc(a.email || '')}" autocomplete="off"></div>
       <div class="mrow"><label class="mlabel">${novo ? 'Senha' : 'Nova senha (deixe em branco para manter)'}</label><input class="minput" id="od-a-senha" type="text" autocomplete="new-password" placeholder="mínimo 6 caracteres"></div></div>
+      <div class="mrow" style="display:flex;align-items:flex-start;gap:8px"><input type="checkbox" id="od-a-cob" style="width:16px;height:16px;margin-top:2px" ${a.cobranca_ativa === 0 ? '' : 'checked'}><label for="od-a-cob" style="font-size:13px;cursor:pointer;line-height:1.45"><b>Cobrança automática ligada</b><br><span style="color:var(--muted);font-size:12px">Desligando, não sai mais nenhuma fatura e as que estão em aberto são canceladas. Mudando o valor, vale para as próximas faturas.</span></label></div>
       <div class="mrow2"><div class="mrow"><label class="mlabel">Dia do vencimento</label><input class="minput" id="od-a-venc" type="number" min="1" max="31" value="${esc(a.dia_vencimento || 10)}"></div>
       <div class="mrow"><label class="mlabel">Situação</label><select class="minput" id="od-a-ativo"><option value="1" ${a.ativo ? 'selected' : ''}>Ativo (anúncios passando)</option><option value="0" ${a.ativo ? '' : 'selected'}>Pausado (nada passa, sem acesso ao painel)</option></select></div></div>
       ${novo ? `<div class="mrow" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="od-a-tv" style="width:16px;height:16px" onchange="document.getElementById('od-a-end-row').style.display=this.checked?'':'none'"><label for="od-a-tv" style="font-size:13px;cursor:pointer">O comércio dele tem TV (vira um ponto: os vídeos dele passam lá, junto com os de outros anunciantes que você escolher)</label></div>
@@ -395,7 +498,35 @@
       clearInterval(O.timer);
       O.timer = setInterval(() => { if ($('sec-outdoor')?.style.display !== 'none' && !$('od-modal')?.classList.contains('on')) carregar(); }, 30000);
     },
-    aba(a) { O.aba = a; render(); },
+    aba(a) { O.aba = a; if (a === 'cobrancas') O.faturas = null; render(); },
+    cobranca(aid) { O.excluir = null; modalCobranca(aid); },
+    async cobrar(aid) {
+      const btn = $('od-c-btn'); if (btn) { btn.disabled = true; btn.textContent = 'Gerando...'; }
+      const pago = !!$('od-c-pago')?.checked;
+      try {
+        const r = await api(`/api/outdoor/admin/anunciantes/${aid}/cobrar`, { method: 'POST', body: { valor: val('od-c-valor'), vence_em: val('od-c-venc'), pago } });
+        if (pago) aviso('ok', 'Pagamento registrado.');
+        else if (r.whatsapp) aviso('ok', r.pix ? 'Fatura gerada e enviada no WhatsApp com o Pix.' : 'Fatura gerada e enviada, mas sem Pix: confira o Mercado Pago em Saques PIX.');
+        else aviso('err', 'Fatura gerada, mas o WhatsApp não foi: ' + (r.erro_whatsapp || 'erro'));
+        await carregar(); modalCobranca(aid);
+      } catch (e) { aviso('err', e.message); if (btn) { btn.disabled = false; btn.textContent = 'Gerar e mandar no WhatsApp'; } }
+    },
+    async faturaAcao(fid, acao) {
+      if (acao === 'cancelar' && O.excluir !== 'f' + fid) {
+        O.excluir = 'f' + fid;
+        if (String(O.aberto || '').startsWith('cob')) modalCobranca(+String(O.aberto).slice(3)); else render();
+        setTimeout(() => { if (O.excluir === 'f' + fid) { O.excluir = null; if (O.aba === 'cobrancas' && !$('od-modal')?.classList.contains('on')) render(); } }, 4000);
+        return;
+      }
+      O.excluir = null;
+      try {
+        await api(`/api/outdoor/admin/faturas/${fid}/${acao}`, { method: 'POST', body: {} });
+        aviso('ok', acao === 'pago' ? 'Fatura marcada como paga. Se os anúncios estavam fora do ar, voltam em alguns segundos.' : acao === 'cancelar' ? 'Fatura cancelada.' : 'Fatura reenviada no WhatsApp.');
+      } catch (e) { aviso('err', e.message); }
+      O.faturas = null;
+      await carregar();
+      if (String(O.aberto || '').startsWith('cob') && $('od-modal')?.classList.contains('on')) modalCobranca(+String(O.aberto).slice(3));
+    },
     trocouLoja() {
       const tem = !!val('od-a-loja');
       const i = $('od-a-loja-info'); if (i) i.style.display = tem ? '' : 'none';
@@ -446,7 +577,7 @@
     async salvarAnunciante(id) {
       const corpo = {
         nome: val('od-a-nome'), responsavel: val('od-a-resp'), telefone: val('od-a-tel'), email: val('od-a-email'),
-        valor_mensal: val('od-a-valor'), dia_vencimento: val('od-a-venc'), observacoes: val('od-a-obs'), ativo: val('od-a-ativo') === '1', tenant_id: val('od-a-loja'),
+        valor_mensal: val('od-a-valor'), dia_vencimento: val('od-a-venc'), observacoes: val('od-a-obs'), ativo: val('od-a-ativo') === '1', tenant_id: val('od-a-loja'), cobranca_ativa: !!$('od-a-cob')?.checked,
         pontos: [...document.querySelectorAll('.od-a-ponto:checked')].map(c => +c.value)
       };
       const senha = val('od-a-senha');

@@ -21,6 +21,7 @@
 // - Usa o mesmo app/página de TV, upload e compressão da TV Indoor.
 
 const crypto = require('crypto')
+const cobranca = require('./outdoor-cobranca') // faturas, Pix e pausa por falta de pagamento
 
 let ctxBase = null
 let tv = null // tv-indoor.js
@@ -106,6 +107,7 @@ function criarTabelas(db) {
     qtd INTEGER DEFAULT 0,
     PRIMARY KEY (video_id, ponto_id, dia)
   )`)
+  cobranca.criarTabelas(db)
   db.exec(`CREATE TABLE IF NOT EXISTS od_sessoes (
     token TEXT PRIMARY KEY,
     anunciante_id INTEGER NOT NULL,
@@ -133,12 +135,13 @@ function playlistDoPonto(pontoId) {
   const p = db.prepare('SELECT * FROM od_pontos WHERE id=?').get(pontoId)
   if (!p || !p.ativo) return { versao: 'off-' + pontoId, ativo: false, loja: { nome: p ? p.nome : '' }, videos: [] }
   const dono = p.anunciante_id ? db.prepare('SELECT * FROM od_anunciantes WHERE id=?').get(p.anunciante_id) : null
-  const daCasa = (dono && dono.ativo) ? db.prepare(`SELECT * FROM od_videos WHERE anunciante_id=? AND status='pronto' AND minha_tv=1 AND rede='aprovado' AND COALESCE(ativo,1)=1 ORDER BY ordem, id`).all(dono.id) : []
+  const pausados = cobranca.idsPausadosPorPagamento(db)
+  const daCasa = (dono && dono.ativo && !pausados.has(dono.id)) ? db.prepare(`SELECT * FROM od_videos WHERE anunciante_id=? AND status='pronto' AND minha_tv=1 AND rede='aprovado' AND COALESCE(ativo,1)=1 ORDER BY ordem, id`).all(dono.id) : []
   const anuncios = db.prepare(`SELECT v.* FROM od_videos v
       JOIN od_contratos c ON c.anunciante_id = v.anunciante_id AND c.ponto_id = ?
       JOIN od_anunciantes a ON a.id = v.anunciante_id AND a.ativo = 1
       WHERE v.status='pronto' AND v.rede='aprovado' AND COALESCE(v.ativo,1)=1 AND v.anunciante_id <> ?
-      ORDER BY a.id, v.ordem, v.id`).all(pontoId, p.anunciante_id || 0)
+      ORDER BY a.id, v.ordem, v.id`).all(pontoId, p.anunciante_id || 0).filter(v => !pausados.has(v.anunciante_id))
   let seq = []
   const n = Math.max(1, Math.min(10, p.anuncios_a_cada || 1))
   if (!daCasa.length) seq = anuncios
@@ -164,7 +167,7 @@ function lojaVinculada(tid) {
 // Anúncios contratados que também passam nas TVs da própria loja
 function anunciosDaLoja(tid) {
   const a = lojaVinculada(tid)
-  if (!a) return []
+  if (!a || cobranca.pausadoPorPagamento(ctxBase.db, a.id)) return []
   return ctxBase.db.prepare(`SELECT * FROM od_videos WHERE anunciante_id=? AND status='pronto' AND rede='aprovado' AND COALESCE(ativo,1)=1 ORDER BY ordem, id`).all(a.id).map(itemTv)
 }
 // Exibição numa TV da loja (ponto 0 = TV própria). Só conta vídeo da própria loja.
@@ -271,9 +274,10 @@ function resumoAdmin(db) {
   const exib = exibicoesPorVideo(db, desde)
   const nomeLoja = new Map()
   try { for (const t of db.prepare('SELECT id, nome FROM tenants').all()) nomeLoja.set(String(t.id), t.nome) } catch (e) {}
-  const anunciantes = db.prepare('SELECT id, nome, responsavel, telefone, email, valor_mensal, dia_vencimento, ativo, observacoes, created_at, loja_id AS tenant_id FROM od_anunciantes ORDER BY nome').all().map(a => {
+  const anunciantes = db.prepare('SELECT id, nome, responsavel, telefone, email, valor_mensal, dia_vencimento, ativo, observacoes, created_at, loja_id AS tenant_id, loja_id, COALESCE(cobranca_ativa,1) cobranca_ativa FROM od_anunciantes ORDER BY nome').all().map(a => {
     const vids = db.prepare('SELECT id, rede, status, ativo FROM od_videos WHERE anunciante_id=?').all(a.id)
     return { ...a, loja_nome: a.tenant_id ? (nomeLoja.get(String(a.tenant_id)) || 'Loja apagada') : null,
+      situacao: cobranca.situacao(db, a),
       pontos: db.prepare('SELECT ponto_id FROM od_contratos WHERE anunciante_id=?').all(a.id).map(r => r.ponto_id),
       videos: vids.length,
       na_rede: vids.filter(v => v.rede === 'aprovado' && v.status === 'pronto' && v.ativo !== 0).length,
@@ -287,7 +291,7 @@ function resumoAdmin(db) {
   let lojas = []
   try { lojas = db.prepare(`SELECT id, nome FROM tenants WHERE id NOT IN ('_global','system') ORDER BY nome COLLATE NOCASE`).all().map(t => ({ id: String(t.id), nome: t.nome || String(t.id) })) } catch (e) {}
   return { anunciantes, pontos, no_ar, receita_mensal: receita, comprime: tv.temCompressor(), max: tv.MAX_VIDEOS,
-    pendentes: trocasPendentes(db), lojas }
+    pendentes: trocasPendentes(db), lojas, cobranca: cobranca.resumoMes(db), tolerancia: cobranca.TOLERANCIA_DIAS }
 }
 
 function limparTexto(v, max) { return String(v ?? '').trim().slice(0, max) }
@@ -376,8 +380,8 @@ async function handle(req, res, ctx) {
         if (senha.length < 6) { send(res, 400, { error: 'A senha precisa ter pelo menos 6 caracteres.' }); return true }
         if (db.prepare('SELECT 1 FROM od_anunciantes WHERE email=?').get(email)) { send(res, 409, { error: 'Já existe um anunciante com esse e-mail.' }); return true }
       }
-      const r = db.prepare(`INSERT INTO od_anunciantes (nome, responsavel, telefone, email, senha_hash, valor_mensal, dia_vencimento, ativo, observacoes, created_at, loja_id)
-        VALUES (?,?,?,?,?,?,?,1,?,?,?)`).run(nome, limparTexto(b.responsavel, 80), limparTexto(b.telefone, 30), email || null, email ? senhaHash(senha) : null,
+      const r = db.prepare(`INSERT INTO od_anunciantes (nome, responsavel, telefone, email, senha_hash, valor_mensal, dia_vencimento, ativo, observacoes, created_at, loja_id, cobranca_ativa)
+        VALUES (?,?,?,?,?,?,?,1,?,?,?,${b.cobranca_ativa === false ? 0 : 1})`).run(nome, limparTexto(b.responsavel, 80), limparTexto(b.telefone, 30), email || null, email ? senhaHash(senha) : null,
         Math.max(0, +b.valor_mensal || 0), Math.min(31, Math.max(1, parseInt(b.dia_vencimento, 10) || 10)), limparTexto(b.observacoes, 1000), agoraISO(), loja.tenant_id)
       const aid = r.lastInsertRowid
       if (b.criar_ponto_proprio) {
@@ -423,9 +427,14 @@ async function handle(req, res, ctx) {
         if (b.dia_vencimento !== undefined) c.dia_vencimento = Math.min(31, Math.max(1, parseInt(b.dia_vencimento, 10) || 10))
         if (b.observacoes !== undefined) c.observacoes = limparTexto(b.observacoes, 1000)
         if (b.ativo !== undefined) c.ativo = b.ativo ? 1 : 0
+        if (b.cobranca_ativa !== undefined) c.cobranca_ativa = b.cobranca_ativa ? 1 : 0
         const ks = Object.keys(c)
         if (ks.length) db.prepare(`UPDATE od_anunciantes SET ${ks.map(k => k + '=?').join(',')} WHERE id=?`).run(...ks.map(k => c[k]), aid)
         if (b.pontos !== undefined) salvarContratos(db, aid, b.pontos)
+        // Cobrança desligada, ou passou a ser cobrado junto com a loja do EstimaFood: as faturas abertas daqui não valem mais
+        if (c.cobranca_ativa === 0) cobranca.cancelarAbertas(db, aid, '| cobrança desligada pelo admin')
+        else if (c.loja_id) cobranca.cancelarAbertas(db, aid, '| passou a ser cobrado na mensalidade do EstimaFood')
+        cobranca.limparCache()
         send(res, 200, { ok: true }); return true
       }
       if (req.method === 'DELETE') {
@@ -437,6 +446,7 @@ async function handle(req, res, ctx) {
         }
         db.prepare('DELETE FROM od_contratos WHERE anunciante_id=?').run(aid)
         db.prepare('DELETE FROM od_sessoes WHERE anunciante_id=?').run(aid)
+        db.prepare('DELETE FROM od_faturas WHERE anunciante_id=?').run(aid)
         db.prepare('DELETE FROM od_anunciantes WHERE id=?').run(aid)
         log('📺', `[OUTDOOR] anunciante "${a.nome}" excluído`)
         send(res, 200, { ok: true }); return true
@@ -542,6 +552,49 @@ async function handle(req, res, ctx) {
       db.transaction(() => ids.forEach((id, i) => up.run(i + 1, id)))()
       send(res, 200, { ok: true }); return true
     }
+    // ── Cobrança dos anunciantes ──
+    if (req.method === 'GET' && upath === '/api/outdoor/admin/faturas') {
+      const aid = parseInt(params.get('anunciante_id'), 10) || 0
+      send(res, 200, { faturas: cobranca.listarFaturas(db, aid), resumo: cobranca.resumoMes(db),
+        proximo: aid ? (() => { const a = db.prepare('SELECT dia_vencimento FROM od_anunciantes WHERE id=?').get(aid); return a ? cobranca.proximoVencimento(a.dia_vencimento || 10, cobranca.hoje()) : null })() : null })
+      return true
+    }
+    if ((m = /^\/api\/outdoor\/admin\/anunciantes\/(\d+)\/cobrar$/.exec(upath)) && req.method === 'POST') {
+      if (!cobranca.pronto()) { send(res, 503, { error: 'A cobrança ainda está iniciando. Tente de novo em alguns segundos.' }); return true }
+      const a = db.prepare('SELECT * FROM od_anunciantes WHERE id=?').get(+m[1])
+      if (!a) { send(res, 404, { error: 'Anunciante não encontrado' }); return true }
+      if (a.loja_id) { send(res, 400, { error: 'Este anunciante é cobrado junto com a mensalidade do EstimaFood.' }); return true }
+      const b = await readBody(req).catch(() => ({}))
+      try {
+        const f = await cobranca.gerarFatura(a, { valor: b.valor, vence_em: b.vence_em, origem: 'admin', pago: !!b.pago, obs: b.pago ? 'Pago por fora (registrado pelo admin)' : null })
+        let wa = null
+        if (!b.pago) wa = await cobranca.mandarFatura(a, f)
+        log('📺', `[VISSETV] cobrança ${f.id} criada pelo admin para "${a.nome}"`)
+        send(res, 200, { ok: true, id: f.id, pix: !!f.qr_code, whatsapp: wa ? wa.ok : null, erro_whatsapp: wa && !wa.ok ? wa.erro : null })
+      } catch (e) { send(res, 400, { error: e.message }) }
+      return true
+    }
+    if ((m = /^\/api\/outdoor\/admin\/faturas\/(\d+)\/(pago|cancelar|reenviar)$/.exec(upath)) && req.method === 'POST') {
+      const f = db.prepare('SELECT * FROM od_faturas WHERE id=?').get(+m[1])
+      if (!f) { send(res, 404, { error: 'Fatura não encontrada' }); return true }
+      if (m[2] === 'pago') {
+        if (f.status === 'pago') { send(res, 400, { error: 'Essa fatura já está paga.' }); return true }
+        if (f.status === 'cancelado') db.prepare(`UPDATE od_faturas SET status='pendente' WHERE id=?`).run(f.id)
+        cobranca.confirmarPagamento(f, 'manual')
+      } else if (m[2] === 'cancelar') {
+        if (f.status !== 'pendente') { send(res, 400, { error: 'Só dá para cancelar fatura em aberto.' }); return true }
+        db.prepare(`UPDATE od_faturas SET status='cancelado', cancelado_em=? WHERE id=?`).run(agoraISO(), f.id)
+        cobranca.limparCache()
+      } else {
+        if (f.status !== 'pendente') { send(res, 400, { error: 'Essa fatura não está em aberto.' }); return true }
+        if (!cobranca.pronto()) { send(res, 503, { error: 'A cobrança ainda está iniciando. Tente de novo em alguns segundos.' }); return true }
+        const a = db.prepare('SELECT * FROM od_anunciantes WHERE id=?').get(f.anunciante_id)
+        const r = await cobranca.mandarFatura(a, f)
+        if (!r.ok) { send(res, 400, { error: 'WhatsApp não enviado: ' + r.erro }); return true }
+      }
+      send(res, 200, { ok: true }); return true
+    }
+
     // Troca pedida pela loja: o admin assiste e aprova ou recusa
     if ((m = /^\/api\/outdoor\/admin\/videos\/(\d+)\/(aprovar|recusar)$/.exec(upath)) && req.method === 'POST') {
       const v = db.prepare(`SELECT * FROM od_videos WHERE id=? AND rede='aguardando'`).get(+m[1])

@@ -519,6 +519,9 @@ function valorPlano(tenant) {
     valor = parseFloat(tenant.valor_mensalidade)
   }
   if (tenant && tenant.voz_ativo) valor += g.preco_addon_voz !== undefined ? parseFloat(g.preco_addon_voz) : 89.90
+  // TV Indoor e anúncio na VisseTV entram na mesma mensalidade (igual à auto-cobrança)
+  if (tenant && tenant.tv_ativo) valor += g.preco_addon_tv !== undefined ? parseFloat(g.preco_addon_tv) : 19.90
+  try { if (tenant && D.db) valor += require('./outdoor-cobranca').valorNaFaturaDaLoja(D.db, tenant.id) } catch (e) {}
   return valor
 }
 

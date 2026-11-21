@@ -15,6 +15,7 @@ const crypto = require('crypto')
 const { buildOrderTrackingMessage } = require('./order-message')
 const { phoneLookupArgs, phoneLookupSql, phonesMatch, phoneDigitsSql } = require('./phone-utils')
 const _svBot = require('./suporte-vendas-bot') // WhatsApp de Suporte e Vendas (WuzAPI ou Evolution)
+const _vtvCobranca = require('./outdoor-cobranca') // VisseTV: cobrança dos anunciantes
 const _mkt = require('./marketing-flows') // Marketing: fluxos de mensagens e disparos (WuzAPI)
 const _site = require('./site-admin') // Site institucional editável pelo admin + contas de teste grátis
 const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (como sempre foi) ou WuzAPI (alternativa leve)
@@ -1366,6 +1367,7 @@ async function _enviarLembreteFatura(db, t, fatura) {
     `Olá, *${t.nome}*! Seu plano *${_planoSaasLabel(fatura.plano)}* do ${_brandNome(t.segmento)} vence em *${venceEmTxt}*.`,
     ``,
     `💰 *Valor:* R$ ${valorTxt}`,
+    ...(_vtvCobranca.valorNaFaturaDaLoja(db, t.id) > 0 ? [`_Inclui o seu anúncio na VisseTV: R$ ${_vtvCobranca.valorNaFaturaDaLoja(db, t.id).toFixed(2).replace('.', ',')}_`] : []),
     `⏰ *Pague até:* ${venceEmTxt}`,
     ``,
     `💸 *Pague agora via PIX* — escaneie o QR Code que vou te enviar ou use o código Copia e Cola abaixo:`,
@@ -1444,6 +1446,8 @@ function _valorRenovacaoTenant(db, t) {
   if (t.voz_ativo) valor += precoAddonVoz
   // Add-on TV indoor (vídeos da loja na TV do estabelecimento)
   if (t.tv_ativo) valor += precoAddonTv
+  // Anúncio na rede VisseTV (anunciante ligado a esta loja): entra na mesma fatura
+  valor += _vtvCobranca.valorNaFaturaDaLoja(db, t.id)
   if (plano === 'fiscal') {
     try {
       const fiscal = _adminFiscalCobrancaAtual(db, t.id, { mes: _adminFiscalMesAtual(), plano_valor: precoFiscal })
@@ -1693,6 +1697,9 @@ function _iniciarAutoCobrancaJob(ctx) {
           // Add-on TV indoor (vídeos da loja na TV do estabelecimento)
           if (t.tv_ativo) valor += precoAddonTv
           let obsFatura = 'Gerada automaticamente (2 dias antes do vencimento)'
+          // Anúncio na rede VisseTV (anunciante ligado a esta loja): entra na mesma fatura
+          const _vtv = _vtvCobranca.valorNaFaturaDaLoja(db, t.id)
+          if (_vtv > 0) { valor += _vtv; obsFatura += ` | inclui VisseTV R$ ${_vtv.toFixed(2)}` }
           if (plano === 'fiscal') {
             const fiscal = _adminFiscalCobrancaAtual(db, t.id, {
               mes: _adminFiscalMesAtual(),
@@ -4405,6 +4412,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
   // ── Inicia job de auto-cobrança SaaS (uma vez) ────────────────────────────
   _iniciarAutoCobrancaJob(ctx)
+  // VisseTV: faturas dos anunciantes (usa o mesmo Mercado Pago e o WhatsApp de cobranças)
+  try {
+    _vtvCobranca.iniciar({ db, log, marcarDirty, mpToken: () => _resolveMpGlobal(db, MP_TOKEN),
+      sendText: (tel, txt) => _svBot.sendText(tel, txt), sendImage: (tel, b64, leg) => _svBot.sendImage(tel, b64, leg),
+      webhookUrl: _mpWebhookUrlPadrao() })
+  } catch (e) { log('⚠️', '[VISSETV] cobrança não iniciou: ' + e.message) }
   _iniciarAvisoWaDesconectadoJob(ctx)
   _iniciarAvisoAgendadoJob(ctx) // aviso de pedido agendado no WhatsApp do gestor
   _iniciarEvolutionOffJob(ctx)
@@ -7167,6 +7180,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
       try {
         if (await _site.pagamentoDoSite(String(mpId), pd)) { send(res, 200, { ok: true }); return true }
       } catch (e) { log('⚠️', 'Webhook compra do site:', e.message) }
+
+      // ── VisseTV: fatura de anunciante (referência começa com "vtv-") ─────
+      try {
+        if (_vtvCobranca.pronto() && _vtvCobranca.pagamentoMercadoPago(pd)) { send(res, 200, { ok: true }); return true }
+      } catch (e) { log('⚠️', 'Webhook VisseTV:', e.message) }
 
       // ── Rota 1: PIX (pagamentos_pix) ──────────────────────────────────────
       const row = db.prepare('SELECT status,valor,tenant_id,order_id,payer_name FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
@@ -10462,6 +10480,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── GET /api/admin/cobranca/valor — mensalidade calculada (plano + adicionais + VisseTV) ──
+  if (req.method === 'GET' && upath === '/api/admin/cobranca/valor') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const t = db.prepare('SELECT * FROM tenants WHERE id=?').get(String(params.get('tenant_id') || ''))
+    if (!t) { send(res, 404, { error: 'Cliente não encontrado' }); return true }
+    const { plano, valor } = _valorRenovacaoTenant(db, t)
+    send(res, 200, { plano, valor, vissetv: _vtvCobranca.valorNaFaturaDaLoja(db, t.id) })
+    return true
+  }
+
   // ── POST /api/admin/cobranca/em-massa — várias cobranças ──
   if (req.method === 'POST' && upath === '/api/admin/cobranca/em-massa') {
     const sess = validarSessaoAdmin(req)
@@ -10497,6 +10525,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
         if (tenant.voz_ativo) valor += precoAddonVoz
         // Add-on TV indoor (vídeos da loja na TV do estabelecimento)
         if (tenant.tv_ativo) valor += precoAddonTv
+        // Anúncio na rede VisseTV (anunciante ligado a esta loja)
+        valor += _vtvCobranca.valorNaFaturaDaLoja(db, tenant.id)
         let obsFiscal = null
         if (plano === 'fiscal') {
           const fiscal = _adminFiscalCobrancaAtual(db, tenant.id, {

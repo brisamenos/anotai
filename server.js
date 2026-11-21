@@ -1780,7 +1780,7 @@ const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_
   'chat_threads','chat_messages','order_chat_threads','order_chat_messages','order_chat_drafts',
   'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts','admin_audit_log','plano_assinaturas',
   'fiscal_config','fiscal_nfce','contas_pagar','faturas','fornecedores','tv_videos','tv_telas',
-  'od_anunciantes','od_pontos','od_contratos','od_videos','od_exibicoes']
+  'od_anunciantes','od_pontos','od_contratos','od_videos','od_exibicoes','od_faturas']
   // wa_messages, radio_messages excluídas — mídia/áudio pode estourar JSON.stringify
   // sessions (admin/indicador/entregador), print_jobs, ia_pausa, addons_esgotados —
   // dados transitórios/operacionais, não fazem sentido restaurar
@@ -9946,7 +9946,7 @@ const _ESTATICO_BLOQUEADO = new RegExp([
   '(^|/)(data|\\.dev-data|node_modules|\\.git|\\.github|app-tv-android)(/|$)',
   '\\.(jks|keystore|kts|gradle)$',
   '\\.(db|db-wal|db-shm|sqlite|sqlite3|sql|log|env|bak)$',
-  '^/?(server|routes|site-admin|marketing-flows|suporte-vendas-bot|tenant-wa|wuzapi|order-message|phone-utils|limpar-links-externos|limpar-movimentos-cancelados|tv-indoor|outdoor|fotos-externas|wa-card-foto)\\.js$',
+  '^/?(server|routes|site-admin|marketing-flows|suporte-vendas-bot|tenant-wa|wuzapi|order-message|phone-utils|limpar-links-externos|limpar-movimentos-cancelados|tv-indoor|outdoor|outdoor-cobranca|fotos-externas|wa-card-foto)\\.js$',
   '^/?(package|package-lock|site-padrao)\\.json$',
   '^/?(Dockerfile|nixpacks\\.toml)$'
 ].join('|'), 'i')

@@ -873,7 +873,7 @@ body.theme-light ::-webkit-scrollbar-thumb{background:#cbd5e1}
 <script src="/admin-marketing-editor.js"></script>
 <script src="/admin-site.js?v=1"></script>
 <script src="/admin-funil.js?v=1"></script>
-<script src="/admin-outdoor.js?v=2"></script>
+<script src="/admin-outdoor.js?v=3"></script>
 </head>
 <body>
 <div id="toast"></div>
@@ -4784,10 +4784,20 @@ async function cdExecutar() {
 
 // ── 💳 COBRANÇA MERCADO PAGO ───────────────────────────
 let _cbTenantAtual = null;
+let _cbValorCalc = null; // { plano, valor, vissetv } vindo do servidor
 function gerarCobrancaCliente(tenantId) {
   const c = _clientes.find(x=>x.id===tenantId);
   if (!c) return;
   _cbTenantAtual = c;
+  _cbValorCalc = null;
+  // Mensalidade calculada no servidor (plano + adicionais + anúncio VisseTV ligado)
+  fetch('/api/admin/cobranca/valor?tenant_id=' + encodeURIComponent(tenantId), { headers: adminAuthHeader() })
+    .then(r => r.ok ? r.json() : null).then(d => {
+      if (!d || _cbTenantAtual !== c) return;
+      _cbValorCalc = d;
+      cbRecalcular();
+      if (d.vissetv > 0) document.getElementById('cb-info').insertAdjacentHTML('beforeend', `<br><span style="color:var(--text-2)">Inclui o anúncio na VisseTV: R$ ${parseFloat(d.vissetv).toFixed(2)}/mês</span>`);
+    }).catch(() => {});
   document.getElementById('cb-titulo').textContent = `Cobrar — ${c.nome}`;
   document.getElementById('cb-info').innerHTML = `Vencimento atual: <strong>${c.expires_at?adminFormatDate(c.expires_at):'Sem data'}</strong>` + ((c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<br><span style="color:var(--success)">Preço personalizado deste cliente: R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês${c.valor_mensalidade_expira_em ? ` <span style="color:var(--warning,#b45309)">(promoção válida até ${adminFormatDate(c.valor_mensalidade_expira_em)}, depois volta ao valor geral)</span>` : ''}</span>` : '');
   document.getElementById('cb-plano').value = 'premium';
@@ -4801,7 +4811,9 @@ function cbRecalcular() {
   const meses = parseInt(document.getElementById('cb-meses').value) || 1;
   // Se o cliente tem preço individual (promoção/desconto) e não é cobrança fiscal, usa o preço dele
   const temCustom = _cbTenantAtual && _cbTenantAtual.valor_mensalidade !== null && _cbTenantAtual.valor_mensalidade !== undefined;
-  const base = (temCustom && plano !== 'fiscal') ? parseFloat(_cbTenantAtual.valor_mensalidade) : _precoPlano(plano);
+  let base = (temCustom && plano !== 'fiscal') ? parseFloat(_cbTenantAtual.valor_mensalidade) : _precoPlano(plano);
+  // Valor calculado no servidor já soma os adicionais (voz, TV Indoor) e a VisseTV
+  if (_cbValorCalc && plano !== 'fiscal' && _cbValorCalc.plano !== 'fiscal') base = parseFloat(_cbValorCalc.valor) || base;
   document.getElementById('cb-valor').value = (base * meses).toFixed(2);
 }
 document.addEventListener('change', e => {
