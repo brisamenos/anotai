@@ -9760,11 +9760,21 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
       doImport()
       marcarDirty()
+      // Fotos que vieram de outro site (Anota AI, iFood...): baixa e guarda
+      // aqui, para não depender da outra plataforma. Espera até 40s; o resto
+      // termina em segundo plano.
+      let fotos = { encontradas: 0, salvas: 0, falhas: 0, pendentes: 0 }
+      try {
+        fotos = await require('./fotos-externas').baixarFotosExternas({
+          db, tid, uploadsDir: UPLOADS_DIR, log, limiteMs: 40000,
+          aoTerminar: r => { if (r.salvas) { marcarDirty(); try { emit(tid, 'menu_items', { tenant_id: tid, bulk: true, image_repair: true }, 'UPDATE') } catch {} } }
+        })
+      } catch (e) { log(`[FOTOS] importação: ${e.message}`) }
       try {
         emit(tid, 'categories', { tenant_id: tid, bulk: true }, 'UPDATE')
         emit(tid, 'menu_items', { tenant_id: tid, bulk: true }, 'UPDATE')
       } catch {}
-      send(res, 200, { ok: true, substituir, catsRemovidas, itensRemovidos, catsCriadas, itensCriados, erros })
+      send(res, 200, { ok: true, substituir, catsRemovidas, itensRemovidos, catsCriadas, itensCriados, erros, fotos })
     } catch(e) {
       send(res, 500, { error: e.message })
     }
@@ -9827,6 +9837,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
         marcarDirty()
         try { emit(tid, 'menu_items', { tenant_id: tid, bulk: true, image_repair: true }, 'UPDATE') } catch {}
       }
+      // Cardápio importado antes desta melhoria: as fotos ainda apontam para
+      // o outro site. Traz para cá em segundo plano (não segura o gestor).
+      try {
+        require('./fotos-externas').baixarFotosExternas({
+          db, tid, uploadsDir: UPLOADS_DIR, log, limiteMs: 0,
+          aoTerminar: r => { if (r.salvas) { marcarDirty(); try { emit(tid, 'menu_items', { tenant_id: tid, bulk: true, image_repair: true }, 'UPDATE') } catch {} } }
+        }).catch(() => {})
+      } catch (e) {}
       send(res, 200, { ok: true, scanned: rows.length, converted, files, skipped })
     } catch(e) {
       send(res, 500, { error: e.message })

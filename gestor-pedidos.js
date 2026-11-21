@@ -4438,8 +4438,10 @@ async function importarCardapio(inputEl) {
     renderGestor();
     renderTable();
     populateCatSelects();
-    const { catsCriadas = 0, itensCriados = 0, erros = 0 } = resultado;
-    const msg = `✅ Importado: ${catsCriadas} categoria(s) · ${itensCriados} item(s)` + (erros ? ` · ⚠️ ${erros} erro(s)` : '');
+    const { catsCriadas = 0, itensCriados = 0, erros = 0, fotos } = resultado;
+    let msg = `✅ Importado: ${catsCriadas} categoria(s) · ${itensCriados} item(s)` + (erros ? ` · ⚠️ ${erros} erro(s)` : '');
+    if (fotos?.salvas) msg += ` · ${fotos.salvas} foto(s) salvas no servidor`;
+    if (fotos?.pendentes) msg += ` · ${fotos.pendentes} foto(s) ainda baixando`;
     sbToast(erros ? 'warn' : 'ok', msg);
 
   } catch (e) {
