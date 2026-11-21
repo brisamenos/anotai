@@ -254,7 +254,7 @@ function desenharVideos(d) {
     '<p>Os vídeos são colocados e trocados pela nossa equipe. Quer mudar um anúncio? É só falar com a gente.</p></div></div><div class="cartao-corpo">';
   h += lista.map(function (v) {
     var pronto = v.status === 'pronto';
-    var trocando = d.videos.some(function (x) { return x.substitui_id === v.id; });
+    var trocando = d.videos.some(function (x) { return x.substitui_id === v.id && x.rede === 'aprovado'; });
     var selos = '';
     if (v.status === 'processando') selos = '<span class="selo">Sendo preparado</span>';
     else if (v.status === 'erro') selos = '<span class="selo erro">Com problema: a equipe vai trocar</span>';

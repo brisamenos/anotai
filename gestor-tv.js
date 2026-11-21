@@ -11,7 +11,10 @@ const _tv = {
   apagarPendente: null,
   removerTelaPendente: null,
   adicionando: false,
-  suporteWa: ''
+  suporteWa: '',
+  rede: null,          // anúncio da loja na rede VisseTV (se a loja for anunciante)
+  trocas: {},          // envio do pedido de troca, por id do anúncio: { nome, tamanho, enviado, erro }
+  cancelarPendente: null
 };
 
 function _tvCss() {
@@ -67,6 +70,17 @@ function _tvCss() {
   .tv-bloqueio{padding:22px;text-align:left;line-height:1.6;font-size:13px}
   .tv-bloqueio h3{margin:0 0 6px;font-size:16px}
   .tv-erro{color:var(--danger)!important}
+  @media(max-width:640px){.tv-anuncio{grid-template-columns:88px minmax(0,1fr)}.tv-anuncio .tv-direita{grid-column:1 / 3;flex-direction:row;justify-content:flex-start}}
+  .tv-rede{border-color:color-mix(in srgb,#ff2e63 45%,var(--border))}
+  .tv-rede .tv-card-head{background:linear-gradient(100deg,color-mix(in srgb,#ffc800 10%,transparent),color-mix(in srgb,#ff2e63 12%,transparent))}
+  .tv-rede-marca{display:flex;align-items:center;gap:10px}
+  .tv-rede-marca img{width:34px;height:34px;flex:none}
+  .tv-anuncio{display:grid;grid-template-columns:112px minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px 0;border-bottom:1px solid var(--border)}
+  .tv-anuncio:last-child{border-bottom:0}
+  .tv-pedido{margin-top:8px;padding:9px 11px;border-radius:9px;font-size:12px;line-height:1.5;background:color-mix(in srgb,#f59e0b 10%,transparent);border:1px solid color-mix(in srgb,#f59e0b 35%,transparent)}
+  .tv-pedido.recusado{background:color-mix(in srgb,var(--danger) 8%,transparent);border-color:color-mix(in srgb,var(--danger) 35%,transparent)}
+  .tv-pedido-acoes{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
+  .tv-link{background:none;border:0;padding:0;color:var(--accent);font:inherit;font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline}
   @media(max-width:640px){
     .tv-add{grid-template-columns:1fr}
     .tv-video{grid-template-columns:28px 88px minmax(0,1fr)}
@@ -120,6 +134,7 @@ async function tvRender() {
     root.innerHTML = `<div class="tv-card"><div class="tv-card-body tv-erro" style="font-size:13px">${_tvEsc(e.message)}</div></div>`;
     return;
   }
+  await _tvCarregarRede();
   if (!_tv.estado.ativo && !_tv.suporteWa) {
     try { const p = await fetch('/api/planos/precos').then(r => r.json()); _tv.suporteWa = p.whatsapp_robo || ''; _tv.preco = p.addon_tv; } catch (e) {}
   }
@@ -127,14 +142,19 @@ async function tvRender() {
   _tvAgendar();
 }
 
+async function _tvCarregarRede() {
+  if (!_tv.estado?.rede) { _tv.rede = null; return; }
+  try { _tv.rede = await _tvApi('/api/outdoor/gestor/rede'); } catch (e) {}
+}
+
 function tvPararAtualizacao() { if (_tv.timer) { clearTimeout(_tv.timer); _tv.timer = null; } }
 function _tvAgendar() {
   tvPararAtualizacao();
   const pg = document.getElementById('page-tv');
   if (!pg || !pg.classList.contains('on')) return;
-  const ocupado = _tv.estado?.videos?.some(v => v.status === 'processando');
+  const ocupado = _tv.estado?.videos?.some(v => v.status === 'processando') || (_tv.rede?.videos || []).some(v => v.pedido && v.pedido.status === 'processando');
   _tv.timer = setTimeout(async () => {
-    try { _tv.estado = await _tvApi('/api/tv/gestor/estado'); _tvDesenharParcial(); } catch (e) {}
+    try { _tv.estado = await _tvApi('/api/tv/gestor/estado'); await _tvCarregarRede(); _tvDesenharParcial(); } catch (e) {}
     _tvAgendar();
   }, ocupado ? 3000 : 15000);
 }
@@ -154,8 +174,10 @@ function _tvDesenhar() {
     return;
   }
   root.innerHTML = `
+    <div class="tv-card tv-rede" id="tv-card-rede" style="display:none"></div>
     <div class="tv-card" id="tv-card-telas"></div>
     <div class="tv-card" id="tv-card-videos"></div>`;
+  _tvDesenharRede();
   _tvDesenharTelas();
   _tvDesenharVideos();
 }
@@ -165,7 +187,123 @@ function _tvDesenharParcial() {
   if (!_tv.estado?.ativo) { _tvDesenhar(); return; }
   const foco = document.activeElement;
   const digitando = foco && foco.closest && foco.closest('#tv-root') && /INPUT|SELECT/.test(foco.tagName);
-  if (!digitando) { _tvDesenharTelas(); _tvDesenharVideos(); }
+  if (!digitando) { _tvDesenharRede(); _tvDesenharTelas(); _tvDesenharVideos(); }
+}
+
+// ── Anúncio da loja na rede VisseTV (contratado: não apaga, só pede troca) ──
+function _tvDesenharRede() {
+  const el = document.getElementById('tv-card-rede');
+  if (!el) return;
+  const r = _tv.rede;
+  if (!r || !r.vinculado) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = '';
+  const ICO_PLAY = '<svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M6 4.5v7l5.5-3.5L6 4.5z" fill="currentColor"/></svg>';
+  const onde = r.pontos.length ? r.pontos.map(p => _tvEsc(p.nome)).join(', ') : 'nenhum comércio marcado ainda';
+  el.innerHTML = `
+    <div class="tv-card-head">
+      <div class="tv-rede-marca"><img src="/vissetv/vissetv-icone.svg" alt=""><div>
+        <div class="tv-card-title">Seu anúncio na rede VisseTV</div>
+        <div class="tv-card-sub">Passa nas suas TVs e em: ${onde}.</div></div></div>
+    </div>
+    <div class="tv-card-body">
+      <div class="tv-ajuda" style="margin:0 0 6px">Este vídeo faz parte do seu plano de anúncio e fica salvo. Para mudar, toque em "Pedir troca" e escolha o vídeo novo: a equipe VisseTV assiste e aprova. Enquanto isso, o anúncio atual continua passando.</div>
+      ${r.videos.map(v => {
+        const p = v.pedido, envio = _tv.trocas[v.id];
+        let caixa = '';
+        if (envio) {
+          const pct = envio.tamanho ? Math.floor(envio.enviado / envio.tamanho * 100) : 0;
+          caixa = envio.erro
+            ? `<div class="tv-pedido recusado">${_tvEsc(envio.erro)}<div class="tv-pedido-acoes"><button class="tv-link" onclick="tvDescartarTroca(${v.id})">Fechar</button></div></div>`
+            : `<div class="tv-pedido">Enviando o vídeo novo ${pct}% de ${_tvMb(envio.tamanho)}. Não feche esta tela.<div class="tv-barra"><i style="width:${pct}%"></i></div></div>`;
+        } else if (p) {
+          const confirma = _tv.cancelarPendente === p.id;
+          if (p.rede === 'recusado') {
+            caixa = `<div class="tv-pedido recusado"><b>Troca não aprovada.</b> Motivo: ${_tvEsc(p.motivo || 'não informado')}
+              <div class="tv-pedido-acoes"><button class="tv-link" onclick="tvCancelarTroca(${p.id},true)">Fechar aviso</button></div></div>`;
+          } else if (p.status === 'erro') {
+            caixa = `<div class="tv-pedido recusado">${_tvEsc(p.erro || 'Não foi possível preparar o vídeo novo.')} Escolha outro arquivo.
+              <div class="tv-pedido-acoes"><button class="tv-link" onclick="tvCancelarTroca(${p.id},true)">Fechar aviso</button></div></div>`;
+          } else if (p.status === 'processando') {
+            caixa = `<div class="tv-pedido">Troca pedida. ${p.na_fila ? 'Na fila para preparar o vídeo novo.' : `Preparando o vídeo novo ${p.progresso || 0}%.`}
+              ${p.na_fila ? '' : `<div class="tv-barra"><i style="width:${p.progresso || 0}%"></i></div>`}</div>`;
+          } else {
+            caixa = `<div class="tv-pedido"><b>Troca aguardando aprovação da equipe VisseTV.</b> ${p.arquivo ? `<a href="${_tvEsc(p.arquivo)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700">Ver o vídeo novo</a>` : ''}
+              <div class="tv-pedido-acoes"><button class="tv-link" onclick="tvCancelarTroca(${p.id})">${confirma ? 'Confirmar cancelamento' : 'Cancelar pedido'}</button></div></div>`;
+          }
+        }
+        const podePedir = !envio && !(p && p.rede === 'aguardando' && p.status === 'processando');
+        return `<div class="tv-anuncio">
+          <a class="tv-capa" href="${_tvEsc(v.arquivo || '#')}" target="_blank" rel="noopener" title="Assistir">${v.capa ? `<img src="${_tvEsc(v.capa)}" alt="">` : ICO_PLAY}<span>${_tvDur(v.duracao)}</span></a>
+          <div class="tv-video-info">
+            <div style="font-weight:800;font-size:13.5px">${_tvEsc(v.titulo || 'Anúncio')}</div>
+            <div class="tv-status">${v.ativo ? '<span style="color:var(--success);font-weight:700">No ar</span>' : '<span>Pausado pela equipe</span>'}<span>${(v.exibicoes_30d || 0).toLocaleString('pt-BR')} exibições em 30 dias</span></div>
+            ${caixa}
+          </div>
+          <div class="tv-direita">
+            ${podePedir ? `<label class="btn bg" style="cursor:pointer"><input type="file" accept="video/*" style="display:none" onchange="tvPedirTroca(${v.id},this)">${p && p.rede === 'aguardando' ? 'Mandar outro' : 'Pedir troca'}</label>` : ''}
+          </div>
+        </div>`;
+      }).join('') || '<div class="tv-vazio">A equipe VisseTV ainda está preparando o seu anúncio. Assim que ele estiver no ar, aparece aqui.</div>'}
+    </div>`;
+}
+
+function tvPedirTroca(vid, inp) {
+  const f = inp.files && inp.files[0];
+  inp.value = '';
+  if (!f) return;
+  _tv.trocas[vid] = { nome: f.name, tamanho: f.size, enviado: 0 };
+  _tvDesenharRede();
+  _tvEnviarTroca(vid, f);
+}
+function tvDescartarTroca(vid) { delete _tv.trocas[vid]; _tvDesenharRede(); }
+
+async function _tvEnviarTroca(vid, f) {
+  const x = _tv.trocas[vid];
+  window.addEventListener('beforeunload', _tvAvisoSaidaTroca);
+  try {
+    const ini = await _tvApi('/api/outdoor/gestor/troca/iniciar', { method: 'POST', body: { nome: f.name, tamanho: f.size, tipo: f.type, substitui_id: vid } });
+    const PARTE = ini.parte || 8 * 1024 * 1024;
+    let pos = 0, tentativas = 0, ultimo = 0;
+    while (pos < f.size) {
+      try {
+        const r = await fetch(`/api/outdoor/gestor/troca/${ini.upload_id}?offset=${pos}`, { method: 'POST', headers: { ..._tvHeaders(false), 'Content-Type': 'application/octet-stream' }, body: f.slice(pos, Math.min(pos + PARTE, f.size)) });
+        const d = await r.json().catch(() => ({}));
+        if (r.status === 409 && typeof d.recebido === 'number') { pos = d.recebido; continue; }
+        if (!r.ok) throw Object.assign(new Error(d.error || 'falha no envio'), { definitivo: r.status < 500 });
+        pos = d.recebido; tentativas = 0;
+      } catch (e) {
+        if (e.definitivo) throw e;
+        if (++tentativas > 8) throw new Error('a internet caiu várias vezes. Tente de novo.');
+        await new Promise(ok => setTimeout(ok, Math.min(30000, 1500 * tentativas)));
+        continue;
+      }
+      x.enviado = pos;
+      if (Date.now() - ultimo > 400) { ultimo = Date.now(); _tvDesenharRede(); }
+    }
+    await _tvApi(`/api/outdoor/gestor/troca/${ini.upload_id}/concluir`, { method: 'POST', body: { substitui_id: vid } });
+    delete _tv.trocas[vid];
+    sbToast('ok', 'Vídeo enviado. Quando ficar pronto, a equipe VisseTV assiste e aprova a troca.');
+    await _tvCarregarRede();
+    _tvDesenharRede();
+    _tvAgendar();
+  } catch (e) {
+    x.erro = 'Não foi possível enviar: ' + e.message;
+    _tvDesenharRede();
+  } finally {
+    if (!Object.values(_tv.trocas).some(t => !t.erro)) window.removeEventListener('beforeunload', _tvAvisoSaidaTroca);
+  }
+}
+function _tvAvisoSaidaTroca(ev) { ev.preventDefault(); ev.returnValue = 'Ainda tem vídeo enviando.'; return ev.returnValue; }
+
+async function tvCancelarTroca(pid, direto) {
+  if (!direto && _tv.cancelarPendente !== pid) {
+    _tv.cancelarPendente = pid; _tvDesenharRede();
+    setTimeout(() => { if (_tv.cancelarPendente === pid) { _tv.cancelarPendente = null; _tvDesenharRede(); } }, 4000);
+    return;
+  }
+  _tv.cancelarPendente = null;
+  try { await _tvApi('/api/outdoor/gestor/troca/' + pid, { method: 'DELETE' }); await _tvCarregarRede(); _tvDesenharRede(); }
+  catch (e) { sbToast('err', e.message); }
 }
 
 // ── TVs ──

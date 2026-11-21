@@ -2,6 +2,13 @@
 //
 // - O admin cadastra os ANUNCIANTES (login, senha, valor negociado) e os
 //   PONTOS (cada comércio com TV). Um ponto pode ser do próprio anunciante.
+// - O anunciante pode ser ligado a uma loja do EstimaFood (coluna loja_id; não se chama tenant_id
+//   de propósito, para não sair no backup que a própria loja baixa). Aí a
+//   loja ganha a TV Indoor completa no gestor (sem cobrar o adicional: o preço
+//   é o negociado aqui), o anúncio contratado passa também nas TVs da loja, e
+//   ela não apaga nem troca esse anúncio: só PEDE a troca. O vídeo novo fica
+//   esperando o admin assistir e aprovar (aí o antigo é apagado de vez) ou
+//   recusar (com o motivo, que aparece para a loja).
 // - O admin escolhe em quais pontos cada anunciante aparece (contratos).
 // - Quem sobe e troca os vídeos é a equipe, pelo admin. Cada vídeo passa na
 //   TV do comércio do próprio anunciante (se ele tiver) e nos pontos escolhidos.
@@ -90,6 +97,8 @@ function criarTabelas(db) {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_od_videos_anunciante ON od_videos(anunciante_id)`)
   try { db.prepare('ALTER TABLE od_videos ADD COLUMN ativo INTEGER DEFAULT 1').run() } catch (e) { /* já existe */ }
   try { db.prepare('ALTER TABLE od_videos ADD COLUMN substitui_id INTEGER').run() } catch (e) { /* já existe */ }
+  // Loja do EstimaFood ligada a este anunciante (opcional)
+  try { db.prepare('ALTER TABLE od_anunciantes ADD COLUMN loja_id TEXT').run() } catch (e) { /* já existe */ }
   db.exec(`CREATE TABLE IF NOT EXISTS od_exibicoes (
     video_id INTEGER NOT NULL,
     ponto_id INTEGER NOT NULL,
@@ -109,7 +118,7 @@ function init(ctx, tvIndoor) {
   tv = tvIndoor
   const { db } = ctx
   criarTabelas(db)
-  tv.registrarOutdoor({ playlistDoPonto, registrarExibicao, aoFicarPronto })
+  tv.registrarOutdoor({ playlistDoPonto, registrarExibicao, aoFicarPronto, lojaVinculada, anunciosDaLoja, registrarExibicaoLoja })
   // Sessões com mais de 30 dias saem
   setInterval(() => { try { db.prepare('DELETE FROM od_sessoes WHERE criado_em < ?').run(Date.now() - 30 * 86400000) } catch (e) {} }, 3600000)
 }
@@ -124,7 +133,7 @@ function playlistDoPonto(pontoId) {
   const p = db.prepare('SELECT * FROM od_pontos WHERE id=?').get(pontoId)
   if (!p || !p.ativo) return { versao: 'off-' + pontoId, ativo: false, loja: { nome: p ? p.nome : '' }, videos: [] }
   const dono = p.anunciante_id ? db.prepare('SELECT * FROM od_anunciantes WHERE id=?').get(p.anunciante_id) : null
-  const daCasa = (dono && dono.ativo) ? db.prepare(`SELECT * FROM od_videos WHERE anunciante_id=? AND status='pronto' AND minha_tv=1 AND COALESCE(ativo,1)=1 ORDER BY ordem, id`).all(dono.id) : []
+  const daCasa = (dono && dono.ativo) ? db.prepare(`SELECT * FROM od_videos WHERE anunciante_id=? AND status='pronto' AND minha_tv=1 AND rede='aprovado' AND COALESCE(ativo,1)=1 ORDER BY ordem, id`).all(dono.id) : []
   const anuncios = db.prepare(`SELECT v.* FROM od_videos v
       JOIN od_contratos c ON c.anunciante_id = v.anunciante_id AND c.ponto_id = ?
       JOIN od_anunciantes a ON a.id = v.anunciante_id AND a.ativo = 1
@@ -147,14 +156,41 @@ function playlistDoPonto(pontoId) {
   return { versao, ativo: true, loja: { nome: p.nome }, videos: lista }
 }
 
-// Vídeo novo ficou pronto: se ele substitui outro, o antigo sai de vez
+// ── Loja do EstimaFood ligada a um anunciante ──
+function lojaVinculada(tid) {
+  if (!tid) return null
+  return ctxBase.db.prepare('SELECT * FROM od_anunciantes WHERE loja_id=? AND ativo=1').get(String(tid)) || null
+}
+// Anúncios contratados que também passam nas TVs da própria loja
+function anunciosDaLoja(tid) {
+  const a = lojaVinculada(tid)
+  if (!a) return []
+  return ctxBase.db.prepare(`SELECT * FROM od_videos WHERE anunciante_id=? AND status='pronto' AND rede='aprovado' AND COALESCE(ativo,1)=1 ORDER BY ordem, id`).all(a.id).map(itemTv)
+}
+// Exibição numa TV da loja (ponto 0 = TV própria). Só conta vídeo da própria loja.
+function registrarExibicaoLoja(videoId, tid) {
+  const a = lojaVinculada(tid)
+  if (!a) return
+  if (!ctxBase.db.prepare('SELECT 1 FROM od_videos WHERE id=? AND anunciante_id=?').get(videoId, a.id)) return
+  registrarExibicao(videoId, 0)
+}
+
+// Vídeo novo ficou pronto: se ele substitui outro e já está aprovado, o antigo sai de vez.
+// (Troca pedida pela loja fica esperando o admin aprovar.)
 function aoFicarPronto(id) {
+  const v = ctxBase.db.prepare('SELECT * FROM od_videos WHERE id=?').get(id)
+  if (!v || !v.substitui_id || v.rede !== 'aprovado') return
+  concluirTroca(v)
+}
+function concluirTroca(v) {
   const { db, log } = ctxBase
-  const v = db.prepare('SELECT * FROM od_videos WHERE id=?').get(id)
-  if (!v || !v.substitui_id) return
   const velho = db.prepare('SELECT * FROM od_videos WHERE id=? AND anunciante_id=?').get(v.substitui_id, v.anunciante_id)
   db.prepare('UPDATE od_videos SET substitui_id=NULL, ordem=? WHERE id=?').run(velho ? velho.ordem : v.ordem, v.id)
-  if (velho) { apagarVideo(db, velho); log('📺', `[OUTDOOR] vídeo ${velho.id} substituído pelo ${v.id} e apagado`) }
+  if (velho) {
+    // Outro pedido de troca do mesmo vídeo (da loja) perde o sentido
+    for (const p of db.prepare(`SELECT * FROM od_videos WHERE substitui_id=? AND id<>? AND rede IN ('aguardando','recusado')`).all(velho.id, v.id)) apagarVideo(db, p)
+    apagarVideo(db, velho); log('📺', `[OUTDOOR] vídeo ${velho.id} substituído pelo ${v.id} e apagado`)
+  }
 }
 
 function registrarExibicao(videoId, pontoId) {
@@ -180,6 +216,30 @@ function videosDoAnunciante(db, aid) {
       ativo: v.ativo === 0 ? 0 : 1, substitui_id: v.substitui_id || null,
       progresso: pr.progresso, na_fila: v.status === 'processando' && pr.na_fila, exibicoes_30d: exib.get(v.id) || 0 }
   })
+}
+
+// Anúncio contratado (no ar, aprovado pela equipe) de um anunciante
+function anuncioDaLoja(db, aid, vid) {
+  return db.prepare(`SELECT * FROM od_videos WHERE id=? AND anunciante_id=? AND rede='aprovado' AND substitui_id IS NULL AND status='pronto'`).get(parseInt(vid, 10) || 0, aid) || null
+}
+
+// O que a loja ligada vê no gestor (TV Indoor): o anúncio dela na rede
+function redeDaLoja(db, a) {
+  const desde = diaHaDias(30)
+  const exib = exibicoesPorVideo(db, desde)
+  const todos = db.prepare('SELECT * FROM od_videos WHERE anunciante_id=? ORDER BY ordem, id').all(a.id)
+  const pedidoDe = id => {
+    const p = todos.find(x => x.substitui_id === id && x.rede !== 'aprovado')
+    if (!p) return null
+    const pr = tv.progressoDe(TAB, p.id)
+    return { id: p.id, status: p.status, rede: p.rede, motivo: p.rede_motivo, capa: p.capa, arquivo: p.arquivo,
+      progresso: pr.progresso, na_fila: p.status === 'processando' && pr.na_fila, erro: p.erro, em: p.rede_em || p.created_at }
+  }
+  const videos = todos.filter(v => v.rede === 'aprovado' && !v.substitui_id).map(v => ({
+    id: v.id, titulo: v.titulo, arquivo: v.arquivo, capa: v.capa, duracao: v.duracao, status: v.status, ativo: v.ativo === 0 ? 0 : 1,
+    exibicoes_30d: exib.get(v.id) || 0, pedido: pedidoDe(v.id) }))
+  const pontos = db.prepare(`SELECT p.id, p.nome FROM od_contratos c JOIN od_pontos p ON p.id = c.ponto_id WHERE c.anunciante_id=? AND p.ativo=1 ORDER BY p.nome`).all(a.id)
+  return { vinculado: true, anunciante: { nome: a.nome }, pontos, videos }
 }
 
 function pontosComTelas(db, where, args) {
@@ -209,23 +269,47 @@ function painelAnunciante(db, aid) {
 function resumoAdmin(db) {
   const desde = diaHaDias(30)
   const exib = exibicoesPorVideo(db, desde)
-  const anunciantes = db.prepare('SELECT id, nome, responsavel, telefone, email, valor_mensal, dia_vencimento, ativo, observacoes, created_at FROM od_anunciantes ORDER BY nome').all().map(a => {
+  const nomeLoja = new Map()
+  try { for (const t of db.prepare('SELECT id, nome FROM tenants').all()) nomeLoja.set(String(t.id), t.nome) } catch (e) {}
+  const anunciantes = db.prepare('SELECT id, nome, responsavel, telefone, email, valor_mensal, dia_vencimento, ativo, observacoes, created_at, loja_id AS tenant_id FROM od_anunciantes ORDER BY nome').all().map(a => {
     const vids = db.prepare('SELECT id, rede, status, ativo FROM od_videos WHERE anunciante_id=?').all(a.id)
-    return { ...a,
+    return { ...a, loja_nome: a.tenant_id ? (nomeLoja.get(String(a.tenant_id)) || 'Loja apagada') : null,
       pontos: db.prepare('SELECT ponto_id FROM od_contratos WHERE anunciante_id=?').all(a.id).map(r => r.ponto_id),
       videos: vids.length,
       na_rede: vids.filter(v => v.rede === 'aprovado' && v.status === 'pronto' && v.ativo !== 0).length,
-      aguardando: vids.filter(v => v.rede === 'aguardando').length,
+      aguardando: vids.filter(v => v.rede === 'aguardando' && v.status === 'pronto').length,
       exibicoes_30d: vids.reduce((s, v) => s + (exib.get(v.id) || 0), 0) }
   })
   const pontos = pontosComTelas(db, '', []).map(p => ({ ...p,
     anunciantes: db.prepare('SELECT COUNT(*) n FROM od_contratos c JOIN od_anunciantes a ON a.id=c.anunciante_id AND a.ativo=1 WHERE c.ponto_id=?').get(p.id).n }))
-  const no_ar = db.prepare(`SELECT COUNT(*) n FROM od_videos v JOIN od_anunciantes a ON a.id = v.anunciante_id AND a.ativo = 1 WHERE v.status='pronto' AND COALESCE(v.ativo,1)=1`).get().n
+  const no_ar = db.prepare(`SELECT COUNT(*) n FROM od_videos v JOIN od_anunciantes a ON a.id = v.anunciante_id AND a.ativo = 1 WHERE v.status='pronto' AND v.rede='aprovado' AND COALESCE(v.ativo,1)=1`).get().n
   const receita = anunciantes.filter(a => a.ativo).reduce((s, a) => s + (+a.valor_mensal || 0), 0)
-  return { anunciantes, pontos, no_ar, receita_mensal: receita, comprime: tv.temCompressor(), max: tv.MAX_VIDEOS }
+  let lojas = []
+  try { lojas = db.prepare(`SELECT id, nome FROM tenants WHERE id NOT IN ('_global','system') ORDER BY nome COLLATE NOCASE`).all().map(t => ({ id: String(t.id), nome: t.nome || String(t.id) })) } catch (e) {}
+  return { anunciantes, pontos, no_ar, receita_mensal: receita, comprime: tv.temCompressor(), max: tv.MAX_VIDEOS,
+    pendentes: trocasPendentes(db), lojas }
 }
 
 function limparTexto(v, max) { return String(v ?? '').trim().slice(0, max) }
+
+// Trocas pedidas pelas lojas, já preparadas, esperando o admin assistir
+function trocasPendentes(db) {
+  return db.prepare(`SELECT v.id, v.titulo, v.arquivo, v.capa, v.duracao, v.tamanho, v.created_at, v.substitui_id, v.anunciante_id,
+      a.nome AS anunciante_nome, o.titulo AS atual_titulo, o.arquivo AS atual_arquivo, o.capa AS atual_capa
+    FROM od_videos v JOIN od_anunciantes a ON a.id = v.anunciante_id
+    LEFT JOIN od_videos o ON o.id = v.substitui_id
+    WHERE v.rede='aguardando' AND v.status='pronto' ORDER BY v.id`).all()
+}
+
+// Confere a loja escolhida no cadastro do anunciante. Retorna { tenant_id } ou { erro }
+function lojaEscolhida(db, valor, aid) {
+  const tid = limparTexto(valor, 80)
+  if (!tid) return { tenant_id: null }
+  if (tid === '_global' || tid === 'system' || !db.prepare('SELECT 1 FROM tenants WHERE id=?').get(tid)) return { erro: 'Loja do EstimaFood não encontrada.' }
+  const outro = db.prepare('SELECT nome FROM od_anunciantes WHERE loja_id=? AND id<>?').get(tid, aid || 0)
+  if (outro) return { erro: `Essa loja já está ligada ao anunciante "${outro.nome}".` }
+  return { tenant_id: tid }
+}
 
 function salvarContratos(db, aid, pontos) {
   if (!Array.isArray(pontos)) return
@@ -275,18 +359,26 @@ async function handle(req, res, ctx) {
     if (!ctx.validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
 
     if (req.method === 'GET' && upath === '/api/outdoor/admin/resumo') { send(res, 200, resumoAdmin(db)); return true }
+    if (req.method === 'GET' && upath === '/api/outdoor/admin/pendentes') {
+      send(res, 200, { n: db.prepare(`SELECT COUNT(*) n FROM od_videos WHERE rede='aguardando' AND status='pronto'`).get().n }); return true
+    }
 
     // Anunciantes
     if (req.method === 'POST' && upath === '/api/outdoor/admin/anunciantes') {
       const b = await readBody(req).catch(() => ({}))
       const nome = limparTexto(b.nome, 80), email = limparTexto(b.email, 120).toLowerCase(), senha = String(b.senha || '')
       if (!nome) { send(res, 400, { error: 'Informe o nome do anunciante.' }); return true }
-      if (!/^\S+@\S+\.\S+$/.test(email)) { send(res, 400, { error: 'Informe um e-mail válido para o login.' }); return true }
-      if (senha.length < 6) { send(res, 400, { error: 'A senha precisa ter pelo menos 6 caracteres.' }); return true }
-      if (db.prepare('SELECT 1 FROM od_anunciantes WHERE email=?').get(email)) { send(res, 409, { error: 'Já existe um anunciante com esse e-mail.' }); return true }
-      const r = db.prepare(`INSERT INTO od_anunciantes (nome, responsavel, telefone, email, senha_hash, valor_mensal, dia_vencimento, ativo, observacoes, created_at)
-        VALUES (?,?,?,?,?,?,?,1,?,?)`).run(nome, limparTexto(b.responsavel, 80), limparTexto(b.telefone, 30), email, senhaHash(senha),
-        Math.max(0, +b.valor_mensal || 0), Math.min(31, Math.max(1, parseInt(b.dia_vencimento, 10) || 10)), limparTexto(b.observacoes, 1000), agoraISO())
+      const loja = lojaEscolhida(db, b.tenant_id, 0)
+      if (loja.erro) { send(res, 400, { error: loja.erro }); return true }
+      // Com loja ligada, o login do painel do anunciante é opcional (ele acompanha pelo gestor)
+      if (email || !loja.tenant_id) {
+        if (!/^\S+@\S+\.\S+$/.test(email)) { send(res, 400, { error: 'Informe um e-mail válido para o login.' }); return true }
+        if (senha.length < 6) { send(res, 400, { error: 'A senha precisa ter pelo menos 6 caracteres.' }); return true }
+        if (db.prepare('SELECT 1 FROM od_anunciantes WHERE email=?').get(email)) { send(res, 409, { error: 'Já existe um anunciante com esse e-mail.' }); return true }
+      }
+      const r = db.prepare(`INSERT INTO od_anunciantes (nome, responsavel, telefone, email, senha_hash, valor_mensal, dia_vencimento, ativo, observacoes, created_at, loja_id)
+        VALUES (?,?,?,?,?,?,?,1,?,?,?)`).run(nome, limparTexto(b.responsavel, 80), limparTexto(b.telefone, 30), email || null, email ? senhaHash(senha) : null,
+        Math.max(0, +b.valor_mensal || 0), Math.min(31, Math.max(1, parseInt(b.dia_vencimento, 10) || 10)), limparTexto(b.observacoes, 1000), agoraISO(), loja.tenant_id)
       const aid = r.lastInsertRowid
       if (b.criar_ponto_proprio) {
         db.prepare('INSERT INTO od_pontos (nome, endereco, anunciante_id, anuncios_a_cada, ativo, created_at) VALUES (?,?,?,1,1,?)')
@@ -306,13 +398,23 @@ async function handle(req, res, ctx) {
         if (b.nome !== undefined) c.nome = limparTexto(b.nome, 80) || a.nome
         if (b.responsavel !== undefined) c.responsavel = limparTexto(b.responsavel, 80)
         if (b.telefone !== undefined) c.telefone = limparTexto(b.telefone, 30)
+        if (b.tenant_id !== undefined) {
+          const loja = lojaEscolhida(db, b.tenant_id, aid)
+          if (loja.erro) { send(res, 400, { error: loja.erro }); return true }
+          c.loja_id = loja.tenant_id
+        }
+        const temLoja = c.loja_id !== undefined ? !!c.loja_id : !!a.loja_id
         if (b.email !== undefined) {
           const email = limparTexto(b.email, 120).toLowerCase()
-          if (!/^\S+@\S+\.\S+$/.test(email)) { send(res, 400, { error: 'E-mail inválido.' }); return true }
-          if (db.prepare('SELECT 1 FROM od_anunciantes WHERE email=? AND id<>?').get(email, aid)) { send(res, 409, { error: 'Já existe outro anunciante com esse e-mail.' }); return true }
-          c.email = email
+          if (!email && temLoja) { c.email = null; c.senha_hash = null; db.prepare('DELETE FROM od_sessoes WHERE anunciante_id=?').run(aid) }
+          else {
+            if (!/^\S+@\S+\.\S+$/.test(email)) { send(res, 400, { error: 'E-mail inválido.' }); return true }
+            if (db.prepare('SELECT 1 FROM od_anunciantes WHERE email=? AND id<>?').get(email, aid)) { send(res, 409, { error: 'Já existe outro anunciante com esse e-mail.' }); return true }
+            if (!a.senha_hash && !b.senha) { send(res, 400, { error: 'Para criar o login do painel, informe também uma senha.' }); return true }
+            c.email = email
+          }
         }
-        if (b.senha) {
+        if (b.senha && c.email !== null) {
           if (String(b.senha).length < 6) { send(res, 400, { error: 'A senha precisa ter pelo menos 6 caracteres.' }); return true }
           c.senha_hash = senhaHash(b.senha)
           db.prepare('DELETE FROM od_sessoes WHERE anunciante_id=?').run(aid)
@@ -440,6 +542,24 @@ async function handle(req, res, ctx) {
       db.transaction(() => ids.forEach((id, i) => up.run(i + 1, id)))()
       send(res, 200, { ok: true }); return true
     }
+    // Troca pedida pela loja: o admin assiste e aprova ou recusa
+    if ((m = /^\/api\/outdoor\/admin\/videos\/(\d+)\/(aprovar|recusar)$/.exec(upath)) && req.method === 'POST') {
+      const v = db.prepare(`SELECT * FROM od_videos WHERE id=? AND rede='aguardando'`).get(+m[1])
+      if (!v) { send(res, 404, { error: 'Esse pedido de troca não existe mais.' }); return true }
+      if (v.status !== 'pronto') { send(res, 409, { error: 'O vídeo ainda está sendo preparado.' }); return true }
+      if (m[2] === 'aprovar') {
+        db.prepare(`UPDATE od_videos SET rede='aprovado', rede_motivo=NULL, rede_em=? WHERE id=?`).run(agoraISO(), v.id)
+        if (v.substitui_id) concluirTroca({ ...v, rede: 'aprovado' })
+        log('📺', `[OUTDOOR] troca ${v.id} aprovada`)
+      } else {
+        const b = await readBody(req).catch(() => ({}))
+        const motivo = limparTexto(b.motivo, 300) || 'Vídeo não aprovado pela equipe.'
+        tv.apagarArquivosVideo(v)
+        db.prepare(`UPDATE od_videos SET rede='recusado', rede_motivo=?, rede_em=?, arquivo=NULL, capa=NULL, tamanho=0 WHERE id=?`).run(motivo, agoraISO(), v.id)
+        log('📺', `[OUTDOOR] troca ${v.id} recusada`)
+      }
+      send(res, 200, { ok: true }); return true
+    }
     if ((m = /^\/api\/outdoor\/admin\/videos\/(\d+)$/.exec(upath))) {
       const v = db.prepare('SELECT * FROM od_videos WHERE id=?').get(+m[1])
       if (!v) { send(res, 404, { error: 'Vídeo não encontrado' }); return true }
@@ -457,6 +577,51 @@ async function handle(req, res, ctx) {
       }
     }
 
+    send(res, 404, { error: 'Rota não encontrada' }); return true
+  }
+
+  // ════════════ LOJA DO ESTIMAFOOD LIGADA (gestor) ════════════
+  if (upath.startsWith('/api/outdoor/gestor/')) {
+    const tid = String(req.headers['x-tenant-id'] || '')
+    if (!tid || !ctx.validarSessaoGestor(req, tid)) { send(res, 401, { error: 'Sessão expirada. Entre de novo no painel.' }); return true }
+    const an = lojaVinculada(tid)
+    if (req.method === 'GET' && upath === '/api/outdoor/gestor/rede') { send(res, 200, an ? redeDaLoja(db, an) : { vinculado: false }); return true }
+    if (!an) { send(res, 403, { error: 'Sua loja não tem anúncio na rede VisseTV.' }); return true }
+    const dono = `od:g${an.id}`
+    if ((m = /^\/api\/outdoor\/gestor\/troca\/(iniciar|[a-f0-9]{32}(?:\/concluir)?)$/.exec(upath)) && (req.method === 'POST' || req.method === 'PUT')) {
+      if (m[1] === 'iniciar') {
+        const b = await readBody(req).catch(() => ({}))
+        if (!anuncioDaLoja(db, an.id, b.substitui_id)) { send(res, 400, { error: 'Escolha qual anúncio quer trocar.' }); return true }
+        const r = tv.uploadIniciar(dono, b, 0)
+        send(res, r.status || 200, r.erro ? { error: r.erro } : r); return true
+      }
+      if (!m[1].endsWith('/concluir')) {
+        const r = await tv.uploadParte(req, dono, m[1], params.get('offset'))
+        send(res, r.status, r.corpo); return true
+      }
+      const b = await readBody(req).catch(() => ({}))
+      const velho = anuncioDaLoja(db, an.id, b.substitui_id)
+      if (!velho) { send(res, 400, { error: 'Esse anúncio não existe mais.' }); return true }
+      // Um pedido por anúncio: o pedido anterior (esperando ou recusado) sai
+      for (const p of db.prepare(`SELECT * FROM od_videos WHERE substitui_id=? AND rede IN ('aguardando','recusado')`).all(velho.id)) {
+        if (tv.emProcessamento(TAB, p.id)) { send(res, 409, { error: 'O pedido anterior ainda está sendo preparado. Espere um pouco e tente de novo.' }); return true }
+        apagarVideo(db, p)
+      }
+      const r = tv.uploadConcluir(dono, m[1].slice(0, 32), 0)
+      if (r.erro) { send(res, r.status, { error: r.erro }); return true }
+      const ins = db.prepare(`INSERT INTO od_videos (anunciante_id, titulo, ordem, minha_tv, rede, ativo, substitui_id, status, original, created_at)
+        VALUES (?,?,?,1,'aguardando',1,?,'processando',?,?)`).run(an.id, velho.titulo, velho.ordem, velho.id, r.original, agoraISO())
+      tv.enfileirar(ins.lastInsertRowid, TAB)
+      log('📺', `[OUTDOOR] loja ${tid} pediu troca do vídeo ${velho.id} (novo ${ins.lastInsertRowid})`)
+      send(res, 200, { ok: true, id: ins.lastInsertRowid }); return true
+    }
+    if ((m = /^\/api\/outdoor\/gestor\/troca\/(\d+)$/.exec(upath)) && req.method === 'DELETE') {
+      const p = db.prepare(`SELECT * FROM od_videos WHERE id=? AND anunciante_id=? AND rede IN ('aguardando','recusado')`).get(+m[1], an.id)
+      if (!p) { send(res, 404, { error: 'Pedido não encontrado.' }); return true }
+      if (tv.emProcessamento(TAB, p.id)) { send(res, 409, { error: 'O vídeo está sendo preparado agora. Espere terminar.' }); return true }
+      apagarVideo(db, p)
+      send(res, 200, { ok: true }); return true
+    }
     send(res, 404, { error: 'Rota não encontrada' }); return true
   }
 

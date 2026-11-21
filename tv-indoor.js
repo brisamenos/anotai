@@ -1,7 +1,8 @@
 // TV Indoor: vídeos da loja passando na TV do estabelecimento.
 //
 // Como funciona:
-//  - A loja tem o adicional ligado pelo admin (tenants.tv_ativo).
+//  - A loja tem o adicional ligado pelo admin (tenants.tv_ativo), ou está
+//    ligada a um anunciante ativo da rede VisseTV (outdoor.js), que já inclui.
 //  - No gestor, ela sobe até 10 vídeos. O upload vai em partes (aguenta vídeo
 //    grande e internet ruim) e o servidor comprime para Full HD (ffmpeg).
 //  - A TV (app Android ou a página /tv) mostra um código de 6 números. O
@@ -119,7 +120,9 @@ function arqTemp(id) { return path.join(pastaTemp(), String(id).replace(/[^a-f0-
 
 function tvLiberada(db, tid) {
   const t = db.prepare('SELECT tv_ativo FROM tenants WHERE id=?').get(tid)
-  return !!(t && t.tv_ativo)
+  if (t && t.tv_ativo) return true
+  // Loja ligada a um anunciante da rede VisseTV: a TV Indoor vem junto
+  try { return !!(_outdoor && _outdoor.lojaVinculada && _outdoor.lojaVinculada(tid)) } catch (e) { return false }
 }
 
 // ── Compressão (uma de cada vez, para não travar o servidor) ─────────────
@@ -218,13 +221,16 @@ function apagarArquivosVideo(v) {
 
 // ── Lista que a TV recebe ─────────────────────────────────────────────────
 function playlistDa(db, tid) {
-  const loja = db.prepare('SELECT nome, tv_ativo FROM tenants WHERE id=?').get(tid) || {}
-  const videos = loja.tv_ativo ? db.prepare(`SELECT id, titulo, arquivo, tamanho, duracao, hora_ini, hora_fim FROM tv_videos
+  const loja = db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid) || {}
+  const ativo = tvLiberada(db, tid)
+  const videos = ativo ? db.prepare(`SELECT id, titulo, arquivo, tamanho, duracao, hora_ini, hora_fim FROM tv_videos
       WHERE tenant_id=? AND status='pronto' AND ativo=1 ORDER BY ordem, id`).all(tid) : []
   const lista = videos.map(v => ({ id: v.id, titulo: v.titulo || '', url: v.arquivo, tamanho: v.tamanho || 0,
     duracao: v.duracao || 0, hora_ini: v.hora_ini || '', hora_fim: v.hora_fim || '' }))
-  const versao = crypto.createHash('sha1').update(JSON.stringify([!!loja.tv_ativo, lista])).digest('hex').slice(0, 16)
-  return { versao, ativo: !!loja.tv_ativo, loja: { nome: loja.nome || '' }, videos: lista }
+  // Anúncio contratado na rede VisseTV também passa nas TVs da própria loja (id negativo)
+  if (ativo && _outdoor && _outdoor.anunciosDaLoja) { try { lista.push(..._outdoor.anunciosDaLoja(tid)) } catch (e) {} }
+  const versao = crypto.createHash('sha1').update(JSON.stringify([ativo, lista])).digest('hex').slice(0, 16)
+  return { versao, ativo, loja: { nome: loja.nome || '' }, videos: lista }
 }
 
 // ── Utilidades de rota ────────────────────────────────────────────────────
@@ -389,6 +395,7 @@ async function handle(req, res, ctx) {
     const body = await readBody(req).catch(() => ({}))
     const id = parseInt(body?.id, 10)
     if (tela.ponto_id && _outdoor && id < 0) { try { _outdoor.registrarExibicao(-id, tela.ponto_id) } catch (e) {} }
+    else if (!tela.ponto_id && _outdoor && _outdoor.registrarExibicaoLoja && id < 0) { try { _outdoor.registrarExibicaoLoja(-id, tela.tenant_id) } catch (e) {} }
     send(res, 200, { ok: true })
     return true
   }
@@ -402,7 +409,9 @@ async function handle(req, res, ctx) {
     if (req.method === 'GET' && upath === '/api/tv/gestor/estado') {
       const videos = db.prepare('SELECT id, titulo, arquivo, capa, tamanho, duracao, ordem, ativo, hora_ini, hora_fim, status, erro, created_at FROM tv_videos WHERE tenant_id=? ORDER BY ordem, id').all(tid)
         .map(v => { const pr = progressoDe('tv_videos', v.id); return { ...v, progresso: pr.progresso, na_fila: v.status === 'processando' && pr.na_fila } })
-      send(res, 200, { ativo: liberada, max: MAX_VIDEOS, comprime: temFfmpeg, videos, telas: resumoTelas(db, tid) })
+      let rede = false
+      try { rede = !!(_outdoor && _outdoor.lojaVinculada && _outdoor.lojaVinculada(tid)) } catch (e) {}
+      send(res, 200, { ativo: liberada, rede, max: MAX_VIDEOS, comprime: temFfmpeg, videos, telas: resumoTelas(db, tid) })
       return true
     }
 

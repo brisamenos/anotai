@@ -72,7 +72,15 @@
     #od-modal .od-checks input{width:16px;height:16px}
     #od-modal .od-mvid{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px}
     #od-modal .od-mvid img{width:72px;height:40px;object-fit:cover;border-radius:6px;background:#000}
-    @media(max-width:640px){#od-modal .mrow2{grid-template-columns:1fr}}
+    #sec-outdoor .od-pend{border:1px solid rgba(245,158,11,.45);background:rgba(245,158,11,.06)}
+    #sec-outdoor .od-pend-item{padding:14px 0;border-top:1px solid var(--border)}
+    #sec-outdoor .od-pend-item:first-of-type{border-top:0}
+    #sec-outdoor .od-comparar{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+    #sec-outdoor .od-comparar video{width:100%;max-height:300px;background:#000;border-radius:10px;display:block}
+    #sec-outdoor .od-comparar .rot{font-size:11.5px;color:var(--muted);font-weight:700;margin-bottom:5px}
+    #sec-outdoor .od-pend-acoes{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+    #sec-outdoor .od-pend-acoes .minput{flex:1;min-width:200px}
+    @media(max-width:640px){#od-modal .mrow2{grid-template-columns:1fr}#sec-outdoor .od-comparar{grid-template-columns:1fr}}
     `;
     document.head.appendChild(st);
   }
@@ -86,7 +94,45 @@
     badge();
   }
 
-  function badge() { const b = $('nav-outdoor-badge'); if (b) b.style.display = 'none'; }
+  // Aviso no menu: trocas pedidas pelas lojas esperando aprovação
+  function badge(n) {
+    if (n === undefined) n = O.dados ? (O.dados.pendentes || []).length : 0;
+    const b = $('nav-outdoor-badge');
+    if (!b) return;
+    b.textContent = n; b.title = n ? `${n} troca(s) de vídeo esperando sua aprovação` : '';
+    b.style.display = n ? '' : 'none';
+  }
+  async function verPendentes() {
+    try {
+      if (typeof getAdminToken === 'function' && !getAdminToken()) return;
+      const d = await api('/api/outdoor/admin/pendentes');
+      const antes = O.ultimoPend;
+      O.ultimoPend = d.n;
+      badge(d.n);
+      if (antes !== undefined && d.n > antes) aviso('ok', 'VisseTV: chegou um pedido de troca de vídeo para você aprovar.');
+    } catch (e) {}
+  }
+  setTimeout(verPendentes, 4000);
+  setInterval(verPendentes, 60000);
+
+  function renderPendentes(d) {
+    const lista = d.pendentes || [];
+    if (!lista.length) return '';
+    return `<div class="card od-pend"><div class="od-titulo" style="font-size:15px">Trocas esperando sua aprovação (${lista.length})</div>
+      <div class="od-sub" style="margin-bottom:6px">A loja pediu para trocar o anúncio. Assista ao vídeo novo antes de aprovar. Se aprovar, o anúncio atual é apagado de vez e o novo entra no lugar em todas as TVs. Se recusar, a loja vê o motivo no painel dela.</div>
+      ${lista.map(p => `<div class="od-pend-item">
+        <div style="font-weight:800">${esc(p.anunciante_nome)}<span style="font-weight:600;color:var(--muted);font-size:12px"> pediu em ${new Date(p.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span></div>
+        <div class="od-comparar">
+          <div><div class="rot">Anúncio atual${p.atual_titulo ? ': ' + esc(p.atual_titulo) : ''}</div>${p.atual_arquivo ? `<video src="${esc(p.atual_arquivo)}" ${p.atual_capa ? `poster="${esc(p.atual_capa)}"` : ''} controls muted preload="none" playsinline></video>` : '<div class="od-vazio">Sem vídeo atual</div>'}</div>
+          <div><div class="rot">Vídeo novo (${dur(p.duracao)}, ${mb(p.tamanho)})</div><video src="${esc(p.arquivo)}" ${p.capa ? `poster="${esc(p.capa)}"` : ''} controls muted preload="none" playsinline></video></div>
+        </div>
+        <div class="od-pend-acoes">
+          <button class="btn bp" onclick="OUTDOORUI.aprovar(${p.id})">Aprovar troca</button>
+          <input class="minput" id="od-motivo-${p.id}" maxlength="300" placeholder="Motivo, se for recusar (a loja vê)">
+          <button class="btn bd" onclick="OUTDOORUI.recusar(${p.id})">Recusar</button>
+        </div>
+      </div>`).join('')}</div>`;
+  }
 
   function render() {
     const sec = $('sec-outdoor');
@@ -114,7 +160,7 @@
     let corpo = '';
     if (O.aba === 'anunciantes') corpo = renderAnunciantes(d);
     else corpo = renderPontos(d);
-    sec.innerHTML = topo + stats + abas + corpo;
+    sec.innerHTML = topo + renderPendentes(d) + stats + abas + corpo;
   }
 
   function renderAnunciantes(d) {
@@ -123,7 +169,7 @@
     return `<div class="card"><div class="od-rolar"><table class="od-tab">
       <thead><tr><th>Anunciante</th><th>Valor</th><th>Onde aparece</th><th>Vídeos</th><th>Exibições (30 dias)</th><th>Situação</th><th></th></tr></thead>
       <tbody>${d.anunciantes.map(a => `<tr>
-        <td><div style="font-weight:800">${esc(a.nome)}</div><div style="font-size:11.5px;color:var(--muted)">${esc(a.email)}${a.telefone ? ', ' + esc(a.telefone) : ''}</div></td>
+        <td><div style="font-weight:800">${esc(a.nome)}</div><div style="font-size:11.5px;color:var(--muted)">${[a.email, a.telefone].filter(Boolean).map(esc).join(', ')}</div>${a.loja_nome ? `<div style="font-size:11.5px;margin-top:2px"><span class="od-pill ok">EstimaFood</span> ${esc(a.loja_nome)}</div>` : ''}${a.aguardando ? `<div style="font-size:11.5px;margin-top:2px"><span class="od-pill esp">${a.aguardando} troca(s) para aprovar</span></div>` : ''}</td>
         <td><div style="font-weight:700">${brl(a.valor_mensal)}</div><div style="font-size:11.5px;color:var(--muted)">vence dia ${a.dia_vencimento || '-'}</div></td>
         <td style="font-size:12px;max-width:220px">${a.pontos.length ? a.pontos.map(id => esc(nomePonto[id] || '')).join(', ') : '<span style="color:var(--muted)">nenhum ponto</span>'}</td>
         <td style="font-size:12px">${a.na_rede} no ar<br><span style="color:var(--muted)">${a.videos} no total</span></td>
@@ -190,7 +236,10 @@
       <div class="mrow"><label class="mlabel">Responsável</label><input class="minput" id="od-a-resp" value="${esc(a.responsavel || '')}"></div></div>
       <div class="mrow2"><div class="mrow"><label class="mlabel">WhatsApp</label><input class="minput" id="od-a-tel" value="${esc(a.telefone || '')}" placeholder="(88) 99999-0000"></div>
       <div class="mrow"><label class="mlabel">Valor mensal negociado (R$)</label><input class="minput" id="od-a-valor" type="number" step="0.01" min="0" value="${esc(a.valor_mensal)}"></div></div>
-      <div class="mrow2"><div class="mrow"><label class="mlabel">E-mail (login do painel)</label><input class="minput" id="od-a-email" type="email" value="${esc(a.email)}" autocomplete="off"></div>
+      <div class="mrow"><label class="mlabel">Cliente do EstimaFood (opcional)</label>
+        <select class="minput" id="od-a-loja" onchange="OUTDOORUI.trocouLoja()"><option value="">Nenhum (anunciante só da VisseTV)</option>${(d.lojas || []).filter(l => l.id === String(a.tenant_id || '') || !d.anunciantes.some(x => String(x.tenant_id || '') === l.id)).map(l => `<option value="${esc(l.id)}" ${String(a.tenant_id || '') === l.id ? 'selected' : ''}>${esc(l.nome)}</option>`).join('')}</select>
+        <div id="od-a-loja-info" style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5;${a.tenant_id ? '' : 'display:none'}">A loja ganha a TV Indoor completa no gestor dela, sem cobrar o adicional (o preço é o negociado aqui). O anúncio passa também nas TVs da loja. Ela não apaga nem troca o anúncio: só pede a troca, e você aprova aqui.</div></div>
+      <div class="mrow2"><div class="mrow"><label class="mlabel" id="od-a-email-rot">E-mail (login do painel)${a.tenant_id ? ', opcional' : ''}</label><input class="minput" id="od-a-email" type="email" value="${esc(a.email || '')}" autocomplete="off"></div>
       <div class="mrow"><label class="mlabel">${novo ? 'Senha' : 'Nova senha (deixe em branco para manter)'}</label><input class="minput" id="od-a-senha" type="text" autocomplete="new-password" placeholder="mínimo 6 caracteres"></div></div>
       <div class="mrow2"><div class="mrow"><label class="mlabel">Dia do vencimento</label><input class="minput" id="od-a-venc" type="number" min="1" max="31" value="${esc(a.dia_vencimento || 10)}"></div>
       <div class="mrow"><label class="mlabel">Situação</label><select class="minput" id="od-a-ativo"><option value="1" ${a.ativo ? 'selected' : ''}>Ativo (anúncios passando)</option><option value="0" ${a.ativo ? '' : 'selected'}>Pausado (nada passa, sem acesso ao painel)</option></select></div></div>
@@ -254,7 +303,9 @@
       if (v.status === 'processando') status = v.na_fila ? 'Na fila para preparar' : `Preparando ${v.progresso || 0}%`;
       else if (v.status === 'erro') status = `<span style="color:var(--danger)">${esc(v.erro || 'Erro no vídeo')}</span>`;
       else status = `${dur(v.duracao)}, ${mb(v.tamanho)}, ${v.exibicoes_30d} exibições em 30 dias, ${v.ativo ? '<b style="color:#22c55e">no ar</b>' : '<b>pausado</b>'}`;
-      if (novo) status += `<br><span style="color:#f59e0b">Versão nova ${novo.status === 'erro' ? 'com erro: ' + esc(novo.erro || '') : (novo.na_fila ? 'na fila' : 'sendo preparada ' + (novo.progresso || 0) + '%')}. Este fica no ar até ela ficar pronta.</span>`;
+      if (novo && novo.rede === 'recusado') status += `<br><span style="color:var(--muted)">Troca pedida pela loja foi recusada: ${esc(novo.rede_motivo || '')}</span>`;
+      else if (novo && novo.rede === 'aguardando') status += `<br><span style="color:#f59e0b">${novo.status === 'pronto' ? 'A loja pediu troca deste anúncio: aprove ou recuse no topo da página VisseTV.' : novo.status === 'erro' ? 'A loja pediu troca, mas o vídeo novo deu erro.' : 'A loja pediu troca: o vídeo novo está sendo preparado.'}</span>`;
+      else if (novo) status += `<br><span style="color:#f59e0b">Versão nova ${novo.status === 'erro' ? 'com erro: ' + esc(novo.erro || '') : (novo.na_fila ? 'na fila' : 'sendo preparada ' + (novo.progresso || 0) + '%')}. Este fica no ar até ela ficar pronta.</span>`;
       if (enviando) status += `<br><span style="color:#f59e0b">${enviando.erro ? esc(enviando.erro) : 'Enviando versão nova ' + (enviando.tamanho ? Math.floor(enviando.enviado / enviando.tamanho * 100) : 0) + '%'}</span>`;
       const confirma = O.excluir === 'v' + v.id;
       return `<div class="od-mvid">
@@ -265,7 +316,7 @@
         </div>
         <div style="display:flex;flex-direction:column;gap:5px;align-items:stretch">
           ${v.status === 'pronto' ? `<button class="btn bg2 bsm" onclick="OUTDOORUI.ligar(${v.id},${aid},${v.ativo ? 0 : 1})">${v.ativo ? 'Pausar' : 'Pôr no ar'}</button>` : ''}
-          ${!novo && !enviando ? `<label class="btn bg2 bsm" style="cursor:pointer"><input type="file" accept="video/*" style="display:none" onchange="OUTDOORUI.substituir(${aid},${v.id},this)">Substituir</label>` : ''}
+          ${(!novo || novo.rede !== 'aprovado') && !enviando ? `<label class="btn bg2 bsm" style="cursor:pointer"><input type="file" accept="video/*" style="display:none" onchange="OUTDOORUI.substituir(${aid},${v.id},this)">Substituir</label>` : ''}
           <button class="btn bd bsm" onclick="OUTDOORUI.apagarVideo(${v.id},${aid})">${confirma ? 'Confirmar' : 'Apagar'}</button>
         </div>
       </div>`;
@@ -345,6 +396,21 @@
       O.timer = setInterval(() => { if ($('sec-outdoor')?.style.display !== 'none' && !$('od-modal')?.classList.contains('on')) carregar(); }, 30000);
     },
     aba(a) { O.aba = a; render(); },
+    trocouLoja() {
+      const tem = !!val('od-a-loja');
+      const i = $('od-a-loja-info'); if (i) i.style.display = tem ? '' : 'none';
+      const r = $('od-a-email-rot'); if (r) r.textContent = 'E-mail (login do painel)' + (tem ? ', opcional' : '');
+    },
+    async aprovar(id) {
+      try { await api(`/api/outdoor/admin/videos/${id}/aprovar`, { method: 'POST', body: {} }); aviso('ok', 'Troca aprovada. O anúncio antigo foi apagado e as TVs atualizam em alguns segundos.'); carregar(); verPendentes(); }
+      catch (e) { aviso('err', e.message); }
+    },
+    async recusar(id) {
+      const motivo = val('od-motivo-' + id);
+      if (!motivo) { aviso('err', 'Escreva o motivo para a loja saber o que mudar.'); $('od-motivo-' + id)?.focus(); return; }
+      try { await api(`/api/outdoor/admin/videos/${id}/recusar`, { method: 'POST', body: { motivo } }); aviso('ok', 'Troca recusada. A loja vai ver o motivo.'); carregar(); verPendentes(); }
+      catch (e) { aviso('err', e.message); }
+    },
     fechar: fecharModal,
     novoAnunciante() { O.excluir = null; modal(formAnunciante(null)); },
     editarAnunciante(id) { O.excluir = null; O.aberto = null; modal(formAnunciante(O.dados.anunciantes.find(a => a.id === id))); },
@@ -380,7 +446,7 @@
     async salvarAnunciante(id) {
       const corpo = {
         nome: val('od-a-nome'), responsavel: val('od-a-resp'), telefone: val('od-a-tel'), email: val('od-a-email'),
-        valor_mensal: val('od-a-valor'), dia_vencimento: val('od-a-venc'), observacoes: val('od-a-obs'), ativo: val('od-a-ativo') === '1',
+        valor_mensal: val('od-a-valor'), dia_vencimento: val('od-a-venc'), observacoes: val('od-a-obs'), ativo: val('od-a-ativo') === '1', tenant_id: val('od-a-loja'),
         pontos: [...document.querySelectorAll('.od-a-ponto:checked')].map(c => +c.value)
       };
       const senha = val('od-a-senha');
