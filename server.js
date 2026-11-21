@@ -17,7 +17,8 @@ const phoneUtils = require('./phone-utils')
 const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (como sempre foi) ou WuzAPI (alternativa leve)
 const _waCardFoto = require('./wa-card-foto') // foto dos cartões do carrossel no pedido pelo WhatsApp
 const _areaEntrega = require('./area-entrega')
-const tvIndoor = require('./tv-indoor') // TV indoor: vídeos da loja na TV do estabelecimento // conta da taxa por distância (mesma do cardápio e do gestor)
+const tvIndoor = require('./tv-indoor') // TV indoor: vídeos da loja na TV do estabelecimento
+const outdoor = require('./outdoor')    // Outdoor: rede de TVs com anunciantes (produto separado) // conta da taxa por distância (mesma do cardápio e do gestor)
 
 const PORT        = process.env.PORT           || 3001
 const EVO_URL     = (process.env.EVOLUTION_URL || 'https://projeto-evolution-api.xtknqq.easypanel.host').replace(/\/+$/,'')
@@ -1778,7 +1779,8 @@ const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_
   'entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens','order_status_history',
   'chat_threads','chat_messages','order_chat_threads','order_chat_messages','order_chat_drafts',
   'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts','admin_audit_log','plano_assinaturas',
-  'fiscal_config','fiscal_nfce','contas_pagar','faturas','fornecedores','tv_videos','tv_telas']
+  'fiscal_config','fiscal_nfce','contas_pagar','faturas','fornecedores','tv_videos','tv_telas',
+  'od_anunciantes','od_pontos','od_contratos','od_videos','od_exibicoes']
   // wa_messages, radio_messages excluídas — mídia/áudio pode estourar JSON.stringify
   // sessions (admin/indicador/entregador), print_jobs, ia_pausa, addons_esgotados —
   // dados transitórios/operacionais, não fazem sentido restaurar
@@ -2177,6 +2179,8 @@ function restaurarBackup() {
   } catch(e) { log('❌', 'Erro ao ler backup:', { error: e.message }); return false }
 }
 
+// Tabelas da TV Indoor e do Outdoor existem antes de restaurar o backup
+try { tvIndoor.criarTabelas(db); outdoor.criarTabelas(db) } catch (e) { log('⚠️', '[TV] tabelas: ' + e.message) }
 if (!_dbExistia) { log('♻️', 'Banco novo — tentando restaurar backup...'); restaurarBackup() }
 
 if (!db.prepare("SELECT id FROM sys_users WHERE role='superadmin' LIMIT 1").get()) {
@@ -9942,7 +9946,7 @@ const _ESTATICO_BLOQUEADO = new RegExp([
   '(^|/)(data|\\.dev-data|node_modules|\\.git|\\.github|app-tv-android)(/|$)',
   '\\.(jks|keystore|kts|gradle)$',
   '\\.(db|db-wal|db-shm|sqlite|sqlite3|sql|log|env|bak)$',
-  '^/?(server|routes|site-admin|marketing-flows|suporte-vendas-bot|tenant-wa|wuzapi|order-message|phone-utils|limpar-links-externos|limpar-movimentos-cancelados|tv-indoor|fotos-externas|wa-card-foto)\\.js$',
+  '^/?(server|routes|site-admin|marketing-flows|suporte-vendas-bot|tenant-wa|wuzapi|order-message|phone-utils|limpar-links-externos|limpar-movimentos-cancelados|tv-indoor|outdoor|fotos-externas|wa-card-foto)\\.js$',
   '^/?(package|package-lock|site-padrao)\\.json$',
   '^/?(Dockerfile|nixpacks\\.toml)$'
 ].join('|'), 'i')
@@ -10593,6 +10597,7 @@ const server = http.createServer(async (req,res) => {
     emit }
   try {
     if (upath.startsWith('/api/tv/') && await tvIndoor.handle(req, res, _routeCtx)) return
+    if (upath.startsWith('/api/outdoor/') && await outdoor.handle(req, res, _routeCtx)) return
     if (await handleRoutes(req, res, _routeCtx)) return
   } catch(e) {
     log('❌', `handleRoutes exception [${req.method} ${upath}]:`, e.message)
@@ -10785,17 +10790,22 @@ const server = http.createServer(async (req,res) => {
   }
 
   // ── TV indoor: player para TV com navegador (sem o app Android) ──
+  // ── Outdoor: painel do anunciante ──
+  if(req.method==='GET'&&(upath==='/outdoor'||upath==='/outdoor/')){
+    const fpath=path.join(__dirname,'outdoor.html')
+    if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
+  }
   if(req.method==='GET'&&(upath==='/tv'||upath==='/tv/')){
     const fpath=path.join(__dirname,'tv.html')
     if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
   }
-  // App Android da TV indoor: coloque o estimafood-tv.apk na pasta de uploads
+  // App Android da TV (VisseTV): coloque o vissetv.apk na pasta de uploads
   // (ou na pasta do projeto) e a TV baixa por este endereço curto
   if(req.method==='GET'&&(upath==='/app-tv'||upath==='/app-tv.apk')){
-    const fpath=[path.join(UPLOADS_DIR,'estimafood-tv.apk'),path.join(__dirname,'estimafood-tv.apk')].find(f=>fs.existsSync(f))
+    const fpath=['vissetv.apk','estimafood-tv.apk'].flatMap(n=>[path.join(UPLOADS_DIR,n),path.join(__dirname,n)]).find(f=>fs.existsSync(f))
     if(fpath){
       res.setHeader('Content-Type','application/vnd.android.package-archive')
-      res.setHeader('Content-Disposition','attachment; filename="estimafood-tv.apk"')
+      res.setHeader('Content-Disposition','attachment; filename="vissetv.apk"')
       res.setHeader('Content-Length',fs.statSync(fpath).size)
       res.setHeader('Cache-Control','no-cache')
       res.writeHead(200);fs.createReadStream(fpath).pipe(res);return
@@ -10897,6 +10907,7 @@ const server = http.createServer(async (req,res) => {
 })
 
 try { tvIndoor.init({ db, log, UPLOADS_DIR }) } catch (e) { log('⚠️', '[TV] não iniciou: ' + e.message) }
+try { outdoor.init({ db, log, UPLOADS_DIR }, tvIndoor) } catch (e) { log('⚠️', '[OUTDOOR] não iniciou: ' + e.message) }
 server.listen(PORT,()=>{
   log('🚀',`Servidor rodando na porta ${PORT}`)
   log('🏢',`Multi-tenant · SQLite`)

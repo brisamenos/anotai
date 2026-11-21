@@ -3,26 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EstimaFood TV</title>
+<title>VisseTV</title>
+<link rel="icon" href="/vissetv/vissetv-icone-32.png">
 <meta name="robots" content="noindex">
 <style>
-  :root{--azul:#1397e8;--azul-escuro:#0b5c96;--fundo:#05080d;--texto:#f1f5f9;--apagado:#8a9bb0}
+  :root{--azul:#ff7a00;--azul-escuro:#ff2e63;--fundo:#0b0612;--texto:#fff6ea;--apagado:#b3a6c2}
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%;background:#000;color:var(--texto);font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;overflow:hidden}
   body.sem-cursor{cursor:none}
   video{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;opacity:0;transition:opacity .35s}
   video.ativo{opacity:1}
-  .tela{position:fixed;inset:0;display:none;background:radial-gradient(120% 90% at 20% 10%,#0d2a44 0%,var(--fundo) 60%)}
+  .tela{position:fixed;inset:0;display:none;background:radial-gradient(120% 90% at 20% 10%,#2c1240 0%,var(--fundo) 62%)}
   .tela.on{display:flex}
   #parear{align-items:center;justify-content:center;padding:5vw}
   .parear-grade{display:grid;grid-template-columns:1.1fr 1fr;gap:6vw;align-items:center;max-width:1500px;width:100%}
-  .marca{font-weight:800;font-size:clamp(16px,1.6vw,30px);color:var(--azul);letter-spacing:.02em}
+  .marca{display:block}
+  .marca img{display:block;height:clamp(56px,7.5vw,140px);width:auto}
+  #espera .marca img{margin:0 auto}
   .parear-titulo{font-size:clamp(28px,3.6vw,68px);font-weight:800;line-height:1.08;margin:1.2vw 0 2vw}
-  .passos{list-style:none;display:flex;flex-direction:column;gap:1.4vw;font-size:clamp(16px,1.6vw,30px);color:#c9d6e3;line-height:1.35}
+  .passos{list-style:none;display:flex;flex-direction:column;gap:1.4vw;font-size:clamp(16px,1.6vw,30px);color:#e3dbec;line-height:1.35}
   .passos li{display:flex;gap:1vw;align-items:flex-start}
   .passos b{color:var(--texto)}
-  .passos span.n{flex:none;width:2.2em;height:2.2em;border-radius:50%;background:rgba(19,151,232,.16);color:var(--azul);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:.8em}
-  .codigo-caixa{background:rgba(255,255,255,.04);border:2px solid rgba(19,151,232,.45);border-radius:2vw;padding:3vw 2vw;text-align:center}
+  .passos span.n{flex:none;width:2.2em;height:2.2em;border-radius:50%;background:rgba(255,46,99,.16);color:#ff7a8f;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:.8em}
+  .codigo-caixa{background:rgba(255,255,255,.04);border:2px solid rgba(255,46,99,.5);border-radius:2vw;padding:3vw 2vw;text-align:center}
   .codigo-rotulo{font-size:clamp(14px,1.3vw,24px);color:var(--apagado);font-weight:600}
   .codigo{font-size:clamp(56px,8.5vw,170px);font-weight:800;letter-spacing:.08em;margin:1vw 0;font-variant-numeric:tabular-nums;color:#fff}
   .codigo-rodape{font-size:clamp(12px,1.05vw,20px);color:var(--apagado)}
@@ -31,20 +34,25 @@
   #espera .pequeno{font-size:clamp(16px,1.5vw,28px);color:var(--apagado);max-width:60ch;line-height:1.4}
   #aviso-som{position:fixed;left:50%;bottom:4vh;transform:translateX(-50%);background:rgba(0,0,0,.72);color:#fff;padding:1vh 2vw;border-radius:99px;font-size:clamp(13px,1.2vw,22px);display:none;z-index:5}
   @media (max-aspect-ratio:1/1){.parear-grade{grid-template-columns:1fr}}
+  /* TV em pé: o palco (vídeos e avisos) gira; o tamanho troca largura por altura */
+  #palco{position:fixed;inset:0}
+  #palco.girado{inset:auto;top:50%;left:50%;width:100vh;height:100vw;transform:translate(-50%,-50%) rotate(var(--giro))}
+  #palco video,#palco .tela{position:absolute}
 </style>
 </head>
 <body>
+<div id="palco">
 <video id="va" playsinline muted preload="auto"></video>
 <video id="vb" playsinline muted preload="auto"></video>
 
 <section class="tela" id="parear">
   <div class="parear-grade">
     <div>
-      <div class="marca">EstimaFood TV</div>
+      <div class="marca"><img src="/vissetv/vissetv-logo-escuro.svg" alt="VisseTV"></div>
       <h1 class="parear-titulo">Ligue esta TV à sua loja</h1>
       <ol class="passos">
-        <li><span class="n">1</span><span>No celular ou computador, abra o <b>painel do gestor</b>.</span></li>
-        <li><span class="n">2</span><span>Entre em <b>TV Indoor</b> e toque em <b>Adicionar TV</b>.</span></li>
+        <li><span class="n">1</span><span>No celular ou computador, abra o <b>seu painel</b>.</span></li>
+        <li><span class="n">2</span><span>Toque em <b>Adicionar TV</b> (ou <b>Ligar TV</b>).</span></li>
         <li><span class="n">3</span><span>Digite o código ao lado. Pronto: os vídeos começam sozinhos.</span></li>
       </ol>
     </div>
@@ -57,10 +65,11 @@
 </section>
 
 <section class="tela" id="espera">
-  <div class="marca">EstimaFood TV</div>
+  <div class="marca"><img src="/vissetv/vissetv-logo-escuro.svg" alt="VisseTV"></div>
   <div class="grande" id="espera-titulo">Carregando...</div>
   <div class="pequeno" id="espera-texto"></div>
 </section>
+</div>
 
 <div id="aviso-som">Aperte OK no controle para ligar o som</div>
 
@@ -144,11 +153,20 @@
       .then(function (d) {
         if (!d) return;
         nomeLoja = (d.loja && d.loja.nome) || '';
+        girar((d.tela && d.tela.rotacao) || 0);
         ativo = !!d.ativo;
         if (d.versao !== versao) { versao = d.versao; lista = d.videos || []; aoMudarLista(); }
         timerLista = setTimeout(buscarLista, 15000);
       })
       .catch(function () { timerLista = setTimeout(buscarLista, 15000); });
+  }
+
+  function girar(graus) {
+    var p = document.getElementById('palco');
+    graus = +graus || 0;
+    p.classList.toggle('girado', graus === 90 || graus === 270);
+    p.style.setProperty('--giro', graus + 'deg');
+    try { localStorage.setItem('estimafood_tv_giro', String(graus)); } catch (e) {}
   }
 
   function minutos(hhmm) { var p = String(hhmm || '').split(':'); return p.length === 2 ? (+p[0]) * 60 + (+p[1]) : null; }
@@ -180,7 +198,7 @@
   function tocar() {
     var v = proximoVideo();
     if (!v) {
-      espera(nomeLoja || 'EstimaFood TV', lista.length ? 'Nenhum vídeo marcado para este horário.' : 'Nenhum vídeo ainda. Suba os vídeos no painel do gestor, em TV Indoor.');
+      espera(nomeLoja || 'VisseTV', lista.length ? 'Nenhum vídeo marcado para este horário.' : 'Nenhum vídeo ainda. Suba os vídeos no painel do gestor, em TV Indoor.');
       setTimeout(function () { if (!tocando && ativo) tocar(); }, 30000);
       return;
     }
@@ -191,6 +209,8 @@
     el.src = v.url;
     el.onended = function () { tocar(); };
     el.onerror = function () { setTimeout(tocar, 1500); };
+    // Anúncio do Outdoor (id negativo): conta a exibição
+    if (v.id < 0) { try { fetch('/api/tv/exibiu', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Tv ' + token }, body: JSON.stringify({ id: v.id }) }).catch(function () {}); } catch (e) {} }
     var p = el.play();
     if (p && p.catch) p.catch(function () { el.muted = true; el.play().catch(function () { setTimeout(tocar, 2000); }); });
     el.classList.add('ativo');
@@ -223,6 +243,7 @@
   var tCursor; document.addEventListener('mousemove', function () { document.body.classList.remove('sem-cursor'); clearTimeout(tCursor); tCursor = setTimeout(function () { document.body.classList.add('sem-cursor'); }, 3000); });
   document.body.classList.add('sem-cursor');
 
+  try { girar(localStorage.getItem('estimafood_tv_giro') || 0); } catch (e) {}
   if (token) { espera('Carregando...', ''); buscarLista(); } else parear();
 })();
 </script>

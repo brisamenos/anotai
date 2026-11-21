@@ -30,9 +30,8 @@ function agoraISO() { return new Date().toISOString() }
 function rnd(n) { return crypto.randomBytes(n).toString('hex') }
 function safeTid(tid) { return String(tid).replace(/[^a-zA-Z0-9_-]/g, '') }
 
-function init(ctx) {
-  ctxBase = ctx
-  const { db } = ctx
+// Cria as tabelas (também chamado antes de restaurar um backup)
+function criarTabelas(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS tv_videos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id TEXT NOT NULL,
@@ -79,7 +78,17 @@ function init(ctx) {
     criado_em INTEGER
   )`)
   try { db.prepare('ALTER TABLE tenants ADD COLUMN tv_ativo INTEGER DEFAULT 0').run() } catch (e) { /* já existe */ }
+  // Posição da TV: 0 = deitada (normal); 90 ou 270 = TV em pé (a imagem gira)
+  try { db.prepare('ALTER TABLE tv_telas ADD COLUMN rotacao INTEGER DEFAULT 0').run() } catch (e) { /* já existe */ }
+  // TV do Outdoor: pertence a um ponto (tenant_id fica 'od:<ponto>')
+  try { db.prepare('ALTER TABLE tv_telas ADD COLUMN ponto_id INTEGER').run() } catch (e) { /* já existe */ }
 
+}
+
+function init(ctx) {
+  ctxBase = ctx
+  const { db } = ctx
+  criarTabelas(db)
   try { temFfmpeg = spawnSync('ffmpeg', ['-version'], { timeout: 8000 }).status === 0 } catch (e) { temFfmpeg = false }
   if (!temFfmpeg) ctx.log('⚠️', '[TV] ffmpeg não encontrado: os vídeos da TV indoor vão sem compressão')
 
@@ -89,6 +98,7 @@ function init(ctx) {
     try {
       const pend = db.prepare(`SELECT id FROM tv_videos WHERE status='processando'`).all()
       for (const p of pend) enfileirar(p.id)
+      try { for (const p of db.prepare(`SELECT id FROM od_videos WHERE status='processando'`).all()) enfileirar(p.id, 'od_videos') } catch (e) {}
     } catch (e) {}
   }, 15000)
   // Limpeza: códigos de pareamento vencidos e uploads largados (24h)
@@ -113,9 +123,20 @@ function tvLiberada(db, tid) {
 }
 
 // ── Compressão (uma de cada vez, para não travar o servidor) ─────────────
-function enfileirar(id) {
-  if (!_fila.includes(id)) _fila.push(id)
+// Serve à TV Indoor (tabela tv_videos) e ao Outdoor (tabela od_videos).
+const PREFIXO_ARQUIVO = {
+  tv_videos: v => `tv_${safeTid(v.tenant_id)}`,
+  od_videos: v => `od_a${parseInt(v.anunciante_id, 10) || 0}`
+}
+function chaveFila(tabela, id) { return `${tabela}:${id}` }
+function enfileirar(id, tabela = 'tv_videos') {
+  const k = chaveFila(tabela, id)
+  if (!_fila.includes(k)) _fila.push(k)
   proximo()
+}
+function progressoDe(tabela, id) {
+  const k = chaveFila(tabela, id)
+  return { progresso: _progresso.has(k) ? _progresso.get(k) : null, na_fila: !_progresso.has(k) }
 }
 
 function duracaoDe(arquivo) {
@@ -140,28 +161,31 @@ function rodar(cmd, args, aoLer) {
 async function proximo() {
   if (_comprimindo || !_fila.length) return
   _comprimindo = true
-  const id = _fila.shift()
+  const chave = _fila.shift()
+  const [tabela, idTxt] = chave.split(':')
+  const id = parseInt(idTxt, 10)
   const { db, log, UPLOADS_DIR } = ctxBase
-  const v = db.prepare('SELECT * FROM tv_videos WHERE id=?').get(id)
+  if (!PREFIXO_ARQUIVO[tabela]) { _comprimindo = false; setImmediate(proximo); return }
+  const v = db.prepare(`SELECT * FROM ${tabela} WHERE id=?`).get(id)
   try {
     if (!v || v.status !== 'processando') return
     const origem = v.original && path.join(pastaTemp(), path.basename(v.original))
     if (!origem || !fs.existsSync(origem)) throw new Error('arquivo enviado não foi encontrado')
-    const base = `tv_${safeTid(v.tenant_id)}_${rnd(10)}`
+    const base = `${PREFIXO_ARQUIVO[tabela](v)}_${rnd(10)}`
     const saida = path.join(UPLOADS_DIR, base + '.mp4')
     const capa = path.join(UPLOADS_DIR, base + '.jpg')
     const dur = duracaoDe(origem)
     if (temFfmpeg) {
-      _progresso.set(id, 0)
+      _progresso.set(chave, 0)
       await rodar('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-i', origem,
         '-map', '0:v:0', '-map', '0:a:0?',
-        '-vf', "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30,format=yuv420p",
+        '-vf', "scale='if(gte(iw,ih),min(1920,iw),min(1080,iw))':'if(gte(iw,ih),min(1080,ih),min(1920,ih))':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30,format=yuv420p",
         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-profile:v', 'high', '-level', '4.1',
         '-c:a', 'aac', '-b:a', '128k', '-ac', '2',
         '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', saida + '.tmp.mp4'],
         txt => {
           const m = /out_time_(?:ms|us)=(\d+)/.exec(txt)
-          if (m && dur > 0) _progresso.set(id, Math.min(99, Math.round(parseInt(m[1], 10) / 1e6 / dur * 100)))
+          if (m && dur > 0) _progresso.set(chave, Math.min(99, Math.round(parseInt(m[1], 10) / 1e6 / dur * 100)))
         })
       fs.renameSync(saida + '.tmp.mp4', saida)
       try { await rodar('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-ss', String(Math.min(1, dur / 2 || 0)), '-i', saida, '-frames:v', '1', '-vf', 'scale=480:-2', capa]) } catch (e) {}
@@ -171,14 +195,15 @@ async function proximo() {
       fs.renameSync(origem, saida)
     }
     const tam = fs.statSync(saida).size
-    db.prepare(`UPDATE tv_videos SET status='pronto', arquivo=?, capa=?, tamanho=?, duracao=?, original=NULL, erro=NULL WHERE id=?`)
+    db.prepare(`UPDATE ${tabela} SET status='pronto', arquivo=?, capa=?, tamanho=?, duracao=?, original=NULL, erro=NULL WHERE id=?`)
       .run('/uploads/' + base + '.mp4', fs.existsSync(capa) ? '/uploads/' + base + '.jpg' : null, tam, duracaoDe(saida) || dur, id)
-    log('📺', `[TV] vídeo ${id} pronto (${(tam / 1048576).toFixed(1)} MB)`)
+    log('📺', `[TV] vídeo ${chave} pronto (${(tam / 1048576).toFixed(1)} MB)`)
+    if (tabela === 'od_videos' && _outdoor && _outdoor.aoFicarPronto) { try { _outdoor.aoFicarPronto(id) } catch (e) { log('⚠️', '[OUTDOOR] troca: ' + e.message) } }
   } catch (e) {
-    log('⚠️', `[TV] vídeo ${id} falhou: ${e.message}`)
-    try { db.prepare(`UPDATE tv_videos SET status='erro', erro=? WHERE id=?`).run('Não foi possível preparar este vídeo. Tente outro arquivo.', id) } catch (x) {}
+    log('⚠️', `[TV] vídeo ${chave} falhou: ${e.message}`)
+    try { db.prepare(`UPDATE ${tabela} SET status='erro', erro=? WHERE id=?`).run('Não foi possível preparar este vídeo. Tente outro arquivo.', id) } catch (x) {}
   } finally {
-    _progresso.delete(id)
+    _progresso.delete(chave)
     _comprimindo = false
     setImmediate(proximo)
   }
@@ -232,9 +257,82 @@ function telaDoToken(req, db, params) {
 }
 
 function resumoTelas(db, tid) {
-  return db.prepare('SELECT id, nome, plataforma, app_versao, tocando, ultimo_contato, created_at FROM tv_telas WHERE tenant_id=? ORDER BY id').all(tid)
+  return db.prepare('SELECT id, nome, plataforma, app_versao, tocando, ultimo_contato, rotacao, created_at FROM tv_telas WHERE tenant_id=? ORDER BY id').all(tid)
     .map(t => ({ ...t, online: !!t.ultimo_contato && (Date.now() - Date.parse(t.ultimo_contato) < ONLINE_MS) }))
 }
+
+// ── Peças reaproveitadas pelo Outdoor (outdoor.js) ───────────────────────
+
+// Liga a TV que mostra o código a uma loja (tenant_id) ou a um ponto do Outdoor.
+function vincularTela(codigoTxt, { tenant_id, ponto_id, nome }) {
+  const { db } = ctxBase
+  const codigo = String(codigoTxt || '').replace(/\D/g, '')
+  const p = db.prepare('SELECT * FROM tv_pareamentos WHERE codigo=?').get(codigo)
+  if (!p || Date.now() - p.criado_em > 30 * 60 * 1000) return { erro: 'Código não encontrado. Confira os números que aparecem na TV.', status: 404 }
+  if (p.tela_token) return { erro: 'Esse código já foi usado.', status: 409 }
+  const token = rnd(24)
+  const dono = ponto_id ? `od:${ponto_id}` : tenant_id
+  const n = db.prepare('SELECT COUNT(*) n FROM tv_telas WHERE tenant_id=?').get(dono).n
+  const nomeFinal = String(nome || '').trim().slice(0, 60) || `TV ${n + 1}`
+  const r = db.prepare('INSERT INTO tv_telas (tenant_id, nome, token, plataforma, ponto_id, created_at) VALUES (?,?,?,?,?,?)')
+    .run(dono, nomeFinal, token, p.plataforma || 'web', ponto_id || null, agoraISO())
+  db.prepare('UPDATE tv_pareamentos SET tela_token=? WHERE codigo=?').run(token, codigo)
+  return { ok: true, tela_id: r.lastInsertRowid, nome: nomeFinal }
+}
+
+// dono: id da loja, ou 'od:a<id>' para anunciante do Outdoor
+function uploadIniciar(dono, body, usados, max = MAX_VIDEOS) {
+  const { db } = ctxBase
+  const tamanho = Math.floor(+body?.tamanho || 0)
+  const nome = String(body?.nome || 'video').slice(0, 120)
+  if (!(tamanho > 0)) return { erro: 'Arquivo vazio', status: 400 }
+  if (tamanho > MAX_ARQUIVO) return { erro: 'Vídeo grande demais (máximo 8 GB).', status: 400 }
+  if (!/\.(mp4|mov|m4v|mkv|webm|avi|3gp|mpeg|mpg|wmv)$/i.test(nome) && !String(body?.tipo || '').startsWith('video/')) return { erro: 'Esse arquivo não parece ser um vídeo.', status: 400 }
+  if (usados >= max) return { erro: `Limite de ${max} vídeos. Apague um para subir outro.`, status: 400 }
+  const id = rnd(16)
+  fs.writeFileSync(arqTemp(id), Buffer.alloc(0))
+  db.prepare('INSERT INTO tv_uploads (id, tenant_id, nome, tamanho, recebido, criado_em) VALUES (?,?,?,?,0,?)').run(id, String(dono), nome, tamanho, Date.now())
+  return { upload_id: id, parte: 8 * 1024 * 1024 }
+}
+
+async function uploadParte(req, dono, uploadId, offsetTxt) {
+  const { db } = ctxBase
+  const up = db.prepare('SELECT * FROM tv_uploads WHERE id=? AND tenant_id=?').get(uploadId, String(dono))
+  if (!up) return { status: 404, corpo: { error: 'Envio não encontrado. Comece de novo.' } }
+  const offset = parseInt(offsetTxt || '0', 10)
+  if (offset !== up.recebido) return { status: 409, corpo: { error: 'fora de ordem', recebido: up.recebido } }
+  let buf
+  try { buf = await lerCorpoBruto(req, MAX_PARTE) } catch (e) { return { status: 413, corpo: { error: e.message } } }
+  if (up.recebido + buf.length > up.tamanho) return { status: 400, corpo: { error: 'Recebi mais do que o tamanho do arquivo.' } }
+  fs.appendFileSync(arqTemp(up.id), buf)
+  const rec = up.recebido + buf.length
+  db.prepare('UPDATE tv_uploads SET recebido=? WHERE id=?').run(rec, up.id)
+  return { status: 200, corpo: { recebido: rec } }
+}
+
+// Retorna { original, titulo } para gravar o vídeo como 'processando' e enfileirar
+function uploadConcluir(dono, uploadId, usados, max = MAX_VIDEOS) {
+  const { db } = ctxBase
+  const up = db.prepare('SELECT * FROM tv_uploads WHERE id=? AND tenant_id=?').get(uploadId, String(dono))
+  if (!up) return { erro: 'Envio não encontrado. Comece de novo.', status: 404 }
+  if (up.recebido !== up.tamanho) return { erro: 'O vídeo não chegou inteiro. Tente de novo.', status: 400 }
+  if (usados >= max) {
+    try { fs.unlinkSync(arqTemp(up.id)) } catch (e) {}
+    db.prepare('DELETE FROM tv_uploads WHERE id=?').run(up.id)
+    return { erro: `Limite de ${max} vídeos.`, status: 400 }
+  }
+  db.prepare('DELETE FROM tv_uploads WHERE id=?').run(up.id)
+  const titulo = up.nome.replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[_-]+/g, ' ').trim().slice(0, 80) || 'Vídeo'
+  return { original: path.basename(arqTemp(up.id)), titulo }
+}
+
+function telasDoPonto(pontoId) { return resumoTelas(ctxBase.db, `od:${pontoId}`) }
+function emProcessamento(tabela, id) { return _progresso.has(chaveFila(tabela, id)) }
+function tirarDaFila(tabela, id) { const i = _fila.indexOf(chaveFila(tabela, id)); if (i >= 0) _fila.splice(i, 1) }
+
+// O Outdoor pluga aqui a lista das TVs dos pontos e a contagem de exibições
+let _outdoor = null
+function registrarOutdoor(api) { _outdoor = api }
 
 // Retorna true se tratou a rota
 async function handle(req, res, ctx) {
@@ -280,8 +378,19 @@ async function handle(req, res, ctx) {
     const versaoApp = String(req.headers['x-tv-versao'] || '').slice(0, 20)
     db.prepare('UPDATE tv_telas SET ultimo_contato=?, tocando=?, app_versao=COALESCE(NULLIF(?,\'\'), app_versao) WHERE id=?')
       .run(agoraISO(), tocando || null, versaoApp, tela.id)
-    const pl = playlistDa(db, tela.tenant_id)
-    send(res, 200, { ...pl, tela: { id: tela.id, nome: tela.nome || '' } })
+    const pl = (tela.ponto_id && _outdoor) ? _outdoor.playlistDoPonto(tela.ponto_id) : playlistDa(db, tela.tenant_id)
+    send(res, 200, { ...pl, tela: { id: tela.id, nome: tela.nome || '', rotacao: tela.rotacao || 0 } })
+    return true
+  }
+
+  // A TV avisa que começou a passar um vídeo (relatório de exibições do Outdoor)
+  if (req.method === 'POST' && upath === '/api/tv/exibiu') {
+    const tela = telaDoToken(req, db, params)
+    if (!tela) { send(res, 401, { error: 'TV desligada' }); return true }
+    const body = await readBody(req).catch(() => ({}))
+    const id = parseInt(body?.id, 10)
+    if (tela.ponto_id && _outdoor && id < 0) { try { _outdoor.registrarExibicao(-id, tela.ponto_id) } catch (e) {} }
+    send(res, 200, { ok: true })
     return true
   }
 
@@ -293,7 +402,7 @@ async function handle(req, res, ctx) {
 
     if (req.method === 'GET' && upath === '/api/tv/gestor/estado') {
       const videos = db.prepare('SELECT id, titulo, arquivo, capa, tamanho, duracao, ordem, ativo, hora_ini, hora_fim, status, erro, created_at FROM tv_videos WHERE tenant_id=? ORDER BY ordem, id').all(tid)
-        .map(v => ({ ...v, progresso: _progresso.has(v.id) ? _progresso.get(v.id) : null, na_fila: v.status === 'processando' && !_progresso.has(v.id) }))
+        .map(v => { const pr = progressoDe('tv_videos', v.id); return { ...v, progresso: pr.progresso, na_fila: v.status === 'processando' && pr.na_fila } })
       send(res, 200, { ativo: liberada, max: MAX_VIDEOS, comprime: temFfmpeg, videos, telas: resumoTelas(db, tid) })
       return true
     }
@@ -304,16 +413,9 @@ async function handle(req, res, ctx) {
     if (req.method === 'POST' && upath === '/api/tv/gestor/telas') {
       if (!ctx.checkRateLimit('tv-vincular:' + tid, 15, 10 * 60 * 1000)) { send(res, 429, { error: 'Muitas tentativas. Aguarde alguns minutos.' }); return true }
       const body = await readBody(req).catch(() => ({}))
-      const codigo = String(body?.codigo || '').replace(/\D/g, '')
-      const p = db.prepare('SELECT * FROM tv_pareamentos WHERE codigo=?').get(codigo)
-      if (!p || Date.now() - p.criado_em > 30 * 60 * 1000) { send(res, 404, { error: 'Código não encontrado. Confira os números que aparecem na TV.' }); return true }
-      if (p.tela_token) { send(res, 409, { error: 'Esse código já foi usado.' }); return true }
-      const token = rnd(24)
-      const n = db.prepare('SELECT COUNT(*) n FROM tv_telas WHERE tenant_id=?').get(tid).n
-      const nome = String(body?.nome || '').trim().slice(0, 60) || `TV ${n + 1}`
-      db.prepare('INSERT INTO tv_telas (tenant_id, nome, token, plataforma, created_at) VALUES (?,?,?,?,?)').run(tid, nome, token, p.plataforma || 'web', agoraISO())
-      db.prepare('UPDATE tv_pareamentos SET tela_token=? WHERE codigo=?').run(token, codigo)
-      log('📺', `[TV] loja ${tid} ligou a tela "${nome}"`)
+      const r = vincularTela(body?.codigo, { tenant_id: tid, nome: body?.nome })
+      if (r.erro) { send(res, r.status, { error: r.erro }); return true }
+      log('📺', `[TV] loja ${tid} ligou a tela "${r.nome}"`)
       send(res, 200, { ok: true, telas: resumoTelas(db, tid) })
       return true
     }
@@ -327,6 +429,7 @@ async function handle(req, res, ctx) {
         const body = await readBody(req).catch(() => ({}))
         const nome = String(body?.nome || '').trim().slice(0, 60)
         if (nome) db.prepare('UPDATE tv_telas SET nome=? WHERE id=?').run(nome, id)
+        if (body && [0, 90, 270].includes(+body.rotacao)) db.prepare('UPDATE tv_telas SET rotacao=? WHERE id=?').run(+body.rotacao, id)
         send(res, 200, { ok: true, telas: resumoTelas(db, tid) }); return true
       }
       if (req.method === 'DELETE') {
@@ -336,50 +439,26 @@ async function handle(req, res, ctx) {
     }
 
     // ── Upload em partes ──
+    const usadosLoja = () => db.prepare(`SELECT COUNT(*) n FROM tv_videos WHERE tenant_id=? AND status<>'erro'`).get(tid).n
     if (req.method === 'POST' && upath === '/api/tv/gestor/upload/iniciar') {
       const body = await readBody(req).catch(() => ({}))
-      const tamanho = Math.floor(+body?.tamanho || 0)
-      const nome = String(body?.nome || 'video').slice(0, 120)
-      if (!(tamanho > 0)) { send(res, 400, { error: 'Arquivo vazio' }); return true }
-      if (tamanho > MAX_ARQUIVO) { send(res, 400, { error: 'Vídeo grande demais (máximo 8 GB).' }); return true }
-      if (!/\.(mp4|mov|m4v|mkv|webm|avi|3gp|mpeg|mpg|wmv)$/i.test(nome) && !String(body?.tipo || '').startsWith('video/')) {
-        send(res, 400, { error: 'Esse arquivo não parece ser um vídeo.' }); return true
-      }
-      const usados = db.prepare(`SELECT COUNT(*) n FROM tv_videos WHERE tenant_id=? AND status<>'erro'`).get(tid).n
-      if (usados >= MAX_VIDEOS) { send(res, 400, { error: `Limite de ${MAX_VIDEOS} vídeos. Apague um para subir outro.` }); return true }
-      const id = rnd(16)
-      fs.writeFileSync(arqTemp(id), Buffer.alloc(0))
-      db.prepare('INSERT INTO tv_uploads (id, tenant_id, nome, tamanho, recebido, criado_em) VALUES (?,?,?,?,0,?)').run(id, tid, nome, tamanho, Date.now())
-      send(res, 200, { upload_id: id, parte: 8 * 1024 * 1024 })
+      const r = uploadIniciar(tid, body, usadosLoja())
+      send(res, r.status || 200, r.erro ? { error: r.erro } : r)
       return true
     }
     if ((m = /^\/api\/tv\/gestor\/upload\/([a-f0-9]{32})$/.exec(upath)) && (req.method === 'PUT' || req.method === 'POST')) {
-      const up = db.prepare('SELECT * FROM tv_uploads WHERE id=? AND tenant_id=?').get(m[1], tid)
-      if (!up) { send(res, 404, { error: 'Envio não encontrado. Comece de novo.' }); return true }
-      const offset = parseInt(params.get('offset') || '0', 10)
-      if (offset !== up.recebido) { send(res, 409, { error: 'fora de ordem', recebido: up.recebido }); return true }
-      let buf
-      try { buf = await lerCorpoBruto(req, MAX_PARTE) } catch (e) { send(res, 413, { error: e.message }); return true }
-      if (up.recebido + buf.length > up.tamanho) { send(res, 400, { error: 'Recebi mais do que o tamanho do arquivo.' }); return true }
-      fs.appendFileSync(arqTemp(up.id), buf)
-      const rec = up.recebido + buf.length
-      db.prepare('UPDATE tv_uploads SET recebido=? WHERE id=?').run(rec, up.id)
-      send(res, 200, { recebido: rec })
+      const r = await uploadParte(req, tid, m[1], params.get('offset'))
+      send(res, r.status, r.corpo)
       return true
     }
     if ((m = /^\/api\/tv\/gestor\/upload\/([a-f0-9]{32})\/concluir$/.exec(upath)) && req.method === 'POST') {
-      const up = db.prepare('SELECT * FROM tv_uploads WHERE id=? AND tenant_id=?').get(m[1], tid)
-      if (!up) { send(res, 404, { error: 'Envio não encontrado. Comece de novo.' }); return true }
-      if (up.recebido !== up.tamanho) { send(res, 400, { error: 'O vídeo não chegou inteiro. Tente de novo.' }); return true }
-      const usados = db.prepare(`SELECT COUNT(*) n FROM tv_videos WHERE tenant_id=? AND status<>'erro'`).get(tid).n
-      if (usados >= MAX_VIDEOS) { try { fs.unlinkSync(arqTemp(up.id)) } catch (e) {} ; db.prepare('DELETE FROM tv_uploads WHERE id=?').run(up.id); send(res, 400, { error: `Limite de ${MAX_VIDEOS} vídeos.` }); return true }
+      const r = uploadConcluir(tid, m[1], usadosLoja())
+      if (r.erro) { send(res, r.status, { error: r.erro }); return true }
       const ordem = (db.prepare('SELECT MAX(ordem) m FROM tv_videos WHERE tenant_id=?').get(tid).m || 0) + 1
-      const titulo = up.nome.replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[_-]+/g, ' ').trim().slice(0, 80) || 'Vídeo'
-      const r = db.prepare(`INSERT INTO tv_videos (tenant_id, titulo, ordem, ativo, status, original, created_at) VALUES (?,?,?,1,'processando',?,?)`)
-        .run(tid, titulo, ordem, path.basename(arqTemp(up.id)), agoraISO())
-      db.prepare('DELETE FROM tv_uploads WHERE id=?').run(up.id)
-      enfileirar(r.lastInsertRowid)
-      send(res, 200, { ok: true, id: r.lastInsertRowid })
+      const ins = db.prepare(`INSERT INTO tv_videos (tenant_id, titulo, ordem, ativo, status, original, created_at) VALUES (?,?,?,1,'processando',?,?)`)
+        .run(tid, r.titulo, ordem, r.original, agoraISO())
+      enfileirar(ins.lastInsertRowid)
+      send(res, 200, { ok: true, id: ins.lastInsertRowid })
       return true
     }
 
@@ -407,8 +486,8 @@ async function handle(req, res, ctx) {
         send(res, 200, { ok: true }); return true
       }
       if (req.method === 'DELETE') {
-        const i = _fila.indexOf(v.id); if (i >= 0) _fila.splice(i, 1)
-        if (_progresso.has(v.id)) { send(res, 409, { error: 'Esse vídeo está sendo preparado agora. Espere terminar para apagar.' }); return true }
+        const i = _fila.indexOf(chaveFila('tv_videos', v.id)); if (i >= 0) _fila.splice(i, 1)
+        if (_progresso.has(chaveFila('tv_videos', v.id))) { send(res, 409, { error: 'Esse vídeo está sendo preparado agora. Espere terminar para apagar.' }); return true }
         db.prepare('DELETE FROM tv_videos WHERE id=?').run(v.id)
         apagarArquivosVideo(v)
         send(res, 200, { ok: true }); return true
@@ -431,4 +510,6 @@ async function handle(req, res, ctx) {
   return false
 }
 
-module.exports = { init, handle }
+module.exports = { init, handle, criarTabelas, enfileirar, progressoDe, emProcessamento, tirarDaFila, apagarArquivosVideo,
+  vincularTela, uploadIniciar, uploadParte, uploadConcluir, telasDoPonto, registrarOutdoor,
+  temCompressor: () => temFfmpeg, MAX_VIDEOS }

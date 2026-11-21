@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>VisseTV</title>
+<link rel="icon" href="/vissetv/vissetv-icone-32.png">
+<link rel="apple-touch-icon" href="/vissetv/vissetv-icone-180.png">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#140a1f">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --tinta:#140a1f; --papel:#f5f2f7; --cartao:#ffffff; --linha:#e3dfd7; --apagado:#6b6f78;
+    --destaque:#d6124a; --destaque-claro:#ffe8ee; --ok:#15803d; --ok-claro:#e8f6ee; --espera:#a16207; --espera-claro:#fdf5dc;
+    --erro:#b91c1c; --erro-claro:#fdecec; --raio:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--papel);color:var(--tinta);font-family:Inter,system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  button,input,select{font:inherit;color:inherit}
+  .esc{display:none!important}
+  .topo{background:var(--tinta);color:#fff;padding:18px 16px 54px}
+  .topo-in{max-width:880px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .marca{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:#c9bcd6}
+  .marca img{height:38px;width:auto;display:block}
+  .sair{background:transparent;border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:9px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer}
+  .ola{max-width:880px;margin:22px auto 0}
+  .ola h1{font-family:Archivo,sans-serif;font-size:clamp(24px,5vw,34px);font-weight:800;line-height:1.1}
+  .ola p{color:#c9ccd3;margin-top:6px;font-size:14px}
+  main{max-width:880px;margin:-34px auto 40px;padding:0 16px;display:flex;flex-direction:column;gap:16px}
+  .cartao{background:var(--cartao);border:1px solid var(--linha);border-radius:var(--raio);overflow:hidden}
+  .cartao-cab{padding:16px 18px;border-bottom:1px solid var(--linha);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .cartao-cab h2{font-family:Archivo,sans-serif;font-size:17px;font-weight:800}
+  .cartao-cab p{font-size:13px;color:var(--apagado);margin-top:2px;max-width:60ch}
+  .cartao-corpo{padding:14px 18px}
+  .numeros{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border-bottom:1px solid var(--linha)}
+  .numeros div{padding:14px 18px}
+  .numeros div+div{border-left:1px solid var(--linha)}
+  .numeros b{display:block;font-family:Archivo,sans-serif;font-size:26px;font-weight:800;line-height:1.1}
+  .numeros span{font-size:12.5px;color:var(--apagado)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:40px;padding:0 16px;border-radius:10px;border:1px solid transparent;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap}
+  a.btn{text-decoration:none}
+  .btn-pri{background:var(--destaque);color:#fff}
+  .btn-pri:hover{filter:brightness(1.06)}
+  .btn-sec{background:#fff;border-color:var(--linha);color:var(--tinta)}
+  .btn-sec:hover{border-color:#cfc9be}
+  .btn-x{background:#fff;border-color:#f3c9c9;color:var(--erro)}
+  .btn-peq{height:34px;padding:0 12px;font-size:13px}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btn:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #ffb3c6;outline-offset:2px}
+  .vazio{padding:16px;border:1px dashed var(--linha);border-radius:12px;color:var(--apagado);font-size:14px}
+  .ponto{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--linha)}
+  .ponto:last-child{border-bottom:0}
+  .ponto-luz{width:10px;height:10px;border-radius:50%;background:#c4c0b7;flex:none}
+  .ponto-luz.on{background:var(--ok);box-shadow:0 0 0 4px var(--ok-claro)}
+  .ponto-info{flex:1;min-width:0}
+  .ponto-info b{font-weight:700}
+  .ponto-info small{display:block;color:var(--apagado);font-size:12.5px}
+  .ponto-n{text-align:right;font-family:Archivo,sans-serif;font-weight:800;font-size:18px;line-height:1.1}
+  .ponto-n small{display:block;font-family:Inter,sans-serif;font-weight:500;font-size:11.5px;color:var(--apagado)}
+  .video{display:grid;grid-template-columns:120px minmax(0,1fr);gap:14px;padding:14px 0;border-bottom:1px solid var(--linha)}
+  .video:last-child{border-bottom:0}
+  .capa{width:120px;aspect-ratio:16/9;border-radius:9px;background:#1d222b;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;color:#8a909b}
+  .capa img{width:100%;height:100%;object-fit:cover}
+  .capa span{position:absolute;right:5px;bottom:5px;background:rgba(0,0,0,.72);color:#fff;font-size:11px;font-weight:700;padding:1px 6px;border-radius:5px}
+  .video-nome{width:100%;border:1px solid transparent;border-radius:8px;padding:4px 6px;margin-left:-6px;font-weight:700;font-size:15px;background:transparent}
+  .video-nome:hover,.video-nome:focus{border-color:var(--linha);background:#fff}
+  .selos{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px}
+  .selo{font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;background:#f0ede7;color:#4b4f57}
+  .selo.ok{background:var(--ok-claro);color:var(--ok)}
+  .selo.esp{background:var(--espera-claro);color:var(--espera)}
+  .selo.erro{background:var(--erro-claro);color:var(--erro)}
+  .motivo{font-size:13px;color:var(--erro);background:var(--erro-claro);border-radius:9px;padding:8px 10px;margin-bottom:8px}
+  .acoes{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .chave{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;user-select:none;margin-right:6px}
+  .chave input{position:absolute;opacity:0;pointer-events:none}
+  .chave i{width:36px;height:21px;border-radius:11px;background:#d8d3c9;position:relative;transition:background .2s;flex:none}
+  .chave i:after{content:'';position:absolute;left:3px;top:3px;width:15px;height:15px;border-radius:50%;background:#fff;transition:left .2s}
+  .chave input:checked+i{background:var(--ok)}
+  .chave input:checked+i:after{left:18px}
+  .chave input:focus-visible+i{outline:3px solid #ffb3c6;outline-offset:2px}
+  .barra{height:6px;border-radius:3px;background:#ece8e0;overflow:hidden;margin:6px 0}
+  .barra i{display:block;height:100%;background:var(--destaque);transition:width .4s}
+  .status{font-size:13px;color:var(--apagado)}
+  .add-tv{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:end;margin-top:12px;padding:12px;border-radius:12px;background:var(--destaque-claro)}
+  label.rot{display:block;font-size:12.5px;font-weight:600;color:var(--apagado);margin-bottom:4px}
+  .campo{width:100%;height:42px;border:1px solid var(--linha);border-radius:10px;padding:0 12px;background:#fff}
+  .codigo{font-family:Archivo,sans-serif;font-weight:800;font-size:22px;letter-spacing:5px;text-align:center}
+  select.campo{padding:0 8px}
+  .tela{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--linha);flex-wrap:wrap}
+  .tela:last-child{border-bottom:0}
+  .tela select{height:34px;border:1px solid var(--linha);border-radius:8px;padding:0 8px;background:#fff;font-size:13px}
+  .ajuda{font-size:13px;color:var(--apagado);margin-top:10px;line-height:1.55}
+  /* Login */
+  .login{min-height:100dvh;display:grid;place-items:center;padding:24px 16px;background:var(--tinta)}
+  .login-caixa{width:100%;max-width:380px;background:var(--cartao);border-radius:18px;padding:28px 24px}
+  .login h1{font-family:Archivo,sans-serif;font-size:26px;font-weight:800;line-height:1.15;margin:16px 0 6px}
+  .login p{color:var(--apagado);font-size:14px;margin-bottom:18px}
+  .login .campo{margin-bottom:12px}
+  .login .btn{width:100%;height:46px;margin-top:4px}
+  .erro-login{color:var(--erro);font-size:13.5px;min-height:20px;margin-top:10px}
+  #aviso{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--tinta);color:#fff;padding:11px 18px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.25);display:none;z-index:50;max-width:calc(100vw - 32px)}
+  #aviso.erro{background:var(--erro)}
+  @media(max-width:600px){
+    .numeros{grid-template-columns:1fr 1fr 1fr}
+    .numeros div{padding:12px}
+    .numeros b{font-size:21px}
+    .video{grid-template-columns:96px minmax(0,1fr);gap:12px}
+    .capa{width:96px}
+    .add-tv{grid-template-columns:1fr}
+  }
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<section class="login esc" id="tela-login">
+  <form class="login-caixa" onsubmit="event.preventDefault();entrar()">
+    <div class="marca"><img src="/vissetv/vissetv-logo.svg" alt="VisseTV" style="height:46px"></div>
+    <h1>Seus anúncios nas TVs da cidade</h1>
+    <p>Entre com o e-mail e a senha que a nossa equipe te passou.</p>
+    <label class="rot" for="l-email">E-mail</label>
+    <input class="campo" id="l-email" type="email" autocomplete="username" required>
+    <label class="rot" for="l-senha">Senha</label>
+    <input class="campo" id="l-senha" type="password" autocomplete="current-password" required>
+    <button class="btn btn-pri" id="l-btn" type="submit">Entrar</button>
+    <div class="erro-login" id="l-erro"></div>
+  </form>
+</section>
+
+<div class="esc" id="tela-painel">
+  <header class="topo">
+    <div class="topo-in">
+      <div class="marca"><img src="/vissetv/vissetv-logo-escuro.svg" alt="VisseTV"></div>
+      <button class="sair" onclick="sair()">Sair</button>
+    </div>
+    <div class="ola"><h1 id="p-nome"></h1><p id="p-sub"></p></div>
+  </header>
+  <main id="p-conteudo"></main>
+</div>
+
+<div id="aviso"></div>
+
+<script>
+'use strict';
+var S = { token: '', dados: null, envios: [], enviando: false, apagar: null, removerTela: null, timer: null };
+try { S.token = localStorage.getItem('od_token') || ''; } catch (e) {}
+// Admin abrindo o painel do anunciante: #sessao=<token>
+(function () {
+  var m = /#sessao=([a-f0-9]{40,})/.exec(location.hash);
+  if (m) { S.token = m[1]; try { localStorage.setItem('od_token', S.token); } catch (e) {} history.replaceState(null, '', location.pathname); }
+})();
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function dur(s) { s = Math.round(+s || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function mb(b) { b = +b || 0; return b >= 1073741824 ? (b / 1073741824).toFixed(1).replace('.', ',') + ' GB' : Math.max(1, Math.round(b / 1048576)) + ' MB'; }
+function num(n) { return (+n || 0).toLocaleString('pt-BR'); }
+function quando(iso) {
+  if (!iso) return 'nunca se conectou';
+  var min = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (min < 2) return 'agora há pouco';
+  if (min < 60) return 'há ' + min + ' min';
+  var h = Math.round(min / 60);
+  return h < 48 ? 'há ' + h + ' h' : 'há ' + Math.round(h / 24) + ' dias';
+}
+var tAviso;
+function aviso(msg, erro) {
+  var a = $('aviso'); a.textContent = msg; a.className = erro ? 'erro' : ''; a.style.display = 'block';
+  clearTimeout(tAviso); tAviso = setTimeout(function () { a.style.display = 'none'; }, 4200);
+}
+
+function api(caminho, opts) {
+  opts = opts || {};
+  var h = { 'Authorization': 'Bearer ' + S.token };
+  if (opts.body !== undefined) h['Content-Type'] = 'application/json';
+  return fetch(caminho, { method: opts.method || 'GET', headers: h, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined })
+    .then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        if (r.status === 401 && caminho !== '/api/outdoor/login') { mostrarLogin(); throw new Error(d.error || 'Entre de novo.'); }
+        if (!r.ok) throw new Error(d.error || 'Não foi possível concluir. Tente de novo.');
+        return d;
+      });
+    });
+}
+
+function mostrarLogin() {
+  S.token = ''; try { localStorage.removeItem('od_token'); } catch (e) {}
+  clearTimeout(S.timer);
+  $('tela-painel').classList.add('esc'); $('tela-login').classList.remove('esc');
+  document.title = 'VisseTV';
+}
+function entrar() {
+  var btn = $('l-btn'); btn.disabled = true; btn.textContent = 'Entrando...'; $('l-erro').textContent = '';
+  api('/api/outdoor/login', { method: 'POST', body: { email: $('l-email').value, senha: $('l-senha').value } })
+    .then(function (d) { S.token = d.token; try { localStorage.setItem('od_token', S.token); } catch (e) {} abrirPainel(); })
+    .catch(function (e) { $('l-erro').textContent = e.message; })
+    .then(function () { btn.disabled = false; btn.textContent = 'Entrar'; });
+}
+function sair() { api('/api/outdoor/sair', { method: 'POST', body: {} }).catch(function () {}); mostrarLogin(); }
+
+function abrirPainel() {
+  $('tela-login').classList.add('esc'); $('tela-painel').classList.remove('esc');
+  carregar();
+}
+function carregar() {
+  return api('/api/outdoor/painel').then(function (d) { S.dados = d; desenhar(); agendar(); }).catch(function (e) { if (S.token) aviso(e.message, true); });
+}
+function agendar() {
+  clearTimeout(S.timer);
+  var ocupado = S.dados && S.dados.videos.some(function (v) { return v.status === 'processando'; });
+  S.timer = setTimeout(function () {
+    var foco = document.activeElement;
+    var digitando = foco && /INPUT|SELECT/.test(foco.tagName) && foco.closest('#p-conteudo');
+    if (digitando) { agendar(); return; }
+    carregar();
+  }, ocupado ? 3000 : 20000);
+}
+
+// ── Desenho ──
+function desenhar() {
+  var d = S.dados, a = d.anunciante;
+  $('p-nome').textContent = a.nome;
+  document.title = a.nome + ' na VisseTV';
+  var totalExib = d.pontos_contratados.reduce(function (s, p) { return s + p.exibicoes_30d; }, 0);
+  $('p-sub').textContent = d.pontos_contratados.length
+    ? 'Seus anúncios aparecem em ' + d.pontos_contratados.length + (d.pontos_contratados.length === 1 ? ' comércio.' : ' comércios.')
+    : 'Seus anúncios ainda não foram colocados em nenhum comércio. Fale com a nossa equipe.';
+  var naRede = d.videos.filter(function (v) { return v.status === 'pronto' && v.ativo && !v.substitui_id; }).length;
+  var ligadas = d.pontos_contratados.reduce(function (s, p) { return s + p.ligadas; }, 0);
+
+  var h = '';
+  h += '<section class="cartao" aria-label="Resumo"><div class="numeros">' +
+    '<div><b>' + num(totalExib) + '</b><span>vezes que seus anúncios passaram nos últimos 30 dias</span></div>' +
+    '<div><b>' + naRede + '</b><span>vídeo(s) no ar</span></div>' +
+    '<div><b>' + ligadas + '</b><span>TV(s) ligada(s) agora onde você aparece</span></div>' +
+    '</div>';
+  h += '<div class="cartao-corpo">' + (d.pontos_contratados.length ? d.pontos_contratados.map(function (p) {
+    return '<div class="ponto"><span class="ponto-luz ' + (p.ligadas ? 'on' : '') + '"></span>' +
+      '<div class="ponto-info"><b>' + esc(p.nome) + '</b><small>' + esc(p.endereco || '') + (p.endereco ? ', ' : '') + (p.ligadas ? 'TV ligada agora' : 'TV desligada agora') + '</small></div>' +
+      '<div class="ponto-n">' + num(p.exibicoes_30d) + '<small>exibições</small></div></div>';
+  }).join('') : '<div class="vazio">Quando a nossa equipe colocar seus anúncios em algum comércio, ele aparece aqui com a contagem de exibições.</div>') + '</div></section>';
+
+  h += desenharVideos(d);
+  if (d.meus_pontos.length) h += desenharMinhaTv(d);
+  $('p-conteudo').innerHTML = h;
+}
+
+function desenharVideos(d) {
+  var play = '<svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M6 4.5v7l5.5-3.5L6 4.5z" fill="currentColor"/></svg>';
+  var lista = d.videos.filter(function (v) { return !v.substitui_id; });
+  var h = '<section class="cartao"><div class="cartao-cab"><div><h2>Seus vídeos</h2>' +
+    '<p>Os vídeos são colocados e trocados pela nossa equipe. Quer mudar um anúncio? É só falar com a gente.</p></div></div><div class="cartao-corpo">';
+  h += lista.map(function (v) {
+    var pronto = v.status === 'pronto';
+    var trocando = d.videos.some(function (x) { return x.substitui_id === v.id; });
+    var selos = '';
+    if (v.status === 'processando') selos = '<span class="selo">Sendo preparado</span>';
+    else if (v.status === 'erro') selos = '<span class="selo erro">Com problema: a equipe vai trocar</span>';
+    else {
+      selos += v.ativo ? '<span class="selo ok">No ar</span>' : '<span class="selo">Pausado</span>';
+      if (trocando) selos += '<span class="selo esp">Versão nova chegando</span>';
+      selos += '<span class="selo">' + num(v.exibicoes_30d) + ' exibições em 30 dias</span>';
+    }
+    return '<div class="video">' +
+      '<a class="capa" ' + (pronto ? 'href="' + esc(v.arquivo) + '" target="_blank" rel="noopener" title="Assistir"' : '') + '>' + (v.capa ? '<img src="' + esc(v.capa) + '" alt="">' : play) + (pronto ? '<span>' + dur(v.duracao) + '</span>' : '') + '</a>' +
+      '<div><div style="font-weight:700;font-size:15px">' + esc(v.titulo) + '</div>' +
+      '<div class="selos">' + selos + '</div>' +
+      (pronto ? '<a class="btn btn-sec btn-peq" href="' + esc(v.arquivo) + '" target="_blank" rel="noopener">Assistir</a>' : '') +
+      '</div></div>';
+  }).join('');
+  if (!lista.length) h += '<div class="vazio">Seus vídeos ainda não foram colocados. Assim que a nossa equipe subir, eles aparecem aqui.</div>';
+  return h + '</div></section>';
+}
+
+function desenharMinhaTv(d) {
+  var h = '<section class="cartao"><div class="cartao-cab"><div><h2>TV do seu comércio</h2><p>Aqui passam os seus vídeos e, entre eles, os anúncios de outros comércios da rede.</p></div></div><div class="cartao-corpo">';
+  d.meus_pontos.forEach(function (p) {
+    if (d.meus_pontos.length > 1) h += '<div style="font-weight:700;margin:6px 0">' + esc(p.nome) + '</div>';
+    h += p.telas.length ? p.telas.map(function (t) {
+      return '<div class="tela"><span class="ponto-luz ' + (t.online ? 'on' : '') + '"></span>' +
+        '<div class="ponto-info"><b>' + esc(t.nome) + '</b><small>' + (t.online ? (t.tocando ? 'Ligada, passando: ' + esc(t.tocando) : 'Ligada') : 'Desligada, último contato ' + quando(t.ultimo_contato)) + '</small></div></div>';
+    }).join('') : '<div class="vazio">A TV ainda não foi ligada. A nossa equipe faz isso na instalação.</div>';
+  });
+  return h + '</div></section>';
+}
+
+if (S.token) abrirPainel(); else mostrarLogin();
+</script>
+</body>
+</html>

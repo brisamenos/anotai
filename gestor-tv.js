@@ -34,6 +34,7 @@ function _tvCss() {
   .tv-tela-nome{font-weight:700;font-size:13.5px}
   .tv-tela-det{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tv-acoes{display:flex;gap:6px;flex-wrap:wrap}
+  .tv-posicao{height:32px;padding:0 8px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:12px;max-width:100%}
   .tv-btn-x{height:32px;padding:0 10px;border-radius:7px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:var(--danger);cursor:pointer;font:inherit;font-size:12px;font-weight:700;white-space:nowrap}
   .tv-add{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:end;margin-top:12px;padding:12px;border-radius:10px;background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent)}
   .tv-add .form-input{margin:0}
@@ -188,6 +189,11 @@ function _tvDesenharTelas() {
             <div class="tv-tela-det">${t.online ? (t.tocando ? 'Ligada, passando: ' + _tvEsc(t.tocando) : 'Ligada') : 'Desligada, último contato ' + _tvQuando(t.ultimo_contato)}${t.plataforma === 'android' ? ' (app Android)' : ' (navegador)'}</div>
           </div>
           <div class="tv-acoes">
+            <select class="tv-posicao" onchange="tvPosicaoTela(${t.id},this.value)" title="Como a TV está pendurada">
+              <option value="0" ${!t.rotacao ? 'selected' : ''}>TV deitada (normal)</option>
+              <option value="270" ${t.rotacao == 270 ? 'selected' : ''}>TV em pé, girada para a direita</option>
+              <option value="90" ${t.rotacao == 90 ? 'selected' : ''}>TV em pé, girada para a esquerda</option>
+            </select>
             <button class="btn bg pf-sm" onclick="tvRenomearTela(${t.id})">Renomear</button>
             <button class="tv-btn-x" onclick="tvRemoverTela(${t.id})">${confirma ? 'Confirmar' : 'Remover'}</button>
           </div>
@@ -200,7 +206,7 @@ function _tvDesenharTelas() {
           <div class="tv-acoes"><button class="btn bg" onclick="tvMostrarAdicionar(false)">Cancelar</button><button class="btn bp" id="tv-add-btn" onclick="tvLigarTela()">Ligar TV</button></div>
         </div>
         <div class="tv-ajuda">
-          <b>Na TV com Android (ou TV box):</b> instale o app EstimaFood TV (na TV, baixe pelo endereço <b>${_tvEsc(location.origin + '/app-tv')}</b>) e abra. <br>
+          <b>Na TV com Android (ou TV box):</b> instale o app VisseTV (na TV, baixe pelo endereço <b>${_tvEsc(location.origin + '/app-tv')}</b>) e abra. <br>
           <b>Em outras TVs (Samsung, LG):</b> abra o navegador da TV e entre em <b>${_tvEsc(linkTv)}</b>. <br>
           Vai aparecer um código de 6 números na TV. Digite ele aqui.
         </div>` : ''}
@@ -223,6 +229,13 @@ async function tvLigarTela() {
     sbToast('err', e.message);
     if (btn) { btn.disabled = false; btn.textContent = 'Ligar TV'; }
   }
+}
+async function tvPosicaoTela(id, valor) {
+  try {
+    const d = await _tvApi('/api/tv/gestor/telas/' + id, { method: 'PATCH', body: { rotacao: +valor } });
+    _tv.estado.telas = d.telas;
+    sbToast('ok', +valor ? 'Pronto. Em alguns segundos a imagem gira na TV. Se ficar de cabeça para baixo, escolha a outra opção "em pé".' : 'Pronto. Em alguns segundos a TV volta ao normal.');
+  } catch (e) { sbToast('err', e.message); }
 }
 async function tvRenomearTela(id) {
   const t = (_tv.estado.telas || []).find(x => x.id === id);
@@ -302,7 +315,7 @@ function _tvDesenharVideos() {
           </div>
         </div>`;
       }).join('')}
-      ${!videos.length && !_tv.envios.length ? '<div class="tv-vazio">Nenhum vídeo ainda. Toque em "Subir vídeo" e escolha um vídeo do celular ou do computador. Vídeos deitados (na horizontal) ficam melhores na TV.</div>' : ''}
+      ${!videos.length && !_tv.envios.length ? '<div class="tv-vazio">Nenhum vídeo ainda. Toque em "Subir vídeo" e escolha um vídeo do celular ou do computador. Use vídeos deitados para TV deitada e vídeos em pé para TV em pé (a posição de cada TV se escolhe em "Suas TVs").</div>' : ''}
     </div>`;
 }
 
