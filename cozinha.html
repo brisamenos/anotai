@@ -175,6 +175,21 @@ svg{display:block}
 .chave.on{background:var(--botao-ok)}
 .chave.on::after{transform:translateX(24px)}
 .painel-acoes{display:flex;gap:10px;margin-top:20px}
+.painel-secao{margin-top:18px;font-family:'Barlow Condensed';font-weight:800;font-size:22px}
+.painel-ajuda{color:var(--tinta-2);font-size:14px;line-height:1.45;margin:2px 0 10px}
+.campo-nome{width:100%;font:700 18px 'Barlow';padding:10px 12px;border-radius:10px;border:2px solid var(--papel-linha);background:#fff;color:var(--tinta)}
+.opcoes-modo{display:flex;gap:8px;margin-bottom:10px}
+.opcoes-modo button{flex:1;padding:11px 8px;border-radius:10px;border:2px solid var(--papel-linha);background:#fff;font-weight:700;font-size:15px;color:var(--tinta-2)}
+.opcoes-modo button.on{border-color:var(--tinta);background:var(--tinta);color:var(--papel)}
+.lista-cats{display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:34vh;overflow:auto;padding:2px}
+.lista-cats label{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;background:#fff;border:2px solid var(--papel-linha);font-weight:600;cursor:pointer;min-width:0}
+.lista-cats label span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lista-cats input{width:20px;height:20px;accent-color:var(--botao-ok);flex:none}
+.lista-cats label.marcada{border-color:var(--botao-ok);background:#effaf4}
+.atalhos-cats{display:flex;gap:14px;margin:8px 0 2px}
+.atalhos-cats button{font-weight:700;color:#1d5fbf;text-decoration:underline;font-size:14px}
+.outros-setores{padding:6px 16px 0;font-size:var(--t-obs);color:var(--tinta-2);font-weight:600}
+.etiqueta.setor{background:#e3f4ea;color:#155c3c}
 .painel-acoes button{flex:1;padding:13px;border-radius:11px;font-weight:800;font-size:17px}
 .btn-claro{background:#efe5d2}
 .btn-sair{background:#fde3e1;color:#8a1f1b}
@@ -185,6 +200,7 @@ svg{display:block}
   .marca span{display:none}
 }
 @media (max-width:560px){
+  .lista-cats{grid-template-columns:1fr}
   .trilho{flex-wrap:wrap}
   .placar{order:3;width:100%;margin-left:0}
   .placa{flex:1;justify-content:center}
@@ -212,7 +228,7 @@ body.embutida .so-tela-cheia{display:none!important}
 <!-- TELA -->
 <div id="app">
   <header class="trilho">
-    <div class="marca"><b>Cozinha</b><span id="nome-loja"></span></div>
+    <div class="marca"><b id="nome-tela">Cozinha</b><span id="nome-loja"></span></div>
     <span class="ponto-conexao" id="conexao" title="Recebendo pedidos em tempo real"></span>
     <div class="placar" aria-live="polite">
       <div class="placa" id="placa-novos"><b id="cont-novos">0</b><span>novos</span></div>
@@ -244,12 +260,27 @@ body.embutida .so-tela-cheia{display:none!important}
 
 <div class="painel-fundo" id="painel-ajustes">
   <div class="painel" role="dialog" aria-modal="true" aria-labelledby="ajustes-titulo">
-    <h2 id="ajustes-titulo">Ajustes da cozinha</h2>
+    <h2 id="ajustes-titulo">Ajustes desta tela</h2>
     <div class="sub">Valem só para esta tela, neste aparelho.</div>
     <div class="linha-ajuste"><span>Faixa amarela depois de (minutos)</span><input type="number" id="aj-morno" min="1" max="120"></div>
     <div class="linha-ajuste"><span>Faixa vermelha depois de (minutos)</span><input type="number" id="aj-atrasado" min="2" max="240"></div>
     <div class="linha-ajuste so-tela-cheia"><span>Som quando chega pedido</span><button class="chave" id="aj-som" type="button" aria-label="Som"></button></div>
-    <div class="linha-ajuste"><span>Pedir confirmação ao recusar</span><span style="color:var(--tinta-2);font-weight:600">sempre</span></div>
+    <div class="linha-ajuste"><span>Esta tela aceita pedidos novos</span><button class="chave" id="aj-aceita" type="button" aria-label="Aceita pedidos novos"></button></div>
+
+    <div class="painel-secao">Nome desta tela</div>
+    <div class="painel-ajuda">Aparece em cima, à esquerda. Ex.: Cozinha, Bar, Churrasqueira, Pizzaria.</div>
+    <input class="campo-nome" id="aj-nome" maxlength="24" placeholder="Cozinha">
+
+    <div class="painel-secao">O que aparece nesta tela</div>
+    <div class="painel-ajuda">Igual à impressão por setor: escolha as categorias do cardápio que este setor prepara. Os outros itens do pedido não aparecem aqui.</div>
+    <div class="opcoes-modo">
+      <button type="button" data-modo="todas">Todas as categorias</button>
+      <button type="button" data-modo="escolher">Escolher categorias</button>
+    </div>
+    <div id="aj-cats-caixa">
+      <div class="lista-cats" id="aj-cats"></div>
+      <div class="atalhos-cats"><button type="button" id="aj-cats-todas">Marcar todas</button><button type="button" id="aj-cats-nenhuma">Desmarcar todas</button></div>
+    </div>
     <div class="painel-acoes">
       <button class="btn-claro" id="aj-fechar" type="button">Fechar</button>
       <button class="btn-sair so-tela-cheia" id="aj-sair" type="button">Sair desta tela</button>
@@ -271,7 +302,10 @@ body.embutida .so-tela-cheia{display:none!important}
   const pedidos = new Map();    // id -> pedido (como vem do servidor)
   let filtro = 'todos';
   let eventos = null;
-  const ajustes = Object.assign({ morno: 10, atrasado: 20, som: !EMBUTIDA }, lerJSON(localStorage, CHAVE_AJUSTES) || {});
+  // cats: null = todas as categorias; ou lista de categorias (nome normalizado) que esta tela mostra
+  const ajustes = Object.assign({ morno: 10, atrasado: 20, som: !EMBUTIDA, nome: 'Cozinha', cats: null, semCat: true, aceita: true }, lerJSON(localStorage, CHAVE_AJUSTES) || {});
+  let categorias = [];          // categorias do cardápio
+  const produtoPorId = new Map(), produtoPorNome = new Map();
   const recusando = new Set();  // id do pedido no segundo toque de "Recusar"
   const conhecidas = new Set(); // comandas já mostradas (para animar só as novas)
   let primeiraCarga = true;
@@ -348,10 +382,25 @@ body.embutida .so-tela-cheia{display:none!important}
       const c = Array.isArray(cfg) ? cfg[0] : cfg;
       if (c) { offsetNumero = parseInt(c.order_num_offset, 10) || 0; if (c.store_name) $('nome-loja').textContent = c.store_name; }
     } catch (e) { if (!sessao) return; }
+    await carregarCardapio();
     await carregarPedidos();
     ligarTempoReal();
     manterTelaAcesa();
   }
+
+  // Categorias e produtos: servem para saber de qual categoria é cada item do pedido
+  async function carregarCardapio() {
+    try {
+      const [cats, prods] = await Promise.all([
+        api('/api/categories?select=id,name,label,sort_order&order=sort_order.asc'),
+        api('/api/menu_items?select=id,name,cat,cat_key,category_id')
+      ]);
+      categorias = (cats || []).filter(c => c && c.name);
+      produtoPorId.clear(); produtoPorNome.clear();
+      (prods || []).forEach(m => { produtoPorId.set(String(m.id), m); produtoPorNome.set(norm(m.name), m); });
+    } catch (e) {}
+  }
+  setInterval(() => { if (sessao) carregarCardapio(); }, 10 * 60000);
 
   async function carregarPedidos() {
     try {
@@ -414,26 +463,59 @@ body.embutida .so-tela-cheia{display:none!important}
   }
   const pagamentoOnlinePendente = o => o.status === 'aguardando_cartao' || o.status === 'aguardando_pix';
 
+  // ── Categorias: igual à impressão por setor ──
+  const norm = v => String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const filtrandoCategorias = () => Array.isArray(ajustes.cats);
+  // Categoria do item (nome normalizado). Usa o que veio no pedido e, se não
+  // tiver, procura o produto no cardápio. '' = não deu para saber.
+  function categoriaDe(it) {
+    let chaves = [it.cat_key, it.catKey, it.cat].filter(Boolean).map(norm);
+    if (!chaves.length) {
+      const m = (it.id != null && produtoPorId.get(String(it.id))) || produtoPorNome.get(norm(it.name));
+      if (m) {
+        chaves = [m.cat_key, m.cat].filter(Boolean).map(norm);
+        const c = categorias.find(x => String(x.id) === String(m.category_id));
+        if (c) chaves.push(norm(c.name));
+      }
+    }
+    for (const k of chaves) {
+      const c = categorias.find(x => norm(x.name) === k || norm(x.label) === k);
+      if (c) return norm(c.name);
+    }
+    return chaves[0] || '';
+  }
+  function itemDestaTela(it) {
+    if (!filtrandoCategorias()) return true;
+    const c = categoriaDe(it);
+    if (!c) return ajustes.semCat !== false;
+    return ajustes.cats.includes(c);
+  }
+
   // Uma comanda por pedido normal; na mesa, uma comanda por envio do garçom
   function montarComandas() {
     const novas = [], preparo = [];
     pedidos.forEach(o => {
       if (pagamentoOnlinePendente(o)) return;
       const itens = itensDe(o);
+      const pendentes = itens.map((it, i) => ({ it, i })).filter(x => x.it.item_status !== 'cancelado' && x.it.item_status !== 'pronto' && x.it.item_status !== 'entregue');
+      const meus = pendentes.filter(x => itemDestaTela(x.it));
+      const outros = pendentes.length - meus.length;
       if (o.status === 'analise' && o.pag !== 'pix_mp') {
+        if (!ajustes.aceita || !meus.length) return;
         novas.push({ chave: 'n-' + o.id, tipo: 'novo', pedido: o, tipoEntrega: tipoDe(o), inicio: dataDe(o.created_at),
-          linhas: agrupar(itens.map((it, i) => ({ it, i }))) });
+          linhas: agrupar(meus), outros });
         return;
       }
       if (o.status === 'producao' || (o.status === 'analise' && o.pag === 'pix_mp')) {
+        if (!meus.length) return;
         preparo.push({ chave: 'p-' + o.id, tipo: 'pedido', pedido: o, tipoEntrega: tipoDe(o), inicio: dataDe(o.created_at),
-          linhas: agrupar(itens.map((it, i) => ({ it, i })).filter(x => x.it.item_status !== 'cancelado')) });
+          linhas: agrupar(meus), outros });
         return;
       }
       if (o.status === 'mesa_aberta') {
         const lotes = new Map();
         itens.forEach((it, i) => {
-          if (it.item_status !== 'producao') return;
+          if (it.item_status !== 'producao' || !itemDestaTela(it)) return;
           const lote = loteDe(it);
           if (!lotes.has(lote)) lotes.set(lote, []);
           lotes.get(lote).push({ it, i });
@@ -544,6 +626,7 @@ body.embutida .so-tela-cheia{display:none!important}
       </div>
       <div class="cab">${etiquetas.join('')}${quem ? `<span class="quem">${esc(quem)}</span>` : ''}</div>
       <ul class="itens">${itens}</ul>
+      ${c.outros ? `<div class="outros-setores">+ ${c.outros} ${c.outros > 1 ? 'itens' : 'item'} de outro setor</div>` : ''}
       <div class="acoes">${acoes}</div>`;
   }
   function fmtQtd(q) { return Number.isInteger(q) ? String(q) : String(Math.round(q * 1000) / 1000).replace('.', ','); }
@@ -661,6 +744,7 @@ body.embutida .so-tela-cheia{display:none!important}
   async function prontoPedido(c, b) {
     if (!c) return;
     const o = c.pedido;
+    if (filtrandoCategorias() || c.outros) return prontoPedidoSetor(c, b);
     travar(b);
     try {
       await mudarStatus(o.id, 'pronto');
@@ -672,6 +756,41 @@ body.embutida .so-tela-cheia{display:none!important}
       });
     } catch (e) { soltar(b); avisar(e.message, null, true); }
   }
+  // Pedido com itens de vários setores: marca só os itens desta tela. Quando
+  // todos os setores terminam, o pedido inteiro vai para "Pronto" (igual ao gestor).
+  async function prontoPedidoSetor(c, b) {
+    const o = c.pedido;
+    const indices = new Set(c.linhas.flatMap(l => l.indices));
+    travar(b);
+    try {
+      const r = await marcarItensPedido(o.id, indices, 'pronto');
+      const nome = c.tipoEntrega === 'mesa' && o.mesa_num ? 'Mesa ' + o.mesa_num : '#' + String(numeroDe(o)).padStart(3, '0');
+      avisar(r.terminou ? `${nome} pronto.` : `${nome}: sua parte está pronta. Falta outro setor.`, async () => {
+        await marcarItensPedido(o.id, indices, null, r.terminou);
+      });
+    } catch (e) { soltar(b); avisar(e.message, null, true); }
+  }
+  async function marcarItensPedido(orderId, indices, para, voltarStatus) {
+    const lista = await api('/api/orders?select=*&id=eq.' + orderId);
+    const atual = Array.isArray(lista) ? lista[0] : lista;
+    if (!atual) throw new Error('Pedido não encontrado.');
+    const novos = itensDe(atual).map((it, i) => {
+      if (!indices.has(i) || it.item_status === 'cancelado') return it;
+      const n = { ...it };
+      if (para) n.item_status = para; else delete n.item_status;
+      return n;
+    });
+    await api('/api/orders?id=eq.' + orderId, { method: 'PATCH', body: { items: novos, updated_at: new Date().toISOString() } });
+    let terminou = false, status = atual.status;
+    if (para === 'pronto' && novos.every(it => it.item_status === 'pronto' || it.item_status === 'cancelado' || it.item_status === 'entregue')) {
+      await mudarStatus(orderId, 'pronto'); terminou = true; status = 'pronto';
+    }
+    if (!para && voltarStatus) { await mudarStatus(orderId, 'producao'); status = 'producao'; }
+    if (status === 'pronto') pedidos.delete(atual.id); else pedidos.set(atual.id, { ...atual, items: novos, status });
+    desenhar();
+    return { terminou };
+  }
+
   // Mesa: marca como pronto um item (linha) ou a comanda toda. Busca a comanda
   // atualizada antes de gravar, para não apagar item que o garçom acabou de lançar.
   async function prontoMesa(c, linha, b) {
@@ -778,17 +897,62 @@ body.embutida .so-tela-cheia{display:none!important}
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else document.documentElement.requestFullscreen().catch(() => {});
   });
-  $('btn-ajustes').addEventListener('click', () => {
+  let rascunhoCats = null; // escolha em andamento no painel
+  $('btn-ajustes').addEventListener('click', async () => {
     $('aj-morno').value = ajustes.morno; $('aj-atrasado').value = ajustes.atrasado;
+    $('aj-nome').value = ajustes.nome || '';
+    $('aj-aceita').classList.toggle('on', ajustes.aceita !== false);
+    rascunhoCats = filtrandoCategorias() ? [...ajustes.cats] : null;
+    desenharCategoriasPainel();
     $('painel-ajustes').classList.add('on');
+    await carregarCardapio();
+    desenharCategoriasPainel();
   });
+  function desenharCategoriasPainel() {
+    const escolher = Array.isArray(rascunhoCats);
+    document.querySelectorAll('[data-modo]').forEach(b => b.classList.toggle('on', (b.dataset.modo === 'escolher') === escolher));
+    $('aj-cats-caixa').style.display = escolher ? '' : 'none';
+    if (!escolher) return;
+    const lista = categorias.map(c => ({ k: norm(c.name), t: c.label || c.name }));
+    lista.push({ k: '__sem__', t: 'Itens sem categoria' });
+    $('aj-cats').innerHTML = lista.map(c => {
+      const on = c.k === '__sem__' ? ajustes.semCat !== false && rascunhoCats.__sem !== false : rascunhoCats.includes(c.k);
+      return `<label class="${on ? 'marcada' : ''}"><input type="checkbox" data-cat="${esc(c.k)}" ${on ? 'checked' : ''}><span>${esc(c.t)}</span></label>`;
+    }).join('') || '<div class="painel-ajuda">Nenhuma categoria no cardápio.</div>';
+  }
+  document.querySelectorAll('[data-modo]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.modo === 'escolher') { if (!Array.isArray(rascunhoCats)) rascunhoCats = categorias.map(c => norm(c.name)); }
+    else rascunhoCats = null;
+    desenharCategoriasPainel();
+  }));
+  $('aj-cats').addEventListener('change', ev => {
+    const k = ev.target.dataset.cat; if (!k || !Array.isArray(rascunhoCats)) return;
+    if (k === '__sem__') ajustes.semCat = ev.target.checked;
+    else if (ev.target.checked) { if (!rascunhoCats.includes(k)) rascunhoCats.push(k); }
+    else rascunhoCats = rascunhoCats.filter(x => x !== k);
+    ev.target.closest('label').classList.toggle('marcada', ev.target.checked);
+  });
+  $('aj-cats-todas').addEventListener('click', () => { rascunhoCats = categorias.map(c => norm(c.name)); ajustes.semCat = true; desenharCategoriasPainel(); });
+  $('aj-cats-nenhuma').addEventListener('click', () => { rascunhoCats = []; ajustes.semCat = false; desenharCategoriasPainel(); });
+  $('aj-aceita').addEventListener('click', () => $('aj-aceita').classList.toggle('on'));
   function fecharAjustes() {
     const m = Math.max(1, parseInt($('aj-morno').value, 10) || 10);
     const a = Math.max(m + 1, parseInt($('aj-atrasado').value, 10) || 20);
-    ajustes.morno = m; ajustes.atrasado = a; salvarAjustes();
+    ajustes.morno = m; ajustes.atrasado = a;
+    ajustes.nome = $('aj-nome').value.trim().slice(0, 24) || 'Cozinha';
+    ajustes.aceita = $('aj-aceita').classList.contains('on');
+    ajustes.cats = Array.isArray(rascunhoCats) ? rascunhoCats : null;
+    salvarAjustes();
     $('painel-ajustes').classList.remove('on');
+    aplicarNomeTela();
+    desenhar();
     atualizarTempos();
   }
+  function aplicarNomeTela() {
+    $('nome-tela').textContent = ajustes.nome || 'Cozinha';
+    document.title = (ajustes.nome || 'Cozinha') + ' · EstimaFood';
+  }
+  aplicarNomeTela();
   $('aj-fechar').addEventListener('click', fecharAjustes);
   $('painel-ajustes').addEventListener('click', ev => { if (ev.target === $('painel-ajustes')) fecharAjustes(); });
   $('aj-sair').addEventListener('click', () => { $('painel-ajustes').classList.remove('on'); sair(false); });
