@@ -183,6 +183,7 @@ function nav(id) {
   if (id === 'impressao') renderImpressao();
   if (typeof tvPararAtualizacao === 'function') tvPararAtualizacao();
   if (id === 'tv' && typeof tvRender === 'function') tvRender();
+  if (id === 'cozinha') cozinhaMostrar();
   if (id === 'caixa') _renderCaixaTela();
   if (id === 'configuracoes') _renderConfiguracoes();
   if (id === 'saques') { carregarCarteira(); conectarSaquesSSE(); carregarConfigPixGestor(); }
@@ -4525,4 +4526,26 @@ async function kanbanMesaServido(orderId) {
     _renderMesaPageFromCache();
     sbToast('ok', 'Mesa ' + order.mesa_num + ' — itens servidos!');
   } catch(e) { sbToast('err', 'Erro: ' + (e?.message || e)); }
+}
+
+
+// ─────────────────────────────────────────
+// TELA DA COZINHA (KDS) dentro do gestor: a mesma página /cozinha, embutida.
+// Usa a sessão do gestor (mesma aba), então não pede login aqui.
+function cozinhaMostrar() {
+  const caixa = document.getElementById('coz-moldura');
+  const link = location.origin + '/cozinha';
+  const t = document.getElementById('coz-link-txt'); if (t) t.textContent = link;
+  if (caixa && !caixa.querySelector('iframe')) {
+    caixa.innerHTML = '<iframe src="/cozinha?embutida=1" title="Tela da cozinha" style="width:100%;height:100%;border:0;display:block" allow="fullscreen; screen-wake-lock"></iframe>';
+  }
+}
+function cozinhaAbrirTelaCheia() {
+  // Abre numa aba nova já entrando com a sessão do gestor
+  window.open('/cozinha', '_blank');
+}
+async function cozinhaCopiarLink() {
+  const link = location.origin + '/cozinha';
+  try { await navigator.clipboard.writeText(link); if (typeof sbToast === 'function') sbToast('ok', 'Link copiado: ' + link); }
+  catch (e) { prompt('Copie o link da tela da cozinha:', link); }
 }

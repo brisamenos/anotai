@@ -10795,6 +10795,11 @@ const server = http.createServer(async (req,res) => {
     const fpath=path.join(__dirname,'outdoor.html')
     if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
   }
+  // ── Tela da cozinha (KDS): pedidos em preparo em tempo real ──
+  if(req.method==='GET'&&(upath==='/cozinha'||upath==='/cozinha/')){
+    const fpath=path.join(__dirname,'cozinha.html')
+    if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
+  }
   if(req.method==='GET'&&(upath==='/tv'||upath==='/tv/')){
     const fpath=path.join(__dirname,'tv.html')
     if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}

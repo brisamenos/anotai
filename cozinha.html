@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#15171a">
+<meta name="robots" content="noindex">
+<title>Cozinha · EstimaFood</title>
+<link rel="icon" href="/favicon-gestor.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Tela da cozinha (KDS): cada pedido é uma comanda de papel presa no trilho.
+   A cor da faixa de cima mostra há quanto tempo o pedido está esperando. */
+:root{
+  --fundo:#15171a; --trilho:#24282d; --trilho-borda:#363b42;
+  --papel:#fbf5e9; --papel-linha:#e7dcc6; --tinta:#1a1714; --tinta-2:#5d554b;
+  --novo:#ffc531; --fresco:#22a06b; --morno:#f0a020; --atrasado:#e5484d;
+  --botao-ok:#1f8f5f; --botao-ok-2:#24a86f;
+  --texto-claro:#eef0f2; --texto-apagado:#9aa1a9;
+  --raio:14px;
+  --t-num: clamp(30px, 2.6vw, 54px);
+  --t-item: clamp(21px, 1.55vw, 34px);
+  --t-obs: clamp(15px, 1.05vw, 23px);
+  --t-base: clamp(14px, .95vw, 20px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--fundo);color:var(--texto-claro);font-family:'Barlow',system-ui,sans-serif;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+body{overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--novo);outline-offset:2px}
+.cond{font-family:'Barlow Condensed',system-ui,sans-serif}
+svg{display:block}
+
+/* ── Login ── */
+#tela-login[hidden]{display:none}
+#tela-login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:radial-gradient(900px 500px at 15% 0%,rgba(255,197,49,.07),transparent 60%),var(--fundo)}
+.login-cartao{width:min(420px,100%);background:var(--papel);color:var(--tinta);border-radius:18px;padding:30px 28px 26px;
+  box-shadow:0 30px 80px rgba(0,0,0,.45);position:relative}
+.login-cartao::before{content:"";position:absolute;left:18px;right:18px;top:-9px;height:18px;border-radius:9px;background:var(--trilho);box-shadow:0 0 0 1px var(--trilho-borda)}
+.login-titulo{font-family:'Barlow Condensed';font-weight:800;font-size:40px;line-height:1;letter-spacing:-.5px}
+.login-sub{color:var(--tinta-2);font-size:15px;margin:8px 0 22px;line-height:1.45}
+.campo{display:block;margin-bottom:14px}
+.campo span{display:block;font-weight:700;font-size:13px;margin-bottom:6px;color:var(--tinta-2)}
+.campo input{width:100%;font:600 17px 'Barlow';padding:13px 14px;border-radius:11px;border:2px solid var(--papel-linha);background:#fff;color:var(--tinta);outline:none}
+.campo input:focus{border-color:var(--tinta)}
+.btn-grande{width:100%;padding:15px;border-radius:12px;background:var(--tinta);color:var(--papel);font:800 20px 'Barlow Condensed';letter-spacing:.3px}
+.btn-grande:disabled{opacity:.6}
+.login-erro{color:#b3261e;font-weight:600;font-size:14px;min-height:20px;margin-top:10px}
+
+/* ── Trilho (barra de cima) ── */
+#app{display:none;height:100%;flex-direction:column}
+#app.on{display:flex}
+.trilho{flex:none;display:flex;align-items:center;gap:14px;padding:10px clamp(12px,1.4vw,26px);
+  background:linear-gradient(180deg,#2b3036,var(--trilho));border-bottom:2px solid #0d0e10;box-shadow:0 6px 20px rgba(0,0,0,.35);position:relative;z-index:5}
+.marca{display:flex;align-items:baseline;gap:10px;min-width:0}
+.marca b{font-family:'Barlow Condensed';font-weight:800;font-size:clamp(24px,1.9vw,38px);letter-spacing:-.3px}
+.marca span{color:var(--texto-apagado);font-weight:600;font-size:var(--t-base);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:28vw}
+.placar{display:flex;gap:8px;margin-left:auto}
+.placa{display:flex;align-items:baseline;gap:7px;padding:6px 13px;border-radius:10px;background:rgba(0,0,0,.25);border:1px solid var(--trilho-borda)}
+.placa b{font-family:'Barlow Condensed';font-weight:800;font-size:clamp(22px,1.6vw,34px);line-height:1}
+.placa span{font-size:var(--t-base);color:var(--texto-apagado);font-weight:600}
+.placa.alerta{background:var(--novo);border-color:var(--novo);color:#1a1300}
+.placa.alerta span{color:#3d2f00}
+.filtros{display:flex;gap:4px;padding:4px;border-radius:11px;background:rgba(0,0,0,.25);border:1px solid var(--trilho-borda)}
+.filtros button{padding:7px 13px;border-radius:8px;font-weight:700;font-size:var(--t-base);color:var(--texto-apagado)}
+.filtros button.on{background:var(--texto-claro);color:var(--tinta)}
+.relogio{font-family:'Barlow Condensed';font-weight:700;font-size:clamp(22px,1.6vw,34px);min-width:3.2em;text-align:right;font-variant-numeric:tabular-nums}
+.icone-btn{width:44px;height:44px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);border:1px solid var(--trilho-borda);color:var(--texto-claro)}
+.icone-btn svg{width:22px;height:22px}
+.icone-btn.desligado{color:var(--atrasado)}
+.ponto-conexao{width:10px;height:10px;border-radius:50%;background:var(--fresco);box-shadow:0 0 0 4px rgba(34,160,107,.2);flex:none}
+.ponto-conexao.off{background:var(--atrasado);box-shadow:0 0 0 4px rgba(229,72,77,.25)}
+
+/* ── Faixa de pedidos novos (esperando aceitar) ── */
+.chegando{flex:none;display:none;gap:14px;padding:14px clamp(12px,1.4vw,26px);overflow-x:auto;
+  background:repeating-linear-gradient(135deg,rgba(255,197,49,.10) 0 18px,rgba(255,197,49,.04) 18px 36px);border-bottom:2px solid rgba(255,197,49,.35)}
+.chegando.on{display:flex}
+.chegando{max-height:50vh;align-items:flex-start}
+.comanda.nova{max-height:calc(50vh - 30px)}
+.comanda.nova .itens{overflow-y:auto;min-height:0}
+.chegando-rotulo{flex:none;writing-mode:vertical-rl;transform:rotate(180deg);font-family:'Barlow Condensed';font-weight:800;letter-spacing:2px;color:var(--novo);font-size:18px;text-align:center}
+
+/* ── Quadro de comandas ── */
+.quadro{flex:1;overflow-y:auto;padding:18px clamp(12px,1.4vw,26px) 40px;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(290px,22vw,460px),1fr));grid-auto-rows:max-content;gap:clamp(12px,1vw,22px);align-content:start;align-items:start}
+.vazio{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:55vh;color:var(--texto-apagado);text-align:center}
+.vazio b{font-family:'Barlow Condensed';font-weight:800;font-size:clamp(30px,2.6vw,52px);color:var(--texto-claro)}
+.vazio p{font-size:clamp(16px,1.1vw,22px);max-width:30ch;line-height:1.45}
+.vazio svg{width:clamp(70px,6vw,120px);height:auto;opacity:.7}
+
+/* Comanda */
+.comanda{background:var(--papel);color:var(--tinta);border-radius:var(--raio);display:flex;flex-direction:column;
+  box-shadow:0 2px 0 rgba(0,0,0,.25),0 14px 30px rgba(0,0,0,.35);position:relative;overflow:hidden;min-height:220px}
+.comanda::after{content:"";position:absolute;left:0;right:0;bottom:0;height:10px;
+  background:radial-gradient(circle at 7px -2px,transparent 7px,var(--papel) 7.5px) repeat-x;background-size:14px 10px;display:none}
+.faixa{--cor:var(--fresco);background:var(--cor);color:#fff;display:flex;align-items:center;gap:10px;padding:10px 16px;transition:background .6s}
+.faixa.morno{--cor:var(--morno);color:#2a1a00}
+.faixa.atrasado{--cor:var(--atrasado)}
+.faixa .num{font-family:'Barlow Condensed';font-weight:800;font-size:var(--t-num);line-height:.95;letter-spacing:-.5px;white-space:nowrap}
+.faixa .tempo{margin-left:auto;text-align:right;line-height:1}
+.faixa .tempo b{font-family:'Barlow Condensed';font-weight:800;font-size:calc(var(--t-num)*.8);font-variant-numeric:tabular-nums}
+.faixa .tempo small{display:block;font-weight:700;font-size:calc(var(--t-base)*.85);opacity:.85;margin-top:2px}
+.faixa.atrasado .num,.faixa.atrasado .tempo b{animation:piscar 1.6s ease-in-out infinite}
+@keyframes piscar{50%{opacity:.55}}
+.cab{padding:10px 16px 8px;border-bottom:2px dashed var(--papel-linha);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.etiqueta{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:99px;font-weight:700;font-size:var(--t-base);background:#efe5d2;color:var(--tinta)}
+.etiqueta svg{width:1em;height:1em}
+.etiqueta.mesa{background:#1a1714;color:var(--papel)}
+.etiqueta.delivery{background:#dbe8ff;color:#123a7a}
+.etiqueta.retirada{background:#ffe7c2;color:#6b3a00}
+.etiqueta.agendado{background:#e9ddff;color:#45207a}
+.cab .quem{font-weight:600;color:var(--tinta-2);font-size:var(--t-base);width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.itens{list-style:none;padding:6px 0;flex:1}
+.item{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:start;padding:9px 16px;border-bottom:1px solid var(--papel-linha)}
+.item:last-child{border-bottom:0}
+.item .qtd{font-family:'Barlow Condensed';font-weight:800;font-size:var(--t-item);line-height:1.05;min-width:1.7em;text-align:center;background:var(--tinta);color:var(--papel);border-radius:8px;padding:1px 6px}
+.item .nome{font-family:'Barlow Condensed';font-weight:700;font-size:var(--t-item);line-height:1.08;letter-spacing:.1px}
+.item .para{display:block;font-family:'Barlow';font-weight:600;font-size:var(--t-obs);color:var(--tinta-2);margin-top:2px}
+.obs{grid-column:2/4;font-size:var(--t-obs);line-height:1.35;color:var(--tinta)}
+.obs .grupo{margin-top:3px}
+.obs .grupo b{font-weight:700;color:var(--tinta-2)}
+.obs .livre{margin-top:5px;padding:5px 9px;border-radius:7px;background:#fff1c2;border-left:5px solid #e0a300;font-weight:700}
+.item-check{width:46px;height:46px;border-radius:12px;border:2px solid var(--papel-linha);display:flex;align-items:center;justify-content:center;color:var(--tinta-2);background:#fff;flex:none}
+.item-check svg{width:24px;height:24px}
+.item-check:active{transform:scale(.94)}
+.acoes{padding:12px 14px 14px;display:flex;gap:10px}
+.btn-pronto{flex:1;display:flex;align-items:center;justify-content:center;gap:10px;padding:clamp(14px,1.1vw,22px);border-radius:12px;
+  background:linear-gradient(180deg,var(--botao-ok-2),var(--botao-ok));color:#fff;font-family:'Barlow Condensed';font-weight:800;font-size:clamp(22px,1.6vw,34px);letter-spacing:.5px;
+  box-shadow:0 4px 0 #136944}
+.btn-pronto svg{width:1.1em;height:1.1em}
+.btn-pronto:active{transform:translateY(3px);box-shadow:0 1px 0 #136944}
+.btn-recusar{padding:0 18px;border-radius:12px;background:#efe5d2;color:#8a1f1b;font-family:'Barlow Condensed';font-weight:800;font-size:clamp(18px,1.3vw,28px)}
+.btn-recusar.confirma{background:var(--atrasado);color:#fff}
+
+/* Pedido novo (faixa de cima) */
+.comanda.nova{flex:none;width:clamp(300px,24vw,470px);min-height:0;box-shadow:0 0 0 4px var(--novo),0 14px 30px rgba(0,0,0,.45);animation:chamar 1.4s ease-in-out infinite}
+.comanda.nova .faixa{--cor:var(--novo);color:#1a1300}
+.comanda.nova .btn-pronto{background:linear-gradient(180deg,#2b2620,#14110e);box-shadow:0 4px 0 #000}
+@keyframes chamar{50%{box-shadow:0 0 0 10px rgba(255,197,49,.25),0 14px 30px rgba(0,0,0,.45)}}
+
+/* Entrar e sair */
+.comanda.entrando{animation:entrar .5s cubic-bezier(.2,.9,.3,1.2) both}
+.comanda.nova.entrando{animation:entrar .5s cubic-bezier(.2,.9,.3,1.2) both,chamar 1.4s ease-in-out .5s infinite}
+.comanda.destaque{box-shadow:0 0 0 4px var(--novo),0 14px 30px rgba(0,0,0,.35)}
+.comanda.saindo{animation:sair .45s ease-in forwards;pointer-events:none}
+@keyframes entrar{from{opacity:0;transform:translateY(-30px) rotate(-1.5deg) scale(.96)}to{opacity:1;transform:none}}
+@keyframes sair{to{opacity:0;transform:translateY(-40px) scale(.92)}}
+@media (prefers-reduced-motion:reduce){.comanda,.comanda.entrando,.comanda.saindo,.comanda.nova{animation:none!important}.faixa.atrasado .num,.faixa.atrasado .tempo b{animation:none}}
+
+/* Aviso com "desfazer" */
+.aviso{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(140%);display:flex;align-items:center;gap:16px;
+  background:#0d0e10;border:1px solid var(--trilho-borda);color:var(--texto-claro);padding:12px 12px 12px 20px;border-radius:14px;
+  font-weight:700;font-size:clamp(16px,1.1vw,22px);box-shadow:0 16px 40px rgba(0,0,0,.5);transition:transform .25s;z-index:30;max-width:calc(100vw - 32px)}
+.aviso.on{transform:translateX(-50%) translateY(0)}
+.aviso button{padding:10px 16px;border-radius:10px;background:var(--texto-claro);color:var(--tinta);font-weight:800}
+.aviso.erro{border-color:var(--atrasado)}
+
+/* Toque para ativar o som */
+.som-bloqueado{position:fixed;inset:auto 0 0 0;display:none;justify-content:center;padding:14px;z-index:25;pointer-events:none}
+.som-bloqueado.on{display:flex}
+.som-bloqueado div{pointer-events:auto;background:var(--novo);color:#1a1300;font-weight:800;padding:12px 20px;border-radius:12px;font-size:18px;box-shadow:0 12px 30px rgba(0,0,0,.45)}
+
+/* Ajustes */
+.painel-fundo{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:18px;z-index:40}
+.painel-fundo.on{display:flex}
+.painel{width:min(460px,100%);background:var(--papel);color:var(--tinta);border-radius:18px;padding:24px;max-height:92vh;overflow:auto}
+.painel h2{font-family:'Barlow Condensed';font-weight:800;font-size:30px;margin-bottom:4px}
+.painel .sub{color:var(--tinta-2);margin-bottom:18px;line-height:1.45}
+.linha-ajuste{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid var(--papel-linha);font-weight:600}
+.linha-ajuste input[type=number]{width:84px;font:700 18px 'Barlow';padding:8px 10px;border-radius:9px;border:2px solid var(--papel-linha);text-align:center}
+.chave{width:56px;height:32px;border-radius:99px;background:#d8ccb4;position:relative;flex:none;transition:background .2s}
+.chave::after{content:"";position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.chave.on{background:var(--botao-ok)}
+.chave.on::after{transform:translateX(24px)}
+.painel-acoes{display:flex;gap:10px;margin-top:20px}
+.painel-acoes button{flex:1;padding:13px;border-radius:11px;font-weight:800;font-size:17px}
+.btn-claro{background:#efe5d2}
+.btn-sair{background:#fde3e1;color:#8a1f1b}
+
+/* Telas menores (tablet em pé, celular) */
+@media (max-width:900px){
+  .filtros{display:none}
+  .marca span{display:none}
+}
+@media (max-width:560px){
+  .trilho{flex-wrap:wrap}
+  .placar{order:3;width:100%;margin-left:0}
+  .placa{flex:1;justify-content:center}
+  .quadro{grid-template-columns:1fr;padding:12px}
+  .comanda.nova{width:86vw}
+}
+/* Embutida dentro do gestor */
+body.embutida .so-tela-cheia{display:none!important}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="tela-login" hidden>
+  <form class="login-cartao" id="form-login" autocomplete="on">
+    <div class="login-titulo">Tela da cozinha</div>
+    <div class="login-sub">Entre com o mesmo e-mail e senha do painel do gestor. Os pedidos aparecem aqui na hora em que entram.</div>
+    <label class="campo"><span>E-mail</span><input id="login-email" type="email" autocomplete="username" required></label>
+    <label class="campo"><span>Senha</span><input id="login-senha" type="password" autocomplete="current-password" required></label>
+    <button class="btn-grande" id="login-btn" type="submit">Entrar na cozinha</button>
+    <div class="login-erro" id="login-erro" role="alert"></div>
+  </form>
+</div>
+
+<!-- TELA -->
+<div id="app">
+  <header class="trilho">
+    <div class="marca"><b>Cozinha</b><span id="nome-loja"></span></div>
+    <span class="ponto-conexao" id="conexao" title="Recebendo pedidos em tempo real"></span>
+    <div class="placar" aria-live="polite">
+      <div class="placa" id="placa-novos"><b id="cont-novos">0</b><span>novos</span></div>
+      <div class="placa"><b id="cont-preparo">0</b><span>em preparo</span></div>
+    </div>
+    <div class="filtros" role="group" aria-label="Mostrar">
+      <button class="on" data-filtro="todos">Todos</button>
+      <button data-filtro="mesa">Mesa</button>
+      <button data-filtro="delivery">Delivery</button>
+      <button data-filtro="balcao">Retirada</button>
+    </div>
+    <div class="relogio" id="relogio">--:--</div>
+    <button class="icone-btn so-tela-cheia" id="btn-som" title="Som dos avisos" aria-label="Som dos avisos"></button>
+    <button class="icone-btn so-tela-cheia" id="btn-tela-cheia" title="Tela cheia" aria-label="Tela cheia">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    </button>
+    <button class="icone-btn" id="btn-ajustes" title="Ajustes" aria-label="Ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.3"/><circle cx="10" cy="17" r="2.3"/></svg>
+    </button>
+  </header>
+  <section class="chegando" id="chegando" aria-label="Pedidos novos esperando aceitar">
+    <div class="chegando-rotulo">CHEGOU</div>
+  </section>
+  <main class="quadro" id="quadro"></main>
+</div>
+
+<div class="aviso" id="aviso" role="status"><span id="aviso-txt"></span><button id="aviso-desfazer" type="button">Desfazer</button></div>
+<div class="som-bloqueado" id="som-bloqueado"><div>Toque na tela para ligar o som dos avisos</div></div>
+
+<div class="painel-fundo" id="painel-ajustes">
+  <div class="painel" role="dialog" aria-modal="true" aria-labelledby="ajustes-titulo">
+    <h2 id="ajustes-titulo">Ajustes da cozinha</h2>
+    <div class="sub">Valem só para esta tela, neste aparelho.</div>
+    <div class="linha-ajuste"><span>Faixa amarela depois de (minutos)</span><input type="number" id="aj-morno" min="1" max="120"></div>
+    <div class="linha-ajuste"><span>Faixa vermelha depois de (minutos)</span><input type="number" id="aj-atrasado" min="2" max="240"></div>
+    <div class="linha-ajuste so-tela-cheia"><span>Som quando chega pedido</span><button class="chave" id="aj-som" type="button" aria-label="Som"></button></div>
+    <div class="linha-ajuste"><span>Pedir confirmação ao recusar</span><span style="color:var(--tinta-2);font-weight:600">sempre</span></div>
+    <div class="painel-acoes">
+      <button class="btn-claro" id="aj-fechar" type="button">Fechar</button>
+      <button class="btn-sair so-tela-cheia" id="aj-sair" type="button">Sair desta tela</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ══════════════════ Estado ══════════════════
+  const EMBUTIDA = new URLSearchParams(location.search).has('embutida');
+  if (EMBUTIDA) document.body.classList.add('embutida');
+  const CHAVE_SESSAO = 'cozinha_sessao';
+  const CHAVE_AJUSTES = 'cozinha_ajustes';
+  let sessao = null;            // { token, tenant_id, nome, loja }
+  let offsetNumero = 0;         // número do pedido (igual ao gestor)
+  const pedidos = new Map();    // id -> pedido (como vem do servidor)
+  let filtro = 'todos';
+  let eventos = null;
+  const ajustes = Object.assign({ morno: 10, atrasado: 20, som: !EMBUTIDA }, lerJSON(localStorage, CHAVE_AJUSTES) || {});
+  const recusando = new Set();  // id do pedido no segundo toque de "Recusar"
+  const conhecidas = new Set(); // comandas já mostradas (para animar só as novas)
+  let primeiraCarga = true;
+
+  function lerJSON(st, k) { try { return JSON.parse(st.getItem(k) || 'null'); } catch (e) { return null; } }
+  function salvarAjustes() { try { localStorage.setItem(CHAVE_AJUSTES, JSON.stringify(ajustes)); } catch (e) {} }
+  const $ = id => document.getElementById(id);
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // ══════════════════ Servidor ══════════════════
+  async function api(caminho, opcoes = {}) {
+    const headers = { 'Content-Type': 'application/json', 'x-tenant-id': sessao.tenant_id, Authorization: 'Bearer ' + sessao.token };
+    const r = await fetch(caminho, { method: opcoes.method || 'GET', headers, body: opcoes.body ? JSON.stringify(opcoes.body) : undefined });
+    const d = await r.json().catch(() => null);
+    if (r.status === 401) { sair(true); throw new Error('Sessão encerrada. Entre de novo.'); }
+    if (!r.ok) throw new Error((d && (d.error || d.message)) || 'Não foi possível falar com o servidor.');
+    return d;
+  }
+  function mudarStatus(id, status) {
+    return api('/api/order-status', { method: 'POST', body: { order_id: id, new_status: status, tenant_id: sessao.tenant_id, actor_type: 'cozinha', actor_name: 'Cozinha', origem: 'cozinha' } });
+  }
+
+  // ══════════════════ Login ══════════════════
+  function iniciar() {
+    // Dentro do gestor (ou aberto a partir dele): usa a sessão do gestor
+    const doGestor = lerJSON(sessionStorage, 'sys_session');
+    const salva = lerJSON(localStorage, CHAVE_SESSAO);
+    if (EMBUTIDA && doGestor && doGestor.token) sessao = { token: doGestor.token, tenant_id: doGestor.tenant_id, nome: doGestor.nome || '', loja: doGestor.loja || doGestor.tenant_nome || '' };
+    else if (salva && salva.token) sessao = salva;
+    else if (doGestor && doGestor.token) sessao = { token: doGestor.token, tenant_id: doGestor.tenant_id, nome: doGestor.nome || '', loja: doGestor.loja || '' };
+    if (sessao) abrirTela(); else mostrarLogin();
+  }
+  function mostrarLogin() {
+    $('app').classList.remove('on');
+    $('tela-login').hidden = false;
+    setTimeout(() => $('login-email').focus(), 50);
+  }
+  $('form-login').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    destravarSom();
+    const btn = $('login-btn');
+    btn.disabled = true; btn.textContent = 'Entrando...'; $('login-erro').textContent = '';
+    try {
+      const r = await fetch('/api/gestor-login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: $('login-email').value.trim(), senha: $('login-senha').value }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.token) throw new Error(d.error || 'E-mail ou senha incorretos.');
+      sessao = { token: d.token, tenant_id: d.tenant_id, nome: d.nome || '', loja: (d.tenant && d.tenant.nome) || '' };
+      try { localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessao)); } catch (e) {}
+      $('login-senha').value = '';
+      abrirTela();
+    } catch (e) {
+      $('login-erro').textContent = e.message;
+    } finally { btn.disabled = false; btn.textContent = 'Entrar na cozinha'; }
+  });
+  function sair(expirou) {
+    try { localStorage.removeItem(CHAVE_SESSAO); } catch (e) {}
+    if (eventos) { try { eventos.close(); } catch (e) {} eventos = null; }
+    if (!expirou && sessao) fetch('/api/gestor-logout', { method: 'POST', headers: { Authorization: 'Bearer ' + sessao.token } }).catch(() => {});
+    sessao = null; pedidos.clear(); conhecidas.clear(); primeiraCarga = true;
+    pararAlarme();
+    if (EMBUTIDA) { $('quadro').innerHTML = '<div class="vazio"><b>Sessão encerrada</b><p>Atualize a página do gestor para entrar de novo.</p></div>'; return; }
+    mostrarLogin();
+  }
+
+  // ══════════════════ Abrir a tela ══════════════════
+  async function abrirTela() {
+    $('tela-login').hidden = true;
+    $('app').classList.add('on');
+    $('nome-loja').textContent = sessao.loja || '';
+    desenharBotaoSom();
+    try {
+      const cfg = await api('/api/store_config?select=store_name,order_num_offset');
+      const c = Array.isArray(cfg) ? cfg[0] : cfg;
+      if (c) { offsetNumero = parseInt(c.order_num_offset, 10) || 0; if (c.store_name) $('nome-loja').textContent = c.store_name; }
+    } catch (e) { if (!sessao) return; }
+    await carregarPedidos();
+    ligarTempoReal();
+    manterTelaAcesa();
+  }
+
+  async function carregarPedidos() {
+    try {
+      const lista = await api('/api/orders?select=*&status=in.(analise,producao,mesa_aberta)&order=id.asc');
+      const novos = new Map();
+      (lista || []).forEach(o => novos.set(o.id, o));
+      pedidos.clear();
+      novos.forEach((o, id) => pedidos.set(id, o));
+      desenhar();
+      primeiraCarga = false;
+    } catch (e) { if (sessao) avisar(e.message, null, true); }
+  }
+
+  // Tempo real: o mesmo canal que o gestor usa. A cada 60 s recarrega tudo
+  // por segurança (se a internet piscar, nada fica para trás).
+  function ligarTempoReal() {
+    if (eventos) { try { eventos.close(); } catch (e) {} }
+    eventos = new EventSource('/sse/' + encodeURIComponent('orders-rt:' + sessao.tenant_id));
+    eventos.onopen = () => $('conexao').classList.remove('off');
+    eventos.onerror = () => { $('conexao').classList.add('off'); };
+    const tratar = tipo => ev => {
+      try {
+        const o = JSON.parse(ev.data);
+        if (!o || !o.id) return;
+        if (tipo === 'DELETE') pedidos.delete(o.id);
+        else pedidos.set(o.id, o);
+        desenhar();
+      } catch (e) {}
+    };
+    eventos.addEventListener('orders:INSERT', tratar('INSERT'));
+    eventos.addEventListener('orders:UPDATE', tratar('UPDATE'));
+    eventos.addEventListener('orders:DELETE', tratar('DELETE'));
+  }
+  setInterval(() => { if (sessao) carregarPedidos(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && sessao) carregarPedidos(); });
+
+  // ══════════════════ Montar as comandas ══════════════════
+  function itensDe(o) {
+    if (Array.isArray(o.items)) return o.items;
+    try { const v = JSON.parse(o.items || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+  }
+  function dataDe(v) {
+    if (!v) return new Date();
+    let s = String(v);
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(s)) s = s.replace(' ', 'T') + 'Z'; // SQLite grava em UTC
+    const d = new Date(s);
+    return isNaN(d) ? new Date() : d;
+  }
+  function tipoDe(o) {
+    if (o.mesa_num && Number(o.mesa_num) > 0) return 'mesa';
+    const addr = String(o.addr || '').trim().toLowerCase();
+    if (/^mesa\b/.test(addr)) return 'mesa';
+    if (addr.startsWith('retirada') || addr.startsWith('balcão') || addr.startsWith('balcao') || addr.includes('retirada no balc') || addr.includes('balcão') || addr === 'balcao') return 'balcao';
+    return 'delivery';
+  }
+  function numeroDe(o) {
+    if (o.order_num) return Number(o.order_num);
+    const n = Number(o.id) || 0;
+    return n > offsetNumero ? Math.max(1, n - offsetNumero) : n;
+  }
+  const pagamentoOnlinePendente = o => o.status === 'aguardando_cartao' || o.status === 'aguardando_pix';
+
+  // Uma comanda por pedido normal; na mesa, uma comanda por envio do garçom
+  function montarComandas() {
+    const novas = [], preparo = [];
+    pedidos.forEach(o => {
+      if (pagamentoOnlinePendente(o)) return;
+      const itens = itensDe(o);
+      if (o.status === 'analise' && o.pag !== 'pix_mp') {
+        novas.push({ chave: 'n-' + o.id, tipo: 'novo', pedido: o, tipoEntrega: tipoDe(o), inicio: dataDe(o.created_at),
+          linhas: agrupar(itens.map((it, i) => ({ it, i }))) });
+        return;
+      }
+      if (o.status === 'producao' || (o.status === 'analise' && o.pag === 'pix_mp')) {
+        preparo.push({ chave: 'p-' + o.id, tipo: 'pedido', pedido: o, tipoEntrega: tipoDe(o), inicio: dataDe(o.created_at),
+          linhas: agrupar(itens.map((it, i) => ({ it, i })).filter(x => x.it.item_status !== 'cancelado')) });
+        return;
+      }
+      if (o.status === 'mesa_aberta') {
+        const lotes = new Map();
+        itens.forEach((it, i) => {
+          if (it.item_status !== 'producao') return;
+          const lote = loteDe(it);
+          if (!lotes.has(lote)) lotes.set(lote, []);
+          lotes.get(lote).push({ it, i });
+        });
+        lotes.forEach((lista, lote) => {
+          const primeiro = lista[0].it;
+          preparo.push({ chave: 'm-' + o.id + '-' + lote, tipo: 'mesa', pedido: o, lote, tipoEntrega: 'mesa',
+            inicio: dataDe(primeiro.added_at || o.updated_at || o.created_at), garcom: primeiro.garcom_nome || '',
+            linhas: agrupar(lista) });
+        });
+      }
+    });
+    const ordem = (a, b) => a.inicio - b.inicio;
+    return { novas: novas.sort(ordem), preparo: preparo.sort(ordem) };
+  }
+  // Envio do garçom: os itens de um mesmo envio têm o mesmo começo no item_id
+  function loteDe(it) {
+    const id = String(it.item_id || '');
+    if (/^\d{10,}_/.test(id)) return id.split('_')[0];
+    const t = dataDe(it.added_at).getTime();
+    return String(Math.floor(t / 60000));
+  }
+  // Junta itens iguais (mesmo nome, mesma observação, mesma pessoa) numa linha só
+  function agrupar(lista) {
+    const linhas = [], porChave = new Map();
+    lista.forEach(({ it, i }) => {
+      const obs = obsComKit(it);
+      const k = [it.name, obs, it.cliente_nome || ''].join('|');
+      let l = porChave.get(k);
+      if (!l) { l = { nome: it.name || 'Item', obs, para: it.cliente_nome || '', qtd: 0, indices: [], ids: [] }; porChave.set(k, l); linhas.push(l); }
+      l.qtd += parseFloat(it.qty) || 1;
+      l.indices.push(i);
+      if (it.item_id) l.ids.push(it.item_id);
+    });
+    return linhas;
+  }
+  // Itens de kit (Contém: ...) vêm em customGroups
+  function obsComKit(it) {
+    const atual = String(it.obs || '').trim();
+    let grupos = it.customGroups ?? it.custom_groups;
+    if (typeof grupos === 'string') { try { grupos = JSON.parse(grupos); } catch (e) { grupos = []; } }
+    if (!Array.isArray(grupos)) return atual;
+    const kit = grupos.find(g => g && g.tipo === 'kit_itens');
+    if (!kit || /(^|\|\s*)Kit:/i.test(atual)) return atual;
+    const nomes = (kit.itens || kit.items || kit.valores || kit.opcoes || []).map(v => typeof v === 'string' ? v : [v.qtd || v.qty || '', v.nome || v.name || v.label || ''].join(' ').trim()).filter(Boolean);
+    return nomes.length ? ['Kit: ' + nomes.join(' · '), atual].filter(Boolean).join(' | ') : atual;
+  }
+  // Observação em partes: grupos de adicionais e o recado livre (em destaque)
+  function obsHtml(raw) {
+    if (!raw) return '';
+    const dividir = v => { const r = []; let b = '', n = 0; for (const ch of v) { if (ch === '(') n++; else if (ch === ')') n = Math.max(0, n - 1); if (ch === ',' && !n) { if (b.trim()) r.push(b.trim()); b = ''; } else b += ch; } if (b.trim()) r.push(b.trim()); return r; };
+    let h = '';
+    String(raw).split(' | ').map(s => s.trim()).filter(Boolean).forEach(sec => {
+      if (/^Kit:\s/i.test(sec)) { h += `<div class="grupo"><b>Contém:</b> ${esc(sec.replace(/^Kit:\s/i, '').split(' · ').join(', '))}</div>`; return; }
+      if (/^Meio a meio/i.test(sec)) { h += `<div class="grupo"><b>Meio a meio:</b> ${esc(sec.replace(/^Meio a meio/i, '').replace(/^\s*·\s*/, '') || '')}</div>`; return; }
+      const m = /^([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\s\-\/&+.?!()]{0,40}):\s*(.+)$/.exec(sec);
+      if (m && m[1].trim().split(/\s+/).length <= 5 && !/^obs/i.test(m[1].trim())) { h += `<div class="grupo"><b>${esc(m[1].trim())}:</b> ${esc(dividir(m[2]).join(', '))}</div>`; return; }
+      h += `<div class="livre">${esc(sec.replace(/^obs(ervação|ervacao)?\s*:\s*/i, ''))}</div>`;
+    });
+    return h;
+  }
+
+  // ══════════════════ Desenhar ══════════════════
+  const ICONES = {
+    mesa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 9h18M6 9v11M18 9v11M9 9l1-5h4l1 5"/></svg>',
+    delivery: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M3.5 17V13l3.5-5h6l3 4.5h3.5V17M8.5 17h7"/></svg>',
+    balcao: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1 12H6L5 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>',
+    relogio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5L19.5 7"/></svg>',
+    somOn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h4l5 4v-13l-5 4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>',
+    somOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h4l5 4v-13l-5 4H4z"/><path d="M17 9.5l5 5M22 9.5l-5 5"/></svg>'
+  };
+  const NOME_TIPO = { mesa: 'Mesa', delivery: 'Delivery', balcao: 'Retirada' };
+
+  function minutosDesde(d) { return Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000)); }
+  function classeTempo(min) { return min >= ajustes.atrasado ? 'atrasado' : min >= ajustes.morno ? 'morno' : ''; }
+  function horaCurta(d) { return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
+
+  function htmlComanda(c) {
+    const o = c.pedido;
+    const min = minutosDesde(c.inicio);
+    const titulo = c.tipoEntrega === 'mesa' && o.mesa_num ? 'Mesa ' + o.mesa_num : '#' + String(numeroDe(o)).padStart(3, '0');
+    const etiquetas = [];
+    if (c.tipoEntrega === 'mesa') etiquetas.push(`<span class="etiqueta mesa">${ICONES.mesa}${o.mesa_num ? 'Pedido #' + String(numeroDe(o)).padStart(3, '0') : 'Consumo no local'}</span>`);
+    else etiquetas.push(`<span class="etiqueta ${c.tipoEntrega === 'balcao' ? 'retirada' : 'delivery'}">${ICONES[c.tipoEntrega]}${NOME_TIPO[c.tipoEntrega]}</span>`);
+    if (o.scheduled_for) etiquetas.push(`<span class="etiqueta agendado">${ICONES.relogio}Agendado ${esc(horaCurta(dataDe(o.scheduled_for)))}</span>`);
+    if (o.canal === 'totem') etiquetas.push('<span class="etiqueta">Totem</span>');
+    const quem = c.tipo === 'mesa' ? (c.garcom ? 'Garçom: ' + c.garcom : '') : (o.client || '');
+    const itens = c.linhas.map((l, k) => `
+      <li class="item">
+        <span class="qtd">${esc(fmtQtd(l.qtd))}</span>
+        <span class="nome">${esc(l.nome)}${l.para ? `<span class="para">para ${esc(l.para)}</span>` : ''}</span>
+        ${c.tipo === 'mesa' && c.linhas.length > 1 ? `<button class="item-check" data-acao="item" data-chave="${esc(c.chave)}" data-linha="${k}" title="Este item está pronto" aria-label="Marcar ${esc(l.nome)} como pronto">${ICONES.check}</button>` : '<span></span>'}
+        ${l.obs ? `<div class="obs">${obsHtml(l.obs)}</div>` : ''}
+      </li>`).join('');
+    let acoes;
+    if (c.tipo === 'novo') {
+      const conf = recusando.has(o.id);
+      acoes = `<button class="btn-pronto" data-acao="aceitar" data-id="${o.id}">${ICONES.check}Aceitar</button>
+        <button class="btn-recusar${conf ? ' confirma' : ''}" data-acao="recusar" data-id="${o.id}">${conf ? 'Confirmar' : 'Recusar'}</button>`;
+    } else {
+      acoes = `<button class="btn-pronto" data-acao="${c.tipo === 'mesa' ? 'mesa' : 'pronto'}" data-chave="${esc(c.chave)}">${ICONES.check}${c.tipo === 'mesa' && c.linhas.length > 1 ? 'Tudo pronto' : 'Pronto'}</button>`;
+    }
+    return `
+      <div class="faixa ${c.tipo === 'novo' ? '' : classeTempo(min)}" data-inicio="${c.inicio.getTime()}">
+        <span class="num">${esc(titulo)}</span>
+        <span class="tempo"><b data-min>${min} min</b><small>${c.tipo === 'novo' ? 'chegou ' : 'desde '}${esc(horaCurta(c.inicio))}</small></span>
+      </div>
+      <div class="cab">${etiquetas.join('')}${quem ? `<span class="quem">${esc(quem)}</span>` : ''}</div>
+      <ul class="itens">${itens}</ul>
+      <div class="acoes">${acoes}</div>`;
+  }
+  function fmtQtd(q) { return Number.isInteger(q) ? String(q) : String(Math.round(q * 1000) / 1000).replace('.', ','); }
+
+  let comandasAtuais = new Map(); // chave -> comanda
+  function desenhar() {
+    if (!sessao) return;
+    const { novas, preparo } = montarComandas();
+    const passa = c => filtro === 'todos' || c.tipoEntrega === filtro;
+    const vNovas = novas.filter(passa), vPreparo = preparo.filter(passa);
+    comandasAtuais = new Map([...novas, ...preparo].map(c => [c.chave, c]));
+    $('cont-novos').textContent = novas.length;
+    $('cont-preparo').textContent = preparo.length;
+    $('placa-novos').classList.toggle('alerta', novas.length > 0);
+
+    // Avisos sonoros: chegou pedido para aceitar (repete) ou comanda nova (uma vez)
+    const chavesAgora = new Set([...novas, ...preparo].map(c => c.chave));
+    const chegaramAgora = [...chavesAgora].filter(k => !conhecidas.has(k));
+    if (!primeiraCarga && chegaramAgora.some(k => k.startsWith('m-') || k.startsWith('p-'))) tocar('comanda');
+    if (novas.length) iniciarAlarme(); else pararAlarme();
+
+    reconciliar($('chegando'), vNovas, 'nova', chegaramAgora);
+    $('chegando').classList.toggle('on', vNovas.length > 0);
+    reconciliar($('quadro'), vPreparo, '', chegaramAgora);
+    if (!vPreparo.length && !$('quadro').querySelector('.vazio')) {
+      $('quadro').insertAdjacentHTML('beforeend', `<div class="vazio">
+        <svg viewBox="0 0 120 90" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 50h80M30 50c0-18 13.4-30 30-30s30 12 30 30"/><path d="M60 20v-7M52 13h16M15 62h90M28 62l6 18h52l6-18"/></svg>
+        <b>Nenhum pedido em preparo</b><p>${novas.length ? 'Tem pedido novo esperando aceitar na faixa de cima.' : 'Quando um pedido for aceito, a comanda aparece aqui na hora.'}</p></div>`);
+    } else if (vPreparo.length) { const v = $('quadro').querySelector('.vazio'); if (v) v.remove(); }
+    chavesAgora.forEach(k => conhecidas.add(k));
+  }
+  // Atualiza só o que mudou: comanda nova entra animada, a que saiu sai animada
+  function reconciliar(caixa, lista, classeExtra, chegaramAgora) {
+    const existentes = new Map([...caixa.querySelectorAll('.comanda')].map(el => [el.dataset.chave, el]));
+    const vistos = new Set();
+    let anterior = classeExtra === 'nova' ? caixa.querySelector('.chegando-rotulo') : null;
+    lista.forEach(c => {
+      vistos.add(c.chave);
+      const html = htmlComanda(c);
+      let el = existentes.get(c.chave);
+      if (!el || el.classList.contains('saindo')) {
+        el = document.createElement('article');
+        el.className = 'comanda' + (classeExtra ? ' ' + classeExtra : '');
+        el.dataset.chave = c.chave;
+        el.innerHTML = html; el._html = html;
+        if (!primeiraCarga && chegaramAgora.includes(c.chave)) {
+          el.classList.add('entrando');
+          if (!classeExtra) { el.classList.add('destaque'); setTimeout(() => el.classList.remove('destaque'), 8000); }
+        }
+      } else if (el._html !== html) { el.innerHTML = html; el._html = html; }
+      // mantém a ordem (mais antigo primeiro)
+      const alvo = anterior ? anterior.nextElementSibling : caixa.firstElementChild;
+      if (alvo !== el) caixa.insertBefore(el, alvo);
+      anterior = el;
+    });
+    existentes.forEach((el, k) => {
+      if (vistos.has(k) || el.classList.contains('saindo')) return;
+      el.classList.add('saindo');
+      setTimeout(() => el.remove(), 460);
+    });
+  }
+
+  // Relógio e minutos das comandas (sem redesenhar tudo)
+  function atualizarTempos() {
+    $('relogio').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    document.querySelectorAll('.comanda:not(.nova) .faixa, .comanda.nova .faixa').forEach(f => {
+      const min = minutosDesde(new Date(+f.dataset.inicio));
+      const b = f.querySelector('[data-min]'); if (b) b.textContent = min + ' min';
+      if (!f.closest('.nova')) { f.classList.toggle('morno', classeTempo(min) === 'morno'); f.classList.toggle('atrasado', classeTempo(min) === 'atrasado'); }
+    });
+  }
+  setInterval(atualizarTempos, 15000);
+  atualizarTempos();
+
+  // ══════════════════ Ações ══════════════════
+  document.addEventListener('click', ev => {
+    destravarSom();
+    const b = ev.target.closest('[data-acao]');
+    if (!b) return;
+    const acao = b.dataset.acao;
+    if (acao === 'aceitar') aceitar(+b.dataset.id, b);
+    else if (acao === 'recusar') recusar(+b.dataset.id);
+    else if (acao === 'pronto') prontoPedido(comandasAtuais.get(b.dataset.chave), b);
+    else if (acao === 'mesa') prontoMesa(comandasAtuais.get(b.dataset.chave), null, b);
+    else if (acao === 'item') { const c = comandasAtuais.get(b.dataset.chave); prontoMesa(c, c && c.linhas[+b.dataset.linha], b); }
+  });
+
+  function travar(b) { if (b) { b.disabled = true; b.style.opacity = '.6'; } }
+  function soltar(b) { if (b) { b.disabled = false; b.style.opacity = ''; } }
+
+  async function aceitar(id, b) {
+    const o = pedidos.get(id); if (!o) return;
+    travar(b);
+    try {
+      await mudarStatus(id, 'producao');
+      pedidos.set(id, { ...o, status: 'producao' });
+      desenhar();
+      avisar(`Pedido #${String(numeroDe(o)).padStart(3, '0')} aceito. Já está em preparo.`);
+    } catch (e) { soltar(b); avisar(e.message, null, true); }
+  }
+  async function recusar(id) {
+    const o = pedidos.get(id); if (!o) return;
+    if (!recusando.has(id)) {
+      recusando.add(id); desenhar();
+      setTimeout(() => { if (recusando.delete(id)) desenhar(); }, 4000);
+      return;
+    }
+    recusando.delete(id);
+    try {
+      await mudarStatus(id, 'cancelado');
+      pedidos.delete(id); desenhar();
+      avisar(`Pedido #${String(numeroDe(o)).padStart(3, '0')} recusado.`);
+    } catch (e) { desenhar(); avisar(e.message, null, true); }
+  }
+  async function prontoPedido(c, b) {
+    if (!c) return;
+    const o = c.pedido;
+    travar(b);
+    try {
+      await mudarStatus(o.id, 'pronto');
+      pedidos.delete(o.id); desenhar();
+      const nome = c.tipoEntrega === 'mesa' && o.mesa_num ? 'Mesa ' + o.mesa_num : '#' + String(numeroDe(o)).padStart(3, '0');
+      avisar(`${nome} pronto.`, async () => {
+        await mudarStatus(o.id, 'producao');
+        pedidos.set(o.id, { ...o, status: 'producao' }); desenhar();
+      });
+    } catch (e) { soltar(b); avisar(e.message, null, true); }
+  }
+  // Mesa: marca como pronto um item (linha) ou a comanda toda. Busca a comanda
+  // atualizada antes de gravar, para não apagar item que o garçom acabou de lançar.
+  async function prontoMesa(c, linha, b) {
+    if (!c) return;
+    const linhas = linha ? [linha] : c.linhas;
+    const ids = new Set(linhas.flatMap(l => l.ids));
+    const indices = new Set(linhas.flatMap(l => l.indices));
+    travar(b);
+    try {
+      const marcados = await trocarItensMesa(c.pedido.id, ids, indices, 'producao', 'pronto');
+      const nome = 'Mesa ' + c.pedido.mesa_num;
+      avisar(linha ? `${nome}: ${linha.nome} pronto. O garçom foi avisado.` : `${nome} pronta. O garçom foi avisado.`, async () => {
+        await trocarItensMesa(c.pedido.id, marcados.ids, marcados.indices, 'pronto', 'producao');
+      });
+    } catch (e) { soltar(b); avisar(e.message, null, true); }
+  }
+  async function trocarItensMesa(orderId, ids, indices, de, para) {
+    const lista = await api('/api/orders?select=*&id=eq.' + orderId);
+    const atual = Array.isArray(lista) ? lista[0] : lista;
+    if (!atual) throw new Error('Essa comanda não está mais aberta.');
+    const itens = itensDe(atual);
+    const feitos = { ids: new Set(), indices: new Set() };
+    const novos = itens.map((it, i) => {
+      const bate = it.item_id ? ids.has(it.item_id) : indices.has(i);
+      if (bate && it.item_status === de) { if (it.item_id) feitos.ids.add(it.item_id); feitos.indices.add(i); return { ...it, item_status: para }; }
+      return it;
+    });
+    if (!feitos.indices.size) { pedidos.set(atual.id, atual); desenhar(); return feitos; }
+    await api('/api/orders?id=eq.' + orderId, { method: 'PATCH', body: { items: novos, updated_at: new Date().toISOString() } });
+    pedidos.set(atual.id, { ...atual, items: novos });
+    desenhar();
+    return feitos;
+  }
+
+  // ══════════════════ Aviso com desfazer ══════════════════
+  let timerAviso = null, desfazerAtual = null;
+  function avisar(texto, desfazer, erro) {
+    $('aviso-txt').textContent = texto;
+    desfazerAtual = desfazer || null;
+    $('aviso-desfazer').style.display = desfazer ? '' : 'none';
+    $('aviso').classList.toggle('erro', !!erro);
+    $('aviso').classList.add('on');
+    clearTimeout(timerAviso);
+    timerAviso = setTimeout(() => { $('aviso').classList.remove('on'); desfazerAtual = null; }, desfazer ? 8000 : 4000);
+  }
+  $('aviso-desfazer').addEventListener('click', async () => {
+    const f = desfazerAtual; desfazerAtual = null;
+    $('aviso').classList.remove('on');
+    if (!f) return;
+    try { await f(); avisar('Pronto, voltou para o preparo.'); } catch (e) { avisar('Não deu para desfazer: ' + e.message, null, true); }
+  });
+
+  // ══════════════════ Som ══════════════════
+  let audio = null, timerAlarme = null;
+  function destravarSom() {
+    try {
+      if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === 'suspended') audio.resume();
+    } catch (e) {}
+    setTimeout(verificarSomBloqueado, 100);
+  }
+  function verificarSomBloqueado() {
+    const bloqueado = ajustes.som && !EMBUTIDA && (!audio || audio.state !== 'running') && pedidos.size >= 0 && sessao;
+    $('som-bloqueado').classList.toggle('on', !!bloqueado);
+  }
+  function nota(freq, inicio, dur, vol) {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'triangle'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, audio.currentTime + inicio);
+    g.gain.linearRampToValueAtTime(vol, audio.currentTime + inicio + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + inicio + dur);
+    o.connect(g).connect(audio.destination);
+    o.start(audio.currentTime + inicio); o.stop(audio.currentTime + inicio + dur + 0.05);
+  }
+  function tocar(tipo) {
+    if (!ajustes.som || EMBUTIDA || !audio || audio.state !== 'running') return;
+    if (tipo === 'alarme') { nota(988, 0, .18, .5); nota(1319, .2, .18, .5); nota(988, .4, .18, .5); nota(1319, .6, .3, .5); }
+    else { nota(784, 0, .25, .35); nota(1175, .16, .4, .35); }
+  }
+  function iniciarAlarme() {
+    if (timerAlarme) return;
+    tocar('alarme');
+    timerAlarme = setInterval(() => tocar('alarme'), 4000);
+  }
+  function pararAlarme() { clearInterval(timerAlarme); timerAlarme = null; }
+  function desenharBotaoSom() {
+    $('btn-som').innerHTML = ajustes.som ? ICONES.somOn : ICONES.somOff;
+    $('btn-som').classList.toggle('desligado', !ajustes.som);
+    $('btn-som').title = ajustes.som ? 'Som ligado' : 'Som desligado';
+    $('aj-som').classList.toggle('on', !!ajustes.som);
+    verificarSomBloqueado();
+  }
+  $('btn-som').addEventListener('click', () => { ajustes.som = !ajustes.som; salvarAjustes(); desenharBotaoSom(); if (ajustes.som) tocar('comanda'); });
+  $('aj-som').addEventListener('click', () => { ajustes.som = !ajustes.som; salvarAjustes(); desenharBotaoSom(); });
+
+  // ══════════════════ Filtros, tela cheia, ajustes ══════════════════
+  document.querySelectorAll('[data-filtro]').forEach(b => b.addEventListener('click', () => {
+    filtro = b.dataset.filtro;
+    document.querySelectorAll('[data-filtro]').forEach(x => x.classList.toggle('on', x === b));
+    $('quadro').innerHTML = ''; [...$('chegando').querySelectorAll('.comanda')].forEach(e => e.remove());
+    desenhar();
+  }));
+  $('btn-tela-cheia').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else document.documentElement.requestFullscreen().catch(() => {});
+  });
+  $('btn-ajustes').addEventListener('click', () => {
+    $('aj-morno').value = ajustes.morno; $('aj-atrasado').value = ajustes.atrasado;
+    $('painel-ajustes').classList.add('on');
+  });
+  function fecharAjustes() {
+    const m = Math.max(1, parseInt($('aj-morno').value, 10) || 10);
+    const a = Math.max(m + 1, parseInt($('aj-atrasado').value, 10) || 20);
+    ajustes.morno = m; ajustes.atrasado = a; salvarAjustes();
+    $('painel-ajustes').classList.remove('on');
+    atualizarTempos();
+  }
+  $('aj-fechar').addEventListener('click', fecharAjustes);
+  $('painel-ajustes').addEventListener('click', ev => { if (ev.target === $('painel-ajustes')) fecharAjustes(); });
+  $('aj-sair').addEventListener('click', () => { $('painel-ajustes').classList.remove('on'); sair(false); });
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && $('painel-ajustes').classList.contains('on')) fecharAjustes(); });
+
+  // Tela acesa (tablet não apaga sozinho)
+  let travaTela = null;
+  async function manterTelaAcesa() {
+    try { if ('wakeLock' in navigator && !travaTela) { travaTela = await navigator.wakeLock.request('screen'); travaTela.addEventListener('release', () => { travaTela = null; }); } } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && sessao) manterTelaAcesa(); });
+
+  iniciar();
+})();
+</script>
+</body>
+</html>
