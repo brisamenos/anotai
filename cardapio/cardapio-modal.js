@@ -1471,9 +1471,11 @@ function _imConfirmCore() {
   else cart.push({ ...cartItem, qty: _imQty });
 
   // Add cross-sell items
+  const _xsellPrecisaEscolher = [];
   for (const xid of _xsellSelected) {
     const xi = allItems.find(x => x.id === xid);
-    if (!xi || _itemExigeEscolha(xi)) continue;
+    if (!xi) continue;
+    if (typeof _precisaEscolherOpcoes === 'function' && _precisaEscolherOpcoes(xi)) { _xsellPrecisaEscolher.push(xi); continue; }
     const xexist = cart.find(c => c.id === xi.id && !c.obs);
     if (xexist) xexist.qty += 1;
     else cart.push({ ...xi, qty: 1, obs: '' });
@@ -1483,4 +1485,10 @@ function _imConfirmCore() {
   closeItemModal();
   updateCartFloat();
   toast('cart', `${isPizza && _halfItem && !_isWholeFlavorSelected() ? 'Pizza meio a meio' : i.name} adicionado!`);
+  // Sugestão com escolha obrigatória: abre a tela dela para o cliente escolher (tamanho etc.) em vez de ir sem preço
+  if (_xsellPrecisaEscolher.length) {
+    const _px = _xsellPrecisaEscolher[0];
+    setTimeout(() => { toast('warn', `Escolha as opções de ${_px.name}`); openItemModal(_px.id); }, 450);
+  }
+  else if (typeof _sugestoesDepoisDeAdicionar === 'function') setTimeout(() => _sugestoesDepoisDeAdicionar(i), 380); // "Quer adicionar mais alguma coisa?"
 }

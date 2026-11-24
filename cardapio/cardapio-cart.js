@@ -165,9 +165,18 @@ function _matchBairro(digitadoRaw, bairrosLista) {
 // ══════════════════════════════════════════
 //  CARRINHO
 // ══════════════════════════════════════════
+// Produto com escolha OBRIGATÓRIA (ex.: TAMANHO) nunca entra direto no carrinho: abre a tela do produto para escolher.
+// Sem isso, o item ia sem opção e com preço zero (ex.: macarronada a R$ 0,00 pela faixa "Adicionar ao pedido").
+function _precisaEscolherOpcoes(i) {
+  if (!i) return false;
+  let gs = i.custom_groups;
+  if (typeof gs === 'string') { try { gs = JSON.parse(gs); } catch (e) { gs = []; } }
+  return Array.isArray(gs) && gs.some(g => g && g.required === true);
+}
 function addToCart(id) {
   const i = allItems.find(x => x.id === id);
   if (!i) return;
+  if (_precisaEscolherOpcoes(i) && typeof openItemModal === 'function') { openItemModal(id); return; }
   const ex = cart.find(c => c.id === id && !c.obs);
   if (ex) ex.qty++;
   else cart.push({...i, qty:1, obs:''});

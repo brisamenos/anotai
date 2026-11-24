@@ -1285,13 +1285,6 @@ async function repetirPedido(orderId) {
         pulados++;
         continue;
       }
-      // Item com escolha obrigatória que veio sem nenhuma escolha no pedido
-      // antigo: não repete (sairia de novo por R$ 0,00). O cliente escolhe
-      // de novo na tela do item.
-      if (typeof _itemExigeEscolha === 'function' && _itemExigeEscolha(atual) && !String(it.obs || '').trim()) {
-        pulados++;
-        continue;
-      }
       // Cria item de carrinho usando preço atual do menu (não o histórico)
       // Mantém obs/customizações do pedido original quando possível
       const cartItem = {
@@ -1303,14 +1296,9 @@ async function repetirPedido(orderId) {
       // Se item tinha customizações específicas (preço calculado, addons), preserva
       // mas marca o `name` original (que pode ter "+ Bacon" etc)
       if (it.name && it.name !== atual.name) cartItem.name = it.name;
-      if (it.price && Math.abs(parseFloat(it.price) - parseFloat(atual.price)) > 0.01) {
-        // Preço difere significativamente — usa o preço atual mas avisa.
-        // Item com opções (tamanho, adicionais): o preço do pedido antigo
-        // já somava as escolhas que continuam no obs; voltar pro preço base
-        // cobraria menos do que o cliente escolheu.
-        const _temOpcoes = Array.isArray(atual.custom_groups) && atual.custom_groups.length > 0;
-        cartItem.price = (_temOpcoes && parseFloat(it.price) > parseFloat(atual.price))
-          ? parseFloat(it.price) : parseFloat(atual.price);
+      if (it.price && Math.abs(parseFloat(it.price) - parseFloat(atual.price)) > 0.01 && !(typeof _precisaEscolherOpcoes === 'function' && _precisaEscolherOpcoes(atual))) {
+        // Preço difere significativamente — usa o preço atual mas avisa
+        cartItem.price = parseFloat(atual.price);
       }
       cart.push(cartItem);
       adicionados++;
@@ -1513,9 +1501,18 @@ function _matchBairro(digitadoRaw, bairrosLista) {
 // ══════════════════════════════════════════
 //  CARRINHO
 // ══════════════════════════════════════════
+// Produto com escolha OBRIGATÓRIA (ex.: TAMANHO) nunca entra direto no carrinho: abre a tela do produto para escolher.
+// Sem isso, o item ia sem opção e com preço zero (ex.: macarronada a R$ 0,00 pela faixa "Adicionar ao pedido").
+function _precisaEscolherOpcoes(i) {
+  if (!i) return false;
+  let gs = i.custom_groups;
+  if (typeof gs === 'string') { try { gs = JSON.parse(gs); } catch (e) { gs = []; } }
+  return Array.isArray(gs) && gs.some(g => g && g.required === true);
+}
 function addToCart(id) {
   const i = allItems.find(x => x.id === id);
   if (!i) return;
+  if (_precisaEscolherOpcoes(i) && typeof openItemModal === 'function') { openItemModal(id); return; }
   const ex = cart.find(c => c.id === id && !c.obs);
   if (ex) ex.qty++;
   else cart.push({...i, qty:1, obs:''});
@@ -3257,8 +3254,6 @@ function toggleChecklistSection(id) {
 }
 
 function toggleChecklistItem(clId, itemId, price) {
-  const _itCl = allItems.find(x => x.id === Number(itemId));
-  if (_itCl && _itemExigeEscolha(_itCl)) { openItemModal(_itCl.id); return; }
   if (!_clState[clId]) _clState[clId] = {};
   const check = document.getElementById(`${clId}-check-${itemId}`);
   const qty   = document.getElementById(`${clId}-qty-${itemId}`);
@@ -3312,13 +3307,16 @@ function addChecklistToCart(clId) {
   const state = _clState[clId] || {};
   if (!Object.keys(state).length) return;
 
+  const _clPrecisaEscolher = [];
   Object.entries(state).forEach(([itemId, qty]) => {
     const item = allItems.find(i => i.id === Number(itemId));
-    if (!item || _itemExigeEscolha(item)) return;
+    if (!item) return;
+    if (typeof _precisaEscolherOpcoes === 'function' && _precisaEscolherOpcoes(item)) { _clPrecisaEscolher.push(item); return; }
     const existing = cart.find(c => c.id === item.id && !c.obs);
     if (existing) { existing.qty += qty; }
     else { cart.push({ ...item, qty, obs: '' }); }
   });
+  if (_clPrecisaEscolher.length) { const _pc = _clPrecisaEscolher[0]; setTimeout(() => { toast('warn', `Escolha as opções de ${_pc.name}`); openItemModal(_pc.id); }, 350); }
 
   // Limpa estado e visual
   _clState[clId] = {};
@@ -5044,9 +5042,11 @@ function _imConfirmCore() {
   else cart.push({ ...cartItem, qty: _imQty });
 
   // Add cross-sell items
+  const _xsellPrecisaEscolher = [];
   for (const xid of _xsellSelected) {
     const xi = allItems.find(x => x.id === xid);
-    if (!xi || _itemExigeEscolha(xi)) continue;
+    if (!xi) continue;
+    if (typeof _precisaEscolherOpcoes === 'function' && _precisaEscolherOpcoes(xi)) { _xsellPrecisaEscolher.push(xi); continue; }
     const xexist = cart.find(c => c.id === xi.id && !c.obs);
     if (xexist) xexist.qty += 1;
     else cart.push({ ...xi, qty: 1, obs: '' });
@@ -5056,6 +5056,12 @@ function _imConfirmCore() {
   closeItemModal();
   updateCartFloat();
   toast('cart', `${isPizza && _halfItem && !_isWholeFlavorSelected() ? 'Pizza meio a meio' : i.name} adicionado!`);
+  // Sugestão com escolha obrigatória: abre a tela dela para o cliente escolher (tamanho etc.) em vez de ir sem preço
+  if (_xsellPrecisaEscolher.length) {
+    const _px = _xsellPrecisaEscolher[0];
+    setTimeout(() => { toast('warn', `Escolha as opções de ${_px.name}`); openItemModal(_px.id); }, 450);
+  }
+  else if (typeof _sugestoesDepoisDeAdicionar === 'function') setTimeout(() => _sugestoesDepoisDeAdicionar(i), 380); // "Quer adicionar mais alguma coisa?"
 }
 
 // ── cardapio-checkout.js ──────────────────────────────────────────
@@ -9819,49 +9825,125 @@ function _updateImPrice() {
   if (btn && _lojaAberta) btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(total)}`;
 }
 
-// Item que só pode entrar no carrinho pela tela de opções: tem escolha
-// obrigatória (ex.: TAMANHO), é pizza, é por peso/kit, ou o preço dele
-// vem todo das opções (preço base zerado). Sem isso o item entrava direto
-// pelas sugestões, pela lista de seleção ou pelo "pedir de novo" sem
-// nenhuma escolha — e saía com R$ 0,00 na comanda.
-function _itemExigeEscolha(item) {
-  if (!item) return false;
-  const cgs = Array.isArray(item.custom_groups) ? item.custom_groups : [];
-  if (cgs.some(g => g && g.required === true)) return true;
-  if (typeof isPizzaItem === 'function' && isPizzaItem(item)) return true;
-  if (_isAcougueItem(item) || _isKitItem(item)) return true;
-  if (cgs.length && !(parseFloat(item.price) > 0)) return true;
-  return false;
-}
-
-// Cross-sell: suggest items from other categories
+// Sugestões: a faixa "Adicionar ao pedido" DENTRO do produto foi tirada (mostrava itens a R$ 0,00 e parecia brinde).
+// Agora, DEPOIS de adicionar o produto, aparece a pergunta "Quer adicionar mais alguma coisa?"
+// com complementos que têm preço: primeiro bebidas, depois sobremesas, depois acompanhamentos.
 function renderImXsell(item) {
   const wrap = document.getElementById('im-xsell-wrap');
-  if (!wrap) return;
-  const itemCat = item.cat_key || item.cat || '';
-  // Get up to 8 items from different categories
-  const others = allItems.filter(x =>
-    x.id !== item.id &&
-    x.status !== 'pausado' && x.status !== 'esgotado' &&
-    (x.cat_key || x.cat) !== itemCat &&
-    !_itemExigeEscolha(x)
-  ).slice(0, 8);
-  if (!others.length) { wrap.innerHTML = ''; return; }
+  if (wrap) wrap.innerHTML = '';
+}
 
-  const cards = others.map(o => `
-    <div class="xsell-card" id="xsell_${o.id}" onclick="xsellToggle(${o.id})" style="position:relative">
-      <div class="xsell-img" style="position:relative">${o.image_url ? `<img src="${_fotoMini(o.image_url, 160)}" >` : _placeholderProduto(o)}</div>
-      <div class="xsell-body">
-        <div class="xsell-name">${o.name}</div>
-        <div class="xsell-price">R$ ${fmt(o.price)}</div>
-      </div>
-      <div class="xsell-check">✓</div>
-    </div>`).join('');
-
-  wrap.innerHTML = `<div class="xsell-section">
-    <div class="xsell-title">Adicionar ao pedido</div>
-    <div class="xsell-scroll">${cards}</div>
-  </div>`;
+const _SUG_BEBIDA = /bebida|refri|refrigerante|suco|agua|cerveja|drink|lata|coca|guarana|chopp|vinho|energetico|\bcha\b|soda|\b\d+\s?ml\b|\b\d(,\d)?\s?l\b|litro/;
+const _SUG_DOCE = /sobremesa|doce|sorvete|acai|pudim|bolo|mousse|torta|brigadeiro|picole|milk ?shake|petit|pave|cocada|chocolate/;
+const _SUG_ACOMP = /acompanhamento|porcao|adicional|extra|batata|frita|molho|vinagrete|\bpao\b|farofa|salada/;
+const _sugNorm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function _sugTipo(i) {
+  const t = _sugNorm([i.cat_key, i.cat, i.name].join(' '));
+  return _SUG_BEBIDA.test(t) ? 3 : _SUG_DOCE.test(t) ? 2 : _SUG_ACOMP.test(t) ? 1 : 0;
+}
+let _sugUltima = 0;
+function _sugCandidatos(item) {
+  const catDele = item.cat_key || item.cat || '';
+  const noCarrinho = new Set(cart.map(c => c.id));
+  const base = allItems.filter(x =>
+    x.id !== item.id && Number(x.price) > 0 && !x.hide_price &&
+    x.status !== 'pausado' && x.status !== 'esgotado' && x.item_type !== 'kg' &&
+    (x.cat_key || x.cat || '') !== catDele && !noCarrinho.has(x.id));
+  const pontos = x => _sugTipo(x) * 10 - ((typeof _precisaEscolherOpcoes === 'function' && _precisaEscolherOpcoes(x)) ? 5 : 0) + (x.image_url ? 1 : 0);
+  let lista = base.filter(x => _sugTipo(x) > 0);
+  if (!lista.length) lista = base.slice(); // loja sem bebidas/sobremesas: mostra os itens mais em conta das outras categorias
+  return lista.sort((a, b) => (pontos(b) - pontos(a)) || (Number(a.price) - Number(b.price))).slice(0, 8);
+}
+function _sugEstilo() {
+  if (document.getElementById('sug-css')) return;
+  const st = document.createElement('style'); st.id = 'sug-css';
+  st.textContent = `
+  .sug-bg{position:fixed;inset:0;z-index:450;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .2s}
+  .sug-bg.on{opacity:1}
+  .sug-sheet{width:100%;max-width:560px;max-height:86vh;display:flex;flex-direction:column;background:var(--s1,#fff);color:var(--text,#111);border-radius:var(--r-lg,20px) var(--r-lg,20px) 0 0;transform:translateY(24px);transition:transform .22s ease;box-shadow:0 -10px 40px rgba(0,0,0,.18)}
+  .sug-bg.on .sug-sheet{transform:none}
+  .sug-grab{width:42px;height:5px;border-radius:9px;background:var(--border,rgba(0,0,0,.12));margin:10px auto 2px}
+  .sug-head{display:flex;align-items:flex-start;gap:12px;padding:10px 20px 12px}
+  .sug-tit{font-size:20px;font-weight:800;line-height:1.2}
+  .sug-sub{font-size:13.5px;color:var(--muted,#6b7280);margin-top:4px;display:flex;align-items:center;gap:6px}
+  .sug-sub b{color:var(--text,#111);font-weight:700}
+  .sug-ok{display:inline-flex;width:18px;height:18px;border-radius:50%;align-items:center;justify-content:center;background:var(--accent,#f97316);color:#fff;font-size:11px;flex:none}
+  .sug-x{margin-left:auto;flex:none;width:36px;height:36px;border-radius:50%;border:1px solid var(--border,rgba(0,0,0,.1));background:transparent;color:inherit;font-size:20px;line-height:1;cursor:pointer}
+  .sug-list{overflow-y:auto;padding:0 12px;-webkit-overflow-scrolling:touch}
+  .sug-row{display:flex;align-items:center;gap:12px;padding:10px 8px;border-top:1px solid var(--border,rgba(0,0,0,.08))}
+  .sug-img{position:relative;width:58px;height:58px;border-radius:12px;overflow:hidden;flex:none;background:var(--s2,#f1f3f7);display:flex;align-items:center;justify-content:center}
+  .sug-img .prod-ph{position:absolute;inset:0;pointer-events:none}
+  .sug-img img{width:100%;height:100%;object-fit:cover}
+  .sug-info{flex:1;min-width:0}
+  .sug-nome{font-size:14.5px;font-weight:700;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .sug-preco{font-size:14px;font-weight:800;color:var(--accent,#f97316);margin-top:3px}
+  .sug-add{flex:none;min-height:40px;padding:0 16px;border-radius:99px;border:1.5px solid var(--accent,#f97316);background:transparent;color:var(--accent,#f97316);font-weight:800;font-size:14px;cursor:pointer;white-space:nowrap}
+  .sug-step{flex:none;display:flex;align-items:center;gap:2px;border-radius:99px;background:var(--accent,#f97316);color:#fff}
+  .sug-step button{width:38px;height:40px;border:0;background:transparent;color:#fff;font-size:20px;font-weight:700;cursor:pointer}
+  .sug-step span{min-width:18px;text-align:center;font-weight:800}
+  .sug-foot{display:flex;gap:10px;padding:14px 20px calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--border,rgba(0,0,0,.08))}
+  .sug-no{flex:1;min-height:50px;border-radius:14px;border:1px solid var(--border,rgba(0,0,0,.12));background:transparent;color:inherit;font-weight:700;font-size:15px;cursor:pointer}
+  .sug-cart{flex:1.4;min-height:50px;border-radius:14px;border:0;background:var(--accent,#f97316);color:#fff;font-weight:800;font-size:15px;cursor:pointer;box-shadow:0 6px 18px rgba(var(--accent-rgb,249,115,22),.32)}
+  @media (prefers-reduced-motion:reduce){.sug-bg,.sug-sheet{transition:none}}`;
+  document.head.appendChild(st);
+}
+function _sugQtd(id) { const c = cart.find(x => x.id === id && !x.obs); return c ? c.qty : 0; }
+function _sugLinha(o) {
+  const q = _sugQtd(o.id);
+  const acao = q > 0
+    ? `<div class="sug-step"><button type="button" aria-label="Tirar um" onclick="_sugMenos(${o.id})">−</button><span>${q}</span><button type="button" aria-label="Mais um" onclick="_sugMais(${o.id})">+</button></div>`
+    : `<button type="button" class="sug-add" onclick="_sugMais(${o.id})">+ Adicionar</button>`;
+  return `<div class="sug-row" id="sug_${o.id}">
+    <div class="sug-img">${o.image_url ? `<img src="${_fotoMini(o.image_url, 160)}" alt="">` : _placeholderProduto(o)}</div>
+    <div class="sug-info"><div class="sug-nome">${o.name}</div><div class="sug-preco">R$ ${fmt(o.price)}</div></div>
+    ${acao}</div>`;
+}
+function _sugRodape() {
+  const b = document.getElementById('sug-cart'); if (!b) return;
+  const tot = typeof cartSubtotal === 'function' ? cartSubtotal() : cart.reduce((s, c) => s + (Number(c.price) || 0) * (c.qty || 1), 0);
+  b.textContent = `Ver carrinho · R$ ${fmt(tot)}`;
+}
+function _sugMais(id) {
+  const o = allItems.find(x => x.id === id); if (!o) return;
+  if (typeof _precisaEscolherOpcoes === 'function' && _precisaEscolherOpcoes(o)) { _sugFechar(); openItemModal(id); return; } // tem tamanho/opção: abre a tela dele
+  const c = cart.find(x => x.id === id && !x.obs);
+  if (c) c.qty++; else cart.push({ ...o, qty: 1, obs: '' });
+  updateCartFloat();
+  const row = document.getElementById('sug_' + id); if (row) row.outerHTML = _sugLinha(o);
+  _sugRodape();
+}
+function _sugMenos(id) {
+  const c = cart.find(x => x.id === id && !x.obs); if (!c) return;
+  if (c.qty > 1) c.qty--; else cart = cart.filter(x => x !== c);
+  updateCartFloat();
+  const o = allItems.find(x => x.id === id); const row = document.getElementById('sug_' + id); if (o && row) row.outerHTML = _sugLinha(o);
+  _sugRodape();
+}
+function _sugFechar() {
+  const bg = document.getElementById('sug-bg'); if (!bg) return;
+  bg.classList.remove('on'); setTimeout(() => bg.remove(), 220);
+}
+function _sugestoesDepoisDeAdicionar(item) {
+  try {
+    if (!item || _sugTipo(item) >= 2) return;           // acabou de pôr bebida/sobremesa: não insiste
+    if (Date.now() - _sugUltima < 45000) return;         // não pergunta toda hora
+    const lista = _sugCandidatos(item); if (!lista.length) return;
+    _sugUltima = Date.now(); _sugEstilo();
+    const old = document.getElementById('sug-bg'); if (old) old.remove();
+    const bg = document.createElement('div'); bg.id = 'sug-bg'; bg.className = 'sug-bg';
+    bg.innerHTML = `<div class="sug-sheet" role="dialog" aria-modal="true" aria-labelledby="sug-tit">
+      <div class="sug-grab" aria-hidden="true"></div>
+      <div class="sug-head"><div><div class="sug-tit" id="sug-tit">Quer adicionar mais alguma coisa?</div>
+        <div class="sug-sub"><span class="sug-ok" aria-hidden="true">✓</span><span><b>${item.name}</b> já está no carrinho</span></div></div>
+        <button type="button" class="sug-x" aria-label="Fechar" onclick="_sugFechar()">×</button></div>
+      <div class="sug-list">${lista.map(_sugLinha).join('')}</div>
+      <div class="sug-foot"><button type="button" class="sug-no" onclick="_sugFechar()">Não, obrigado</button><button type="button" class="sug-cart" id="sug-cart" onclick="_sugFechar();openCart()"></button></div>
+    </div>`;
+    bg.addEventListener('click', e => { if (e.target === bg) _sugFechar(); });
+    const _ta = document.getElementById('toast-area'); if (_ta) _ta.innerHTML = ''; // a janela já diz que entrou no carrinho
+    document.body.appendChild(bg); _sugRodape();
+    requestAnimationFrame(() => bg.classList.add('on'));
+  } catch (e) { /* sugestão nunca atrapalha o pedido */ }
 }
 
 // Cross-sell state

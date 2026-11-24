@@ -3403,36 +3403,39 @@ async function handleREST(req, res, table, params, body) {
               : (typeof payload.items === 'string' ? JSON.parse(payload.items) : [])
             for (const it of orderItems) {
               if (it?.id == null) continue // item avulso sem id de catálogo (ex: taxa extra) — não valida
-              const catalogItem = db.prepare('SELECT name, price, item_type, custom_groups, allow_half, cat, cat_key FROM menu_items WHERE id=? AND tenant_id=?').get(it.id, tenantId)
+              const catalogItem = db.prepare('SELECT name, price, item_type, custom_groups, cat, cat_key, allow_half FROM menu_items WHERE id=? AND tenant_id=?').get(it.id, tenantId)
               if (!catalogItem) {
                 return send(res, 422, { error: `Item "${it.name || it.id}" não existe mais no cardápio.` })
               }
               const isKg = catalogItem.item_type === 'kg'
               let temGrupos = false
-              let _gruposCat = []
-              try { _gruposCat = JSON.parse(catalogItem.custom_groups || '[]') || []; temGrupos = !!_gruposCat.length } catch(e) {}
-              // Escolha obrigatória (ex.: TAMANHO): o item tem que chegar com
-              // ela feita. O cardápio escreve cada escolha no obs como
-              // "NOME DO GRUPO: opção" — se o grupo obrigatório não aparece
-              // ali, o item entrou no carrinho sem passar pela tela de opções
-              // (foi assim que uma macarronada saiu por R$ 0,00). Pizza, kg,
-              // kit e pedido por voz montam o texto de outro jeito, então
-              // ficam de fora pra não travar pedido certo.
-              const _ESPECIAIS = ['pizza_sizes', 'tamanhos_pizza', 'cortes', 'pesos', 'porcao_ref', 'preparos', 'ocasiao', 'armazenamento', 'kit_itens', 'kit_categorias']
-              const _obsItem = String(it.obs || '').toLowerCase()
-              const _ehPizza = catalogItem.item_type === 'pizza' || Number(catalogItem.allow_half) === 1 ||
-                /pizza/i.test(`${catalogItem.cat || ''} ${catalogItem.cat_key || ''}`) ||
-                /pizza|meio a meio/.test(_obsItem) || String(it.name || '').includes(' / ')
-              const _foraDaRegra = isKg || catalogItem.item_type === 'kit' || _ehPizza || payload.canal === 'voz_whatsapp' ||
-                _gruposCat.some(g => g && _ESPECIAIS.includes(g.tipo))
-              if (!_foraDaRegra) {
-                const _faltou = _gruposCat.find(g => g && g.required === true && String(g.nome || '').trim() &&
-                  Array.isArray(g.opcoes) && g.opcoes.length &&
-                  !_obsItem.includes(String(g.nome).trim().toLowerCase() + ':'))
-                if (_faltou) {
-                  return send(res, 422, { error: `Escolha ${String(_faltou.nome).trim()} de "${catalogItem.name || it.name || 'item'}" antes de enviar o pedido.` })
+              try { temGrupos = !!(JSON.parse(catalogItem.custom_groups || '[]')?.length) } catch(e) {}
+              // Escolha OBRIGATÓRIA (ex.: TAMANHO): o item tem que chegar com a escolha feita e,
+              // se as opções têm preço, com pelo menos o valor da opção mais barata.
+              // (Antes passava: a macarronada saiu a R$ 0,00 pela faixa "Adicionar ao pedido".)
+              // Pizza, kit, açougue e item por kg têm regras próprias e ficam de fora.
+              try {
+                let _gCat = []; try { _gCat = JSON.parse(catalogItem.custom_groups || '[]') || [] } catch (e) {}
+                const _TIPOS_PROPRIOS = ['pizza_sizes', 'cortes', 'preparos', 'ocasiao', 'armazenamento', 'pesos', 'porcao_ref', 'kit_itens', 'kit_categorias']
+                const _catTxt = String(catalogItem.cat_key || catalogItem.cat || '').toLowerCase()
+                const _ehPizza = catalogItem.item_type === 'pizza' || !!catalogItem.allow_half || _catTxt.includes('pizza') || _gCat.some(g => g && g.tipo === 'pizza_sizes')
+                if (!isKg && !_ehPizza && Array.isArray(_gCat)) {
+                  const _txt = String(it.obs || '') + ' ' + String(it.name || '')
+                  let _minOpcoes = 0
+                  for (const g of _gCat) {
+                    if (!g || g.required !== true || _TIPOS_PROPRIOS.includes(g.tipo)) continue
+                    const _nomeG = String(g.nome || '').trim(); if (!_nomeG) continue
+                    if (!_txt.includes(_nomeG + ':')) {
+                      return send(res, 422, { error: `Escolha "${_nomeG}" de ${catalogItem.name || it.name || 'um item'} antes de finalizar o pedido.` })
+                    }
+                    const _precos = (Array.isArray(g.opcoes) ? g.opcoes : []).map(o => parseFloat(o && o.preco) || 0)
+                    if (_precos.length) _minOpcoes += Math.min(..._precos)
+                  }
+                  if (_minOpcoes > 0 && (parseFloat(it.price) || 0) + 0.01 < _minOpcoes) {
+                    return send(res, 422, { error: `Preço de "${it.name || 'item'}" não confere com as opções escolhidas.` })
+                  }
                 }
-              }
+              } catch (e) { log('⚠️', 'validação de escolha obrigatória falhou:', e.message) }
               if (!isKg && !temGrupos) {
                 const precoCatalogo = parseFloat(catalogItem.price) || 0
                 const precoPedido   = parseFloat(it.price) || 0
