@@ -2571,6 +2571,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
   _iniciarFiscalAutoJob(ctx) // NFC-e automática ao finalizar o pedido (roda 1 vez)
   _sseAvisoRef = sseBroadcast
 
+  // SuperSaaS (painel central): conector com token proprio (HUB_TOKEN)
+  if (upath.startsWith('/api/hub/v1/')) { if (await require('./hub-connector')(req, res, ctx)) return true }
+
   // Criar cardápio por foto (gestor)
   if (upath.startsWith('/api/cardapio-ia/')) { if (await require('./cardapio-ia')(req, res, ctx)) return true }
 
