@@ -2554,6 +2554,8 @@ function _iniciarFiscalAutoJob(ctx) {
 }
 
 module.exports = async function handleRoutes(req, res, ctx) {
+  // SuperSaaS: loja suspensa não usa o sistema nem estando logada (confere a cada acesso)
+  if (await require('./hub-connector').guard(req, res, ctx)) return true
   const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
           validarSessaoAdmin, criarSessaoAdmin, validarSessaoGestor, criarSessaoGestor, criarSessaoGarcom,
           hashPassword, verifyPassword, precisaMigrarHash, checkRateLimit, clientIp,

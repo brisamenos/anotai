@@ -115,7 +115,7 @@ module.exports = async function hubConnector(req, res, ctx) {
     if (!t) { send(res, 404, { error: 'Loja não encontrada.' }); return true }
     const b = (await readBody(req)) || {}
     if (m[2] === 'status') {
-      db.prepare('UPDATE tenants SET ativo = ? WHERE id = ?').run(b.active ? 1 : 0, t.id)
+      db.prepare('UPDATE tenants SET ativo = ? WHERE id = ?').run(b.active ? 1 : 0, t.id); _ativoCache.delete(String(t.id))
       dirty(); send(res, 200, { ok: true, active: !!b.active }); return true
     }
     if (m[2] === 'renew') {
@@ -140,3 +140,39 @@ module.exports = async function hubConnector(req, res, ctx) {
   send(res, 404, { error: 'Rota do conector não encontrada.' })
   return true
 }
+
+// ---------- bloqueio de verdade: loja suspensa não usa o sistema nem logada ----------
+// O login do gestor dura "para sempre" e o sistema não reconferia se a loja foi suspensa.
+// Este guarda roda antes das rotas: se a sessão (gestor, garçom ou entregador) é de uma loja suspensa, recusa.
+const SUSP_MSG = 'Acesso suspenso. Fale com o suporte para regularizar.'
+const _ativoCache = new Map()
+function lojaAtiva(db, tid) {
+  const c = _ativoCache.get(String(tid)); if (c && Date.now() - c.at < 5000) return c.ativo
+  let ativo = true; try { const r = db.prepare('SELECT ativo FROM tenants WHERE id = ?').get(tid); ativo = !r || r.ativo !== 0 } catch (_) { /* na dúvida, libera */ }
+  _ativoCache.set(String(tid), { ativo, at: Date.now() }); return ativo
+}
+async function guard(req, res, ctx) {
+  const { upath, db, send } = ctx
+  if (!upath || !(upath.startsWith('/api/') || upath.startsWith('/rest'))) return false
+  if (upath.startsWith('/api/hub/v1/') || upath === '/api/tenant-info-gestor' || /logout$/.test(upath) || upath === '/api/admin-login') return false
+  try {
+    if (req.method === 'POST' && upath === '/api/gestor-login') { // login de loja suspensa: recusa com mensagem clara
+      const body = await ctx.readBody(req); ctx.readBody = async () => body // as rotas leem o mesmo corpo
+      const email = String((body && body.email) || '').toLowerCase().trim()
+      const u = email ? db.prepare('SELECT tenant_id FROM sys_users WHERE email = ?').get(email) : null
+      if (u && u.tenant_id && !lojaAtiva(db, u.tenant_id)) { send(res, 403, { error: SUSP_MSG, suspenso: true }); return true }
+      return false
+    }
+    const auth = req.headers['authorization'] || '', token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+    if (!token) return false
+    let tid = null
+    for (const t of ['gestor_sessions', 'garcom_sessions', 'entregador_sessions']) {
+      try { const r = db.prepare(`SELECT tenant_id FROM ${t} WHERE token = ?`).get(token); if (r) { tid = r.tenant_id; break } } catch (_) { /* tabela ausente */ }
+    }
+    if (tid && !lojaAtiva(db, tid)) { send(res, 403, { error: SUSP_MSG, suspenso: true }); return true }
+  } catch (_) { /* o guarda nunca derruba o sistema */ }
+  return false
+}
+module.exports.guard = guard
+module.exports.lojaAtivaLimpar = tid => _ativoCache.delete(String(tid))
+
