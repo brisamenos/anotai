@@ -4052,13 +4052,26 @@ function toggleIngr(chip) {
 }
 
 // ── cross-sell ───────────────────────────────
+// Item que precisa da tela de opções (escolha obrigatória, pizza, kg/kit
+// ou preço que vem todo das opções) não entra pelas sugestões: entraria
+// sem escolha nenhuma e sairia por R$ 0,00 na comanda.
+function _garcomItemExigeEscolha(x) {
+  if (!x) return false;
+  const cgs = Array.isArray(x.custom_groups) ? x.custom_groups : [];
+  if (cgs.some(g => g && g.required === true)) return true;
+  if (_isPizzaItem(x)) return true;
+  if (x.item_type === 'kg' || x.item_type === 'kit') return true;
+  if (cgs.some(g => g && ['cortes','pesos','kit_itens','kit_categorias'].includes(g.tipo))) return true;
+  if (cgs.length && !(parseFloat(x.price) > 0)) return true;
+  return false;
+}
 function renderImXsell(item) {
   const wrap = document.getElementById('im-xsell-wrap');
   if (!wrap) return;
   const itemCat = item.cat_key || item.cat || '';
   const others = allItems.filter(x =>
     x.id !== item.id && x.status !== 'pausado' && x.status !== 'esgotado' && _garcomItemVisivel(x) &&
-    (x.cat_key || x.cat) !== itemCat
+    (x.cat_key || x.cat) !== itemCat && !_garcomItemExigeEscolha(x)
   ).slice(0, 8);
   if (!others.length) { wrap.innerHTML = ''; return; }
   const cards = others.map(o => `
@@ -4194,7 +4207,7 @@ function imConfirmGarcom() {
   // cross-sell
   for (const xid of _imXsellSelected) {
     const xi = allItems.find(x => x.id === xid);
-    if (!xi) continue;
+    if (!xi || _garcomItemExigeEscolha(xi)) continue;
     const xex = cart.find(c => c.id === xi.id && !c.obs && _mesmoClienteSelecionado(c));
     if (xex) xex.qty += 1;
     else cart.push(_aplicarClienteAoItem({ ...xi, qty: 1, obs: '' }));

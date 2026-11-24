@@ -760,6 +760,13 @@ async function repetirPedido(orderId) {
         pulados++;
         continue;
       }
+      // Item com escolha obrigatória que veio sem nenhuma escolha no pedido
+      // antigo: não repete (sairia de novo por R$ 0,00). O cliente escolhe
+      // de novo na tela do item.
+      if (typeof _itemExigeEscolha === 'function' && _itemExigeEscolha(atual) && !String(it.obs || '').trim()) {
+        pulados++;
+        continue;
+      }
       // Cria item de carrinho usando preço atual do menu (não o histórico)
       // Mantém obs/customizações do pedido original quando possível
       const cartItem = {
@@ -772,8 +779,13 @@ async function repetirPedido(orderId) {
       // mas marca o `name` original (que pode ter "+ Bacon" etc)
       if (it.name && it.name !== atual.name) cartItem.name = it.name;
       if (it.price && Math.abs(parseFloat(it.price) - parseFloat(atual.price)) > 0.01) {
-        // Preço difere significativamente — usa o preço atual mas avisa
-        cartItem.price = parseFloat(atual.price);
+        // Preço difere significativamente — usa o preço atual mas avisa.
+        // Item com opções (tamanho, adicionais): o preço do pedido antigo
+        // já somava as escolhas que continuam no obs; voltar pro preço base
+        // cobraria menos do que o cliente escolheu.
+        const _temOpcoes = Array.isArray(atual.custom_groups) && atual.custom_groups.length > 0;
+        cartItem.price = (_temOpcoes && parseFloat(it.price) > parseFloat(atual.price))
+          ? parseFloat(it.price) : parseFloat(atual.price);
       }
       cart.push(cartItem);
       adicionados++;

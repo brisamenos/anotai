@@ -1420,6 +1420,21 @@ function _updateImPrice() {
   if (btn && _lojaAberta) btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(total)}`;
 }
 
+// Item que só pode entrar no carrinho pela tela de opções: tem escolha
+// obrigatória (ex.: TAMANHO), é pizza, é por peso/kit, ou o preço dele
+// vem todo das opções (preço base zerado). Sem isso o item entrava direto
+// pelas sugestões, pela lista de seleção ou pelo "pedir de novo" sem
+// nenhuma escolha — e saía com R$ 0,00 na comanda.
+function _itemExigeEscolha(item) {
+  if (!item) return false;
+  const cgs = Array.isArray(item.custom_groups) ? item.custom_groups : [];
+  if (cgs.some(g => g && g.required === true)) return true;
+  if (typeof isPizzaItem === 'function' && isPizzaItem(item)) return true;
+  if (_isAcougueItem(item) || _isKitItem(item)) return true;
+  if (cgs.length && !(parseFloat(item.price) > 0)) return true;
+  return false;
+}
+
 // Cross-sell: suggest items from other categories
 function renderImXsell(item) {
   const wrap = document.getElementById('im-xsell-wrap');
@@ -1429,7 +1444,8 @@ function renderImXsell(item) {
   const others = allItems.filter(x =>
     x.id !== item.id &&
     x.status !== 'pausado' && x.status !== 'esgotado' &&
-    (x.cat_key || x.cat) !== itemCat
+    (x.cat_key || x.cat) !== itemCat &&
+    !_itemExigeEscolha(x)
   ).slice(0, 8);
   if (!others.length) { wrap.innerHTML = ''; return; }
 

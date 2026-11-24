@@ -1473,7 +1473,7 @@ function _imConfirmCore() {
   // Add cross-sell items
   for (const xid of _xsellSelected) {
     const xi = allItems.find(x => x.id === xid);
-    if (!xi) continue;
+    if (!xi || _itemExigeEscolha(xi)) continue;
     const xexist = cart.find(c => c.id === xi.id && !c.obs);
     if (xexist) xexist.qty += 1;
     else cart.push({ ...xi, qty: 1, obs: '' });

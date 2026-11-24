@@ -523,6 +523,8 @@ function toggleChecklistSection(id) {
 }
 
 function toggleChecklistItem(clId, itemId, price) {
+  const _itCl = allItems.find(x => x.id === Number(itemId));
+  if (_itCl && _itemExigeEscolha(_itCl)) { openItemModal(_itCl.id); return; }
   if (!_clState[clId]) _clState[clId] = {};
   const check = document.getElementById(`${clId}-check-${itemId}`);
   const qty   = document.getElementById(`${clId}-qty-${itemId}`);
@@ -578,7 +580,7 @@ function addChecklistToCart(clId) {
 
   Object.entries(state).forEach(([itemId, qty]) => {
     const item = allItems.find(i => i.id === Number(itemId));
-    if (!item) return;
+    if (!item || _itemExigeEscolha(item)) return;
     const existing = cart.find(c => c.id === item.id && !c.obs);
     if (existing) { existing.qty += qty; }
     else { cart.push({ ...item, qty, obs: '' }); }

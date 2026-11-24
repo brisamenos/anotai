@@ -1285,6 +1285,13 @@ async function repetirPedido(orderId) {
         pulados++;
         continue;
       }
+      // Item com escolha obrigatória que veio sem nenhuma escolha no pedido
+      // antigo: não repete (sairia de novo por R$ 0,00). O cliente escolhe
+      // de novo na tela do item.
+      if (typeof _itemExigeEscolha === 'function' && _itemExigeEscolha(atual) && !String(it.obs || '').trim()) {
+        pulados++;
+        continue;
+      }
       // Cria item de carrinho usando preço atual do menu (não o histórico)
       // Mantém obs/customizações do pedido original quando possível
       const cartItem = {
@@ -1297,8 +1304,13 @@ async function repetirPedido(orderId) {
       // mas marca o `name` original (que pode ter "+ Bacon" etc)
       if (it.name && it.name !== atual.name) cartItem.name = it.name;
       if (it.price && Math.abs(parseFloat(it.price) - parseFloat(atual.price)) > 0.01) {
-        // Preço difere significativamente — usa o preço atual mas avisa
-        cartItem.price = parseFloat(atual.price);
+        // Preço difere significativamente — usa o preço atual mas avisa.
+        // Item com opções (tamanho, adicionais): o preço do pedido antigo
+        // já somava as escolhas que continuam no obs; voltar pro preço base
+        // cobraria menos do que o cliente escolheu.
+        const _temOpcoes = Array.isArray(atual.custom_groups) && atual.custom_groups.length > 0;
+        cartItem.price = (_temOpcoes && parseFloat(it.price) > parseFloat(atual.price))
+          ? parseFloat(it.price) : parseFloat(atual.price);
       }
       cart.push(cartItem);
       adicionados++;
@@ -3245,6 +3257,8 @@ function toggleChecklistSection(id) {
 }
 
 function toggleChecklistItem(clId, itemId, price) {
+  const _itCl = allItems.find(x => x.id === Number(itemId));
+  if (_itCl && _itemExigeEscolha(_itCl)) { openItemModal(_itCl.id); return; }
   if (!_clState[clId]) _clState[clId] = {};
   const check = document.getElementById(`${clId}-check-${itemId}`);
   const qty   = document.getElementById(`${clId}-qty-${itemId}`);
@@ -3300,7 +3314,7 @@ function addChecklistToCart(clId) {
 
   Object.entries(state).forEach(([itemId, qty]) => {
     const item = allItems.find(i => i.id === Number(itemId));
-    if (!item) return;
+    if (!item || _itemExigeEscolha(item)) return;
     const existing = cart.find(c => c.id === item.id && !c.obs);
     if (existing) { existing.qty += qty; }
     else { cart.push({ ...item, qty, obs: '' }); }
@@ -5032,7 +5046,7 @@ function _imConfirmCore() {
   // Add cross-sell items
   for (const xid of _xsellSelected) {
     const xi = allItems.find(x => x.id === xid);
-    if (!xi) continue;
+    if (!xi || _itemExigeEscolha(xi)) continue;
     const xexist = cart.find(c => c.id === xi.id && !c.obs);
     if (xexist) xexist.qty += 1;
     else cart.push({ ...xi, qty: 1, obs: '' });
@@ -9805,6 +9819,21 @@ function _updateImPrice() {
   if (btn && _lojaAberta) btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(total)}`;
 }
 
+// Item que só pode entrar no carrinho pela tela de opções: tem escolha
+// obrigatória (ex.: TAMANHO), é pizza, é por peso/kit, ou o preço dele
+// vem todo das opções (preço base zerado). Sem isso o item entrava direto
+// pelas sugestões, pela lista de seleção ou pelo "pedir de novo" sem
+// nenhuma escolha — e saía com R$ 0,00 na comanda.
+function _itemExigeEscolha(item) {
+  if (!item) return false;
+  const cgs = Array.isArray(item.custom_groups) ? item.custom_groups : [];
+  if (cgs.some(g => g && g.required === true)) return true;
+  if (typeof isPizzaItem === 'function' && isPizzaItem(item)) return true;
+  if (_isAcougueItem(item) || _isKitItem(item)) return true;
+  if (cgs.length && !(parseFloat(item.price) > 0)) return true;
+  return false;
+}
+
 // Cross-sell: suggest items from other categories
 function renderImXsell(item) {
   const wrap = document.getElementById('im-xsell-wrap');
@@ -9814,7 +9843,8 @@ function renderImXsell(item) {
   const others = allItems.filter(x =>
     x.id !== item.id &&
     x.status !== 'pausado' && x.status !== 'esgotado' &&
-    (x.cat_key || x.cat) !== itemCat
+    (x.cat_key || x.cat) !== itemCat &&
+    !_itemExigeEscolha(x)
   ).slice(0, 8);
   if (!others.length) { wrap.innerHTML = ''; return; }
 
