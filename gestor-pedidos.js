@@ -2793,7 +2793,10 @@ function _noOpcQtyHtml() {
   const b = 'width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:16px;font-weight:700;line-height:1;cursor:pointer;padding:0;font-family:inherit';
   return `<span class="no-opc-qty" onclick="event.preventDefault();event.stopPropagation()" style="display:none;align-items:center;gap:6px;flex-shrink:0;cursor:default">
               <button type="button" onclick="noOpcQty(event,this,-1)" style="${b}">−</button>
-              <span class="no-opc-qty-num" style="min-width:22px;text-align:center;font-size:13px;font-weight:800">1</span>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="1" class="no-opc-qty-num" aria-label="Quantidade" title="Digite a quantidade"
+                onfocus="this.select()" oninput="noOpcQtyDigitar(this,false)" onchange="noOpcQtyDigitar(this,true)" onblur="noOpcQtyDigitar(this,true)"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
+                style="width:40px;height:28px;box-sizing:border-box;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);text-align:center;font-size:14px;font-weight:800;font-family:inherit;padding:0 2px;outline:none">
               <button type="button" onclick="noOpcQty(event,this,1)" style="${b}">+</button>
             </span>`;
 }
@@ -2821,7 +2824,35 @@ function _noOpcQtySync(inp) {
   if (!inp.checked) inp.dataset.qty = 1;
   box.style.display = inp.checked ? 'inline-flex' : 'none';
   const num = box.querySelector('.no-opc-qty-num');
-  if (num) num.textContent = _noOpcQtyDe(inp);
+  if (num && document.activeElement !== num) { if ('value' in num) num.value = _noOpcQtyDe(inp); else num.textContent = _noOpcQtyDe(inp); }
+}
+
+// Quantidade digitada no campo entre o − e o + (mais rápido que apertar várias vezes).
+// Respeita os mesmos limites: máximo do adicional e total máximo do grupo.
+// Enquanto digita: aceita só números e atualiza o total. Ao sair do campo: vazio ou 0 vira 1.
+function noOpcQtyDigitar(campo, final) {
+  const inp = campo.closest('label')?.querySelector('input[type=checkbox]');
+  if (!inp || !inp.checked) return;
+  const limpo = String(campo.value || '').replace(/\D/g, '').slice(0, 3);
+  if (campo.value !== limpo) campo.value = limpo;
+  let q = parseInt(limpo, 10);
+  if (!q || q < 1) {
+    if (!final) return;          // ainda digitando (campo vazio): espera
+    q = 1;
+  }
+  const atual = _noOpcQtyDe(inp);
+  const max  = parseInt(inp.dataset.max) || 0;
+  const gmax = parseInt(inp.dataset.gmax) || 0;
+  let limite = Infinity, motivo = '';
+  if (max > 0) { limite = max; motivo = `Máximo de ${max} para ${inp.dataset.nome || 'este adicional'}`; }
+  if (gmax > 1) {
+    const livre = gmax - (_noGrupoTotal(inp) - atual);   // o que sobra no grupo para este adicional
+    if (livre < limite) { limite = Math.max(1, livre); motivo = `Máximo de ${gmax} no total para este grupo`; }
+  }
+  if (q > limite) { q = limite; campo.value = q; sbToast('err', motivo); }
+  inp.dataset.qty = q;
+  if (final) campo.value = q;
+  _noOpcAtualizarTotais();
 }
 
 function _noOpcAtualizarTotais() {
