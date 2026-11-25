@@ -179,6 +179,7 @@ async function sendList(tenantId, phone, opts) {
 }
 
 // opts: { text, footer, buttons:[{id,text}], image }
+// Igual ao sendText: se o número não existir assim no WhatsApp (com/sem o 9), acha o certo e tenta de novo.
 async function sendButtons(tenantId, phone, opts) {
   const cfg = getConfig(tenantId);
   if (!cfg.wuzapi_token) throw new Error('WhatsApp (WuzAPI) não conectado para esta loja');
@@ -186,7 +187,18 @@ async function sendButtons(tenantId, phone, opts) {
   const digits = n.startsWith('55') ? n : `55${n}`;
   const known = _resolved.get(`${tenantId}:${digits}`);
   const first = known && Date.now() - known.at < 24 * 3600 * 1000 ? known.to : digits;
-  return wuzapi.sendButtons(cfg.wuzapi_token, first, opts);
+  try {
+    return await wuzapi.sendButtons(cfg.wuzapi_token, first, opts);
+  } catch (err) {
+    if (!/no LID found|not (registered|on whatsapp)|not found|invalid/i.test(err.message)) throw err;
+    const users = await wuzapi.checkUsers(cfg.wuzapi_token, phoneVariants(digits)).catch(() => []);
+    const found = users.find(u => u.IsInWhatsapp || u.isInWhatsapp);
+    if (!found) throw err;
+    const to = String(found.JID || found.jid || found.Query).split('@')[0];
+    if (to === first) throw err;
+    _resolved.set(`${tenantId}:${digits}`, { to, at: Date.now() });
+    return wuzapi.sendButtons(cfg.wuzapi_token, to, opts);
+  }
 }
 
 // opts: { text, footer, cards:[{ image, text, footer, buttons:[{id,text}] }] }

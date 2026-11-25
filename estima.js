@@ -34,6 +34,7 @@ function criarTabelas(db) {
     PRIMARY KEY (tenant_id, mes)
   )`)
   db.exec(`CREATE TABLE IF NOT EXISTS estima_config (chave TEXT PRIMARY KEY, valor TEXT)`)
+  try { db.prepare('ALTER TABLE estima_uso ADD COLUMN transcricoes INTEGER DEFAULT 0').run() } catch (e) { /* já existe */ }
 }
 
 function init(ctx) { ctxBase = ctx; criarTabelas(ctx.db) }
@@ -95,14 +96,14 @@ function valorNaFatura(db, tid) {
 // ── uso e limites ───────────────────────────────────────────────────────────
 function anotarUso(db, tid, campos) {
   try {
-    db.prepare(`INSERT INTO estima_uso (tenant_id, mes, perguntas, falas, caracteres_voz, tokens_entrada, tokens_saida, ultima_em) VALUES (?,?,?,?,?,?,?,?)
+    db.prepare(`INSERT INTO estima_uso (tenant_id, mes, perguntas, falas, caracteres_voz, tokens_entrada, tokens_saida, transcricoes, ultima_em) VALUES (?,?,?,?,?,?,?,?,?)
       ON CONFLICT(tenant_id, mes) DO UPDATE SET perguntas=perguntas+excluded.perguntas, falas=falas+excluded.falas, caracteres_voz=caracteres_voz+excluded.caracteres_voz,
-      tokens_entrada=tokens_entrada+excluded.tokens_entrada, tokens_saida=tokens_saida+excluded.tokens_saida, ultima_em=excluded.ultima_em`)
-      .run(tid, mesAtual(), campos.perguntas || 0, campos.falas || 0, campos.caracteres_voz || 0, campos.tokens_entrada || 0, campos.tokens_saida || 0, agoraISO())
+      tokens_entrada=tokens_entrada+excluded.tokens_entrada, tokens_saida=tokens_saida+excluded.tokens_saida, transcricoes=transcricoes+excluded.transcricoes, ultima_em=excluded.ultima_em`)
+      .run(tid, mesAtual(), campos.perguntas || 0, campos.falas || 0, campos.caracteres_voz || 0, campos.tokens_entrada || 0, campos.tokens_saida || 0, campos.transcricoes || 0, agoraISO())
   } catch (e) { /* uso é só informativo */ }
 }
 function usoDoMes(db, tid, mes = mesAtual()) {
-  try { return db.prepare('SELECT perguntas, falas, caracteres_voz, tokens_entrada, tokens_saida, ultima_em FROM estima_uso WHERE tenant_id=? AND mes=?').get(tid, mes) || { perguntas: 0, falas: 0, caracteres_voz: 0, tokens_entrada: 0, tokens_saida: 0, ultima_em: null } }
+  try { return db.prepare('SELECT perguntas, falas, caracteres_voz, tokens_entrada, tokens_saida, transcricoes, ultima_em FROM estima_uso WHERE tenant_id=? AND mes=?').get(tid, mes) || { perguntas: 0, falas: 0, caracteres_voz: 0, tokens_entrada: 0, tokens_saida: 0, transcricoes: 0, ultima_em: null } }
   catch (e) { return { perguntas: 0, falas: 0 } }
 }
 const _janela = new Map()
@@ -295,6 +296,48 @@ async function gerarVoz(db, tid, texto, voz) {
   return buf
 }
 
+// ── ouvir pelo servidor (Electron e navegadores sem o reconhecimento do Google) ──
+// O painel grava a fala (só quando a pessoa fala) e manda aqui; a OpenAI transcreve.
+// Os nomes do cardápio vão como dica, para ela acertar "X-Tudo", "açaí", "parmegiana"...
+function lerCorpoBruto(req, max) {
+  return new Promise((resolve, reject) => {
+    const partes = []; let total = 0, estourou = false
+    req.on('data', c => { total += c.length; if (total > max) { estourou = true; return } partes.push(c) })
+    req.on('end', () => estourou ? reject(Object.assign(new Error('Áudio grande demais. Fale uma pergunta mais curta.'), { status: 413 })) : resolve(Buffer.concat(partes)))
+    req.on('error', reject)
+  })
+}
+function dicasDeVocabulario(db, tid) {
+  const nomes = []
+  try { for (const m of db.prepare("SELECT name FROM menu_items WHERE tenant_id=? AND COALESCE(status,'') NOT IN ('pausado','inativo') ORDER BY sort_order, id LIMIT 80").all(tid)) if (m.name) nomes.push(String(m.name).trim()) } catch (e) { /* ok */ }
+  const loja = D.infoLoja(db, tid).nome
+  let txt = `Pergunta para a Estima, assistente da loja ${loja}: faturamento, ticket médio, pedidos, clientes, cardápio. Produtos: `
+  for (const n of nomes) { if ((txt + n).length > 700) break; txt += n + ', ' }
+  return txt.replace(/, $/, '.')
+}
+async function transcrever(db, tid, audio, tipo) {
+  const chave = chaveOpenAI(db)
+  if (!chave) { const e = new Error('A transcrição de voz não está disponível. Digite a pergunta.'); e.status = 503; throw e }
+  if (!audio || audio.length < 1500) return ''
+  const ext = /mp4|m4a|aac/.test(tipo) ? 'm4a' : /ogg/.test(tipo) ? 'ogg' : /wav/.test(tipo) ? 'wav' : /mpeg|mp3/.test(tipo) ? 'mp3' : 'webm'
+  const fd = new FormData()
+  fd.append('file', new Blob([audio], { type: tipo || 'audio/webm' }), 'fala.' + ext)
+  fd.append('model', process.env.ESTIMA_STT_MODEL || 'gpt-4o-mini-transcribe')
+  fd.append('language', 'pt')
+  fd.append('prompt', dicasDeVocabulario(db, tid))
+  fd.append('response_format', 'json')
+  let r
+  try { r = await fetch(BASE_OPENAI() + '/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: 'Bearer ' + chave }, body: fd, signal: AbortSignal.timeout(30000) }) }
+  catch (e) { const er = new Error('Não consegui transcrever agora. Tente de novo ou digite.'); er.status = 502; throw er }
+  if (!r.ok) { const e = new Error(r.status === 429 ? 'Muitas falas seguidas. Espere um instante.' : 'Não consegui entender o áudio (erro ' + r.status + '). Tente de novo ou digite.'); e.status = 502; throw e }
+  let j = {}; try { j = await r.json() } catch (e) { /* vazio */ }
+  anotarUso(db, tid, { transcricoes: 1 })
+  // a transcrição às vezes devolve só a dica ou ruído ("Legendas por...", "Obrigado.") quando não houve fala de verdade
+  const t = String(j.text || '').replace(/\s+/g, ' ').trim()
+  if (!t || /^(legenda|legendas|obrigad[oa]\.?$|tchau\.?$|\.+$)/i.test(t) || t.startsWith('Pergunta para a Estima')) return ''
+  return t.slice(0, 600)
+}
+
 // ── rotas ───────────────────────────────────────────────────────────────────
 function tidDoGestor(req, ctx) {
   const tid = String(req.headers['x-tenant-id'] || '')
@@ -408,6 +451,7 @@ async function handle(req, res, ctx) {
     send(res, 200, {
       ...sit, pronta: !!M, nome_loja: D.infoLoja(db, tid).nome,
       voz_premium: sit.liberada && vozPremiumPronta(db) ? { ready: true, voices: VOZES } : { ready: false, voices: [] },
+      ouvir_pelo_servidor: sit.liberada && !!chaveOpenAI(db),
       uso_mes: uso.perguntas || 0, limite_mensal: limite, suporte_whatsapp: suporteWhatsapp(db)
     })
     return true
@@ -428,6 +472,16 @@ async function handle(req, res, ctx) {
     const b = await readBody(req).catch(() => ({})) || {}
     try { send(res, 200, await perguntar(db, tid, b)) }
     catch (e) { send(res, e.status || 502, { error: e.message || 'A Estima não conseguiu responder.' }) }
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/estima/ouvir') {
+    if (!dentroDoRitmo('o:' + tid, 30)) { send(res, 429, { error: 'Muitas falas seguidas. Espere um instante.' }); return true }
+    try {
+      const audio = await lerCorpoBruto(req, 4 * 1024 * 1024)
+      const texto = await transcrever(db, tid, audio, String(req.headers['content-type'] || '').split(';')[0].trim())
+      send(res, 200, { text: texto })
+    } catch (e) { send(res, e.status || 502, { error: e.message }) }
     return true
   }
 

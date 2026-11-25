@@ -162,6 +162,7 @@ async function sendButtons(token, phone, { text, footer, buttons, image }) {
   const data = await wzFetch('/chat/send/buttons', {
     method: 'POST',
     token,
+    timeoutMs: image ? 60000 : 30000, // com foto, a WuzAPI sobe a imagem para o WhatsApp antes de mandar
     body: {
       Phone: phone,
       Body: text,

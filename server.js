@@ -4411,9 +4411,22 @@ async function sendWACarousel(phone, inst, opts) {
 // imagem da loja no topo, o texto e o botão "Abrir cardápio" embaixo.
 // Se a WuzAPI recusar o botão, manda o texto normal com o link (que ainda
 // chega com a prévia do site). Desliga com WA_BOTAO_CARDAPIO=0.
+//
+// Mensagem com botão é instável no WhatsApp (não é a API oficial): às vezes a
+// WuzAPI diz "enviado" e o aparelho do cliente não mostra nada. Por isso:
+//  - se a WuzAPI der erro ou não devolver o ID da mensagem, vai o link em texto;
+//  - se o cardápio já foi com botão para este cliente nas últimas 12 horas
+//    (ele pediu de novo = provavelmente não apareceu), vai o link em texto.
+const _cardapioComBotao = new Map() // "loja:telefone" -> quando foi o botão
+const CARDAPIO_BOTAO_JANELA = 12 * 3600 * 1000
 async function sendWALinkCardapio(phone, inst, tenantId, texto, link, delayMs, extras = []) {
+  const chaveBotao = `${tenantId}:${String(phone || '').replace(/\D/g, '').slice(-11)}`
+  const ultimoBotao = _cardapioComBotao.get(chaveBotao)
+  const jaFoiComBotao = !!ultimoBotao && Date.now() - ultimoBotao < CARDAPIO_BOTAO_JANELA
+  if (_cardapioComBotao.size > 5000) { const lim = Date.now() - CARDAPIO_BOTAO_JANELA; for (const [k, t] of _cardapioComBotao) if (t < lim) _cardapioComBotao.delete(k) }
   const usaBotao = process.env.WA_BOTAO_CARDAPIO !== '0' && link && String(texto || '').includes(link) &&
-    typeof inst === 'string' && inst.startsWith(WUZAPI_SENTINEL)
+    typeof inst === 'string' && inst.startsWith(WUZAPI_SENTINEL) && !jaFoiComBotao
+  if (jaFoiComBotao && link && String(texto || '').includes(link)) log('ℹ️', `Cardápio de novo para ${phone}: agora vai o link em texto (o botão pode não ter aparecido no aparelho do cliente)`)
   if (usaBotao) {
     const esc = link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     // "Cardápio: <link>" numa linha só some inteira (o botão já diz isso);
@@ -4436,7 +4449,9 @@ async function sendWALinkCardapio(phone, inst, tenantId, texto, link, delayMs, e
         buttons: [{ type: 'url', id: 'abrir_cardapio', text: 'Cardápio completo', url: link }, ...extras]
       })
       const id = typeof r === 'string' ? r : (r?.Id || r?.id || null)
-      if (id) _tenantWa.markBotSent(id)
+      if (!id) throw new Error('a WuzAPI não confirmou o envio (sem ID da mensagem)')
+      _tenantWa.markBotSent(id)
+      _cardapioComBotao.set(chaveBotao, Date.now())
       try {
         const num = phone.replace(/\D/g, '')
         const number = num.startsWith('55') ? num : `55${num}`
@@ -4447,7 +4462,7 @@ async function sendWALinkCardapio(phone, inst, tenantId, texto, link, delayMs, e
           .run(tenantId, jid, msgId, payload, Math.floor(Date.now() / 1000))
         marcarDirty()
       } catch (e) {}
-      log('📤', `Cardápio com botão (WuzAPI) para ${phone}`)
+      log('📤', `Cardápio com botão (WuzAPI) para ${phone} [id ${id}]`)
       return { ok: true }
     } catch (e) {
       log('⚠️', 'Botão do cardápio falhou, mandando link em texto:', e.message)
