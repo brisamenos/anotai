@@ -2053,8 +2053,14 @@ async function enviarBackupTelegram(forcar = false) {
     enviarBackupTelegram._enviando = true
     _peguei = true
 
-    const rawBuf = fs.readFileSync(BACKUP_PATH)
-    const buf    = zlib.gzipSync(rawBuf)
+    // Compacta lendo o arquivo aos poucos, em segundo plano. Antes o arquivo
+    // inteiro (quase 200 MB) era lido e compactado de uma vez, e o sistema
+    // ficava sem responder enquanto isso.
+    const gzPath = BACKUP_PATH + '.telegram.gz'
+    const rawSize = (await fs.promises.stat(BACKUP_PATH)).size
+    await require('stream').promises.pipeline(fs.createReadStream(BACKUP_PATH), zlib.createGzip({ level: 6 }), fs.createWriteStream(gzPath))
+    const buf = await fs.promises.readFile(gzPath)
+    fs.promises.unlink(gzPath).catch(() => {})
     const stamp  = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 
     // Limite do Telegram Bot API pra sendDocument: 50MB
@@ -2064,17 +2070,18 @@ async function enviarBackupTelegram(forcar = false) {
       return { ok:false, motivo:'arquivo_excede_limite_telegram', tamanho_kb: Math.round(buf.length/1024) }
     }
 
-    const form  = new FormData()
-    form.append('chat_id', String(cfg.chat_id))
-    form.append('caption', `💾 Backup Anotai — ${stamp} (${(rawBuf.length / 1024).toFixed(0)} KB → ${(buf.length / 1024).toFixed(0)} KB gzip)`)
-    form.append('document', new Blob([buf], { type: 'application/gzip' }), `backup-${new Date().toISOString().slice(0, 10)}.json.gz`)
-
-    // Serializa o FormData num Buffer fixo e envia com Content-Length explícito.
+    // Monta o envio num Buffer fixo e manda com Content-Length explícito.
     // O envio direto de FormData/Blob pelo fetch nativo do Node pode truncar uploads
     // grandes, e o Telegram responde "Bad Request: incomplete input" quando isso ocorre.
-    const formResponse = new Response(form)
-    const contentType  = formResponse.headers.get('content-type')
-    const bodyBuf       = Buffer.from(await formResponse.arrayBuffer())
+    // Montado à mão para não fazer várias cópias do arquivo na memória.
+    const caption  = `💾 Backup Anotai — ${stamp} (${(rawSize / 1024).toFixed(0)} KB → ${(buf.length / 1024).toFixed(0)} KB gzip)`
+    const boundary = '----estimafood' + crypto.randomBytes(12).toString('hex')
+    const campo = (nome, valor) => `--${boundary}\r\nContent-Disposition: form-data; name="${nome}"\r\n\r\n${valor}\r\n`
+    const cabecalho = Buffer.from(
+      campo('chat_id', String(cfg.chat_id)) + campo('caption', caption) +
+      `--${boundary}\r\nContent-Disposition: form-data; name="document"; filename="backup-${new Date().toISOString().slice(0, 10)}.json.gz"\r\nContent-Type: application/gzip\r\n\r\n`, 'utf8')
+    const bodyBuf     = Buffer.concat([cabecalho, buf, Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8')])
+    const contentType = `multipart/form-data; boundary=${boundary}`
 
     const t0 = Date.now()
     const resp = await fetch(`https://api.telegram.org/bot${cfg.bot_token}/sendDocument`, {
@@ -2120,44 +2127,113 @@ function fazerBackup(forcar = false) {
   // Evita chamadas simultâneas
   if (fazerBackup._running) return
   fazerBackup._running = true
-  setImmediate(() => {
-    try {
-      const snapshot = { ts: new Date().toISOString(), tabelas: {} }
-      let total = 0
-      for (const t of TABELAS_BACKUP) {
-        try {
-          const rows = db.prepare(`SELECT * FROM "${t}"`).all()
-          // Remove campos grandes (imagens base64, json extenso) linha a linha
-          snapshot.tabelas[t] = rows.map(row => {
-            const r = {}
-            for (const [k, v] of Object.entries(row)) {
-              if (typeof v === 'string' && v.length > 50000) r[k] = null
-              else r[k] = v
-            }
-            return r
-          })
-          total += rows.length
-        } catch { snapshot.tabelas[t] = [] }
-      }
-      // Escreve em partes para não estourar a heap
-      const ws = fs.createWriteStream(BACKUP_PATH + '.tmp')
-      ws.write(JSON.stringify(snapshot))
-      ws.end()
-      ws.on('finish', () => {
-        try { fs.renameSync(BACKUP_PATH + '.tmp', BACKUP_PATH) } catch {}
-        log('💾', `Backup salvo (${total} registros)`)
-        fazerBackup._running = false
-        enviarBackupTelegram().catch(() => {})
-      })
-      ws.on('error', (e) => {
-        log('❌', 'Erro backup write:', { error: e.message })
-        fazerBackup._running = false
-      })
-    } catch(e) {
+  _gravarBackup()
+    .then(info => {
+      const maiores = info.maiores.map(([t, b]) => `${t} ${(b / 1048576).toFixed(1)} MB`).join(', ')
+      log('💾', `Backup salvo (${info.total} registros, ${(info.bytes / 1048576).toFixed(1)} MB em ${(info.ms / 1000).toFixed(1)}s; maiores: ${maiores})`)
+      fazerBackup._running = false
+      enviarBackupTelegram().catch(() => {})
+    })
+    .catch(e => {
       log('❌', 'Erro backup:', { error: e.message })
       fazerBackup._running = false
-    }
+    })
+}
+
+// Grava o backup aos poucos: lê cada tabela em blocos e devolve a vez ao
+// servidor entre um bloco e outro. Antes o banco inteiro era lido e
+// transformado em texto de uma vez só, e o sistema parava de responder
+// enquanto isso acontecia. O arquivo final é o mesmo de antes.
+async function _gravarBackup() {
+  const t0 = Date.now()
+  const BLOCO = 1000
+  const tmp = BACKUP_PATH + '.tmp'
+  const ws = fs.createWriteStream(tmp)
+  let erroEscrita = null
+  ws.on('error', e => { erroEscrita = e })
+  const escrever = txt => new Promise((ok, falha) => {
+    if (erroEscrita) return falha(erroEscrita)
+    if (ws.write(txt)) return ok()
+    const fim = () => { ws.off('drain', fim); ws.off('error', fim); erroEscrita ? falha(erroEscrita) : ok() }
+    ws.on('drain', fim); ws.on('error', fim)
   })
+  const respirar = () => new Promise(r => setImmediate(r))
+  // Remove campos grandes (imagens base64, json extenso) linha a linha
+  const limpar = row => {
+    const r = {}
+    for (const [k, v] of Object.entries(row)) {
+      if (k === '__rid') continue
+      r[k] = typeof v === 'string' && v.length > 50000 ? null : v
+    }
+    return r
+  }
+  let total = 0, bytes = 0
+  const porTabela = []
+  // Lê por uma segunda conexão, só de leitura, dentro de uma transação. Com o
+  // banco em WAL, ela enxerga o banco congelado no instante em que o backup
+  // começou, enquanto o sistema continua gravando pedidos normalmente. Assim o
+  // backup é uma foto exata de um momento, igual ao jeito antigo.
+  let leitor = db, foto = false
+  try {
+    leitor = new Database(DB_PATH, { readonly: true, fileMustExist: true })
+    leitor.exec('BEGIN')
+    leitor.prepare('SELECT 1 FROM sqlite_master LIMIT 1').get() // congela a foto agora
+    foto = true
+  } catch (e) {
+    try { if (leitor !== db) leitor.close() } catch {}
+    leitor = db
+  }
+  try {
+    await escrever(`{"ts":${JSON.stringify(new Date().toISOString())},"tabelas":{`)
+    let primeiraTabela = true
+    for (const t of TABELAS_BACKUP) {
+      await escrever(`${primeiraTabela ? '' : ','}${JSON.stringify(t)}:[`)
+      primeiraTabela = false
+      let primeiraLinha = true, bytesTabela = 0
+      const gravarLinhas = async rows => {
+        if (!rows.length) return
+        const txt = (primeiraLinha ? '' : ',') + rows.map(r => JSON.stringify(limpar(r))).join(',')
+        primeiraLinha = false
+        bytesTabela += txt.length
+        total += rows.length
+        await escrever(txt)
+      }
+      try {
+        let stmt = null
+        try { stmt = leitor.prepare(`SELECT rowid AS __rid, * FROM "${t}" WHERE rowid > ? ORDER BY rowid LIMIT ${BLOCO}`) } catch (e) { stmt = null }
+        if (stmt) {
+          let ultimo = Number.MIN_SAFE_INTEGER
+          for (;;) {
+            const rows = stmt.all(ultimo)
+            if (!rows.length) break
+            ultimo = rows[rows.length - 1].__rid
+            await gravarLinhas(rows)
+            if (rows.length < BLOCO) break
+            await respirar()
+          }
+        } else {
+          // Tabela sem rowid: lê inteira (são tabelas pequenas)
+          await gravarLinhas(leitor.prepare(`SELECT * FROM "${t}"`).all())
+        }
+      } catch (e) { /* tabela que não existe neste banco fica vazia, como antes */ }
+      await escrever(']')
+      bytes += bytesTabela
+      porTabela.push([t, bytesTabela])
+      await respirar()
+    }
+    await escrever('}}')
+    await new Promise((ok, falha) => { if (erroEscrita) return falha(erroEscrita); ws.end(() => erroEscrita ? falha(erroEscrita) : ok()) })
+    await fs.promises.rename(tmp, BACKUP_PATH)
+  } catch (e) {
+    try { ws.destroy() } catch {}
+    try { await fs.promises.unlink(tmp) } catch {}
+    throw e
+  } finally {
+    if (leitor !== db) { try { leitor.exec('COMMIT') } catch {} try { leitor.close() } catch {} }
+  }
+  if (!foto) log('⚠️', 'Backup: não consegui abrir a leitura separada, li pela conexão principal')
+  porTabela.sort((x, y) => y[1] - x[1])
+  return { total, bytes, ms: Date.now() - t0, maiores: porTabela.slice(0, 3) }
 }
 fazerBackup._running = false
 
