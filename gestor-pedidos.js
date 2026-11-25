@@ -3722,6 +3722,17 @@ async function createOrder() {
     return;
   }
 
+  // Anota os pedidos que já foram impressos (por qualquer caminho), para a impressão
+  // automática do Novo pedido nunca sair em dobro nem deixar de sair.
+  if (typeof printOrder === 'function' && !window.printOrder.__noMarca) {
+    const _printOrig = window.printOrder;
+    window.printOrder = function (o) {
+      try { if (o && o.id != null) (window._noImpressos ||= new Set()).add(Number(o.id)); } catch (_) {}
+      return _printOrig.apply(this, arguments);
+    };
+    window.printOrder.__noMarca = true;
+  }
+
   // ── PEDIDOS DE DELIVERY E RETIRADA — fluxo original (status: 'analise')
   // Preserva o `obs` de cada item (que já vem com os adicionais formatados pelo modal).
   // Se o usuário digitou uma observação geral, anexa apenas no último item.
@@ -3771,6 +3782,17 @@ async function createOrder() {
     // computadores imprimem a deles pelo tempo real.
     if (window._printModoPCAtivo?.() && (window._printMode || _printMode) === 'auto' && typeof printOrder === 'function') {
       printOrder(mapOrder(orderData));
+    } else if ((window._printMode || _printMode) === 'auto' && !mesaNum && typeof printOrder === 'function') {
+      // Impressão automática normal: antes dependia do "tempo real" chegar ANTES da resposta
+      // do servidor. Quando a resposta chegava primeiro, o tempo real ignorava o pedido
+      // (_pdvCreatedIds) e nada imprimia. Agora, se em 1,5 s ninguém imprimiu, imprime aqui
+      // (uma vez só: se o tempo real já imprimiu, não repete).
+      const _idNovo = Number(orderData.id), _pedidoNovo = mapOrder(orderData);
+      setTimeout(() => {
+        if (window._noImpressos && window._noImpressos.has(_idNovo)) return;
+        (window._noImpressos ||= new Set()).add(_idNovo);
+        printOrder(_pedidoNovo);
+      }, 1500);
     }
 
     sbLoading(false);
