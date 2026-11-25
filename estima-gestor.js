@@ -253,7 +253,7 @@
   // ---------- microfone (só para o globo reagir à voz) ----------
   let mic = null;
   async function micOn() {
-    if (mic || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    if (mic || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return mic;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       const ac = new (window.AudioContext || window.webkitAudioContext)(), an = ac.createAnalyser(); an.fftSize = 512; ac.createMediaStreamSource(stream).connect(an);
@@ -276,9 +276,21 @@
   const WAKE = /(?:^|\s)(?:ola|oi|ei|hey|alo|fala|e ai|eae|ok|okay)\s+(?:a\s+)?(?:estima|estimar|estime|istima|esteema|estiima|stima|estimo)(?:\s+|$)/;
   const FAREWELL = /^((ok |beleza |ta |entao )?(obrigad[oa]|valeu|tchau|ate mais|ate logo|ate depois|ate amanha|falou|so isso|era so isso|e so isso|nao obrigado|pode fechar|fechar|encerrar|encerra|pode encerrar|fecha|desligar|pode desligar|boa noite|bom descanso)( estima)?( (obrigad[oa]|tchau|valeu|era so isso))?)$/;
 
-  let rec = null;
-  function killRec() { if (!rec) return; const r = rec; rec = null; r.onresult = r.onerror = r.onend = r.onstart = null; try { r.abort(); } catch (_) { /* ok */ } }
-  const canListen = () => !!SR && window.isSecureContext;
+  // Dois jeitos de ouvir:
+  //  - Chrome/Edge: o reconhecimento do próprio navegador (rápido e grátis), que também permite o "Olá, Estima".
+  //  - Electron (EstimaFood Print) e navegadores sem ele: o painel grava a fala e o servidor transcreve (OpenAI).
+  //    Nesse modo a Estima não fica ouvindo o tempo todo: toca no botão/globo e fala.
+  const EH_ELECTRON = /Electron\//.test(navigator.userAgent) || !!window.ElectronPrint;
+  let googleFalhou = sstore.get('est_srv') === '1';
+  const temGravador = () => !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) && window.isSecureContext;
+  const reconhecimentoGoogle = () => !!SR && window.isSecureContext && !EH_ELECTRON && !googleFalhou;
+  const ouvirPeloServidor = () => !!(estado && estado.ouvir_pelo_servidor) && temGravador();
+  const canListen = () => reconhecimentoGoogle() || ouvirPeloServidor();
+  let rec = null, srv = null;
+  function killRec() {
+    if (srv) { const g = srv; srv = null; g.cancelado = true; try { if (g.mr.state !== 'inactive') g.mr.stop(); } catch (_) { /* ok */ } }
+    if (!rec) return; const r = rec; rec = null; r.onresult = r.onerror = r.onend = r.onstart = null; try { r.abort(); } catch (_) { /* ok */ }
+  }
 
   let mode = 'off', phase = 'idle', wakeBackoff = 300, wakeTimer = null, ctxMsgs = [], ctxAt = 0, busy = false;
   try { ctxMsgs = JSON.parse(sstore.get('est_ctx') || '[]'); } catch (_) { ctxMsgs = []; }
@@ -286,7 +298,7 @@
 
   function startWake() {
     clearTimeout(wakeTimer);
-    if (!prefs.wake || !liberada() || !canListen() || mode === 'open' || document.hidden) { if (mode === 'wake') mode = 'off'; pintarTopo(); return; }
+    if (!prefs.wake || !liberada() || !reconhecimentoGoogle() || mode === 'open' || document.hidden) { if (mode === 'wake') mode = 'off'; pintarTopo(); return; }
     killRec(); mode = 'wake'; pintarTopo();
     const r = new SR(); rec = r; r.lang = 'pt-BR'; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
     let pending = null;
@@ -330,7 +342,7 @@
     ov.querySelector('.est-x').addEventListener('click', () => close());
     ov.querySelector('.est-orb-hit').addEventListener('click', () => { if (phase === 'speaking' || phase === 'greet') { stopSpeaking(); listen(); } else if (phase === 'idle') listen(); });
     ov.querySelector('.est-type').addEventListener('submit', e => { e.preventDefault(); const i = ov.querySelector('#estIn'); const q = i.value.trim(); if (!q) return; i.value = ''; killRec(); stopSpeaking(); ask(q, false); });
-    ov.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && ov && !ov.hidden && ov.classList.contains('on')) { e.preventDefault(); close(); } });
     return ov;
   }
   const STATE_TXT = { greet: 'Estima', listening: 'Ouvindo', thinking: 'Olhando os números da loja', speaking: 'Estima', idle: 'Toque no globo para falar' };
@@ -364,6 +376,7 @@
   const END_FINAL = 650, END_INTERIM = 1100;
   function listen() {
     if (mode !== 'open') return;
+    if (!reconhecimentoGoogle() && ouvirPeloServidor()) return listenServidor();
     if (!canListen()) { setPhase('idle'); caption('', !SR ? 'Este navegador não entende voz. Use o Google Chrome ou o Microsoft Edge. Você pode digitar abaixo.' : 'O microfone só funciona com o endereço em https://. Você pode digitar abaixo.'); return; }
     killRec(); setPhase('listening'); caption(''); micOn();
     const r = new SR(); rec = r; r.lang = 'pt-BR'; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
@@ -380,6 +393,7 @@
       // a última resposta continua na tela; o aviso vai na linha de estado
       const aviso = m => { failed = true; killRec(); setPhase('idle'); if (ov) ov.querySelector('.est-state').textContent = m; };
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') aviso('Microfone bloqueado: clique no cadeado ao lado do endereço e permita. Ou digite abaixo.');
+      else if (['network', 'audio-capture', 'language-not-supported'].includes(e.error) && ouvirPeloServidor()) { googleFalhou = true; sstore.set('est_srv', '1'); killRec(); listenServidor(); } // sem o serviço do Google: ouve pelo servidor
       else if (e.error === 'network') aviso('A voz precisa de internet e não conectou. Toque no globo para tentar de novo.');
       else if (e.error === 'audio-capture') aviso('Não encontrei o microfone. Confira se está ligado e toque no globo.');
     };
@@ -390,6 +404,54 @@
       if (mode === 'open' && !busy) setTimeout(() => { if (mode === 'open' && !busy && !rec && phase === 'listening') listen(); }, 120);
     };
     try { r.start(); } catch (_) { rec = null; setTimeout(() => { if (mode === 'open' && !rec) listen(); }, 400); }
+  }
+
+  // Ouve gravando a fala e mandando para o servidor transcrever.
+  // Mede o barulho do ambiente no começo; só grava "fala" acima dele; para sozinha depois de ~1 s de silêncio.
+  // Só envia quando alguém falou de verdade (barulho curto não gasta nada).
+  async function listenServidor() {
+    if (mode !== 'open') return;
+    killRec(); setPhase('listening'); caption('');
+    await micOn();
+    if (mode !== 'open' || phase !== 'listening' || srv) return;
+    const estado1 = m => { setPhase('idle'); if (ov) ov.querySelector('.est-state').textContent = m; };
+    if (!mic) return estado1(EH_ELECTRON ? 'Não consegui usar o microfone neste computador. Confira se ele está ligado. Você pode digitar abaixo.' : 'Microfone bloqueado: clique no cadeado ao lado do endereço e permita. Ou digite abaixo.');
+    const tipos = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+    const tipo = tipos.find(t => { try { return MediaRecorder.isTypeSupported(t); } catch (_) { return false; } }) || '';
+    let mr; try { mr = new MediaRecorder(mic.stream, tipo ? { mimeType: tipo, audioBitsPerSecond: 32000 } : undefined); } catch (_) { return estado1('Este aparelho não consegue gravar a voz. Digite a pergunta abaixo.'); }
+    const g = { mr, cancelado: false }; srv = g;
+    const partes = []; mr.ondataavailable = e => { if (e.data && e.data.size) partes.push(e.data); };
+    const t0 = performance.now(); let piso = 0, n = 0, falou = 0, ultima = 0, comecou = false, tick = null;
+    const terminar = enviar => { clearInterval(tick); const fim = () => depois(enviar); if (mr.state !== 'inactive') { mr.onstop = fim; try { mr.stop(); } catch (_) { fim(); } } else fim(); };
+    tick = setInterval(() => {
+      if (g.cancelado) { clearInterval(tick); return; }
+      const v = mic ? mic.read() : 0, agora = performance.now();
+      if (agora - t0 < 400) { piso += v; n++; return; } // barulho do ambiente
+      const lim = Math.max(0.022, (n ? piso / n : 0.01) * 2.6);
+      if (v > lim) { if (!comecou) { comecou = true; if (ov) ov.querySelector('.est-state').textContent = 'Ouvindo… pode falar'; } falou += 50; ultima = agora; }
+      if (comecou && falou >= 300 && agora - ultima > 950) return terminar(true);   // parou de falar
+      if (comecou && agora - t0 > 15000) return terminar(true);                     // fala longa: manda o que tem
+      if (!comecou && agora - t0 > 20000) return terminar(false);                   // ninguém falou
+      if (comecou && falou < 300 && agora - ultima > 1500) { comecou = false; falou = 0; } // foi só um barulho
+    }, 50);
+    try { mr.start(250); } catch (_) { clearInterval(tick); srv = null; return estado1('Não consegui começar a gravar. Toque no globo para tentar de novo.'); }
+    async function depois(enviar) {
+      if (srv === g) srv = null;
+      if (g.cancelado || mode !== 'open') return;
+      if (!enviar) { micOff(); return estado1('Toque no globo para falar'); }
+      if (falou < 300) return listenServidor();
+      const blob = new Blob(partes, { type: (mr.mimeType || tipo || 'audio/webm').split(';')[0] });
+      setPhase('thinking'); if (ov) ov.querySelector('.est-state').textContent = 'Entendendo o que você falou';
+      let txt = '';
+      try {
+        const r = await fetch('/api/estima/ouvir', { method: 'POST', headers: { ...headers(false), 'Content-Type': blob.type || 'audio/webm' }, body: blob });
+        const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Não consegui entender o áudio.');
+        txt = String(j.text || '').trim();
+      } catch (e) { if (mode === 'open') estado1(e.message + ' Toque no globo para tentar de novo.'); return; }
+      if (mode !== 'open') return;
+      if (!txt) return listenServidor(); // não entendeu nada: continua ouvindo
+      ask(txt, true);
+    }
   }
 
   async function ask(q, spoken) {
@@ -478,7 +540,7 @@
     const sit = st.status === 'teste'
       ? `<span class="est-pill est-pill-teste">Teste grátis: ${st.dias_restantes === 1 ? 'último dia' : 'faltam ' + st.dias_restantes + ' dias'} (até ${fmtData(st.teste_ate)})</span>`
       : '<span class="est-pill">Ativa nesta loja</span>';
-    const wakeOk = canListen();
+    const wakeOk = reconhecimentoGoogle(), servidor = !wakeOk && ouvirPeloServidor();
     p.innerHTML = head + `
       <section class="est-hero">
         <div class="est-hero-orb"><canvas aria-hidden="true"></canvas><button type="button" class="est-hero-hit" aria-label="Conversar com a Estima"></button></div>
@@ -487,13 +549,13 @@
           <h2>Olá${prefs.name ? ', ' + esc(prefs.name) : ''}. Pergunte o que quiser sobre ${esc(st.nome_loja || 'a sua loja')}.</h2>
           <p>Vendas, produtos que mais e menos vendem, horários, clientes, avaliações e dicas práticas, tudo com os números reais da loja.</p>
           <div class="est-hero-act"><button type="button" class="btn bp est-talk">${ic('mic', 16)} Conversar com a Estima</button>
-          <span class="est-hint">${prefs.wake && wakeOk ? 'Ou diga “Olá, Estima” com o painel aberto.' : 'Dica: ligue o “Olá, Estima” abaixo para chamar só com a voz.'}</span></div>
+          <span class="est-hint">${servidor ? 'Toque no botão, fale a pergunta e ela responde.' : prefs.wake && wakeOk ? 'Ou diga “Olá, Estima” com o painel aberto.' : 'Dica: ligue o “Olá, Estima” abaixo para chamar só com a voz.'}</span></div>
         </div>
       </section>
       <div class="est-grid">
         <section class="card est-card"><h3>Pergunte, por exemplo</h3><div class="est-chips">${EXEMPLOS.map(q => `<button type="button" class="est-chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></section>
         <section class="card est-card"><h3>Voz e ativação</h3>
-          <label class="est-switch"><input type="checkbox" id="est-wake" ${prefs.wake ? 'checked' : ''} ${wakeOk ? '' : 'disabled'}><span class="est-sw" aria-hidden="true"></span><span><b>Atender quando eu disser “Olá, Estima”</b><small>${wakeOk ? 'O navegador vai pedir o microfone. Funciona com o painel aberto na tela.' : (!SR ? 'Este navegador não entende voz: use o Chrome ou o Edge.' : 'O microfone só funciona com o endereço em https://.')}</small></span></label>
+          <label class="est-switch"><input type="checkbox" id="est-wake" ${prefs.wake ? 'checked' : ''} ${wakeOk ? '' : 'disabled'}><span class="est-sw" aria-hidden="true"></span><span><b>Atender quando eu disser “Olá, Estima”</b><small>${wakeOk ? 'O navegador vai pedir o microfone. Funciona com o painel aberto na tela.' : servidor ? (EH_ELECTRON ? 'No aplicativo EstimaFood Print ela não fica ouvindo o tempo todo: toque no botão Estima e fale. O “Olá, Estima” funciona no Chrome e no Edge.' : 'Neste navegador ela não fica ouvindo o tempo todo: toque no botão Estima e fale. O “Olá, Estima” funciona no Chrome e no Edge.') : (!window.isSecureContext ? 'O microfone só funciona com o endereço em https://.' : 'Este navegador não entende voz: use o Chrome ou o Edge, ou digite a pergunta.')}</small></span></label>
           <label class="est-lbl" for="est-voz">Voz</label><select id="est-voz" class="form-input"></select>
           <div class="est-row"><div><label class="est-lbl" for="est-rate">Velocidade</label><input type="range" id="est-rate" min="0.8" max="1.4" step="0.02" value="${prefs.rate}"></div>
           <div><label class="est-lbl" for="est-nome">Como a Estima te chama</label><input id="est-nome" class="form-input" maxlength="30" value="${esc(prefs.name)}" placeholder="Seu nome"></div></div>
@@ -564,7 +626,7 @@
 .est-topbtn.locked{border-color:var(--border);background:transparent;color:var(--muted)}
 @keyframes estPulse{0%,100%{box-shadow:0 0 6px 1px rgba(56,189,248,.45)}50%{box-shadow:0 0 14px 5px rgba(56,189,248,.75)}}
 #sn-estima .est-tag{font-size:8.5px;font-weight:800;letter-spacing:.4px;padding:1px 5px;border-radius:99px;margin-left:5px;background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff}
-.est-ov{position:fixed;inset:0;z-index:10050;color:#e8f4ff;background:radial-gradient(ellipse 70% 60% at 50% 42%,#0b2249 0%,#05101f 55%,#02060d 100%);opacity:0;transition:opacity .26s ease;font-family:inherit}
+.est-ov{position:fixed;inset:0;z-index:100050;color:#e8f4ff;background:radial-gradient(ellipse 70% 60% at 50% 42%,#0b2249 0%,#05101f 55%,#02060d 100%);opacity:0;transition:opacity .26s ease;font-family:inherit}
 .est-ov.on{opacity:1}.est-ov[hidden]{display:none}
 .est-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
 .est-orb-hit{position:absolute;left:50%;top:42%;width:calc(min(100vw,100vh)*.42);aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:transparent;border:0;cursor:pointer}

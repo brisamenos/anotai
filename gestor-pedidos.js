@@ -3421,7 +3421,7 @@ async function noOpenModal() {
   if (historicoWrap) historicoWrap.style.display = 'none';
   const mesaSelect = document.getElementById('order-mesa');
   if (mesaSelect) mesaSelect.value = '';
-  document.getElementById('order-pag').value = 'PIX';
+  document.getElementById('order-pag').value = 'Dinheiro'; // padrão do Novo pedido: dinheiro
   noResetTroco();
   document.getElementById('no-search').value = '';
   _noCatFilter = null; // reset filtro de categoria
