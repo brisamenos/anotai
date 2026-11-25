@@ -1578,6 +1578,35 @@ body.theme-light ::-webkit-scrollbar-thumb{background:#cbd5e1}
             <input class="minput" id="adm-tv-limite-padrao" type="number" step="1" min="1" max="50" value="1" style="width:90px;text-align:center">
           </div>
 
+          <div id="adm-estima-card" style="margin-top:14px;padding:14px;border:1.5px solid rgba(14,165,233,.3);border-radius:12px;background:rgba(14,165,233,.04)">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <div style="flex:1;min-width:220px">
+                <div style="font-size:13px;font-weight:700">Add-on: Estima (assistente de voz do gestor)</div>
+                <div style="font-size:11.5px;color:var(--muted)">O preço você define loja por loja, na ficha do cliente (Teste grátis ou Ativa com o valor).</div>
+              </div>
+              <div id="adm-estima-resumo" style="font-size:12px;font-weight:700;color:var(--muted);text-align:right"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:12px">
+              <div><label class="mlabel" for="adm-estima-motor">Inteligência (motor)</label>
+                <select class="minput" id="adm-estima-motor">
+                  <option value="auto">Automático (Claude se tiver chave; senão OpenAI)</option>
+                  <option value="claude">Claude (Anthropic)</option>
+                  <option value="openai">OpenAI (mesma chave do Agente IA)</option>
+                </select></div>
+              <div><label class="mlabel" for="adm-estima-key">Chave do Claude (opcional)</label>
+                <input class="minput" id="adm-estima-key" type="password" autocomplete="off" placeholder="sk-ant-..."></div>
+              <div><label class="mlabel" for="adm-estima-limite">Limite de perguntas por loja/mês</label>
+                <input class="minput" id="adm-estima-limite" type="number" min="0" step="50" placeholder="0 = sem limite"></div>
+              <div style="display:flex;align-items:center;gap:8px;padding-top:18px">
+                <input type="checkbox" id="adm-estima-voz" style="width:16px;height:16px;margin:0">
+                <label class="mlabel" for="adm-estima-voz" style="margin:0;cursor:pointer">Voz premium (OpenAI) nas lojas</label></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap">
+              <span id="adm-estima-status" style="font-size:11.5px;color:var(--muted)"></span>
+              <button class="btn bp bsm" type="button" onclick="estimaAdmSalvar()">Salvar Estima</button>
+            </div>
+          </div>
+
           <div style="margin-top:14px;display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px solid rgba(37,99,235,.2);border-radius:12px;background:rgba(37,99,235,.03)">
             <div style="flex:1">
               <div style="font-size:13px;font-weight:700">WhatsApp do robô de cobrança</div>
@@ -2739,6 +2768,38 @@ body.theme-light ::-webkit-scrollbar-thumb{background:#cbd5e1}
       </div>
       <span id="cli-tv-resumo" style="grid-column:1 / -1;font-size:11.5px;font-weight:700;display:block;margin-top:2px"></span>
     </div>
+    <div class="mrow2" style="margin-top:12px;display:block;padding:12px 14px;border:1.5px solid rgba(14,165,233,.28);border-radius:12px;background:rgba(14,165,233,.04)" id="cli-estima-row">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <div>
+          <div class="mlabel" style="margin:0">Estima: assistente de voz do gestor</div>
+          <span style="font-size:11.5px;color:var(--muted)">O gestor pergunta por voz sobre as vendas da loja e recebe dicas. O valor entra na fatura deste cliente só quando estiver Ativa.</span>
+        </div>
+        <span id="cli-estima-uso" style="font-size:11.5px;font-weight:700;color:var(--muted)"></span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div class="mrow" style="margin:0;min-width:170px;flex:1">
+          <label class="mlabel" for="cli-estima-status">Situação</label>
+          <select class="minput" id="cli-estima-status" onchange="cliEstimaVer()">
+            <option value="desligada">Desligada</option>
+            <option value="teste">Teste grátis (não cobra)</option>
+            <option value="ativa">Ativa (cobra na fatura)</option>
+          </select>
+        </div>
+        <div class="mrow" style="margin:0;flex:1;min-width:170px" id="cli-estima-teste-box">
+          <label class="mlabel" for="cli-estima-teste-ate">Teste até</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input class="minput" id="cli-estima-teste-ate" type="date" style="flex:1;min-width:140px">
+            <button type="button" class="btn bg" style="font-size:12px;padding:6px 10px" onclick="cliEstimaDias(7)">7 dias</button>
+            <button type="button" class="btn bg" style="font-size:12px;padding:6px 10px" onclick="cliEstimaDias(15)">15 dias</button>
+          </div>
+        </div>
+        <div class="mrow" style="margin:0;flex:1;min-width:150px" id="cli-estima-valor-box">
+          <label class="mlabel" for="cli-estima-valor">Valor mensal (R$)</label>
+          <input class="minput" id="cli-estima-valor" type="number" step="0.01" min="0" placeholder="Ex: 49,90">
+        </div>
+      </div>
+      <span id="cli-estima-info" style="display:block;font-size:11.5px;color:var(--muted);margin-top:6px"></span>
+    </div>
     <div class="mrow2" style="margin-top:12px" id="cli-ia-teste-row">
       <div class="mrow" style="margin:0">
         <label class="mlabel" for="cli-ia-teste-ate">Teste do pedido por IA até <span style="color:var(--muted);font-weight:400">(opcional, sem cobrança)</span></label>
@@ -3843,7 +3904,40 @@ async function carregarPrecosPlanos() {
     if (d.tv_limite_padrao !== undefined && document.getElementById('adm-tv-limite-padrao')) document.getElementById('adm-tv-limite-padrao').value = d.tv_limite_padrao;
     if (d.whatsapp_robo !== undefined) document.getElementById('adm-whatsapp-robo').value = d.whatsapp_robo || '';
     _atualizarLabelPrecoVoz();
+    estimaAdmCarregar();
   } catch(e) {}
+}
+
+// ── Estima: configuração geral (motor da IA, chave, voz, limite) ─────────────
+async function estimaAdmCarregar() {
+  if (!document.getElementById('adm-estima-card')) return;
+  try {
+    const r = await fetch('/api/estima/admin/config', { headers: adminAuthHeader() });
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('adm-estima-motor').value = d.motor || 'auto';
+    const k = document.getElementById('adm-estima-key'); k.value = d.anthropic_key || '';
+    k.placeholder = d.anthropic_env ? 'Usando ANTHROPIC_API_KEY do servidor' : 'sk-ant-...';
+    document.getElementById('adm-estima-limite').value = d.limite_mensal || 0;
+    document.getElementById('adm-estima-voz').checked = !!d.voz_premium;
+    const st = document.getElementById('adm-estima-status');
+    st.innerHTML = d.em_uso
+      ? `Respondendo com <strong>${d.em_uso.tipo === 'claude' ? 'Claude' : 'OpenAI'}</strong> (${d.em_uso.modelo})${d.em_uso.aviso ? ' · ' + d.em_uso.aviso : ''}${d.voz_premium && d.openai_ok ? ' · voz premium ligada' : ''}`
+      : '<strong style="color:var(--danger,#ef4444)">Sem chave de IA:</strong> cadastre a chave da OpenAI no Agente IA ou a do Claude aqui.';
+    const L = d.lojas || {};
+    document.getElementById('adm-estima-resumo').textContent = `${L.ativas || 0} ativa(s) · ${L.em_teste || 0} em teste · R$ ${(L.receita_mensal || 0).toFixed(2).replace('.', ',')}/mês`;
+  } catch (e) {}
+}
+async function estimaAdmSalvar() {
+  const k = document.getElementById('adm-estima-key').value.trim();
+  const body = { motor: document.getElementById('adm-estima-motor').value, limite_mensal: parseInt(document.getElementById('adm-estima-limite').value, 10) || 0, voz_premium: document.getElementById('adm-estima-voz').checked };
+  if (!k.startsWith('•')) body.anthropic_key = k;
+  try {
+    const r = await fetch('/api/estima/admin/config', { method: 'POST', headers: adminAuthHeader(), body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast('err', j.error || 'Não salvou'); return; }
+    toast('ok', 'Estima salva!'); estimaAdmCarregar();
+  } catch (e) { toast('err', e.message); }
 }
 
 function _atualizarLabelPrecoVoz() {
@@ -4369,6 +4463,7 @@ async function _abrirModalClienteAsync(id) {
     } catch(e) {}
   }
   cliIaTesteStatus();
+  cliEstimaCarregar(id);
   abrirModal('m-cliente');
 }
 function editarCliente(id) { abrirModalCliente(id); }
@@ -4390,6 +4485,65 @@ function cliIaTesteStatus() {
   else { el.textContent = 'O teste terminou em ' + br + '.'; el.style.color = 'var(--muted)'; }
 }
 document.addEventListener('change', e => { if (e.target && e.target.id === 'cli-ia-teste-ate') cliIaTesteStatus(); });
+
+// ── Estima (assistente de voz do gestor) na ficha do cliente ──────────────
+function cliEstimaVer() {
+  const st = document.getElementById('cli-estima-status').value;
+  document.getElementById('cli-estima-teste-box').style.display = st === 'teste' ? '' : 'none';
+  document.getElementById('cli-estima-valor-box').style.display = st === 'ativa' ? '' : 'none';
+  const info = document.getElementById('cli-estima-info');
+  if (st === 'desligada') info.textContent = 'O gestor vê a apresentação da Estima e um botão para pedir o teste.';
+  else if (st === 'teste') { const v = document.getElementById('cli-estima-teste-ate').value; info.textContent = v ? 'Libera até ' + v.split('-').reverse().join('/') + '. No dia seguinte desliga sozinha e não entra na fatura.' : 'Escolha até quando vai o teste.'; }
+  else info.textContent = 'Entra na próxima fatura deste cliente, somado à mensalidade.';
+}
+function cliEstimaDias(n) {
+  const d = new Date(_hojeBRISO() + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n - 1);
+  document.getElementById('cli-estima-teste-ate').value = d.toISOString().slice(0,10);
+  document.getElementById('cli-estima-status').value = 'teste'; cliEstimaVer();
+}
+document.addEventListener('change', e => { if (e.target && e.target.id === 'cli-estima-teste-ate') cliEstimaVer(); });
+async function cliEstimaCarregar(id) {
+  const row = document.getElementById('cli-estima-row'); if (!row) return;
+  row.style.display = id ? '' : 'none';
+  document.getElementById('cli-estima-status').value = 'desligada';
+  document.getElementById('cli-estima-teste-ate').value = '';
+  document.getElementById('cli-estima-valor').value = '';
+  document.getElementById('cli-estima-uso').textContent = '';
+  cliEstimaVer();
+  if (!id) return;
+  try {
+    const r = await fetch('/api/estima/admin/loja?tenant_id=' + encodeURIComponent(id), { headers: adminAuthHeader() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const st = d.status === 'ativa' ? 'ativa' : d.status === 'teste' ? 'teste' : 'desligada';
+    document.getElementById('cli-estima-status').value = st;
+    document.getElementById('cli-estima-teste-ate').value = d.teste_ate ? String(d.teste_ate).slice(0,10) : '';
+    document.getElementById('cli-estima-valor').value = (d.valor !== null && d.valor !== undefined) ? d.valor : '';
+    const u = d.uso_mes || {};
+    document.getElementById('cli-estima-uso').textContent = (u.perguntas || u.falas) ? `Neste mês: ${u.perguntas || 0} pergunta(s), ${u.falas || 0} fala(s) com voz premium` : (st !== 'desligada' ? 'Ainda não usou neste mês' : '');
+    cliEstimaVer();
+    if (d.situacao && d.situacao.status === 'teste_encerrado') document.getElementById('cli-estima-info').textContent = 'O teste terminou em ' + String(d.teste_ate).slice(0,10).split('-').reverse().join('/') + '. Escolha Ativa para cobrar ou dê mais dias de teste.';
+  } catch (e) {}
+}
+function cliEstimaValidar() {
+  const row = document.getElementById('cli-estima-row'); if (!row || row.style.display === 'none') return null;
+  const st = document.getElementById('cli-estima-status').value;
+  if (st === 'ativa' && String(document.getElementById('cli-estima-valor').value).trim() === '') return 'Estima: informe o valor mensal (pode ser 0 para cortesia).';
+  if (st === 'teste' && !document.getElementById('cli-estima-teste-ate').value) return 'Estima: escolha até quando vai o teste grátis.';
+  return null;
+}
+async function cliEstimaSalvar(id) {
+  const row = document.getElementById('cli-estima-row'); if (!row || !id) return null;
+  const status = document.getElementById('cli-estima-status').value;
+  const body = { tenant_id: id, status, teste_ate: document.getElementById('cli-estima-teste-ate').value || null, valor: document.getElementById('cli-estima-valor').value };
+  if (status === 'ativa' && String(body.valor).trim() === '') return 'informe o valor mensal da Estima.';
+  if (status === 'teste' && !body.teste_ate) return 'escolha até quando vai o teste da Estima.';
+  try {
+    const r = await fetch('/api/estima/admin/loja', { method: 'POST', headers: adminAuthHeader(), body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    return r.ok ? null : (j.error || 'erro ' + r.status);
+  } catch (e) { return e.message; }
+}
 
 async function salvarCliente() {
   const id         = document.getElementById('cli-id').value;
@@ -4418,8 +4572,10 @@ async function salvarCliente() {
   if (!id && (!gestorNome||!email||!senha)) { toast('err','Preencha todos os dados do gestor'); return; }
   let error;
   if (id) {
+    const avisoEstima = cliEstimaValidar(); if (avisoEstima) { toast('err', avisoEstima); return; }
     ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segmento, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira, telefone_cobranca: telefoneCobranca, voz_ativo: vozAtivo, tv_ativo: tvAtivo, tv_limite: tvLimite, ia_teste_ate: iaTesteAte }).eq('id',id));
     if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segmento,valor_mensalidade:valorPersonalizado,valor_mensalidade_expira_em:valorExpira,telefone_cobranca:telefoneCobranca,voz_ativo:vozAtivo,tv_ativo:tvAtivo,tv_limite:tvLimite,ia_teste_ate:iaTesteAte}; }
+    if (!error) { const errEst = await cliEstimaSalvar(id); if (errEst) { toast('err', 'Cliente salvo, mas a Estima não: ' + errEst); return; } }
     const iaKeyVal = (document.getElementById('cli-ia-key')?.value || '').trim();
     if (!error && iaKeyVal && !iaKeyVal.startsWith('•')) {
       try {

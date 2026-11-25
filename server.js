@@ -18,6 +18,7 @@ const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (co
 const _waCardFoto = require('./wa-card-foto') // foto dos cartões do carrossel no pedido pelo WhatsApp
 const _areaEntrega = require('./area-entrega')
 const tvIndoor = require('./tv-indoor') // TV indoor: vídeos da loja na TV do estabelecimento
+const estima = require('./estima') // Estima: assistente de voz do gestor (add-on por loja)
 const outdoor = require('./outdoor')    // Outdoor: rede de TVs com anunciantes (produto separado) // conta da taxa por distância (mesma do cardápio e do gestor)
 
 const PORT        = process.env.PORT           || 3001
@@ -2181,6 +2182,7 @@ function restaurarBackup() {
 
 // Tabelas da TV Indoor e do Outdoor existem antes de restaurar o backup
 try { tvIndoor.criarTabelas(db); outdoor.criarTabelas(db) } catch (e) { log('⚠️', '[TV] tabelas: ' + e.message) }
+try { estima.criarTabelas(db) } catch (e) { log('⚠️', '[ESTIMA] tabelas: ' + e.message) }
 if (!_dbExistia) { log('♻️', 'Banco novo — tentando restaurar backup...'); restaurarBackup() }
 
 if (!db.prepare("SELECT id FROM sys_users WHERE role='superadmin' LIMIT 1").get()) {
@@ -9972,7 +9974,7 @@ const _ESTATICO_BLOQUEADO = new RegExp([
   '(^|/)(data|\\.dev-data|node_modules|\\.git|\\.github|app-tv-android)(/|$)',
   '\\.(jks|keystore|kts|gradle)$',
   '\\.(db|db-wal|db-shm|sqlite|sqlite3|sql|log|env|bak)$',
-  '^/?(server|routes|site-admin|marketing-flows|suporte-vendas-bot|tenant-wa|wuzapi|order-message|phone-utils|limpar-links-externos|limpar-movimentos-cancelados|tv-indoor|outdoor|outdoor-cobranca|fotos-externas|wa-card-foto)\\.js$',
+  '^/?(server|routes|site-admin|marketing-flows|suporte-vendas-bot|tenant-wa|wuzapi|order-message|phone-utils|limpar-links-externos|limpar-movimentos-cancelados|tv-indoor|outdoor|outdoor-cobranca|fotos-externas|wa-card-foto|estima|estima-dados|hub-connector)\\.js$',
   '^/?(package|package-lock|site-padrao)\\.json$',
   '^/?(Dockerfile|nixpacks\\.toml)$'
 ].join('|'), 'i')
@@ -10623,6 +10625,7 @@ const server = http.createServer(async (req,res) => {
     emit }
   try {
     if (upath.startsWith('/api/tv/') && await tvIndoor.handle(req, res, _routeCtx)) return
+    if (upath.startsWith('/api/estima/') && await estima.handle(req, res, _routeCtx)) return
     if (upath.startsWith('/api/outdoor/') && await outdoor.handle(req, res, _routeCtx)) return
     if (await handleRoutes(req, res, _routeCtx)) return
   } catch(e) {
@@ -10938,6 +10941,7 @@ const server = http.createServer(async (req,res) => {
 })
 
 try { tvIndoor.init({ db, log, UPLOADS_DIR }) } catch (e) { log('⚠️', '[TV] não iniciou: ' + e.message) }
+try { estima.init({ db, log }) } catch (e) { log('⚠️', '[ESTIMA] não iniciou: ' + e.message) }
 try { outdoor.init({ db, log, UPLOADS_DIR }, tvIndoor) } catch (e) { log('⚠️', '[OUTDOOR] não iniciou: ' + e.message) }
 server.listen(PORT,()=>{
   log('🚀',`Servidor rodando na porta ${PORT}`)

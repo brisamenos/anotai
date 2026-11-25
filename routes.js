@@ -16,6 +16,7 @@ const { buildOrderTrackingMessage } = require('./order-message')
 const { phoneLookupArgs, phoneLookupSql, phonesMatch, phoneDigitsSql } = require('./phone-utils')
 const _svBot = require('./suporte-vendas-bot') // WhatsApp de Suporte e Vendas (WuzAPI ou Evolution)
 const _vtvCobranca = require('./outdoor-cobranca') // VisseTV: cobrança dos anunciantes
+const _estima = require('./estima') // Estima: assistente de voz do gestor (entra na mensalidade quando ativa)
 const _mkt = require('./marketing-flows') // Marketing: fluxos de mensagens e disparos (WuzAPI)
 const _site = require('./site-admin') // Site institucional editável pelo admin + contas de teste grátis
 const _tenantWa = require('./tenant-wa') // WhatsApp de cada loja: Evolution (como sempre foi) ou WuzAPI (alternativa leve)
@@ -1368,6 +1369,7 @@ async function _enviarLembreteFatura(db, t, fatura) {
     ``,
     `💰 *Valor:* R$ ${valorTxt}`,
     ...(_vtvCobranca.valorNaFaturaDaLoja(db, t.id) > 0 ? [`_Inclui o seu anúncio na VisseTV: R$ ${_vtvCobranca.valorNaFaturaDaLoja(db, t.id).toFixed(2).replace('.', ',')}_`] : []),
+    ...(_estima.valorNaFatura(db, t.id) > 0 ? [`_Inclui a Estima, sua assistente de voz: R$ ${_estima.valorNaFatura(db, t.id).toFixed(2).replace('.', ',')}_`] : []),
     `⏰ *Pague até:* ${venceEmTxt}`,
     ``,
     `💸 *Pague agora via PIX* — escaneie o QR Code que vou te enviar ou use o código Copia e Cola abaixo:`,
@@ -1448,6 +1450,8 @@ function _valorRenovacaoTenant(db, t) {
   if (t.tv_ativo) valor += precoAddonTv
   // Anúncio na rede VisseTV (anunciante ligado a esta loja): entra na mesma fatura
   valor += _vtvCobranca.valorNaFaturaDaLoja(db, t.id)
+  // Estima (assistente de voz do gestor): valor definido loja por loja no admin; teste grátis não cobra
+  valor += _estima.valorNaFatura(db, t.id)
   if (plano === 'fiscal') {
     try {
       const fiscal = _adminFiscalCobrancaAtual(db, t.id, { mes: _adminFiscalMesAtual(), plano_valor: precoFiscal })
@@ -1700,6 +1704,8 @@ function _iniciarAutoCobrancaJob(ctx) {
           // Anúncio na rede VisseTV (anunciante ligado a esta loja): entra na mesma fatura
           const _vtv = _vtvCobranca.valorNaFaturaDaLoja(db, t.id)
           if (_vtv > 0) { valor += _vtv; obsFatura += ` | inclui VisseTV R$ ${_vtv.toFixed(2)}` }
+          const _est = _estima.valorNaFatura(db, t.id)
+          if (_est > 0) { valor += _est; obsFatura += ` | inclui Estima R$ ${_est.toFixed(2)}` }
           if (plano === 'fiscal') {
             const fiscal = _adminFiscalCobrancaAtual(db, t.id, {
               mes: _adminFiscalMesAtual(),
@@ -10491,7 +10497,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const t = db.prepare('SELECT * FROM tenants WHERE id=?').get(String(params.get('tenant_id') || ''))
     if (!t) { send(res, 404, { error: 'Cliente não encontrado' }); return true }
     const { plano, valor } = _valorRenovacaoTenant(db, t)
-    send(res, 200, { plano, valor, vissetv: _vtvCobranca.valorNaFaturaDaLoja(db, t.id) })
+    send(res, 200, { plano, valor, vissetv: _vtvCobranca.valorNaFaturaDaLoja(db, t.id), estima: _estima.valorNaFatura(db, t.id) })
     return true
   }
 
@@ -10532,6 +10538,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
         if (tenant.tv_ativo) valor += precoAddonTv
         // Anúncio na rede VisseTV (anunciante ligado a esta loja)
         valor += _vtvCobranca.valorNaFaturaDaLoja(db, tenant.id)
+        // Estima (assistente de voz do gestor), quando ativa
+        valor += _estima.valorNaFatura(db, tenant.id)
         let obsFiscal = null
         if (plano === 'fiscal') {
           const fiscal = _adminFiscalCobrancaAtual(db, tenant.id, {
