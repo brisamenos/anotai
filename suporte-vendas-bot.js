@@ -731,7 +731,7 @@ async function textoPlanos(phone, tenant) {
 
 // ==================== Comando /pix ====================
 // Quem digita /pix (o cliente, ou voce pelo proprio WhatsApp) faz o robo mandar a chave Pix (CNPJ)
-// com o botao nativo "Copiar chave Pix". A chave fica em /admin → WhatsApp de Suporte e Vendas.
+// em texto, com a chave sozinha numa mensagem para copiar. A chave fica em /admin → WhatsApp de Suporte e Vendas.
 
 const PIX_CMD = /(^|\n)\s*\/pix\s*($|\n)/i
 const isPixCmd = text => PIX_CMD.test(String(text || ''))
@@ -764,27 +764,12 @@ async function enviarPixChave(phone, { manual = false } = {}) {
     formatCnpj(chave),
     ...(g.cobranca_pix_nome ? [``, `*Favorecido:* ${g.cobranca_pix_nome}`] : [])
   ].join('\n')
-  const rodape = `Depois de pagar, é só mandar o comprovante por aqui`
-  const texto = `${cabecalho}\n\nToque no botão abaixo para *copiar a chave* e cole no app do seu banco\n\n${rodape}`
-
-  if (provider() === 'wuzapi') {
-    try {
-      const id = await wuzSend(phone, (t, to) => wuzapi.sendButtons(t, to, {
-        text: texto,
-        footer: 'Estima Food',
-        buttons: [{ type: 'copy', id: 'pix_copiar', text: 'Copiar chave Pix', copyCode: chave }]
-      }))
-      rememberSent(id)
-      return
-    } catch (e) {
-      D.log?.('⚠️', `WuzAPI botão copiar Pix falhou, enviando texto: ${e.message}`)
-    }
-  }
-  // Reserva (Evolution ou falha no botao): texto simples, com a chave sozinha na ultima linha
-  // para o cliente segurar e copiar com um toque
-  await sendText(phone, `${cabecalho}\n\nSegure a chave abaixo para copiar`)
+  // Só texto. O botão "Copiar chave Pix" aparecia como enviado, mas em vários
+  // celulares a mensagem nem chegava a aparecer para o cliente (o WhatsApp
+  // descarta em silêncio botões enviados por API não oficial). A chave vai
+  // sozinha na mensagem seguinte, para o cliente segurar e copiar.
+  await sendText(phone, `${cabecalho}\n\nDepois de pagar, é só mandar o comprovante por aqui.\n\nA chave vai na próxima mensagem, sozinha, para você copiar 👇`)
   await sendText(phone, chave)
-  await sendText(phone, rodape)
 }
 
 // ==================== Processamento ====================
